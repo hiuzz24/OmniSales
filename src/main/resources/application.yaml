@@ -1,0 +1,23 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: OSMS
+  datasource:
+    url: jdbc:postgresql://localhost:5432/OSMS
+    username: postgres
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+app:
+  jwt:
+
+    # 1 hour
+    # 7 days
