@@ -3,8 +3,8 @@ package fu.osms.auth.security;
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
@@ -21,8 +21,16 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JwtService {
     private final UserRepository userRepository;
+
     @Value("${JWT_SECRET}")
     private String jwtSecret;
+
+    @Getter
+    @Value("${JWT_EXPIRATION_MS:1800000}")
+    private long accessTokenExpirationMs;
+
+    @Value("${JWT_REFRESH_EXPIRATION_MS:604800000}")
+    private long refreshTokenExpirationMs;
 
     private SecretKey getSigningKey(){
         return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
@@ -35,15 +43,24 @@ public class JwtService {
                 .orElseThrow(() -> new UsernameNotFoundException("Not found account"));
 
         return Jwts.builder()
-                .setId(UUID.randomUUID().toString())
-                .setSubject(user.getEmail())
-                .claim("role",role)
-                .claim("userId",user.getId())
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + 1000L * 60 * 30))
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .id(UUID.randomUUID().toString())
+                .subject(user.getEmail())
+                .claim("role", role)
+                .claim("userId", user.getId())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + accessTokenExpirationMs))
+                .signWith(getSigningKey())
                 .compact();
     }
 
+    public String generateRefreshToken(UserDetails userDetails) {
+        return Jwts.builder()
+                .id(UUID.randomUUID().toString())
+                .subject(userDetails.getUsername())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + refreshTokenExpirationMs))
+                .signWith(getSigningKey())
+                .compact();
+    }
 
 }

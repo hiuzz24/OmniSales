@@ -1,5 +1,6 @@
 package fu.osms.order.entity;
 
+import fu.osms.auth.entity.User;
 import fu.osms.channel.entity.Channel;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.order.enums.OrderStatus;
@@ -99,4 +100,11 @@ public class Order {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
+
+    @Column(name = "cancel_reason", length = 255)
+    private String cancelReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelled_by")
+    private User cancelledBy;
 }

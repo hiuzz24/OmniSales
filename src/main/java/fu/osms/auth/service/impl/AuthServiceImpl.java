@@ -7,7 +7,9 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.mapper.UserMapper;
 import fu.osms.auth.repository.RefreshTokenRepository;
 import fu.osms.auth.repository.UserRepository;
+import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
+import fu.osms.config.CustomUserDetailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -30,7 +32,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final UserDetailsServiceImpl userDetailsService;
+    private final CustomUserDetailService userDetailsService;
     private final JwtService jwtService;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;

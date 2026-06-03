@@ -40,5 +40,9 @@ public class OrderResponse {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
+    private String cancelReason;
+    private UUID cancelledById;
+    private String cancelledByName;
+
     private List<OrderItemResponse> items;
 }

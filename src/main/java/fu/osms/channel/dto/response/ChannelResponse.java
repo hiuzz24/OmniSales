@@ -22,6 +22,7 @@ public class ChannelResponse {
     private String status;
     private String region;
     private Map<String, Object> metadata;
+    private Boolean syncEnabled;
     private OffsetDateTime lastSyncedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

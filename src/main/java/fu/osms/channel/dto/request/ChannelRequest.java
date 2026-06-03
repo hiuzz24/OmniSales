@@ -30,4 +30,6 @@ public class ChannelRequest {
     private String region = "VN";
 
     private Map<String, Object> metadata;
+
+    private Boolean syncEnabled = true;
 }
