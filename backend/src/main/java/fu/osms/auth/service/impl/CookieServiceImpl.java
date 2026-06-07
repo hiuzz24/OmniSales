@@ -13,7 +13,7 @@ public class CookieServiceImpl implements CookieService {
         ResponseCookie cookie = ResponseCookie
                 .from("refreshToken",refreshToken)
                 .httpOnly(true)
-                .path("/api/auth/refreshToken")
+                .path("/api/auth/refresh")
                 .sameSite("Strict")
                 .maxAge(Duration.ofDays(7))
                 .secure(true)

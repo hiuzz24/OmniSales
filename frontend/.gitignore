@@ -64,3 +64,8 @@ coverage
 # Optional: TypeScript
 # =========================
 *.tsbuildinfo
+
+# =========================
+# Frontend Maven Plugin
+# =========================
+node/
