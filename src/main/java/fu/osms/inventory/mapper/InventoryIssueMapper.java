@@ -1,0 +1,53 @@
+package fu.osms.inventory.mapper;
+
+import fu.osms.inventory.dto.request.InventoryIssueItemRequest;
+import fu.osms.inventory.dto.request.InventoryIssueRequest;
+import fu.osms.inventory.dto.response.InventoryIssueItemResponse;
+import fu.osms.inventory.dto.response.InventoryIssueResponse;
+import fu.osms.inventory.entity.InventoryIssue;
+import fu.osms.inventory.entity.InventoryIssueItem;
+import org.mapstruct.*;
+
+@Mapper(componentModel = "spring")
+public interface InventoryIssueMapper {
+
+    // ── Issue ─────────────────────────────────────────────────────────────────
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "shop", ignore = true)
+    @Mapping(target = "warehouse", ignore = true)
+    @Mapping(target = "status", ignore = true)
+    @Mapping(target = "totalCost", ignore = true)
+    @Mapping(target = "createdBy", ignore = true)
+    @Mapping(target = "approvedBy", ignore = true)
+    @Mapping(target = "confirmedAt", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    InventoryIssue toEntity(InventoryIssueRequest request);
+
+    @Mapping(target = "shopId", source = "shop.id")
+    @Mapping(target = "warehouseId", source = "warehouse.id")
+    @Mapping(target = "warehouseName", source = "warehouse.name")
+    @Mapping(target = "createdById", source = "createdBy.id")
+    @Mapping(target = "createdByName", source = "createdBy.fullName")
+    @Mapping(target = "approvedById", source = "approvedBy.id")
+    @Mapping(target = "approvedByName", source = "approvedBy.fullName")
+    @Mapping(target = "items", ignore = true)
+    InventoryIssueResponse toResponse(InventoryIssue issue);
+
+    // ── Issue Item ────────────────────────────────────────────────────────────
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "issue", ignore = true)
+    @Mapping(target = "variant", ignore = true)
+    @Mapping(target = "batch", ignore = true)
+    @Mapping(target = "totalCost", ignore = true)
+    InventoryIssueItem toItemEntity(InventoryIssueItemRequest request);
+
+    @Mapping(target = "variantId", source = "variant.id")
+    @Mapping(target = "variantSku", source = "variant.sku")
+    @Mapping(target = "variantName", source = "variant.name")
+    @Mapping(target = "batchId", source = "batch.id")
+    @Mapping(target = "batchCode", source = "batch.batchCode")
+    InventoryIssueItemResponse toItemResponse(InventoryIssueItem item);
+}
