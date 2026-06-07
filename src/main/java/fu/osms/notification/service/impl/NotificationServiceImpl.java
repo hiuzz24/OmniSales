@@ -27,7 +27,7 @@ public class NotificationServiceImpl implements NotificationService {
     public NotificationResponse getById(UUID id) {
         return notificationRepository.findById(id)
                 .map(notificationMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông báo: " + id));
+                .orElseThrow(() -> new RuntimeException("Notification not found: " + id));
     }
 
     @Override
@@ -56,7 +56,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional
     public NotificationResponse markAsRead(UUID id) {
         Notification notification = notificationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông báo: " + id));
+                .orElseThrow(() -> new RuntimeException("Notification not found: " + id));
         notification.setReadAt(OffsetDateTime.now());
         return notificationMapper.toResponse(notificationRepository.save(notification));
     }

@@ -30,6 +30,12 @@ public class Shop {
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
+    @Column(name = "allow_negative_stock", nullable = false)
+    private Boolean allowNegativeStock = false;
+
+    @Column(name = "costing_method", nullable = false, length = 5)
+    private String costingMethod = "WAC";
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

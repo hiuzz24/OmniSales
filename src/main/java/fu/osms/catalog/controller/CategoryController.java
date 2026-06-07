@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/categories")
+@RequestMapping("/api/categories")
 @RequiredArgsConstructor
 public class CategoryController {
 
@@ -23,7 +23,7 @@ public class CategoryController {
     @PostMapping
     public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CategoryRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo danh mục thành công", categoryService.create(request)));
+                .body(ApiResponse.success("Category created successfully", categoryService.create(request)));
     }
 
     @GetMapping("/{id}")
@@ -49,12 +49,12 @@ public class CategoryController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<CategoryResponse>> update(@PathVariable UUID id,
                                                                  @Valid @RequestBody CategoryRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật thành công", categoryService.update(id, request)));
+        return ResponseEntity.ok(ApiResponse.success("Category updated successfully", categoryService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         categoryService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Xoá danh mục thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Category deleted successfully", null));
     }
 }

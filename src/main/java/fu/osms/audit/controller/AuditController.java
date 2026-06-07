@@ -13,7 +13,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/audit-logs")
+@RequestMapping("/api/audit-logs")
 @RequiredArgsConstructor
 public class AuditController {
 

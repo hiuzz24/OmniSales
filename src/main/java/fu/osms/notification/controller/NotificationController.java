@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/notifications")
+@RequestMapping("/api/notifications")
 @RequiredArgsConstructor
 public class NotificationController {
 
@@ -43,7 +43,7 @@ public class NotificationController {
 
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<NotificationResponse>> markAsRead(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success("Đánh dấu đã đọc thành công",
+        return ResponseEntity.ok(ApiResponse.success("Marked as read successfully",
                 notificationService.markAsRead(id)));
     }
 
@@ -51,6 +51,6 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<Integer>> markAllAsRead(@RequestParam UUID shopId,
                                                                @RequestParam UUID userId) {
         int count = notificationService.markAllAsRead(shopId, userId);
-        return ResponseEntity.ok(ApiResponse.success("Đánh dấu tất cả đã đọc thành công", count));
+        return ResponseEntity.ok(ApiResponse.success("All notifications marked as read successfully", count));
     }
 }

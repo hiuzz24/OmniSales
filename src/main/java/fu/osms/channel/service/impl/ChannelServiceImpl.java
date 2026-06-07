@@ -40,7 +40,7 @@ public class ChannelServiceImpl implements ChannelService {
     @Transactional
     public ChannelResponse create(ChannelRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop"));
+                .orElseThrow(() -> new RuntimeException("Shop not found"));
         Channel channel = channelMapper.toEntity(request);
         channel.setShop(shop);
         channel.setStatus("PENDING");
@@ -52,7 +52,7 @@ public class ChannelServiceImpl implements ChannelService {
     public ChannelResponse getById(UUID id) {
         return channelRepository.findById(id)
                 .map(channelMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy kênh bán hàng: " + id));
+                .orElseThrow(() -> new RuntimeException("Sales channel not found: " + id));
     }
 
     @Override
@@ -66,7 +66,7 @@ public class ChannelServiceImpl implements ChannelService {
     @Transactional
     public ChannelResponse update(UUID id, ChannelRequest request) {
         Channel channel = channelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy kênh bán hàng: " + id));
+                .orElseThrow(() -> new RuntimeException("Sales channel not found: " + id));
         channelMapper.updateEntityFromRequest(request, channel);
         return channelMapper.toResponse(channelRepository.save(channel));
     }
@@ -75,7 +75,7 @@ public class ChannelServiceImpl implements ChannelService {
     @Transactional
     public void delete(UUID id) {
         Channel channel = channelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy kênh bán hàng: " + id));
+                .orElseThrow(() -> new RuntimeException("Sales channel not found: " + id));
         channel.setDeletedAt(OffsetDateTime.now());
         channelRepository.save(channel);
     }
@@ -85,7 +85,7 @@ public class ChannelServiceImpl implements ChannelService {
     public ChannelCredentialResponse getCredential(UUID channelId) {
         return credentialRepository.findByChannelId(channelId)
                 .map(credentialMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy credential cho kênh: " + channelId));
+                .orElseThrow(() -> new RuntimeException("Credential not found for channel: " + channelId));
     }
 
     @Override

@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/channels")
+@RequestMapping("/api/channels")
 @RequiredArgsConstructor
 public class ChannelController {
 
@@ -26,7 +26,7 @@ public class ChannelController {
     @PostMapping
     public ResponseEntity<ApiResponse<ChannelResponse>> create(@Valid @RequestBody ChannelRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo kênh bán hàng thành công", channelService.create(request)));
+                .body(ApiResponse.success("Sales channel created successfully", channelService.create(request)));
     }
 
     @GetMapping("/{id}")
@@ -42,13 +42,13 @@ public class ChannelController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ChannelResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ChannelRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật thành công", channelService.update(id, request)));
+        return ResponseEntity.ok(ApiResponse.success("Channel updated successfully", channelService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         channelService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Xoá kênh bán hàng thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Sales channel deleted successfully", null));
     }
 
     @GetMapping("/{id}/credential")

@@ -14,10 +14,10 @@ import java.util.UUID;
 @Builder
 public class WarehouseRequest {
 
-    @NotNull(message = "Shop ID không được để trống")
+    @NotNull(message = "Shop ID must not be null")
     private UUID shopId;
 
-    @NotBlank(message = "Tên kho không được để trống")
+    @NotBlank(message = "Warehouse name must not be blank")
     @Size(max = 255)
     private String name;
 

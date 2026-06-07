@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/products")
+@RequestMapping("/api/products")
 @RequiredArgsConstructor
 public class ProductController {
 
@@ -24,7 +24,7 @@ public class ProductController {
     @PostMapping
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo sản phẩm thành công", productService.create(request)));
+                .body(ApiResponse.success("Product created successfully", productService.create(request)));
     }
 
     @GetMapping("/{id}")
@@ -45,19 +45,19 @@ public class ProductController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ProductRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật thành công", productService.update(id, request)));
+        return ResponseEntity.ok(ApiResponse.success("Product updated successfully", productService.update(id, request)));
     }
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<ProductResponse>> updateStatus(@PathVariable UUID id,
                                                                       @RequestParam ProductStatus status) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái thành công",
+        return ResponseEntity.ok(ApiResponse.success("Product status updated successfully",
                 productService.updateStatus(id, status)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         productService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Xoá sản phẩm thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Product deleted successfully", null));
     }
 }

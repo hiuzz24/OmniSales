@@ -29,7 +29,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse create(UserRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email đã được sử dụng: " + request.getEmail());
+            throw new IllegalArgumentException("Email is already in use: " + request.getEmail());
         }
         User user = userMapper.toEntity(request);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
@@ -42,7 +42,7 @@ public class UserServiceImpl implements UserService {
     public UserResponse getById(UUID id) {
         return userRepository.findById(id)
                 .map(userMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy user: " + id));
+                .orElseThrow(() -> new RuntimeException("User not found: " + id));
     }
 
     @Override
@@ -50,7 +50,7 @@ public class UserServiceImpl implements UserService {
     public UserResponse getByEmail(String email) {
         return userRepository.findByEmail(email)
                 .map(userMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy user: " + email));
+                .orElseThrow(() -> new RuntimeException("User not found: " + email));
     }
 
     @Override
@@ -70,7 +70,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse update(UUID id, UserRequest request) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy user: " + id));
+                .orElseThrow(() -> new RuntimeException("User not found: " + id));
         userMapper.updateEntityFromRequest(request, user);
         return userMapper.toResponse(userRepository.save(user));
     }
@@ -79,9 +79,9 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void changePassword(UUID id, String oldPassword, String newPassword) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy user: " + id));
+                .orElseThrow(() -> new RuntimeException("User not found: " + id));
         if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
-            throw new IllegalArgumentException("Mật khẩu cũ không đúng");
+            throw new IllegalArgumentException("Old password is incorrect");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
@@ -91,7 +91,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public void delete(UUID id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy user: " + id));
+                .orElseThrow(() -> new RuntimeException("User not found: " + id));
         user.setStatus(UserStatus.INACTIVE);
         user.setDeletedAt(java.time.OffsetDateTime.now());
         userRepository.save(user);

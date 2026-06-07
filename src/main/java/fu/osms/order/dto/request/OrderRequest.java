@@ -20,19 +20,19 @@ import java.util.UUID;
 @Builder
 public class OrderRequest {
 
-    @NotNull(message = "Shop ID không được để trống")
+    @NotNull(message = "Shop ID must not be null")
     private UUID shopId;
 
     private UUID channelId;
 
-    @NotNull(message = "Platform không được để trống")
+    @NotNull(message = "Platform must not be null")
     private PlatformType platform;
 
-    @NotBlank(message = "Tên kênh không được để trống")
+    @NotBlank(message = "Channel name must not be blank")
     @Size(max = 100)
     private String channelName;
 
-    @NotBlank(message = "External Order ID không được để trống")
+    @NotBlank(message = "External Order ID must not be blank")
     @Size(max = 200)
     private String externalOrderId;
 
@@ -46,7 +46,7 @@ public class OrderRequest {
     @Size(max = 50)
     private String buyerPhone;
 
-    @NotNull(message = "Địa chỉ giao hàng không được để trống")
+    @NotNull(message = "Shipping address must not be null")
     private Map<String, Object> shippingAddress;
 
     private BigDecimal subtotal = BigDecimal.ZERO;
@@ -61,6 +61,6 @@ public class OrderRequest {
     @Size(max = 200)
     private String trackingNumber;
 
-    @NotEmpty(message = "Đơn hàng phải có ít nhất một sản phẩm")
+    @NotEmpty(message = "Order must have at least one item")
     private List<OrderItemRequest> items;
 }

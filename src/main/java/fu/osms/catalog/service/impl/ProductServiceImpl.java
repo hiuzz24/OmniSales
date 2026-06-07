@@ -34,12 +34,12 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ProductResponse create(ProductRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop: " + request.getShopId()));
+                .orElseThrow(() -> new RuntimeException("Shop not found: " + request.getShopId()));
         Product product = productMapper.toEntity(request);
         product.setShop(shop);
         if (request.getCategoryId() != null) {
             Category category = categoryRepository.findById(request.getCategoryId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục"));
+                    .orElseThrow(() -> new RuntimeException("Category not found"));
             product.setCategory(category);
         }
         return productMapper.toResponse(productRepository.save(product));
@@ -50,7 +50,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductResponse getById(UUID id) {
         return productRepository.findByIdAndDeletedAtIsNull(id)
                 .map(productMapper::toResponseWithDetails)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm: " + id));
+                .orElseThrow(() -> new RuntimeException("Product not found: " + id));
     }
 
     @Override
@@ -78,11 +78,11 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ProductResponse update(UUID id, ProductRequest request) {
         Product product = productRepository.findByIdAndDeletedAtIsNull(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm: " + id));
+                .orElseThrow(() -> new RuntimeException("Product not found: " + id));
         productMapper.updateEntityFromRequest(request, product);
         if (request.getCategoryId() != null) {
             Category category = categoryRepository.findById(request.getCategoryId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục"));
+                    .orElseThrow(() -> new RuntimeException("Category not found"));
             product.setCategory(category);
         }
         return productMapper.toResponse(productRepository.save(product));
@@ -92,7 +92,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ProductResponse updateStatus(UUID id, ProductStatus status) {
         Product product = productRepository.findByIdAndDeletedAtIsNull(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm: " + id));
+                .orElseThrow(() -> new RuntimeException("Product not found: " + id));
         product.setStatus(status);
         return productMapper.toResponse(productRepository.save(product));
     }
@@ -101,7 +101,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public void delete(UUID id) {
         Product product = productRepository.findByIdAndDeletedAtIsNull(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm: " + id));
+                .orElseThrow(() -> new RuntimeException("Product not found: " + id));
         product.setDeletedAt(OffsetDateTime.now());
         productRepository.save(product);
     }

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/users")
+@RequestMapping("/api/users")
 @RequiredArgsConstructor
 public class UserController {
 
@@ -23,7 +23,7 @@ public class UserController {
     @PostMapping
     public ResponseEntity<ApiResponse<UserResponse>> create(@Valid @RequestBody UserRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo người dùng thành công", userService.create(request)));
+                .body(ApiResponse.success("User created successfully", userService.create(request)));
     }
 
     @GetMapping("/{id}")
@@ -41,12 +41,12 @@ public class UserController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<UserResponse>> update(@PathVariable UUID id,
                                                              @Valid @RequestBody UserRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật thành công", userService.update(id, request)));
+        return ResponseEntity.ok(ApiResponse.success("User updated successfully", userService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         userService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Xoá người dùng thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("User deleted successfully", null));
     }
 }

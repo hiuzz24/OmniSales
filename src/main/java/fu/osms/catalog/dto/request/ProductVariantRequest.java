@@ -16,7 +16,7 @@ import java.util.Map;
 @Builder
 public class ProductVariantRequest {
 
-    @NotBlank(message = "SKU không được để trống")
+    @NotBlank(message = "SKU must not be blank")
     @Size(max = 100)
     private String sku;
 
@@ -26,8 +26,8 @@ public class ProductVariantRequest {
     @Size(max = 100)
     private String barcode;
 
-    @NotNull(message = "Giá không được để trống")
-    @Positive(message = "Giá phải lớn hơn 0")
+    @NotNull(message = "Price must not be null")
+    @Positive(message = "Price must be greater than 0")
     private BigDecimal price;
 
     private BigDecimal costPrice;

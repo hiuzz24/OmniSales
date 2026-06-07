@@ -34,12 +34,12 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse create(OrderRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop"));
+                .orElseThrow(() -> new RuntimeException("Shop not found"));
         Order order = orderMapper.toEntity(request);
         order.setShop(shop);
         if (request.getChannelId() != null) {
             Channel channel = channelRepository.findById(request.getChannelId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy kênh bán hàng"));
+                    .orElseThrow(() -> new RuntimeException("Sales channel not found"));
             order.setChannel(channel);
         }
         order.setStatusChangedAt(OffsetDateTime.now());
@@ -51,7 +51,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse getById(UUID id) {
         return orderRepository.findById(id)
                 .map(orderMapper::toResponseWithItems)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + id));
+                .orElseThrow(() -> new RuntimeException("Order not found: " + id));
     }
 
     @Override
@@ -72,7 +72,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse updateStatus(UUID id, OrderStatus status) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + id));
+                .orElseThrow(() -> new RuntimeException("Order not found: " + id));
         order.setStatus(status);
         order.setStatusChangedAt(OffsetDateTime.now());
         return orderMapper.toResponse(orderRepository.save(order));
@@ -82,7 +82,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse update(UUID id, OrderRequest request) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + id));
+                .orElseThrow(() -> new RuntimeException("Order not found: " + id));
         orderMapper.updateEntityFromRequest(request, order);
         return orderMapper.toResponse(orderRepository.save(order));
     }
@@ -91,9 +91,9 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public void cancel(UUID id, String reason) {
         Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng: " + id));
+                .orElseThrow(() -> new RuntimeException("Order not found: " + id));
         if (order.getStatus() == OrderStatus.SHIPPED || order.getStatus() == OrderStatus.DELIVERED) {
-            throw new IllegalStateException("Không thể huỷ đơn hàng ở trạng thái: " + order.getStatus());
+            throw new IllegalStateException("Cannot cancel order with status: " + order.getStatus());
         }
         order.setStatus(OrderStatus.CANCELLED);
         order.setNote(reason);

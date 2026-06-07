@@ -29,9 +29,6 @@ public interface OrderMapper {
     @Mapping(target = "items", ignore = true)
     OrderResponse toResponse(Order order);
 
-    /**
-     * Phiên bản đầy đủ: bao gồm danh sách items.
-     */
     @Mapping(target = "shopId", source = "order.shop.id")
     @Mapping(target = "shopName", source = "order.shop.name")
     @Mapping(target = "channelId", source = "order.channel.id")

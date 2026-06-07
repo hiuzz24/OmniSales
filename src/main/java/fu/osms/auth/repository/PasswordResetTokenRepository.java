@@ -16,17 +16,11 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
 
     Optional<PasswordResetToken> findByToken(String token);
 
-    /**
-     * Tìm token hợp lệ (chưa dùng, chưa hết hạn) cho user.
-     */
     @Query("SELECT p FROM PasswordResetToken p WHERE p.user.id = :userId " +
            "AND p.usedAt IS NULL AND p.expiresAt > :now")
     Optional<PasswordResetToken> findValidTokenByUserId(@Param("userId") UUID userId,
                                                          @Param("now") OffsetDateTime now);
 
-    /**
-     * Xoá các token đã hết hạn (dùng cho scheduled cleanup).
-     */
     @Modifying
     @Query("DELETE FROM PasswordResetToken p WHERE p.expiresAt < :now AND p.usedAt IS NULL")
     int deleteExpiredTokens(@Param("now") OffsetDateTime now);

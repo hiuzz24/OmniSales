@@ -17,7 +17,7 @@ import java.util.UUID;
 @Builder
 public class ProductRequest {
 
-    @NotNull(message = "Shop ID không được để trống")
+    @NotNull(message = "Shop ID must not be null")
     private UUID shopId;
 
     private UUID categoryId;
@@ -25,7 +25,7 @@ public class ProductRequest {
     @Size(max = 100)
     private String sku;
 
-    @NotBlank(message = "Tên sản phẩm không được để trống")
+    @NotBlank(message = "Product name must not be blank")
     @Size(max = 500)
     private String name;
 

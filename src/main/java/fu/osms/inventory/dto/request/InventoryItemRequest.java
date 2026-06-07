@@ -13,21 +13,21 @@ import java.util.UUID;
 @Builder
 public class InventoryItemRequest {
 
-    @NotNull(message = "Shop ID không được để trống")
+    @NotNull(message = "Shop ID must not be null")
     private UUID shopId;
 
-    @NotNull(message = "Warehouse ID không được để trống")
+    @NotNull(message = "Warehouse ID must not be null")
     private UUID warehouseId;
 
-    @NotNull(message = "Variant ID không được để trống")
+    @NotNull(message = "Variant ID must not be null")
     private UUID variantId;
 
-    @Min(value = 0, message = "Số lượng trong kho không được âm")
+    @Min(value = 0, message = "Quantity on hand must not be negative")
     private Integer quantityOnHand = 0;
 
-    @Min(value = 0, message = "Số lượng đặt trước không được âm")
+    @Min(value = 0, message = "Reserved quantity must not be negative")
     private Integer reservedQuantity = 0;
 
-    @Min(value = 0, message = "Ngưỡng tồn kho thấp không được âm")
+    @Min(value = 0, message = "Low stock threshold must not be negative")
     private Integer lowStockThreshold = 5;
 }

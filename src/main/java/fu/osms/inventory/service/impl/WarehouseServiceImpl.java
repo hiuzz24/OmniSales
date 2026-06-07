@@ -28,7 +28,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Transactional
     public WarehouseResponse create(WarehouseRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop: " + request.getShopId()));
+                .orElseThrow(() -> new RuntimeException("Shop not found: " + request.getShopId()));
         Warehouse warehouse = warehouseMapper.toEntity(request);
         warehouse.setShop(shop);
         return warehouseMapper.toResponse(warehouseRepository.save(warehouse));
@@ -39,7 +39,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     public WarehouseResponse getById(UUID id) {
         return warehouseRepository.findById(id)
                 .map(warehouseMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy kho: " + id));
+                .orElseThrow(() -> new RuntimeException("Warehouse not found: " + id));
     }
 
     @Override
@@ -53,7 +53,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Transactional
     public WarehouseResponse update(UUID id, WarehouseRequest request) {
         Warehouse warehouse = warehouseRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy kho: " + id));
+                .orElseThrow(() -> new RuntimeException("Warehouse not found: " + id));
         warehouseMapper.updateEntityFromRequest(request, warehouse);
         return warehouseMapper.toResponse(warehouseRepository.save(warehouse));
     }
@@ -62,7 +62,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Transactional
     public void delete(UUID id) {
         if (!warehouseRepository.existsById(id)) {
-            throw new RuntimeException("Không tìm thấy kho: " + id);
+            throw new RuntimeException("Warehouse not found: " + id);
         }
         warehouseRepository.deleteById(id);
     }

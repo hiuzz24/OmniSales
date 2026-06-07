@@ -27,15 +27,15 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public CategoryResponse create(CategoryRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop: " + request.getShopId()));
+                .orElseThrow(() -> new RuntimeException("Shop not found: " + request.getShopId()));
         if (categoryRepository.existsByShopIdAndSlug(request.getShopId(), request.getSlug())) {
-            throw new IllegalArgumentException("Slug đã tồn tại trong shop");
+            throw new IllegalArgumentException("Slug already exists in this shop");
         }
         Category category = categoryMapper.toEntity(request);
         category.setShop(shop);
         if (request.getParentId() != null) {
             Category parent = categoryRepository.findById(request.getParentId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục cha"));
+                    .orElseThrow(() -> new RuntimeException("Parent category not found"));
             category.setParent(parent);
         }
         return categoryMapper.toResponse(categoryRepository.save(category));
@@ -46,7 +46,7 @@ public class CategoryServiceImpl implements CategoryService {
     public CategoryResponse getById(UUID id) {
         return categoryRepository.findById(id)
                 .map(categoryMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục: " + id));
+                .orElseThrow(() -> new RuntimeException("Category not found: " + id));
     }
 
     @Override
@@ -74,11 +74,11 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public CategoryResponse update(UUID id, CategoryRequest request) {
         Category category = categoryRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục: " + id));
+                .orElseThrow(() -> new RuntimeException("Category not found: " + id));
         categoryMapper.updateEntityFromRequest(request, category);
         if (request.getParentId() != null) {
             Category parent = categoryRepository.findById(request.getParentId())
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục cha"));
+                    .orElseThrow(() -> new RuntimeException("Parent category not found"));
             category.setParent(parent);
         } else {
             category.setParent(null);
@@ -90,7 +90,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public void delete(UUID id) {
         if (!categoryRepository.existsById(id)) {
-            throw new RuntimeException("Không tìm thấy danh mục: " + id);
+            throw new RuntimeException("Category not found: " + id);
         }
         categoryRepository.deleteById(id);
     }

@@ -16,13 +16,13 @@ import java.util.UUID;
 @Builder
 public class ChannelRequest {
 
-    @NotNull(message = "Shop ID không được để trống")
+    @NotNull(message = "Shop ID must not be null")
     private UUID shopId;
 
-    @NotNull(message = "Platform không được để trống")
+    @NotNull(message = "Platform must not be null")
     private PlatformType platform;
 
-    @NotBlank(message = "Tên hiển thị không được để trống")
+    @NotBlank(message = "Display name must not be blank")
     @Size(max = 100)
     private String displayName;
 

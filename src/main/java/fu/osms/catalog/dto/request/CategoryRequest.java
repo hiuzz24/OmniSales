@@ -14,16 +14,16 @@ import java.util.UUID;
 @Builder
 public class CategoryRequest {
 
-    @NotNull(message = "Shop ID không được để trống")
+    @NotNull(message = "Shop ID must not be null")
     private UUID shopId;
 
     private UUID parentId;
 
-    @NotBlank(message = "Tên danh mục không được để trống")
+    @NotBlank(message = "Category name must not be blank")
     @Size(max = 255)
     private String name;
 
-    @NotBlank(message = "Slug không được để trống")
+    @NotBlank(message = "Slug must not be blank")
     @Size(max = 255)
     private String slug;
 

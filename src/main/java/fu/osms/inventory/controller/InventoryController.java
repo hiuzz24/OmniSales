@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/inventory")
+@RequestMapping("/api/inventory")
 @RequiredArgsConstructor
 public class InventoryController {
 
@@ -27,7 +27,7 @@ public class InventoryController {
     public ResponseEntity<ApiResponse<InventoryItemResponse>> createItem(
             @Valid @RequestBody InventoryItemRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo mục tồn kho thành công", inventoryService.createItem(request)));
+                .body(ApiResponse.success("Inventory item created successfully", inventoryService.createItem(request)));
     }
 
     @GetMapping("/items/{id}")
@@ -52,7 +52,7 @@ public class InventoryController {
     public ResponseEntity<ApiResponse<InventoryTransactionResponse>> recordTransaction(
             @Valid @RequestBody InventoryTransactionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Ghi nhận giao dịch kho thành công",
+                .body(ApiResponse.success("Inventory transaction recorded successfully",
                         inventoryService.recordTransaction(request)));
     }
 

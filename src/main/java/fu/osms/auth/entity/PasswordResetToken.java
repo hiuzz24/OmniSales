@@ -37,9 +37,6 @@ public class PasswordResetToken {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
-    /**
-     * Kiểm tra token còn hiệu lực (chưa hết hạn và chưa được dùng).
-     */
     public boolean isValid() {
         return usedAt == null && expiresAt.isAfter(OffsetDateTime.now());
     }

@@ -11,11 +11,11 @@ import lombok.*;
 @Builder
 public class ShopRequest {
 
-    @NotBlank(message = "Tên shop không được để trống")
+    @NotBlank(message = "Shop name must not be blank")
     @Size(max = 255)
     private String name;
 
-    @NotBlank(message = "Slug không được để trống")
+    @NotBlank(message = "Slug must not be blank")
     @Size(max = 100)
     private String slug;
 

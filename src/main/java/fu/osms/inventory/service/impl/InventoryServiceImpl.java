@@ -43,11 +43,11 @@ public class InventoryServiceImpl implements InventoryService {
     @Transactional
     public InventoryItemResponse createItem(InventoryItemRequest request) {
         Shop shop = shopRepository.findById(request.getShopId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop"));
+                .orElseThrow(() -> new RuntimeException("Shop not found"));
         var warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy kho"));
+                .orElseThrow(() -> new RuntimeException("Warehouse not found"));
         ProductVariant variant = variantRepository.findById(request.getVariantId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy variant"));
+                .orElseThrow(() -> new RuntimeException("Product variant not found"));
 
         InventoryItem item = inventoryItemMapper.toEntity(request);
         item.setShop(shop);
@@ -61,7 +61,7 @@ public class InventoryServiceImpl implements InventoryService {
     public InventoryItemResponse getItemById(UUID id) {
         return inventoryItemRepository.findById(id)
                 .map(inventoryItemMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy mục tồn kho: " + id));
+                .orElseThrow(() -> new RuntimeException("Inventory item not found: " + id));
     }
 
     @Override
@@ -89,11 +89,11 @@ public class InventoryServiceImpl implements InventoryService {
     public InventoryTransactionResponse recordTransaction(InventoryTransactionRequest request) {
         InventoryItem item = inventoryItemRepository
                 .findByShopIdAndWarehouseIdAndVariantId(request.getShopId(), request.getWarehouseId(), request.getVariantId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy mục tồn kho"));
+                .orElseThrow(() -> new RuntimeException("Inventory item not found"));
 
         int before = item.getQuantityOnHand();
         int after = before + request.getQuantityChange();
-        if (after < 0) throw new IllegalArgumentException("Số lượng tồn kho không thể âm");
+        if (after < 0) throw new IllegalArgumentException("Inventory quantity cannot be negative");
 
         item.setQuantityOnHand(after);
         inventoryItemRepository.save(item);

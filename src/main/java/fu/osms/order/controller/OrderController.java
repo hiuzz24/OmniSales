@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/orders")
+@RequestMapping("/api/orders")
 @RequiredArgsConstructor
 public class OrderController {
 
@@ -24,7 +24,7 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<ApiResponse<OrderResponse>> create(@Valid @RequestBody OrderRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo đơn hàng thành công", orderService.create(request)));
+                .body(ApiResponse.success("Order created successfully", orderService.create(request)));
     }
 
     @GetMapping("/{id}")
@@ -47,13 +47,13 @@ public class OrderController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<OrderResponse>> update(@PathVariable UUID id,
                                                              @Valid @RequestBody OrderRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật đơn hàng thành công", orderService.update(id, request)));
+        return ResponseEntity.ok(ApiResponse.success("Order updated successfully", orderService.update(id, request)));
     }
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<OrderResponse>> updateStatus(@PathVariable UUID id,
                                                                     @RequestParam OrderStatus status) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái thành công",
+        return ResponseEntity.ok(ApiResponse.success("Order status updated successfully",
                 orderService.updateStatus(id, status)));
     }
 
@@ -61,6 +61,6 @@ public class OrderController {
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id,
                                                      @RequestParam(required = false) String reason) {
         orderService.cancel(id, reason);
-        return ResponseEntity.ok(ApiResponse.success("Huỷ đơn hàng thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Order cancelled successfully", null));
     }
 }

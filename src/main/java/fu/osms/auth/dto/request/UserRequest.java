@@ -12,16 +12,16 @@ import lombok.*;
 @Builder
 public class UserRequest {
 
-    @NotBlank(message = "Email không được để trống")
-    @Email(message = "Email không hợp lệ")
+    @NotBlank(message = "Email must not be blank")
+    @Email(message = "Email is not valid")
     @Size(max = 255)
     private String email;
 
-    @NotBlank(message = "Mật khẩu không được để trống")
-    @Size(min = 6, max = 255, message = "Mật khẩu phải từ 6 đến 255 ký tự")
+    @NotBlank(message = "Password must not be blank")
+    @Size(min = 6, max = 255, message = "Password must be between 6 and 255 characters")
     private String password;
 
-    @NotBlank(message = "Họ tên không được để trống")
+    @NotBlank(message = "Full name must not be blank")
     @Size(max = 255)
     private String fullName;
 

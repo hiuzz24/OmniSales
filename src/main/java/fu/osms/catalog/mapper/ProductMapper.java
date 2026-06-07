@@ -32,10 +32,6 @@ public interface ProductMapper {
     @Mapping(target = "images", ignore = true)
     ProductResponse toResponse(Product product);
 
-    /**
-     * Phiên bản đầy đủ: bao gồm variants và images.
-     * Cần được gọi thủ công sau khi load các collection liên quan.
-     */
     @Mapping(target = "shopId", source = "product.shop.id")
     @Mapping(target = "shopName", source = "product.shop.name")
     @Mapping(target = "categoryId", source = "product.category.id")

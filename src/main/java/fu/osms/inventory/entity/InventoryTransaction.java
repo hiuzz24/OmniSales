@@ -7,6 +7,7 @@ import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -45,6 +46,10 @@ public class InventoryTransaction {
     @Column(name = "reference_id")
     private UUID referenceId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id")
+    private InventoryBatch batch;
+
     @Column(name = "quantity_change", nullable = false)
     private Integer quantityChange;
 
@@ -53,6 +58,9 @@ public class InventoryTransaction {
 
     @Column(name = "quantity_after", nullable = false)
     private Integer quantityAfter;
+
+    @Column(name = "unit_cost", precision = 12, scale = 2)
+    private BigDecimal unitCost;
 
     @Column(columnDefinition = "TEXT")
     private String note;

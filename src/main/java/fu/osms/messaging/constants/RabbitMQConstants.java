@@ -4,10 +4,8 @@ public final class RabbitMQConstants {
 
     private RabbitMQConstants() {}
 
-    // Exchange
     public static final String TOPIC_EXCHANGE = "osms.topic.exchange";
 
-    // Routing Keys
     public static final String ORDER_CREATED        = "order.created";
     public static final String ORDER_CANCELLED      = "order.cancelled";
     public static final String ORDER_PAID           = "order.paid";
@@ -22,7 +20,6 @@ public final class RabbitMQConstants {
 
     public static final String NOTIFICATION_SEND    = "notification.send";
 
-    // Queue Names
     public static final String QUEUE_INVENTORY_ORDER_CREATED    = "queue.inventory.order-created";
     public static final String QUEUE_INVENTORY_ORDER_CANCELLED  = "queue.inventory.order-cancelled";
 

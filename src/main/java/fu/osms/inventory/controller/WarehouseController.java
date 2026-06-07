@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/warehouses")
+@RequestMapping("/api/warehouses")
 @RequiredArgsConstructor
 public class WarehouseController {
 
@@ -23,7 +23,7 @@ public class WarehouseController {
     @PostMapping
     public ResponseEntity<ApiResponse<WarehouseResponse>> create(@Valid @RequestBody WarehouseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo kho thành công", warehouseService.create(request)));
+                .body(ApiResponse.success("Warehouse created successfully", warehouseService.create(request)));
     }
 
     @GetMapping("/{id}")
@@ -39,12 +39,12 @@ public class WarehouseController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<WarehouseResponse>> update(@PathVariable UUID id,
                                                                   @Valid @RequestBody WarehouseRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật thành công", warehouseService.update(id, request)));
+        return ResponseEntity.ok(ApiResponse.success("Warehouse updated successfully", warehouseService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         warehouseService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Xoá kho thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Warehouse deleted successfully", null));
     }
 }

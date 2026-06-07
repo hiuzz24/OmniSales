@@ -13,10 +13,6 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Ghi lại lịch sử thay đổi của sản phẩm / variant.
- * Bảng này là immutable — không cho phép UPDATE hay DELETE (trigger DB bảo vệ).
- */
 @Entity
 @Table(name = "product_logs")
 @Getter
@@ -42,9 +38,6 @@ public class ProductLog {
     @JoinColumn(name = "variant_id")
     private ProductVariant variant;
 
-    /**
-     * SKU tại thời điểm ghi log (snapshot, không thay đổi dù variant bị xoá).
-     */
     @Column(nullable = false, length = 100)
     private String sku;
 
@@ -60,15 +53,9 @@ public class ProductLog {
     @JoinColumn(name = "performed_by")
     private User performedBy;
 
-    /**
-     * Email snapshot — giữ lại kể cả khi user bị xoá.
-     */
     @Column(name = "performed_by_email", length = 255)
     private String performedByEmail;
 
-    /**
-     * Loại tham chiếu nghiệp vụ: ORDER, TRANSFER, ADJUSTMENT, IMPORT (nullable).
-     */
     @Column(name = "reference_type", length = 50)
     private String referenceType;
 

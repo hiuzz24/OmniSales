@@ -7,6 +7,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -45,6 +46,9 @@ public class InventoryItem {
 
     @Column(name = "available_quantity", insertable = false, updatable = false)
     private Integer availableQuantity;
+
+    @Column(name = "average_cost", precision = 12, scale = 2)
+    private BigDecimal averageCost;
 
     @Column(name = "low_stock_threshold", nullable = false)
     private Integer lowStockThreshold = 5;

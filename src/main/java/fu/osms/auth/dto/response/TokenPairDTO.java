@@ -7,9 +7,8 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class AuthResponse {
+public class TokenPairDTO {
     private String accessToken;
-    private String tokenType = "Bearer";
-    private long expiresIn;
+    private String refreshToken;
     private UserResponse user;
 }

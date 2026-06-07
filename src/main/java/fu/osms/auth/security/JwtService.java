@@ -2,6 +2,8 @@ package fu.osms.auth.security;
 
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.Getter;
@@ -61,6 +63,27 @@ public class JwtService {
                 .expiration(new Date(System.currentTimeMillis() + refreshTokenExpirationMs))
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    public Claims extractClaim(String token){
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    public String extractUsername(String token){
+        return extractClaim(token).getSubject();
+    }
+
+    public boolean validateToken(String token){
+        try{
+            extractClaim(token);
+            return true;
+        }catch (JwtException e){
+            return false;
+        }
     }
 
 }

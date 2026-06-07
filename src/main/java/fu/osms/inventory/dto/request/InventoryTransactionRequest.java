@@ -13,23 +13,23 @@ import java.util.UUID;
 @Builder
 public class InventoryTransactionRequest {
 
-    @NotNull(message = "Shop ID không được để trống")
+    @NotNull(message = "Shop ID must not be null")
     private UUID shopId;
 
-    @NotNull(message = "Warehouse ID không được để trống")
+    @NotNull(message = "Warehouse ID must not be null")
     private UUID warehouseId;
 
-    @NotNull(message = "Variant ID không được để trống")
+    @NotNull(message = "Variant ID must not be null")
     private UUID variantId;
 
-    @NotNull(message = "Loại giao dịch không được để trống")
+    @NotNull(message = "Transaction type must not be null")
     private InvTxnType type;
 
     private String referenceType;
 
     private UUID referenceId;
 
-    @NotNull(message = "Số lượng thay đổi không được để trống")
+    @NotNull(message = "Quantity change must not be null")
     private Integer quantityChange;
 
     private String note;

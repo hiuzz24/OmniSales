@@ -10,7 +10,7 @@ import lombok.*;
 @Builder
 public class ProductImageRequest {
 
-    @NotBlank(message = "URL hình ảnh không được để trống")
+    @NotBlank(message = "Image URL must not be blank")
     private String url;
 
     private Short sortOrder = 0;

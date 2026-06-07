@@ -26,7 +26,7 @@ public class ShopServiceImpl implements ShopService {
     @Transactional
     public ShopResponse create(ShopRequest request) {
         if (shopRepository.existsBySlug(request.getSlug())) {
-            throw new IllegalArgumentException("Slug đã tồn tại: " + request.getSlug());
+            throw new IllegalArgumentException("Slug already exists: " + request.getSlug());
         }
         Shop shop = shopMapper.toEntity(request);
         return shopMapper.toResponse(shopRepository.save(shop));
@@ -37,7 +37,7 @@ public class ShopServiceImpl implements ShopService {
     public ShopResponse getById(UUID id) {
         return shopRepository.findById(id)
                 .map(shopMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop: " + id));
+                .orElseThrow(() -> new RuntimeException("Shop not found: " + id));
     }
 
     @Override
@@ -57,7 +57,7 @@ public class ShopServiceImpl implements ShopService {
     @Transactional
     public ShopResponse update(UUID id, ShopRequest request) {
         Shop shop = shopRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy shop: " + id));
+                .orElseThrow(() -> new RuntimeException("Shop not found: " + id));
         shopMapper.updateEntityFromRequest(request, shop);
         return shopMapper.toResponse(shopRepository.save(shop));
     }
@@ -66,7 +66,7 @@ public class ShopServiceImpl implements ShopService {
     @Transactional
     public void delete(UUID id) {
         if (!shopRepository.existsById(id)) {
-            throw new RuntimeException("Không tìm thấy shop: " + id);
+            throw new RuntimeException("Shop not found: " + id);
         }
         shopRepository.deleteById(id);
     }

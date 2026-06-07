@@ -50,4 +50,7 @@ public class OrderItem {
 
     @Column(name = "total_price", insertable = false, updatable = false, precision = 12, scale = 2)
     private BigDecimal totalPrice;
+
+    @Column(name = "cost_price", precision = 12, scale = 2)
+    private BigDecimal costPrice;
 }

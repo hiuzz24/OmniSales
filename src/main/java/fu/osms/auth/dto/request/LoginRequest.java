@@ -11,10 +11,10 @@ import lombok.*;
 @Builder
 public class LoginRequest {
 
-    @NotBlank(message = "Email không được để trống")
-    @Email(message = "Email không hợp lệ")
+    @NotBlank(message = "Email must not be blank")
+    @Email(message = "Email is not valid")
     private String email;
 
-    @NotBlank(message = "Mật khẩu không được để trống")
+    @NotBlank(message = "Password must not be blank")
     private String password;
 }

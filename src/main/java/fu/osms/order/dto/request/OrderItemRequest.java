@@ -23,15 +23,15 @@ public class OrderItemRequest {
     @Size(max = 100)
     private String sku;
 
-    @NotBlank(message = "Tên sản phẩm không được để trống")
+    @NotBlank(message = "Product name must not be blank")
     @Size(max = 500)
     private String name;
 
-    @NotNull(message = "Số lượng không được để trống")
-    @Positive(message = "Số lượng phải lớn hơn 0")
+    @NotNull(message = "Quantity must not be null")
+    @Positive(message = "Quantity must be greater than 0")
     private Integer quantity;
 
-    @NotNull(message = "Đơn giá không được để trống")
+    @NotNull(message = "Unit price must not be null")
     private BigDecimal unitPrice;
 
     private BigDecimal discountAmount = BigDecimal.ZERO;
