@@ -61,7 +61,11 @@ public enum ErrorCode {
     SYNC_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "Sync log not found"),
     SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "A sync task is already running for this channel"),
 
-    REPORT_CONFIG_NOT_FOUND(HttpStatus.NOT_FOUND, "Report configuration not found");
+    REPORT_CONFIG_NOT_FOUND(HttpStatus.NOT_FOUND, "Report configuration not found"),
+
+    //register-error-codes
+    INVALID_DATA(HttpStatus.BAD_REQUEST, "Invalid data"),
+    PHONE_ALREADY_EXISTS(HttpStatus.CONFLICT, "Phone number already exists in this shop");
 
     private final HttpStatus httpStatus;
     private final String message;
