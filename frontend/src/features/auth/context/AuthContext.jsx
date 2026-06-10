@@ -10,18 +10,14 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = getAccessToken();
+  const token = getAccessToken();
 
-    if (token && !isTokenExpired(token)) {
-      const storedUser = authService.getUserFromStorage();
-      setUser(storedUser);
-    } else {
-      clearAccessToken();
-      localStorage.removeItem('osms_user');
-    }
+  if (token) {
+    setUser(authService.getUserFromStorage());
+  }
 
-    setIsLoading(false);
-  }, []);
+  setIsLoading(false);
+}, []);
 
   const login = async (credentials) => {
     const data = await authService.login(credentials);
