@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   --color-primary: #004bca;
   --color-primary-container: #0061ff;
@@ -100,7 +102,7 @@ body {
   line-height: var(--line-height-body-md);
   font-weight: 400;
   color: var(--color-on-surface);
-  background-color: var(--color-background);
+  background-color: #ffffff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;

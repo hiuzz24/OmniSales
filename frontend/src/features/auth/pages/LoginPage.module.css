@@ -44,6 +44,25 @@
   background-clip: text;
 }
 
+.brandNameLink {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-display-lg);
+  line-height: var(--line-height-display-lg);
+  font-weight: 700;
+  letter-spacing: var(--letter-spacing-display-lg);
+  color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #4285f4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.brandNameLink:hover {
+  opacity: 0.75;
+}
+
 .helpButton {
   font-family: var(--font-family-base);
   font-size: var(--font-size-label-uppercase);
