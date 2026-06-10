@@ -6,6 +6,13 @@ import { AuthProvider } from './features/auth/context/AuthContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
+// Bật mock API khi VITE_USE_MOCK=true (không cần chạy backend)
+if (import.meta.env.VITE_USE_MOCK === 'true') {
+  import('./mocks/mockApi').then(() => {
+    console.info('%c[MOCK MODE] Đang chạy với dữ liệu giả — backend không cần thiết', 'color: #10b981; font-weight: bold');
+  }).catch(console.error);
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
