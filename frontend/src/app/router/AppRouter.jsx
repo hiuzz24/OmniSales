@@ -5,14 +5,21 @@ import PublicRoute from './PublicRoute';
 import RoleRoute from './RoleRoute';
 import { ROLES } from '../../features/auth/constants/roles';
 import LoginPage from '../../features/auth/pages/LoginPage';
+import HomePage from '../../features/auth/pages/HomePage';
+import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
+import EmptyLayout from '../layouts/EmptyLayout';
 
 const AppRouter = () => {
   return (
     <BrowserRouter>
       <Routes>
         <Route element={<PublicRoute />}>
+          <Route element={<EmptyLayout />}>
+            <Route path={ROUTES.HOME} element={<HomePage />} />
+            <Route path={ROUTES.ABOUT} element={<AboutPage />} />
+          </Route>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
         </Route>
 
@@ -26,8 +33,8 @@ const AppRouter = () => {
           </Route>
         </Route>
 
-        <Route path="/" element={<Navigate to={ROUTES.LOGIN} replace />} />
-        <Route path="*" element={<Navigate to={ROUTES.LOGIN} replace />} />
+        <Route path="/" element={<Navigate to={ROUTES.HOME} replace />} />
+        <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
       </Routes>
     </BrowserRouter>
   );

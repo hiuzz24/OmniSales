@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import LoginForm from '../components/LoginForm';
 import styles from './LoginPage.module.css';
 
@@ -5,7 +6,7 @@ const LoginPage = () => {
   return (
     <div className={styles.page}>
       <header className={styles.topBar}>
-        <div className={styles.brandName}>OSMS</div>
+        <Link to="/home" className={styles.brandNameLink}>OSMS</Link>
         <nav>
           <button id="help-btn" className={styles.helpButton} type="button">
             Trợ giúp
