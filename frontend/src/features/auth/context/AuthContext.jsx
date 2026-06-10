@@ -23,6 +23,8 @@ export const AuthProvider = ({ children }) => {
     setIsLoading(false);
   }, []);
 
+  const isAuthenticated = !!user;
+
   const login = async (credentials) => {
     const data = await authService.login(credentials);
     setUser(data.user);
@@ -35,7 +37,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
