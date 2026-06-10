@@ -4,8 +4,6 @@ import './interceptors';
 const authApi = {
   login: async (credentials) => {
     const data = await axiosClient.post('/auth/login', credentials);
-    console.log(data);
-    
     return data;
   },
 
@@ -16,11 +14,6 @@ const authApi = {
 
   refreshToken: async () => {
     const data = await axiosClient.post('/auth/refresh');
-    return data;
-  },
-
-  getMe: async () => {
-    const data = await axiosClient.get('/auth/me');
     return data;
   },
 

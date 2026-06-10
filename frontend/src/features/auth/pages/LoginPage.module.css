@@ -96,6 +96,7 @@
   width: 100%;
   max-width: var(--container-max);
   margin: 0 auto;
+  flex: 1;
 }
 
 @media (min-width: 1024px) {
@@ -141,164 +142,71 @@
 @media (min-width: 1024px) {
   .brandPanel {
     display: flex;
+    flex-direction: column;
     width: 50%;
-    min-height: 100%;
     position: relative;
-    background: linear-gradient(135deg, #0a1628 0%, #0d2461 40%, #0052dc 100%);
-    overflow: hidden;
+    background-color: var(--color-surface-container-low);
+    border-radius: var(--radius-xl);
     align-items: center;
     justify-content: center;
+    padding: 2rem;
+    margin: 1rem;
   }
 }
 
-.brandPanel::before {
-  content: '';
-  position: absolute;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(180, 197, 255, 0.2) 0%, transparent 70%);
-  top: -150px;
-  right: -150px;
-  border-radius: 50%;
-  pointer-events: none;
+.brandImage {
+  max-width: 90%;
+  height: auto;
+  max-height: 50vh;
+  object-fit: contain;
+  margin-bottom: 2.5rem;
+  border-radius: var(--radius-xl);
+  animation: fadeInUp 0.8s ease-out 0.2s both;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05);
 }
 
-.brandPanel::after {
-  content: '';
-  position: absolute;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(0, 97, 255, 0.3) 0%, transparent 70%);
-  bottom: -100px;
-  left: -100px;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.brandContent {
-  position: relative;
-  z-index: 1;
-  padding: 3rem;
+.brandTextContainer {
   text-align: center;
-  color: #ffffff;
+  max-width: 420px;
+  animation: fadeInUp 0.8s ease-out 0.4s both;
 }
 
-.brandLogoBox {
-  width: 80px;
-  height: 80px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-xl);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.brandLogoIcon {
-  font-size: 2.5rem;
-  color: #ffffff;
-  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 48;
-}
-
-.brandTagline {
-  font-size: var(--font-size-display-lg);
+.brandTitle {
+  font-size: var(--font-size-display-lg-mobile);
   font-weight: 700;
+  color: var(--color-on-surface);
+  margin-bottom: 1rem;
   letter-spacing: var(--letter-spacing-display-lg);
-  line-height: var(--line-height-display-lg);
-  margin-bottom: 1.5rem;
-  color: #ffffff;
 }
 
-.brandTaglineAccent {
-  color: var(--color-primary-fixed-dim);
-}
-
-.brandDescription {
+.brandSubtitle {
   font-size: var(--font-size-body-md);
+  color: var(--color-on-surface-variant);
   line-height: var(--line-height-body-md);
-  color: rgba(255, 255, 255, 0.75);
-  max-width: 360px;
-  margin: 0 auto 2.5rem;
 }
 
-.featureList {
-  list-style: none;
+.footer {
+  width: 100%;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 1.5rem var(--spacing-margin-desktop);
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  text-align: left;
-}
-
-.featureItem {
-  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  font-size: var(--font-size-body-sm);
-  color: rgba(255, 255, 255, 0.85);
+  border-top: 1px solid var(--color-surface-variant);
+  font-size: var(--font-size-label-uppercase);
+  color: var(--color-on-surface-variant);
 }
 
-.featureIconBox {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.12);
+.footerLinks {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  gap: 1.5rem;
 }
 
-.featureIconBox .material-symbols-outlined {
-  font-size: 18px;
-  color: #ffffff;
-  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+.footerLink {
+  transition: color 0.2s ease;
 }
 
-.floatingCard {
-  position: absolute;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-xl);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 1rem 1.25rem;
-  z-index: 2;
-}
-
-.floatingCard1 {
-  top: 12%;
-  right: 8%;
-  animation: fadeInUp 0.8s ease-out 0.3s both;
-}
-
-.floatingCard2 {
-  bottom: 15%;
-  left: 8%;
-  animation: fadeInUp 0.8s ease-out 0.5s both;
-}
-
-.floatingCardLabel {
-  font-size: var(--font-size-label-uppercase);
-  letter-spacing: var(--letter-spacing-label-uppercase);
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
-  margin-bottom: 0.25rem;
-  font-weight: var(--font-weight-label-uppercase);
-}
-
-.floatingCardValue {
-  font-size: var(--font-size-title-sm);
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.floatingCardTrend {
-  font-size: var(--font-size-label-uppercase);
-  letter-spacing: var(--letter-spacing-label-uppercase);
-  font-weight: 600;
-  color: #4ade80;
-  margin-top: 2px;
+.footerLink:hover {
+  color: var(--color-primary);
 }
