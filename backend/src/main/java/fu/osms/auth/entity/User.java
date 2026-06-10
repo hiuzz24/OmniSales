@@ -61,6 +61,9 @@ public class User {
     @Column(name = "verification_token", length = 255)
     private String verificationToken;
 
+    @Column(name = "verification_token_expires_at")
+    private OffsetDateTime verificationTokenExpiresAt;
+
     @Column(name = "failed_login_attempts")
     private Integer failedLoginAttempts = 0;
 

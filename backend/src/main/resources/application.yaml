@@ -9,15 +9,32 @@ spring:
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
+    show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
-    show-sql: false
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${USERNAME_GMAIL}
+    password: ${APP_PASSWORD_GMAIL}
+
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+logging:
+  level:
+    root: INFO
 
 app:
   jwt:
-
+    secret: ${JWT_SECRET}
     # 1 hour
     # 7 days
+  frontend:
+    base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+

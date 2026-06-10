@@ -36,6 +36,12 @@ public class Shop {
     @Column(name = "costing_method", nullable = false, length = 5)
     private String costingMethod = "WAC";
 
+    @Column(length = 255)
+    private String address;
+
+    @Column(length = 100)
+    private String city;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
