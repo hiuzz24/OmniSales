@@ -5,6 +5,8 @@ import PublicRoute from './PublicRoute';
 import RoleRoute from './RoleRoute';
 import { ROLES } from '../../features/auth/constants/roles';
 import LoginPage from '../../features/auth/pages/LoginPage';
+import RegisterPage from '../../features/auth/pages/RegisterPage';
+import VerifyEmailPage from '../../features/auth/pages/VerifyEmailPage';
 import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 
@@ -14,7 +16,10 @@ const AppRouter = () => {
       <Routes>
         <Route element={<PublicRoute />}>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+          <Route path={ROUTES.REGISTER} element={<RegisterPage />} />
+          <Route path={ROUTES.VERIFY_EMAIL} element={<VerifyEmailPage />} />
         </Route>
+
 
         <Route element={<PrivateRoute />}>
           <Route element={<RoleRoute allowedRoles={[ROLES.SYSTEM_ADMIN]} />}>
@@ -34,3 +39,4 @@ const AppRouter = () => {
 };
 
 export default AppRouter;
+

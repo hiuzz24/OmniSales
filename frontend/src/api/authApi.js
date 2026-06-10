@@ -5,7 +5,7 @@ const authApi = {
   login: async (credentials) => {
     const data = await axiosClient.post('/auth/login', credentials);
     console.log(data);
-    
+
     return data;
   },
 
@@ -24,6 +24,30 @@ const authApi = {
     return data;
   },
 
+  register: async (payload) => {
+    const data = await axiosClient.post('/auth/register', payload);
+    return data;
+  },
+
+  resendVerificationEmail: async (email) => {
+    const data = await axiosClient.post(
+      '/auth/resend-verification-email',
+      null,
+      {
+        params: { email },
+      }
+    );
+    return data;
+  },
+
+  verifyEmail: async (token) => {
+    const data = await axiosClient.get('/auth/verify-email', {
+      params: { token },
+    });
+    return data;
+  },
+
+
   forgotPassword: async (email) => {
     const data = await axiosClient.post('/auth/forgot-password', { email });
     return data;
@@ -39,5 +63,6 @@ const authApi = {
     return data;
   },
 };
+
 
 export default authApi;

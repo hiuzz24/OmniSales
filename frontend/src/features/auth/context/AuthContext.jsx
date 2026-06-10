@@ -34,9 +34,42 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const register = async (payload) => {
+    return authService.register(payload);
+  };
+
+  const resendVerificationEmail = async (email) => {
+    return authService.resendVerificationEmail(email);
+  };
+
+  const [isLoadingVerifyEmail, setIsLoadingVerifyEmail] = useState(false);
+
+  const verifyEmail = async (token) => {
+    setIsLoadingVerifyEmail(true);
+    try {
+      return authService.verifyEmail(token);
+    } finally {
+      setIsLoadingVerifyEmail(false);
+    }
+  };
+
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        login,
+        logout,
+        register,
+        resendVerificationEmail,
+        verifyEmail,
+        isLoadingVerify: isLoadingVerifyEmail,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
+
+

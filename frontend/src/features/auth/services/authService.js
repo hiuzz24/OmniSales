@@ -39,10 +39,35 @@ const authService = {
     return data;
   },
 
+  register: async ({ fullName, email, password, phone, city, address, shopName, confirmPassword }) => {
+    const payload = {
+      fullName,
+      email,
+      password,
+      confirmPassword: confirmPassword ?? password,
+      phone,
+      shopName,
+      address,
+      city,
+    };
+    return authApi.register(payload);
+  },
+
+
+  resendVerificationEmail: async (email) => {
+    return authApi.resendVerificationEmail(email);
+  },
+
+  verifyEmail: async (token) => {
+    return authApi.verifyEmail(token);
+  },
+
+
   changePassword: async (currentPassword, newPassword) => {
     const data = await authApi.changePassword(currentPassword, newPassword);
     return data;
   },
 };
+
 
 export default authService;

@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,10 +21,29 @@ const loginSchema = z.object({
 
 const LoginForm = () => {
   const navigate = useNavigate();
+  const { state } = useLocation();
   const { login } = useAuth();
 
   const [showPassword, setShowPassword] = useState(false);
   const [apiError, setApiError] = useState('');
+
+  const popupMessage = state?.popup ? String(state.popup) : '';
+
+  useEffect(() => {
+    if (!popupMessage) return;
+    try {
+      // Tránh hiển thị lại popup khi refresh trang
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch {
+      // ignore
+    }
+  }, [popupMessage]);
+
+
+
+
+
+
 
   const {
     register,
@@ -68,14 +88,21 @@ const LoginForm = () => {
         <p className={styles.subtitle}>Đăng nhập vào tài khoản OSMS của bạn</p>
       </div>
 
-      {apiError && (
+      {apiError ? (
         <div className={styles.errorBanner} role="alert">
           <span className={`material-symbols-outlined ${styles.errorBannerIcon}`}>
             error
           </span>
           <span>{apiError}</span>
         </div>
-      )}
+      ) : null}
+
+      {popupMessage ? (
+        <div style={{ marginBottom: 16, padding: 12, borderRadius: 10, background: '#ecfccb', color: '#365314', fontWeight: 700 }} role="status">
+          {popupMessage}
+        </div>
+      ) : null}
+
 
       <form className={styles.form} onSubmit={handleSubmit(onSubmit)} noValidate>
         <div className={styles.inputGroup}>
