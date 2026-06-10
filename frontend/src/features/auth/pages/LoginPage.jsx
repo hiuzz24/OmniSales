@@ -8,7 +8,7 @@ const LoginPage = () => {
         <div className={styles.brandName}>OmniSales</div>
         <nav>
           <button id="help-btn" className={styles.helpButton} type="button">
-            Help
+            Trợ giúp
           </button>
         </nav>
       </header>
@@ -28,9 +28,9 @@ const LoginPage = () => {
               className={styles.brandImage} 
             />
             <div className={styles.brandTextContainer}>
-              <h2 className={styles.brandTitle}>Unified Operations</h2>
+              <h2 className={styles.brandTitle}>Quản lý hợp nhất</h2>
               <p className={styles.brandSubtitle}>
-                Manage inventory, orders, and customers across all sales channels from a single interface.
+                Quản lý hàng tồn kho, đơn hàng và khách hàng trên tất cả các kênh bán hàng từ một giao diện duy nhất.
               </p>
             </div>
           </aside>
@@ -38,11 +38,11 @@ const LoginPage = () => {
       </main>
 
       <footer className={styles.footer}>
-        <div>OmniSales &copy; 2024 OmniSales. All rights reserved.</div>
+        <div>OmniSales &copy; 2024 OmniSales. Đã đăng ký bản quyền.</div>
         <div className={styles.footerLinks}>
-          <a href="#" className={styles.footerLink}>Terms</a>
-          <a href="#" className={styles.footerLink}>Privacy</a>
-          <a href="#" className={styles.footerLink}>Contact</a>
+          <a href="#" className={styles.footerLink}>Điều khoản</a>
+          <a href="#" className={styles.footerLink}>Bảo mật</a>
+          <a href="#" className={styles.footerLink}>Liên hệ</a>
         </div>
       </footer>
     </div>

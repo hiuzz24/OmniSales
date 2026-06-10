@@ -11,12 +11,12 @@ import styles from './LoginForm.module.css';
 const loginSchema = z.object({
   email: z
     .string()
-    .min(1, 'Please enter your email address.')
-    .email('Invalid email address.'),
+    .min(1, 'Vui lòng nhập địa chỉ email của bạn.')
+    .email('Địa chỉ email không hợp lệ.'),
   password: z
     .string()
-    .min(1, 'Please enter your password.')
-    .min(8, 'Password must be at least 8 characters.'),
+    .min(1, 'Vui lòng nhập mật khẩu của bạn.')
+    .min(8, 'Mật khẩu phải có ít nhất 8 ký tự.'),
   rememberMe: z.boolean().optional(),
 });
 
@@ -44,18 +44,18 @@ const LoginForm = () => {
     setApiError('');
     try {
       const result = await login(data);
-      toast.success("Login Successful");
+      toast.success("Đăng nhập thành công");
       navigate(getRoleHome(result?.user?.role));
     } catch (err) {
       const status = err?.response?.status;
       if (status === 401) {
-        setApiError('Incorrect email or password. Please try again.');
+        setApiError('Email hoặc mật khẩu không chính xác. Vui lòng thử lại.');
       } else if (status === 429) {
-        setApiError('Too many login attempts. Please wait and try again.');
+        setApiError('Quá nhiều lần thử đăng nhập. Vui lòng đợi và thử lại sau.');
       } else if (status >= 500) {
-        setApiError('Server error. Please try again later.');
+        setApiError('Lỗi máy chủ. Vui lòng thử lại sau.');
       } else {
-        setApiError('Something went wrong. Please try again.');
+        setApiError('Đã xảy ra lỗi. Vui lòng thử lại.');
       }
     }
   };
@@ -68,8 +68,8 @@ const LoginForm = () => {
             <span className="material-symbols-outlined">storefront</span>
           </div>
         </div>
-        <h1 className={styles.title}>Welcome Back</h1>
-        <p className={styles.subtitle}>Log in to your omnichannel management system</p>
+        <h1 className={styles.title}>Chào mừng trở lại</h1>
+        <p className={styles.subtitle}>Đăng nhập vào hệ thống quản lý đa kênh của bạn</p>
       </div>
 
       {apiError && (
@@ -112,7 +112,7 @@ const LoginForm = () => {
 
         <div className={styles.inputGroup}>
           <label htmlFor="login-password" className={styles.label}>
-            Password
+            Mật khẩu
           </label>
           <div className={styles.inputWrapper}>
             <span className={`material-symbols-outlined ${styles.inputLeadingIcon}`}>
@@ -133,7 +133,7 @@ const LoginForm = () => {
               type="button"
               className={styles.trailingIconBtn}
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
               tabIndex={-1}
             >
               <span className="material-symbols-outlined">
@@ -152,10 +152,10 @@ const LoginForm = () => {
         <div className={styles.optionsRow}>
           <label className={styles.checkboxWrapper}>
             <input type="checkbox" {...register('rememberMe')} className={styles.checkbox} />
-            <span className={styles.checkboxLabel}>Remember me</span>
+            <span className={styles.checkboxLabel}>Ghi nhớ đăng nhập</span>
           </label>
           <a href="/forgot-password" className={styles.forgotLink}>
-            Forgot password?
+            Quên mật khẩu?
           </a>
         </div>
 
@@ -168,14 +168,14 @@ const LoginForm = () => {
           {isSubmitting ? (
             <>
               <span className={styles.spinner} aria-hidden="true" />
-              Signing in...
+              Đang đăng nhập...
             </>
           ) : (
             <>
               <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
                 login
               </span>
-              Sign in
+              Đăng nhập
             </>
           )}
         </button>
@@ -183,24 +183,24 @@ const LoginForm = () => {
 
 
         <p className={styles.signupRow}>
-          Don't have an account?
+          Chưa có tài khoản?
           <a href="/register" className={styles.signupLink}>
-            Sign up for free
+            Đăng ký miễn phí
           </a>
         </p>
 
         <div className={styles.trustBadges}>
           <span className={styles.trustBadge}>
             <span className="material-symbols-outlined">lock</span>
-            SSL Secured
+            Bảo mật SSL
           </span>
           <span className={styles.trustBadge}>
             <span className="material-symbols-outlined">verified_user</span>
-            Data Protection
+            Bảo vệ dữ liệu
           </span>
           <span className={styles.trustBadge}>
             <span className="material-symbols-outlined">shield</span>
-            Two-factor Auth
+            Xác thực hai yếu tố
           </span>
         </div>
       </form>
