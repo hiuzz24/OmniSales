@@ -49,7 +49,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(@RequestParam String refreshToken) {
+    public ResponseEntity<ApiResponse<Void>> logout(@CookieValue String refreshToken) {
         authService.logout(refreshToken);
         return ResponseEntity.ok(ApiResponse.success("Logged out successfully", null));
     }
