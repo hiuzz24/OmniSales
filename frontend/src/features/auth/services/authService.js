@@ -4,10 +4,16 @@ import { setAccessToken, clearAccessToken } from '../../../api/interceptors';
 const USER_KEY = 'osms_user';
 
 const authService = {
-  login: async ({ email, password }) => {
+  login: async ({ email, password, rememberMe = true }) => {
     const data = await authApi.login({ email, password });
-    setAccessToken(data.accessToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    setAccessToken(data.accessToken, rememberMe);
+    if (rememberMe) {
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      sessionStorage.removeItem(USER_KEY);
+    } else {
+      sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      localStorage.removeItem(USER_KEY);
+    }
     return data;
   },
 
@@ -17,12 +23,13 @@ const authService = {
     } finally {
       clearAccessToken();
       localStorage.removeItem(USER_KEY);
+      sessionStorage.removeItem(USER_KEY);
     }
   },
 
   getUserFromStorage: () => {
     try {
-      const raw = localStorage.getItem(USER_KEY);
+      const raw = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;

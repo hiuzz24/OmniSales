@@ -19,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -50,15 +51,16 @@ public class AuthServiceImpl implements AuthService {
         try{
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
-        }catch(BadCredentialsException e){
-            log.info("username or pw not correct");
+        }catch(AuthenticationException e){
+            log.error("Username or password not correct for email: {}", request.getEmail());
+            throw e;
         }
 
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new BadCredentialsException("User not found"));
 
         UserRole role = userRoleRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new BadCredentialsException("User role not found"));
 
         UserResponse response = userMapper.toResponse(user);
         response.setRole(role.getRole().getName());

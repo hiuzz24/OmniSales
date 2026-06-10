@@ -28,7 +28,7 @@ public class JwtService {
     private String jwtSecret;
 
     @Getter
-    @Value("${JWT_EXPIRATION_MS:1800000}")
+    @Value("${JWT_EXPIRATION_MS:120000}")
     private long accessTokenExpirationMs;
 
     @Value("${JWT_REFRESH_EXPIRATION_MS:604800000}")
