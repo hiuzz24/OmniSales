@@ -13,6 +13,7 @@ public interface OrderItemMapper {
     @Mapping(target = "variant", ignore = true)
     @Mapping(target = "channelVariant", ignore = true)
     @Mapping(target = "totalPrice", ignore = true)
+    @Mapping(target = "costPrice", ignore = true)
     OrderItem toEntity(OrderItemRequest request);
 
     @Mapping(target = "orderId", source = "order.id")

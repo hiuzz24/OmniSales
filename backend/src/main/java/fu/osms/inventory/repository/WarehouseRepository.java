@@ -10,7 +10,7 @@ import java.util.UUID;
 @Repository
 public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
 
-    List<Warehouse> findByShopId(UUID shopId);
+    List<Warehouse> findByIsActive(Boolean isActive);
 
-    List<Warehouse> findByShopIdAndIsActive(UUID shopId, Boolean isActive);
+    List<Warehouse> findByDeletedAtIsNull();
 }

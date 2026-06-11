@@ -2,7 +2,6 @@ package fu.osms.catalog.dto.request;
 
 import fu.osms.catalog.enums.ProductStatus;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -16,9 +15,6 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class ProductRequest {
-
-    @NotNull(message = "Shop ID must not be null")
-    private UUID shopId;
 
     private UUID categoryId;
 
@@ -34,8 +30,10 @@ public class ProductRequest {
     @Size(max = 255)
     private String brand;
 
+    @Builder.Default
     private ProductStatus status = ProductStatus.DRAFT;
 
+    @Builder.Default
     private Integer lowStockThreshold = 5;
 
     private Integer weightGrams;

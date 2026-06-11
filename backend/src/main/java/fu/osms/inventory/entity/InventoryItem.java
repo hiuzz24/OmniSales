@@ -2,7 +2,6 @@ package fu.osms.inventory.entity;
 
 import fu.osms.auth.entity.User;
 import fu.osms.catalog.entity.ProductVariant;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -27,10 +26,6 @@ public class InventoryItem {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
@@ -39,9 +34,11 @@ public class InventoryItem {
     private ProductVariant variant;
 
     @Column(name = "quantity_on_hand", nullable = false)
+    @Builder.Default
     private Integer quantityOnHand = 0;
 
     @Column(name = "reserved_quantity", nullable = false)
+    @Builder.Default
     private Integer reservedQuantity = 0;
 
     @Column(name = "available_quantity", insertable = false, updatable = false)
@@ -51,10 +48,12 @@ public class InventoryItem {
     private BigDecimal averageCost;
 
     @Column(name = "low_stock_threshold", nullable = false)
+    @Builder.Default
     private Integer lowStockThreshold = 5;
 
     @Version
     @Column(nullable = false)
+    @Builder.Default
     private Long version = 0L;
 
     @ManyToOne(fetch = FetchType.LAZY)

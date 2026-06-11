@@ -32,13 +32,13 @@ export const MOCK_USERS = [
   },
 ];
 
-export const MOCK_SHOPS = [
+export const MOCK_CHANNELS = [
   {
     id: 1,
     name: 'Shop Thời Trang Nữ',
     platform: 'SHOPEE',
-    shopId: 'SP001',
-    ownerId: 2,
+    channelCode: 'SP001',
+    
     isConnected: true,
     monthlyRevenue: 125000000,
   },
@@ -46,8 +46,8 @@ export const MOCK_SHOPS = [
     id: 2,
     name: 'Cosmetics Store',
     platform: 'TIKTOK_SHOP',
-    shopId: 'TT001',
-    ownerId: 2,
+    channelCode: 'TT001',
+    
     isConnected: true,
     monthlyRevenue: 89000000,
   },
@@ -55,8 +55,8 @@ export const MOCK_SHOPS = [
     id: 3,
     name: 'Lazada Accessories',
     platform: 'LAZADA',
-    shopId: 'LZ001',
-    ownerId: 2,
+    channelCode: 'LZ001',
+    
     isConnected: true,
     monthlyRevenue: 45000000,
   },

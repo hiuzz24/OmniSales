@@ -1,10 +1,10 @@
 package fu.osms.inventory.service;
 
+import fu.osms.common.dto.PageResponse;
 import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
-import fu.osms.common.dto.PageResponse;
 
 import java.util.List;
 import java.util.UUID;
@@ -15,13 +15,13 @@ public interface InventoryService {
 
     InventoryItemResponse getItemById(UUID id);
 
-    PageResponse<InventoryItemResponse> getItemsByShop(UUID shopId, int page, int size);
+    PageResponse<InventoryItemResponse> getItems(UUID warehouseId, int page, int size);
 
-    List<InventoryItemResponse> getLowStockItems(UUID shopId);
+    List<InventoryItemResponse> getLowStockItems();
 
     InventoryTransactionResponse recordTransaction(InventoryTransactionRequest request);
 
-    PageResponse<InventoryTransactionResponse> getTransactionsByShop(UUID shopId, int page, int size);
+    PageResponse<InventoryTransactionResponse> getTransactions(int page, int size);
 
-    PageResponse<InventoryTransactionResponse> getTransactionsByVariant(UUID shopId, UUID variantId, int page, int size);
+    PageResponse<InventoryTransactionResponse> getTransactionsByVariant(UUID variantId, int page, int size);
 }

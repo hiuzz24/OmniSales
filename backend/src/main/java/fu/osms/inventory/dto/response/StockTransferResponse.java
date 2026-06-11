@@ -14,7 +14,7 @@ import java.util.UUID;
 public class StockTransferResponse {
 
     private UUID id;
-    private UUID shopId;
+
     private UUID fromWarehouseId;
     private String fromWarehouseName;
     private UUID toWarehouseId;

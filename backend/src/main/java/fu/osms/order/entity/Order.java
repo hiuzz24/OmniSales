@@ -3,8 +3,8 @@ package fu.osms.order.entity;
 import fu.osms.auth.entity.User;
 import fu.osms.channel.entity.Channel;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.customer.entity.Customer;
 import fu.osms.order.enums.OrderStatus;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -31,14 +31,15 @@ public class Order {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "channel_id")
     private Channel channel;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id")
+    private Customer customer;
+
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     private PlatformType platform;
 
@@ -49,10 +50,13 @@ public class Order {
     private String externalOrderId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
+    @Builder.Default
     private OrderStatus status = OrderStatus.PENDING;
 
     @Column(name = "payment_status", nullable = false, length = 20)
+    @Builder.Default
     private String paymentStatus = "UNPAID";
 
     @Column(name = "status_changed_at")
@@ -69,18 +73,22 @@ public class Order {
     private Map<String, Object> shippingAddress;
 
     @Column(nullable = false, precision = 12, scale = 2)
+    @Builder.Default
     private BigDecimal subtotal = BigDecimal.ZERO;
 
     @Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
     @Column(name = "shipping_fee", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
     private BigDecimal shippingFee = BigDecimal.ZERO;
 
     @Column(name = "total_amount", insertable = false, updatable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
     @Column(nullable = false, length = 3)
+    @Builder.Default
     private String currency = "VND";
 
     @Column(columnDefinition = "TEXT")
@@ -89,8 +97,16 @@ public class Order {
     @Column(name = "tracking_number", length = 200)
     private String trackingNumber;
 
+    @Column(name = "cancel_reason", length = 255)
+    private String cancelReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cancelled_by")
+    private User cancelledBy;
+
     @Version
     @Column(nullable = false)
+    @Builder.Default
     private Long version = 0L;
 
     @CreationTimestamp
@@ -100,11 +116,4 @@ public class Order {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
-
-    @Column(name = "cancel_reason", length = 255)
-    private String cancelReason;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "cancelled_by")
-    private User cancelledBy;
 }

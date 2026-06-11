@@ -15,8 +15,7 @@ import java.util.UUID;
 public class ChannelResponse {
 
     private UUID id;
-    private UUID shopId;
-    private String shopName;
+
     private PlatformType platform;
     private String displayName;
     private String status;

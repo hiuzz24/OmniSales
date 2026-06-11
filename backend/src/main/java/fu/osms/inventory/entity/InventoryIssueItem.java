@@ -28,10 +28,6 @@ public class InventoryIssueItem {
     @JoinColumn(name = "variant_id", nullable = false)
     private ProductVariant variant;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_id")
-    private InventoryBatch batch;
-
     @Column(nullable = false)
     private Integer quantity;
 

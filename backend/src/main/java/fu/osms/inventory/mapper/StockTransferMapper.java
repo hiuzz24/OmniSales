@@ -14,7 +14,7 @@ public interface StockTransferMapper {
     // ── Transfer ──────────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "fromWarehouse", ignore = true)
     @Mapping(target = "toWarehouse", ignore = true)
     @Mapping(target = "status", ignore = true)
@@ -24,7 +24,6 @@ public interface StockTransferMapper {
     @Mapping(target = "updatedAt", ignore = true)
     StockTransfer toEntity(StockTransferRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
     @Mapping(target = "fromWarehouseId", source = "fromWarehouse.id")
     @Mapping(target = "fromWarehouseName", source = "fromWarehouse.name")
     @Mapping(target = "toWarehouseId", source = "toWarehouse.id")

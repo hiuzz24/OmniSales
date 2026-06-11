@@ -34,5 +34,6 @@ public class OrderItemRequest {
     @NotNull(message = "Unit price must not be null")
     private BigDecimal unitPrice;
 
+    @Builder.Default
     private BigDecimal discountAmount = BigDecimal.ZERO;
 }

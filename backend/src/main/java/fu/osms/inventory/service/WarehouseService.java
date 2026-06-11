@@ -12,7 +12,7 @@ public interface WarehouseService {
 
     WarehouseResponse getById(UUID id);
 
-    List<WarehouseResponse> getByShopId(UUID shopId);
+    List<WarehouseResponse> getAll();
 
     WarehouseResponse update(UUID id, WarehouseRequest request);
 

@@ -1,6 +1,5 @@
 package fu.osms.auth.entity;
 
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -29,10 +28,6 @@ public class UserRole {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id")
-    private Shop shop;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "granted_by")

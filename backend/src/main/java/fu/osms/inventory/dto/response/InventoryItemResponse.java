@@ -13,7 +13,7 @@ import java.util.UUID;
 public class InventoryItemResponse {
 
     private UUID id;
-    private UUID shopId;
+
     private UUID warehouseId;
     private String warehouseName;
     private UUID variantId;

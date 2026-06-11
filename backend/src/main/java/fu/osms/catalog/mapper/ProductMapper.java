@@ -10,7 +10,6 @@ import org.mapstruct.*;
 public interface ProductMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "createdBy", ignore = true)
@@ -20,8 +19,6 @@ public interface ProductMapper {
     @Mapping(target = "deletedAt", ignore = true)
     Product toEntity(ProductRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
-    @Mapping(target = "shopName", source = "shop.name")
     @Mapping(target = "categoryId", source = "category.id")
     @Mapping(target = "categoryName", source = "category.name")
     @Mapping(target = "createdById", source = "createdBy.id")
@@ -32,18 +29,17 @@ public interface ProductMapper {
     @Mapping(target = "images", ignore = true)
     ProductResponse toResponse(Product product);
 
-    @Mapping(target = "shopId", source = "product.shop.id")
-    @Mapping(target = "shopName", source = "product.shop.name")
     @Mapping(target = "categoryId", source = "product.category.id")
     @Mapping(target = "categoryName", source = "product.category.name")
     @Mapping(target = "createdById", source = "product.createdBy.id")
     @Mapping(target = "createdByName", source = "product.createdBy.fullName")
     @Mapping(target = "updatedById", source = "product.updatedBy.id")
     @Mapping(target = "updatedByName", source = "product.updatedBy.fullName")
+    @Mapping(target = "variants", ignore = true)
+    @Mapping(target = "images", ignore = true)
     ProductResponse toResponseWithDetails(Product product);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "createdBy", ignore = true)

@@ -1,18 +1,17 @@
 package fu.osms.inventory.entity;
 
 import fu.osms.auth.entity.User;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "inventory_issues",
-        uniqueConstraints = @UniqueConstraint(name = "uq_issue_code", columnNames = {"shop_id", "issue_code"}))
+@Table(name = "inventory_issues")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,26 +24,24 @@ public class InventoryIssue {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
-    @Column(name = "issue_code", nullable = false, length = 100)
+    @Column(name = "issue_code", nullable = false, unique = true, length = 100)
     private String issueCode;
 
-    @Column(name = "issue_type", nullable = false, length = 20)
+    @Column(name = "issue_type", nullable = false, length = 10)
     private String issueType;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
+    @Builder.Default
     private String status = "DRAFT";
 
     @Column(name = "reference_id")
     private UUID referenceId;
 
     @Column(name = "total_cost", nullable = false, precision = 14, scale = 2)
+    @Builder.Default
     private BigDecimal totalCost = BigDecimal.ZERO;
 
     @Column(columnDefinition = "TEXT")
@@ -65,12 +62,7 @@ public class InventoryIssue {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
-
-    @PrePersist
-    @PreUpdate
-    protected void onUpsert() {
-        updatedAt = OffsetDateTime.now();
-    }
 }

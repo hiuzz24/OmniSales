@@ -1,7 +1,6 @@
 package fu.osms.catalog.entity;
 
 import fu.osms.auth.entity.User;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -31,10 +30,6 @@ public class ProductVariant {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
     @Column(nullable = false, length = 100)
     private String sku;
 
@@ -45,12 +40,14 @@ public class ProductVariant {
     private String barcode;
 
     @Column(nullable = false, precision = 12, scale = 2)
+    @Builder.Default
     private BigDecimal price = BigDecimal.ZERO;
 
     @Column(name = "cost_price", precision = 12, scale = 2)
     private BigDecimal costPrice;
 
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private Boolean isActive = true;
 
     @JdbcTypeCode(SqlTypes.JSON)

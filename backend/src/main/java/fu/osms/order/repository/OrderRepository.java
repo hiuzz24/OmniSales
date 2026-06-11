@@ -16,18 +16,16 @@ import java.util.UUID;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
-    Page<Order> findByShopId(UUID shopId, Pageable pageable);
+    Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
-    Page<Order> findByShopIdAndStatus(UUID shopId, OrderStatus status, Pageable pageable);
+    Page<Order> findByChannelId(UUID channelId, Pageable pageable);
 
-    Page<Order> findByShopIdAndChannelId(UUID shopId, UUID channelId, Pageable pageable);
+    Optional<Order> findByExternalOrderId(String externalOrderId);
 
-    Optional<Order> findByShopIdAndExternalOrderId(UUID shopId, String externalOrderId);
+    Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
 
-    @Query("SELECT o FROM Order o WHERE o.shop.id = :shopId " +
-           "AND o.createdAt BETWEEN :from AND :to")
-    Page<Order> findByShopIdAndDateRange(@Param("shopId") UUID shopId,
-                                          @Param("from") OffsetDateTime from,
-                                          @Param("to") OffsetDateTime to,
-                                          Pageable pageable);
+    @Query("SELECT o FROM Order o WHERE o.createdAt BETWEEN :from AND :to")
+    Page<Order> findByDateRange(@Param("from") OffsetDateTime from,
+                                @Param("to") OffsetDateTime to,
+                                Pageable pageable);
 }

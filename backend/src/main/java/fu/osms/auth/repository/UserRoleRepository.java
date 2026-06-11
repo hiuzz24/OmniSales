@@ -4,15 +4,16 @@ import fu.osms.auth.entity.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface UserRoleRepository extends JpaRepository<UserRole, UUID> {
 
-    Optional<UserRole> findByUserId(UUID userId);
+    List<UserRole> findByUserId(UUID userId);
 
-    Optional<UserRole> findByUserIdAndShopId(UUID userId, UUID shopId);
+    Optional<UserRole> findByUserIdAndRoleId(UUID userId, UUID roleId);
 
-    void deleteByUserIdAndRoleIdAndShopId(UUID userId, UUID roleId, UUID shopId);
+    void deleteByUserIdAndRoleId(UUID userId, UUID roleId);
 }
