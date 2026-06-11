@@ -16,7 +16,7 @@ public class ProductVariantResponse {
     private UUID id;
     private UUID productId;
     private String productName;
-    private UUID shopId;
+
     private String sku;
     private String name;
     private String barcode;

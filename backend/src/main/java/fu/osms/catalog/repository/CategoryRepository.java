@@ -11,13 +11,13 @@ import java.util.UUID;
 @Repository
 public interface CategoryRepository extends JpaRepository<Category, UUID> {
 
-    List<Category> findByShopIdOrderBySortOrderAsc(UUID shopId);
+    List<Category> findAllByOrderBySortOrderAsc();
 
-    List<Category> findByShopIdAndParentIsNull(UUID shopId);
+    List<Category> findByParentIsNull();
 
     List<Category> findByParentId(UUID parentId);
 
-    Optional<Category> findByShopIdAndSlug(UUID shopId, String slug);
+    Optional<Category> findBySlug(String slug);
 
-    boolean existsByShopIdAndSlug(UUID shopId, String slug);
+    boolean existsBySlug(String slug);
 }

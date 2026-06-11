@@ -14,7 +14,6 @@ import java.util.UUID;
 public class InventoryTransactionRequest {
 
     @NotNull(message = "Shop ID must not be null")
-    private UUID shopId;
 
     @NotNull(message = "Warehouse ID must not be null")
     private UUID warehouseId;

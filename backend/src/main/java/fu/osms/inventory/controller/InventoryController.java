@@ -26,45 +26,38 @@ public class InventoryController {
     @PostMapping("/items")
     public ResponseEntity<ApiResponse<InventoryItemResponse>> createItem(
             @Valid @RequestBody InventoryItemRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Inventory item created successfully", inventoryService.createItem(request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/items/{id}")
     public ResponseEntity<ApiResponse<InventoryItemResponse>> getItemById(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(inventoryService.getItemById(id)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/items")
-    public ResponseEntity<ApiResponse<PageResponse<InventoryItemResponse>>> getItemsByShop(
-            @RequestParam UUID shopId,
+    public ResponseEntity<ApiResponse<PageResponse<InventoryItemResponse>>> getItems(
+            @RequestParam UUID warehouseId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(inventoryService.getItemsByShop(shopId, page, size)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/items/low-stock")
-    public ResponseEntity<ApiResponse<List<InventoryItemResponse>>> getLowStock(@RequestParam UUID shopId) {
-        return ResponseEntity.ok(ApiResponse.success(inventoryService.getLowStockItems(shopId)));
+    public ResponseEntity<ApiResponse<List<InventoryItemResponse>>> getLowStock() {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PostMapping("/transactions")
     public ResponseEntity<ApiResponse<InventoryTransactionResponse>> recordTransaction(
             @Valid @RequestBody InventoryTransactionRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Inventory transaction recorded successfully",
-                        inventoryService.recordTransaction(request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/transactions")
     public ResponseEntity<ApiResponse<PageResponse<InventoryTransactionResponse>>> getTransactions(
-            @RequestParam UUID shopId,
             @RequestParam(required = false) UUID variantId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResponse<InventoryTransactionResponse> result = variantId != null
-                ? inventoryService.getTransactionsByVariant(shopId, variantId, page, size)
-                : inventoryService.getTransactionsByShop(shopId, page, size);
-        return ResponseEntity.ok(ApiResponse.success(result));
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

@@ -16,7 +16,6 @@ import java.util.UUID;
 public class SupplierRequest {
 
     @NotNull(message = "Shop ID must not be null")
-    private UUID shopId;
 
     @NotBlank(message = "Supplier name must not be blank")
     @Size(max = 255)
@@ -34,5 +33,6 @@ public class SupplierRequest {
 
     private String address;
 
+    @Builder.Default
     private Boolean isActive = true;
 }

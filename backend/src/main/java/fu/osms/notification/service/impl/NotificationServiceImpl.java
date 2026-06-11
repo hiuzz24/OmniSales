@@ -6,6 +6,8 @@ import fu.osms.notification.entity.Notification;
 import fu.osms.notification.mapper.NotificationMapper;
 import fu.osms.notification.repository.NotificationRepository;
 import fu.osms.notification.service.NotificationService;
+import fu.osms.auth.entity.User;
+import fu.osms.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,60 +22,46 @@ import java.util.UUID;
 public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
     private final NotificationMapper notificationMapper;
 
     @Override
     @Transactional(readOnly = true)
-    public NotificationResponse getById(UUID id) {
-        return notificationRepository.findById(id)
-                .map(notificationMapper::toResponse)
-                .orElseThrow(() -> new RuntimeException("Notification not found: " + id));
+    public PageResponse<NotificationResponse> getByUser(UUID userId, int page, int size) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<NotificationResponse> getByUser(UUID shopId, UUID userId, int page, int size) {
-        Page<Notification> pageResult = notificationRepository
-                .findByShopIdAndUserIdOrderByCreatedAtDesc(shopId, userId, PageRequest.of(page, size));
-        return toPageResponse(pageResult, page, size);
+    public PageResponse<NotificationResponse> getUnread(UUID userId, int page, int size) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<NotificationResponse> getUnread(UUID shopId, UUID userId, int page, int size) {
-        Page<Notification> pageResult = notificationRepository
-                .findByShopIdAndUserIdAndReadAtIsNullOrderByCreatedAtDesc(shopId, userId, PageRequest.of(page, size));
-        return toPageResponse(pageResult, page, size);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public long countUnread(UUID shopId, UUID userId) {
-        return notificationRepository.countByShopIdAndUserIdAndReadAtIsNull(shopId, userId);
+    public long countUnread(UUID userId) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @Override
     @Transactional
-    public NotificationResponse markAsRead(UUID id) {
-        Notification notification = notificationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Notification not found: " + id));
-        notification.setReadAt(OffsetDateTime.now());
-        return notificationMapper.toResponse(notificationRepository.save(notification));
+    public void markAsRead(UUID id) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @Override
     @Transactional
-    public int markAllAsRead(UUID shopId, UUID userId) {
-        return notificationRepository.markAllAsRead(shopId, userId);
+    public int markAllAsRead(UUID userId) {
+        throw new UnsupportedOperationException("Chưa code");
+    }
+
+    @Override
+    @Transactional
+    public void createNotification(UUID userId, String type, String title, String body, String entityType, UUID entityId) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     private PageResponse<NotificationResponse> toPageResponse(Page<Notification> p, int page, int size) {
-        return PageResponse.<NotificationResponse>builder()
-                .content(p.getContent().stream().map(notificationMapper::toResponse).toList())
-                .page(page).size(size)
-                .totalElements(p.getTotalElements())
-                .totalPages(p.getTotalPages())
-                .first(p.isFirst()).last(p.isLast())
-                .build();
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

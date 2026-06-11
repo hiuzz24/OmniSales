@@ -14,13 +14,11 @@ import java.util.UUID;
 @Repository
 public interface InventoryTransactionRepository extends JpaRepository<InventoryTransaction, UUID> {
 
-    Page<InventoryTransaction> findByShopId(UUID shopId, Pageable pageable);
+    Page<InventoryTransaction> findByWarehouseId(UUID warehouseId, Pageable pageable);
 
-    Page<InventoryTransaction> findByShopIdAndVariantId(UUID shopId, UUID variantId, Pageable pageable);
+    Page<InventoryTransaction> findByVariantId(UUID variantId, Pageable pageable);
 
-    List<InventoryTransaction> findByShopIdAndType(UUID shopId, InvTxnType type);
+    List<InventoryTransaction> findByType(InvTxnType type);
 
-    List<InventoryTransaction> findByShopIdAndPerformedAtBetween(UUID shopId,
-                                                                   OffsetDateTime from,
-                                                                   OffsetDateTime to);
+    List<InventoryTransaction> findByPerformedAtBetween(OffsetDateTime from, OffsetDateTime to);
 }

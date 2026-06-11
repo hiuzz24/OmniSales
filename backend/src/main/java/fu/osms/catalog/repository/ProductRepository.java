@@ -15,18 +15,16 @@ import java.util.UUID;
 @Repository
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
-    Page<Product> findByShopIdAndDeletedAtIsNull(UUID shopId, Pageable pageable);
+    Page<Product> findByDeletedAtIsNull(Pageable pageable);
 
-    Page<Product> findByShopIdAndStatusAndDeletedAtIsNull(UUID shopId, ProductStatus status, Pageable pageable);
+    Page<Product> findByStatusAndDeletedAtIsNull(ProductStatus status, Pageable pageable);
 
-    Page<Product> findByShopIdAndCategoryIdAndDeletedAtIsNull(UUID shopId, UUID categoryId, Pageable pageable);
+    Page<Product> findByCategoryIdAndDeletedAtIsNull(UUID categoryId, Pageable pageable);
 
     Optional<Product> findByIdAndDeletedAtIsNull(UUID id);
 
-    @Query("SELECT p FROM Product p WHERE p.shop.id = :shopId AND p.deletedAt IS NULL " +
+    @Query("SELECT p FROM Product p WHERE p.deletedAt IS NULL " +
            "AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :keyword, '%')))")
-    Page<Product> searchByShopIdAndKeyword(@Param("shopId") UUID shopId,
-                                            @Param("keyword") String keyword,
-                                            Pageable pageable);
+    Page<Product> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
 }

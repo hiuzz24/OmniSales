@@ -15,7 +15,7 @@ public interface ChannelService {
 
     ChannelResponse getById(UUID id);
 
-    List<ChannelResponse> getByShopId(UUID shopId);
+    List<ChannelResponse> getAll();
 
     ChannelResponse update(UUID id, ChannelRequest request);
 

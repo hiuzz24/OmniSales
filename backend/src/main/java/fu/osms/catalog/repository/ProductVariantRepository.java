@@ -13,9 +13,9 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     List<ProductVariant> findByProductIdAndDeletedAtIsNull(UUID productId);
 
-    List<ProductVariant> findByShopIdAndDeletedAtIsNull(UUID shopId);
+    List<ProductVariant> findByDeletedAtIsNull();
 
-    Optional<ProductVariant> findByShopIdAndSkuAndDeletedAtIsNull(UUID shopId, String sku);
+    Optional<ProductVariant> findBySkuAndDeletedAtIsNull(String sku);
 
-    boolean existsByShopIdAndSkuAndDeletedAtIsNull(UUID shopId, String sku);
+    boolean existsBySkuAndDeletedAtIsNull(String sku);
 }

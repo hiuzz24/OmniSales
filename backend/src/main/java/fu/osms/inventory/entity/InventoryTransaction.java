@@ -3,7 +3,6 @@ package fu.osms.inventory.entity;
 import fu.osms.auth.entity.User;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.inventory.enums.InvTxnType;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -25,10 +24,6 @@ public class InventoryTransaction {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id", nullable = false)
     private Warehouse warehouse;
 
@@ -40,15 +35,11 @@ public class InventoryTransaction {
     @Column(nullable = false)
     private InvTxnType type;
 
-    @Column(name = "reference_type", length = 50)
+    @Column(name = "reference_type", length = 15)
     private String referenceType;
 
     @Column(name = "reference_id")
     private UUID referenceId;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_id")
-    private InventoryBatch batch;
 
     @Column(name = "quantity_change", nullable = false)
     private Integer quantityChange;

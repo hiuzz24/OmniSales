@@ -1,7 +1,6 @@
 package fu.osms.reporting.entity;
 
 import fu.osms.auth.entity.User;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -25,10 +24,6 @@ public class ReportConfig {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
 
     @Column(nullable = false, length = 200)
     private String name;
@@ -55,6 +50,7 @@ public class ReportConfig {
     private String schedule;
 
     @Column(name = "is_active", nullable = false)
+    @Builder.Default
     private Boolean isActive = true;
 
     @ManyToOne(fetch = FetchType.LAZY)

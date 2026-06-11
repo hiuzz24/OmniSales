@@ -8,14 +8,14 @@ import java.util.UUID;
 
 public interface AuditService {
 
-    PageResponse<AuditLog> getByShopId(UUID shopId, int page, int size);
+    PageResponse<AuditLog> getAll(int page, int size);
 
-    PageResponse<AuditLog> getByEntity(UUID shopId, String entityType, UUID entityId, int page, int size);
+    PageResponse<AuditLog> getByEntity(String entityType, UUID entityId, int page, int size);
 
-    PageResponse<AuditLog> getByActor(UUID shopId, UUID actorId, int page, int size);
+    PageResponse<AuditLog> getByActor(UUID actorId, int page, int size);
 
-    PageResponse<AuditLog> getByDateRange(UUID shopId, OffsetDateTime from, OffsetDateTime to, int page, int size);
+    PageResponse<AuditLog> getByDateRange(OffsetDateTime from, OffsetDateTime to, int page, int size);
 
-    void record(UUID shopId, UUID actorId, String actorEmail, String action,
+    void record(UUID actorId, String actorEmail, String action,
                 String entityType, UUID entityId, String entityName, Object changes);
 }

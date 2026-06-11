@@ -40,10 +40,12 @@ public class ChannelProduct {
     private String externalStatus;
 
     @Column(name = "mapping_state", nullable = false, length = 20)
+    @Builder.Default
     private String mappingState = "ACTIVE";
 
     @Enumerated(EnumType.STRING)
     @Column(name = "sync_status", nullable = false)
+    @Builder.Default
     private SyncStatus syncStatus = SyncStatus.PENDING;
 
     @Column(name = "last_synced_at")

@@ -31,12 +31,15 @@ public class SyncTask {
     private Channel channel;
 
     @Column(nullable = false, length = 20)
+    @Builder.Default
     private String status = "PENDING";
 
     @Column(name = "items_processed", nullable = false)
+    @Builder.Default
     private Integer itemsProcessed = 0;
 
     @Column(name = "items_failed", nullable = false)
+    @Builder.Default
     private Integer itemsFailed = 0;
 
     @Column(name = "error_message", columnDefinition = "TEXT")
@@ -49,5 +52,6 @@ public class SyncTask {
     private OffsetDateTime completedAt;
 
     @Column(name = "timeout_seconds", nullable = false)
+    @Builder.Default
     private Integer timeoutSeconds = 30;
 }

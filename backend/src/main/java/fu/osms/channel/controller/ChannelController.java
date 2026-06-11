@@ -25,35 +25,33 @@ public class ChannelController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<ChannelResponse>> create(@Valid @RequestBody ChannelRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Sales channel created successfully", channelService.create(request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ChannelResponse>> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(channelService.getById(id)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<ChannelResponse>>> getByShop(@RequestParam UUID shopId) {
-        return ResponseEntity.ok(ApiResponse.success(channelService.getByShopId(shopId)));
+    public ResponseEntity<ApiResponse<List<ChannelResponse>>> getAll() {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ChannelResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ChannelRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Channel updated successfully", channelService.update(id, request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        channelService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Sales channel deleted successfully", null));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
-    @GetMapping("/{id}/credential")
-    public ResponseEntity<ApiResponse<ChannelCredentialResponse>> getCredential(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(channelService.getCredential(id)));
+    @GetMapping("/{id}/credentials")
+    public ResponseEntity<ApiResponse<ChannelCredentialResponse>> getCredentials(@PathVariable UUID id) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/{id}/products")
@@ -61,6 +59,6 @@ public class ChannelController {
             @PathVariable UUID id,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(channelService.getChannelProducts(id, page, size)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

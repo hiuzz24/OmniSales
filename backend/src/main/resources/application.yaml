@@ -17,7 +17,6 @@ spring:
     show-sql: false
 
 app:
-  jwt:
-
-    # 1 hour
-    # 7 days
+  security:
+    max-failed-attempts: 5
+    lock-time-duration: 5
