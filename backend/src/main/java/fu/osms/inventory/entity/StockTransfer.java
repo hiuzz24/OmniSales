@@ -1,17 +1,17 @@
 package fu.osms.inventory.entity;
 
 import fu.osms.auth.entity.User;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "stock_transfers",
-        uniqueConstraints = @UniqueConstraint(name = "uq_transfer_code", columnNames = {"shop_id", "transfer_code"}))
+        uniqueConstraints = @UniqueConstraint(name = "uq_transfer_code", columnNames = {"transfer_code"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,10 +24,6 @@ public class StockTransfer {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "from_warehouse_id", nullable = false)
     private Warehouse fromWarehouse;
 
@@ -35,10 +31,11 @@ public class StockTransfer {
     @JoinColumn(name = "to_warehouse_id", nullable = false)
     private Warehouse toWarehouse;
 
-    @Column(name = "transfer_code", nullable = false, length = 100)
+    @Column(name = "transfer_code", nullable = false, unique = true, length = 100)
     private String transferCode;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 10)
+    @Builder.Default
     private String status = "DRAFT";
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -53,12 +50,7 @@ public class StockTransfer {
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
-
-    @PrePersist
-    @PreUpdate
-    protected void onUpsert() {
-        updatedAt = OffsetDateTime.now();
-    }
 }

@@ -13,9 +13,9 @@ public interface ProductService {
 
     ProductResponse getById(UUID id);
 
-    PageResponse<ProductResponse> getByShopId(UUID shopId, int page, int size);
+    PageResponse<ProductResponse> getAll(int page, int size);
 
-    PageResponse<ProductResponse> search(UUID shopId, String keyword, ProductStatus status, int page, int size);
+    PageResponse<ProductResponse> search(String keyword, ProductStatus status, int page, int size);
 
     ProductResponse update(UUID id, ProductRequest request);
 

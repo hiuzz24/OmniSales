@@ -14,7 +14,7 @@ public interface InventoryIssueMapper {
     // ── Issue ─────────────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "totalCost", ignore = true)
@@ -25,7 +25,6 @@ public interface InventoryIssueMapper {
     @Mapping(target = "updatedAt", ignore = true)
     InventoryIssue toEntity(InventoryIssueRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "warehouseName", source = "warehouse.name")
     @Mapping(target = "createdById", source = "createdBy.id")
@@ -40,14 +39,11 @@ public interface InventoryIssueMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "issue", ignore = true)
     @Mapping(target = "variant", ignore = true)
-    @Mapping(target = "batch", ignore = true)
     @Mapping(target = "totalCost", ignore = true)
     InventoryIssueItem toItemEntity(InventoryIssueItemRequest request);
 
     @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "variantSku", source = "variant.sku")
     @Mapping(target = "variantName", source = "variant.name")
-    @Mapping(target = "batchId", source = "batch.id")
-    @Mapping(target = "batchCode", source = "batch.batchCode")
     InventoryIssueItemResponse toItemResponse(InventoryIssueItem item);
 }

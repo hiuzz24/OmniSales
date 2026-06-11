@@ -9,18 +9,18 @@ import org.mapstruct.*;
 public interface WarehouseMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     Warehouse toEntity(WarehouseRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
-    @Mapping(target = "shopName", source = "shop.name")
     WarehouseResponse toResponse(Warehouse warehouse);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "deletedAt", ignore = true)
     void updateEntityFromRequest(WarehouseRequest request, @MappingTarget Warehouse warehouse);
 }

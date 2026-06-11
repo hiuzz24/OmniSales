@@ -15,7 +15,7 @@ import java.util.UUID;
 public class InventoryIssueResponse {
 
     private UUID id;
-    private UUID shopId;
+
     private UUID warehouseId;
     private String warehouseName;
     private String issueCode;

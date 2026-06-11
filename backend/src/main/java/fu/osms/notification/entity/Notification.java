@@ -1,7 +1,6 @@
 package fu.osms.notification.entity;
 
 import fu.osms.auth.entity.User;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -23,14 +22,10 @@ public class Notification {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, length = 20)
     private String type;
 
     @Column(nullable = false, length = 255)
@@ -42,7 +37,7 @@ public class Notification {
     @Column(name = "read_at")
     private OffsetDateTime readAt;
 
-    @Column(name = "entity_type", length = 50)
+    @Column(name = "entity_type", length = 10)
     private String entityType;
 
     @Column(name = "entity_id")

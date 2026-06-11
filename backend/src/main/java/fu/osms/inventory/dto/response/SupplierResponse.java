@@ -13,7 +13,7 @@ import java.util.UUID;
 public class SupplierResponse {
 
     private UUID id;
-    private UUID shopId;
+
     private String name;
     private String contactName;
     private String phone;

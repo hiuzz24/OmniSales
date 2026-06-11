@@ -16,8 +16,6 @@ import java.util.UUID;
 public class ProductResponse {
 
     private UUID id;
-    private UUID shopId;
-    private String shopName;
     private UUID categoryId;
     private String categoryName;
     private String sku;

@@ -14,7 +14,7 @@ import java.util.UUID;
 public class InventoryTransactionResponse {
 
     private UUID id;
-    private UUID shopId;
+
     private UUID warehouseId;
     private String warehouseName;
     private UUID variantId;

@@ -1,7 +1,6 @@
 package fu.osms.audit.entity;
 
 import fu.osms.auth.entity.User;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -25,20 +24,16 @@ public class AuditLog {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "actor_id")
     private User actor;
 
     @Column(name = "actor_email", nullable = false, length = 255)
     private String actorEmail;
 
-    @Column(nullable = false, length = 50)
+    @Column(nullable = false, length = 15)
     private String action;
 
-    @Column(name = "entity_type", nullable = false, length = 50)
+    @Column(name = "entity_type", nullable = false, length = 10)
     private String entityType;
 
     @Column(name = "entity_id")

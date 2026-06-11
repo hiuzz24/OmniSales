@@ -3,7 +3,6 @@ package fu.osms.sync.entity;
 import fu.osms.auth.entity.User;
 import fu.osms.channel.entity.Channel;
 import fu.osms.common.enums.SyncStatus;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -24,10 +23,6 @@ public class SyncLog {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "channel_id")
     private Channel channel;
 
@@ -39,15 +34,18 @@ public class SyncLog {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @Builder.Default
     private SyncStatus status = SyncStatus.PENDING;
 
     @Column(name = "total_items")
     private Integer totalItems;
 
     @Column(name = "success_count", nullable = false)
+    @Builder.Default
     private Integer successCount = 0;
 
     @Column(name = "fail_count", nullable = false)
+    @Builder.Default
     private Integer failCount = 0;
 
     @Column(name = "error_summary", columnDefinition = "TEXT")

@@ -17,40 +17,27 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<NotificationResponse>> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(notificationService.getById(id)));
-    }
-
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getByUser(
-            @RequestParam UUID shopId,
+    public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getNotifications(
             @RequestParam UUID userId,
-            @RequestParam(defaultValue = "false") boolean unreadOnly,
+            @RequestParam(required = false, defaultValue = "false") boolean unreadOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResponse<NotificationResponse> result = unreadOnly
-                ? notificationService.getUnread(shopId, userId, page, size)
-                : notificationService.getByUser(shopId, userId, page, size);
-        return ResponseEntity.ok(ApiResponse.success(result));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/unread-count")
-    public ResponseEntity<ApiResponse<Long>> countUnread(@RequestParam UUID shopId,
-                                                          @RequestParam UUID userId) {
-        return ResponseEntity.ok(ApiResponse.success(notificationService.countUnread(shopId, userId)));
+    public ResponseEntity<ApiResponse<Long>> countUnread(@RequestParam UUID userId) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PatchMapping("/{id}/read")
-    public ResponseEntity<ApiResponse<NotificationResponse>> markAsRead(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success("Marked as read successfully",
-                notificationService.markAsRead(id)));
+    public ResponseEntity<ApiResponse<Void>> markAsRead(@PathVariable UUID id) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
-    @PostMapping("/read-all")
-    public ResponseEntity<ApiResponse<Integer>> markAllAsRead(@RequestParam UUID shopId,
-                                                               @RequestParam UUID userId) {
-        int count = notificationService.markAllAsRead(shopId, userId);
-        return ResponseEntity.ok(ApiResponse.success("All notifications marked as read successfully", count));
+    @PostMapping("/mark-all-read")
+    public ResponseEntity<ApiResponse<Integer>> markAllAsRead(@RequestParam UUID userId) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

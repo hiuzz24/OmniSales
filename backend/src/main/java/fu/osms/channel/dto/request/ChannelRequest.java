@@ -17,7 +17,6 @@ import java.util.UUID;
 public class ChannelRequest {
 
     @NotNull(message = "Shop ID must not be null")
-    private UUID shopId;
 
     @NotNull(message = "Platform must not be null")
     private PlatformType platform;
@@ -27,9 +26,11 @@ public class ChannelRequest {
     private String displayName;
 
     @Size(max = 10)
+    @Builder.Default
     private String region = "VN";
 
     private Map<String, Object> metadata;
 
+    @Builder.Default
     private Boolean syncEnabled = true;
 }

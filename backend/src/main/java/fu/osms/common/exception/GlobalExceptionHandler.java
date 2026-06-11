@@ -58,14 +58,6 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(HttpStatus.FORBIDDEN.value(), "You do not have permission to perform this action"));
     }
 
-    @ExceptionHandler(DisabledException.class)
-    public ResponseEntity<ApiResponse<Void>> handleDisable(DisabledException ex){
-        log.warn("[Disable] {}",ex.getMessage());
-        return ResponseEntity.
-                status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(HttpStatus.FORBIDDEN.value(),"Your account is not ACTIVE or LOCKED"));
-    }
-
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception ex) {
         log.error("[UnhandledException] {}", ex.getMessage(), ex);

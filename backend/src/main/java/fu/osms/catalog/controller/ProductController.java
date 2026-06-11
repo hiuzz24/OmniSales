@@ -23,41 +23,37 @@ public class ProductController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Product created successfully", productService.create(request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(productService.getById(id)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getByShop(
-            @RequestParam UUID shopId,
+    public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) ProductStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(productService.search(shopId, keyword, status, page, size)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ProductRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Product updated successfully", productService.update(id, request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<ProductResponse>> updateStatus(@PathVariable UUID id,
-                                                                      @RequestParam ProductStatus status) {
-        return ResponseEntity.ok(ApiResponse.success("Product status updated successfully",
-                productService.updateStatus(id, status)));
+                                                                     @RequestParam ProductStatus status) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        productService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Product deleted successfully", null));
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

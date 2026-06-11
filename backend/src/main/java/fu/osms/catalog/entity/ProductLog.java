@@ -2,7 +2,6 @@ package fu.osms.catalog.entity;
 
 import fu.osms.auth.entity.User;
 import fu.osms.catalog.enums.ProductLogAction;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -27,10 +26,6 @@ public class ProductLog {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
@@ -42,6 +37,7 @@ public class ProductLog {
     private String sku;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     private ProductLogAction action;
 

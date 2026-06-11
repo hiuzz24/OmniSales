@@ -23,44 +23,37 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<OrderResponse>> create(@Valid @RequestBody OrderRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Order created successfully", orderService.create(request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<OrderResponse>> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(orderService.getById(id)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getByShop(
-            @RequestParam UUID shopId,
+    public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getOrders(
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResponse<OrderResponse> result = status != null
-                ? orderService.getByStatus(shopId, status, page, size)
-                : orderService.getByShopId(shopId, page, size);
-        return ResponseEntity.ok(ApiResponse.success(result));
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<OrderResponse>> update(@PathVariable UUID id,
-                                                             @Valid @RequestBody OrderRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Order updated successfully", orderService.update(id, request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<OrderResponse>> updateStatus(@PathVariable UUID id,
-                                                                    @RequestParam OrderStatus status) {
-        return ResponseEntity.ok(ApiResponse.success("Order status updated successfully",
-                orderService.updateStatus(id, status)));
+                                                                   @RequestParam OrderStatus status) {
+        throw new UnsupportedOperationException("Chưa code");
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<OrderResponse>> update(@PathVariable UUID id,
+                                                              @Valid @RequestBody OrderRequest request) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id,
-                                                     @RequestParam(required = false) String reason) {
-        orderService.cancel(id, reason);
-        return ResponseEntity.ok(ApiResponse.success("Order cancelled successfully", null));
+                                                    @RequestParam(required = false) String reason) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

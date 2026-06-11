@@ -32,9 +32,11 @@ public class ProductImage {
     private String url;
 
     @Column(name = "sort_order", nullable = false)
+    @Builder.Default
     private Short sortOrder = 0;
 
     @Column(name = "is_primary", nullable = false)
+    @Builder.Default
     private Boolean isPrimary = false;
 
     @CreationTimestamp

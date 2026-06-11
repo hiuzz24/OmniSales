@@ -16,8 +16,6 @@ public class InventoryIssueItemResponse {
     private UUID variantId;
     private String variantSku;
     private String variantName;
-    private UUID batchId;
-    private String batchCode;
     private Integer quantity;
     private BigDecimal unitCost;
     private BigDecimal totalCost;

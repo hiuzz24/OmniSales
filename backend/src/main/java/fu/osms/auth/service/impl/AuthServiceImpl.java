@@ -7,6 +7,7 @@ import fu.osms.auth.dto.response.UserResponse;
 import fu.osms.auth.entity.RefreshToken;
 import fu.osms.auth.entity.User;
 import fu.osms.auth.entity.UserRole;
+import fu.osms.auth.enums.UserStatus;
 import fu.osms.auth.mapper.UserMapper;
 import fu.osms.auth.repository.RefreshTokenRepository;
 import fu.osms.auth.repository.UserRepository;
@@ -16,8 +17,8 @@ import fu.osms.auth.service.AuthService;
 import fu.osms.config.CustomUserDetailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -25,6 +26,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -43,24 +47,58 @@ public class AuthServiceImpl implements AuthService {
     private final CustomUserDetailService userDetailsService;
     private final JwtService jwtService;
     private final UserMapper userMapper;
-    private final PasswordEncoder passwordEncoder;
+
+    @Value("${app.security.max-failed-attempts}")
+    private int maxFailedAttempts;
+
+    @Value("${app.security.lock-time-duration}")
+    private int lockTimeDuration;
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = {AuthenticationException.class, AppException.class})
     public TokenPairDTO login(LoginRequest request) {
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_CREDENTIALS));
+
+        if (user.getLockedUntil() != null) {
+            if(user.getLockedUntil().isAfter(OffsetDateTime.now())){
+                long minutesLeft = java.time.temporal.ChronoUnit.MINUTES.between(OffsetDateTime.now(), user.getLockedUntil()) + 1;
+                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Tài khoản đang bị khóa. Vui lòng thử lại sau " + minutesLeft + " phút.");
+            }else{
+                user.setFailedLoginAttempts(0);
+                user.setLockedUntil(null);
+                user.setStatus(UserStatus.ACTIVE);
+                userRepository.save(user);
+            }
+        }
+
         try{
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+            if(user.getFailedLoginAttempts() > 0){
+                user.setFailedLoginAttempts(0);
+            }
+
         }catch(AuthenticationException e){
-            log.error("Username or password not correct for email: {}", request.getEmail());
-            throw e;
+            int attempts = user.getFailedLoginAttempts() + 1;
+            user.setFailedLoginAttempts(attempts);
+            
+            if(attempts >= maxFailedAttempts){
+                user.setLockedUntil(OffsetDateTime.now().plusMinutes(lockTimeDuration));
+                user.setStatus(UserStatus.LOCKED);
+                userRepository.save(user);
+                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Bạn đã nhập sai " + maxFailedAttempts + " lần. Tài khoản bị khóa " + lockTimeDuration + " phút.");
+            }else{
+                userRepository.save(user);
+                throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai mật khẩu. Bạn còn " + (maxFailedAttempts - attempts) + " lần thử.");
+            }
         }
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new BadCredentialsException("User not found"));
-
-        UserRole role = userRoleRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new BadCredentialsException("User role not found"));
+        var roles = userRoleRepository.findByUserId(user.getId());
+        if (roles.isEmpty()) {
+            throw new AppException(ErrorCode.USER_NOT_FOUND);
+        }
+        UserRole role = roles.get(0);
 
         UserResponse response = userMapper.toResponse(user);
         response.setRole(role.getRole().getName());
@@ -89,13 +127,13 @@ public class AuthServiceImpl implements AuthService {
     public AuthResponse refreshToken(String refreshToken) {
         String tokenHash = hashToken(refreshToken);
         RefreshToken storedToken = refreshTokenRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> new RuntimeException("Refresh token is invalid"));
+                .orElseThrow(() -> new AppException(ErrorCode.TOKEN_INVALID));
 
         if (storedToken.getRevokedAt() != null) {
-            throw new RuntimeException("Refresh token has been revoked");
+            throw new AppException(ErrorCode.TOKEN_REVOKED);
         }
         if (storedToken.getExpiresAt().isBefore(OffsetDateTime.now())) {
-            throw new RuntimeException("Refresh token has expired");
+            throw new AppException(ErrorCode.TOKEN_EXPIRED);
         }
 
         User user = storedToken.getUser();
@@ -138,7 +176,7 @@ public class AuthServiceImpl implements AuthService {
             byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(hash);
         } catch (Exception e) {
-            throw new RuntimeException("Error hashing token", e);
+            throw new AppException(ErrorCode.TOKEN_INVALID,e.getMessage());
         }
     }
 }

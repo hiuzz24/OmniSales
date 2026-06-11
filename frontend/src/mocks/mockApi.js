@@ -19,7 +19,7 @@ import MockAdapter from 'axios-mock-adapter';
 import axiosClient from '../api/axiosClient';
 import {
   MOCK_USERS,
-  MOCK_SHOPS,
+  MOCK_CHANNELS,
   MOCK_ORDERS,
   MOCK_PRODUCTS,
   MOCK_WAREHOUSES,
@@ -92,14 +92,14 @@ mock.onPost('/auth/change-password').reply(200, {
   data: { message: 'Password changed successfully.' },
 });
 
-//  Shops Mock 
+//  Channels Mock 
 
-mock.onGet('/shops').reply(200, { data: MOCK_SHOPS });
+mock.onGet('/channels').reply(200, { data: MOCK_CHANNELS });
 
-mock.onGet(/\/shops\/\d+/).reply((config) => {
+mock.onGet(/\/channels\/\d+/).reply((config) => {
   const id = parseInt(config.url.split('/').pop());
-  const shop = MOCK_SHOPS.find((s) => s.id === id);
-  return shop ? [200, { data: shop }] : [404, { message: 'Shop not found' }];
+  const channel = MOCK_CHANNELS.find((s) => s.id === id);
+  return channel ? [200, { data: channel }] : [404, { message: 'Channel not found' }];
 });
 
 //  Orders Mock 

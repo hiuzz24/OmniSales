@@ -10,7 +10,7 @@ import java.util.UUID;
 @Repository
 public interface ReportConfigRepository extends JpaRepository<ReportConfig, UUID> {
 
-    List<ReportConfig> findByShopIdAndIsActive(UUID shopId, Boolean isActive);
+    List<ReportConfig> findByIsActive(Boolean isActive);
 
-    List<ReportConfig> findByShopIdAndReportType(UUID shopId, String reportType);
+    List<ReportConfig> findByReportType(String reportType);
 }

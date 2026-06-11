@@ -18,11 +18,11 @@ import java.util.UUID;
 public class OrderResponse {
 
     private UUID id;
-    private UUID shopId;
-    private String shopName;
     private UUID channelId;
-    private String channelName;
+    private UUID customerId;
+    private String customerName;
     private PlatformType platform;
+    private String channelName;
     private String externalOrderId;
     private OrderStatus status;
     private String paymentStatus;
@@ -37,12 +37,12 @@ public class OrderResponse {
     private String currency;
     private String note;
     private String trackingNumber;
-    private OffsetDateTime createdAt;
-    private OffsetDateTime updatedAt;
-
-    private String cancelReason;
     private UUID cancelledById;
     private String cancelledByName;
+    private String cancelReason;
+    private Long version;
+    private OffsetDateTime createdAt;
+    private OffsetDateTime updatedAt;
 
     private List<OrderItemResponse> items;
 }
