@@ -44,14 +44,17 @@ const LoginForm = () => {
     setApiError('');
     try {
       const result = await login(data);
+      console.log(result);
       toast.success("Đăng nhập thành công");
       navigate(getRoleHome(result?.user?.role));
     } catch (err) {
       const status = err?.response?.status;
       if (status === 401) {
         setApiError('Email hoặc mật khẩu không chính xác. Vui lòng thử lại.');
+        toast.info(err?.response?.data?.message);
       } else if (status === 429) {
         setApiError('Quá nhiều lần thử đăng nhập. Vui lòng đợi và thử lại sau.');
+        toast.info(err?.response?.data?.message);
       } else if (status >= 500) {
         setApiError('Lỗi máy chủ. Vui lòng thử lại sau.');
       } else {
