@@ -20,6 +20,7 @@ public interface UserMapper {
     @Mapping(target = "lockedUntil", ignore = true)
     User toEntity(UserRequest request);
 
+    @Mapping(target = "role", ignore = true)
     UserResponse toResponse(User user);
 
     @Mapping(target = "id", ignore = true)

@@ -13,8 +13,7 @@ import java.util.UUID;
 public class WarehouseResponse {
 
     private UUID id;
-    private UUID shopId;
-    private String shopName;
+
     private String name;
     private String address;
     private Boolean isActive;

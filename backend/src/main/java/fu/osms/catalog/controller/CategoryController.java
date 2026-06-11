@@ -22,39 +22,37 @@ public class CategoryController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CategoryRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Category created successfully", categoryService.create(request)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<CategoryResponse>> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(ApiResponse.success(categoryService.getById(id)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getByShop(@RequestParam UUID shopId) {
-        return ResponseEntity.ok(ApiResponse.success(categoryService.getByShopId(shopId)));
+    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getAll() {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/roots")
-    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getRoots(@RequestParam UUID shopId) {
-        return ResponseEntity.ok(ApiResponse.success(categoryService.getRootCategories(shopId)));
+    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getRoots() {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
-    @GetMapping("/{parentId}/children")
-    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getChildren(@PathVariable UUID parentId) {
-        return ResponseEntity.ok(ApiResponse.success(categoryService.getSubCategories(parentId)));
+    @GetMapping("/{parentId}/subcategories")
+    public ResponseEntity<ApiResponse<List<CategoryResponse>>> getSubCategories(@PathVariable UUID parentId) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<CategoryResponse>> update(@PathVariable UUID id,
-                                                                 @Valid @RequestBody CategoryRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Category updated successfully", categoryService.update(id, request)));
+                                                                @Valid @RequestBody CategoryRequest request) {
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        categoryService.delete(id);
-        return ResponseEntity.ok(ApiResponse.success("Category deleted successfully", null));
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

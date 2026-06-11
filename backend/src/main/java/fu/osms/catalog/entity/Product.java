@@ -2,7 +2,6 @@ package fu.osms.catalog.entity;
 
 import fu.osms.auth.entity.User;
 import fu.osms.catalog.enums.ProductStatus;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -28,10 +27,6 @@ public class Product {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
     private Category category;
 
@@ -48,10 +43,13 @@ public class Product {
     private String brand;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
+    @Builder.Default
     private ProductStatus status = ProductStatus.DRAFT;
 
     @Column(name = "low_stock_threshold", nullable = false)
+    @Builder.Default
     private Integer lowStockThreshold = 5;
 
     @Column(name = "weight_grams")
@@ -63,6 +61,7 @@ public class Product {
 
     @Version
     @Column(nullable = false)
+    @Builder.Default
     private Long version = 0L;
 
     @ManyToOne(fetch = FetchType.LAZY)

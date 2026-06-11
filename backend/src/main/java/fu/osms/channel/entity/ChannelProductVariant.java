@@ -46,6 +46,7 @@ public class ChannelProductVariant {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "sync_status", nullable = false)
+    @Builder.Default
     private SyncStatus syncStatus = SyncStatus.PENDING;
 
     @Column(name = "last_synced_at")

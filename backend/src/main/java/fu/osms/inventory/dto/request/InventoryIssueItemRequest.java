@@ -18,8 +18,6 @@ public class InventoryIssueItemRequest {
     @NotNull(message = "Variant ID must not be null")
     private UUID variantId;
 
-    private UUID batchId;
-
     @Min(value = 1, message = "Quantity must be greater than 0")
     private Integer quantity;
 

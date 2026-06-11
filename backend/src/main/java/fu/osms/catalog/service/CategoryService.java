@@ -12,9 +12,9 @@ public interface CategoryService {
 
     CategoryResponse getById(UUID id);
 
-    List<CategoryResponse> getByShopId(UUID shopId);
+    List<CategoryResponse> getAll();
 
-    List<CategoryResponse> getRootCategories(UUID shopId);
+    List<CategoryResponse> getRootCategories();
 
     List<CategoryResponse> getSubCategories(UUID parentId);
 

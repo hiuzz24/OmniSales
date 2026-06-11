@@ -9,16 +9,16 @@ import org.mapstruct.*;
 public interface InventoryItemMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "variant", ignore = true)
     @Mapping(target = "availableQuantity", ignore = true)
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "updatedBy", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "averageCost", ignore = true)
     InventoryItem toEntity(InventoryItemRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "warehouseName", source = "warehouse.name")
     @Mapping(target = "variantId", source = "variant.id")
@@ -30,12 +30,13 @@ public interface InventoryItemMapper {
     InventoryItemResponse toResponse(InventoryItem item);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "variant", ignore = true)
     @Mapping(target = "availableQuantity", ignore = true)
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "updatedBy", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "averageCost", ignore = true)
     void updateEntityFromRequest(InventoryItemRequest request, @MappingTarget InventoryItem item);
 }

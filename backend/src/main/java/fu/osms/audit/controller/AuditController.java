@@ -20,40 +20,35 @@ public class AuditController {
     private final AuditService auditService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PageResponse<AuditLog>>> getByShop(
-            @RequestParam UUID shopId,
+    public ResponseEntity<ApiResponse<PageResponse<AuditLog>>> getLogs(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(auditService.getByShopId(shopId, page, size)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
-    @GetMapping("/entity")
+    @GetMapping("/entity/{entityType}/{entityId}")
     public ResponseEntity<ApiResponse<PageResponse<AuditLog>>> getByEntity(
-            @RequestParam UUID shopId,
-            @RequestParam String entityType,
-            @RequestParam UUID entityId,
+            @PathVariable String entityType,
+            @PathVariable UUID entityId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(
-                auditService.getByEntity(shopId, entityType, entityId, page, size)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/actor/{actorId}")
     public ResponseEntity<ApiResponse<PageResponse<AuditLog>>> getByActor(
-            @RequestParam UUID shopId,
             @PathVariable UUID actorId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(auditService.getByActor(shopId, actorId, page, size)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/date-range")
     public ResponseEntity<ApiResponse<PageResponse<AuditLog>>> getByDateRange(
-            @RequestParam UUID shopId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(ApiResponse.success(auditService.getByDateRange(shopId, from, to, page, size)));
+        throw new UnsupportedOperationException("Chưa code");
     }
 }

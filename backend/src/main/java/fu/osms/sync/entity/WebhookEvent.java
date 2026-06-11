@@ -39,6 +39,7 @@ public class WebhookEvent {
     private String externalEventId;
 
     @Column(nullable = false, length = 20)
+    @Builder.Default
     private String status = "RECEIVED";
 
     @JdbcTypeCode(SqlTypes.JSON)

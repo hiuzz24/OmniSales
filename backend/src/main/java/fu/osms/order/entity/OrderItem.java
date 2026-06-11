@@ -46,6 +46,7 @@ public class OrderItem {
     private BigDecimal unitPrice;
 
     @Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
     private BigDecimal discountAmount = BigDecimal.ZERO;
 
     @Column(name = "total_price", insertable = false, updatable = false, precision = 12, scale = 2)

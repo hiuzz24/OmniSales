@@ -11,11 +11,9 @@ import java.util.UUID;
 @Repository
 public interface ChannelRepository extends JpaRepository<Channel, UUID> {
 
-    List<Channel> findByShopId(UUID shopId);
+    List<Channel> findByDeletedAtIsNull();
 
-    List<Channel> findByShopIdAndDeletedAtIsNull(UUID shopId);
+    List<Channel> findByPlatform(PlatformType platform);
 
-    List<Channel> findByShopIdAndPlatform(UUID shopId, PlatformType platform);
-
-    boolean existsByShopIdAndPlatformAndDisplayName(UUID shopId, PlatformType platform, String displayName);
+    boolean existsByPlatformAndDisplayName(PlatformType platform, String displayName);
 }

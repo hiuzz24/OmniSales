@@ -14,14 +14,12 @@ import java.util.UUID;
 @Repository
 public interface DailySalesSummaryRepository extends JpaRepository<DailySalesSummary, UUID> {
 
-    Optional<DailySalesSummary> findByShopIdAndChannelIdAndDate(UUID shopId, UUID channelId, LocalDate date);
+    Optional<DailySalesSummary> findByChannelIdAndDate(UUID channelId, LocalDate date);
 
-    List<DailySalesSummary> findByShopIdAndDateBetweenOrderByDateAsc(UUID shopId, LocalDate from, LocalDate to);
+    List<DailySalesSummary> findByDateBetweenOrderByDateAsc(LocalDate from, LocalDate to);
 
-    @Query("SELECT d FROM DailySalesSummary d WHERE d.shop.id = :shopId " +
-           "AND d.date BETWEEN :from AND :to AND d.channel.id = :channelId")
-    List<DailySalesSummary> findByShopChannelAndDateRange(@Param("shopId") UUID shopId,
-                                                           @Param("channelId") UUID channelId,
-                                                           @Param("from") LocalDate from,
-                                                           @Param("to") LocalDate to);
+    @Query("SELECT d FROM DailySalesSummary d WHERE d.date BETWEEN :from AND :to AND d.channel.id = :channelId")
+    List<DailySalesSummary> findByChannelAndDateRange(@Param("channelId") UUID channelId,
+                                                       @Param("from") LocalDate from,
+                                                       @Param("to") LocalDate to);
 }

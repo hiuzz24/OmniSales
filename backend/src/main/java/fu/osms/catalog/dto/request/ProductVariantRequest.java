@@ -32,6 +32,7 @@ public class ProductVariantRequest {
 
     private BigDecimal costPrice;
 
+    @Builder.Default
     private Boolean isActive = true;
 
     private Map<String, Object> optionValues;

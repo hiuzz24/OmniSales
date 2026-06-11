@@ -1,7 +1,6 @@
 package fu.osms.channel.entity;
 
 import fu.osms.common.enums.PlatformType;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -15,7 +14,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "channels", uniqueConstraints = {
-        @UniqueConstraint(name = "uq_channel", columnNames = {"shop_id", "platform", "display_name"})
+        @UniqueConstraint(name = "uq_channel", columnNames = {"platform", "display_name"})
 })
 @Getter
 @Setter
@@ -28,11 +27,8 @@ public class Channel {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     private PlatformType platform;
 
@@ -40,9 +36,11 @@ public class Channel {
     private String displayName;
 
     @Column(nullable = false, length = 20)
+    @Builder.Default
     private String status = "PENDING";
 
     @Column(nullable = false, length = 10)
+    @Builder.Default
     private String region = "VN";
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -53,6 +51,7 @@ public class Channel {
     private OffsetDateTime lastSyncedAt;
 
     @Column(name = "sync_enabled", nullable = false)
+    @Builder.Default
     private Boolean syncEnabled = true;
 
     @CreationTimestamp

@@ -14,7 +14,7 @@ public interface StocktakeMapper {
     // ── Session ───────────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "createdBy", ignore = true)
@@ -22,7 +22,6 @@ public interface StocktakeMapper {
     @Mapping(target = "updatedAt", ignore = true)
     StocktakeSession toEntity(StocktakeSessionRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "warehouseName", source = "warehouse.name")
     @Mapping(target = "createdById", source = "createdBy.id")

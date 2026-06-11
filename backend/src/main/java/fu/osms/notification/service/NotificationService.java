@@ -7,15 +7,15 @@ import java.util.UUID;
 
 public interface NotificationService {
 
-    NotificationResponse getById(UUID id);
+    PageResponse<NotificationResponse> getByUser(UUID userId, int page, int size);
 
-    PageResponse<NotificationResponse> getByUser(UUID shopId, UUID userId, int page, int size);
+    PageResponse<NotificationResponse> getUnread(UUID userId, int page, int size);
 
-    PageResponse<NotificationResponse> getUnread(UUID shopId, UUID userId, int page, int size);
+    long countUnread(UUID userId);
 
-    long countUnread(UUID shopId, UUID userId);
+    void markAsRead(UUID id);
 
-    NotificationResponse markAsRead(UUID id);
+    int markAllAsRead(UUID userId);
 
-    int markAllAsRead(UUID shopId, UUID userId);
+    void createNotification(UUID userId, String type, String title, String body, String entityType, UUID entityId);
 }

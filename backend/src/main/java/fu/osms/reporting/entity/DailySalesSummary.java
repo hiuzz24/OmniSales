@@ -1,7 +1,6 @@
 package fu.osms.reporting.entity;
 
 import fu.osms.channel.entity.Channel;
-import fu.osms.shop.entity.Shop;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -25,10 +24,6 @@ public class DailySalesSummary {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "shop_id", nullable = false)
-    private Shop shop;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "channel_id")
     private Channel channel;
 
@@ -36,15 +31,19 @@ public class DailySalesSummary {
     private LocalDate date;
 
     @Column(name = "order_count", nullable = false)
+    @Builder.Default
     private Integer orderCount = 0;
 
     @Column(nullable = false, precision = 14, scale = 2)
+    @Builder.Default
     private BigDecimal revenue = BigDecimal.ZERO;
 
     @Column(name = "units_sold", nullable = false)
+    @Builder.Default
     private Integer unitsSold = 0;
 
     @Column(name = "is_dirty", nullable = false)
+    @Builder.Default
     private Boolean isDirty = true;
 
     @Column(name = "last_refreshed_at")

@@ -14,7 +14,7 @@ public interface InventoryReceiptMapper {
     // ── Receipt ───────────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "supplier", ignore = true)
     @Mapping(target = "status", ignore = true)
@@ -27,7 +27,6 @@ public interface InventoryReceiptMapper {
     @Mapping(target = "updatedAt", ignore = true)
     InventoryReceipt toEntity(InventoryReceiptRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "warehouseName", source = "warehouse.name")
     @Mapping(target = "supplierId", source = "supplier.id")

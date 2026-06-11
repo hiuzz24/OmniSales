@@ -9,7 +9,7 @@ import org.mapstruct.*;
 public interface ChannelMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "lastSyncedAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
@@ -17,12 +17,10 @@ public interface ChannelMapper {
     @Mapping(target = "deletedAt", ignore = true)
     Channel toEntity(ChannelRequest request);
 
-    @Mapping(target = "shopId", source = "shop.id")
-    @Mapping(target = "shopName", source = "shop.name")
     ChannelResponse toResponse(Channel channel);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "shop", ignore = true)
+
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "lastSyncedAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)

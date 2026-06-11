@@ -13,9 +13,9 @@ public interface OrderService {
 
     OrderResponse getById(UUID id);
 
-    PageResponse<OrderResponse> getByShopId(UUID shopId, int page, int size);
+    PageResponse<OrderResponse> getAll(int page, int size);
 
-    PageResponse<OrderResponse> getByStatus(UUID shopId, OrderStatus status, int page, int size);
+    PageResponse<OrderResponse> getByStatus(OrderStatus status, int page, int size);
 
     OrderResponse updateStatus(UUID id, OrderStatus status);
 

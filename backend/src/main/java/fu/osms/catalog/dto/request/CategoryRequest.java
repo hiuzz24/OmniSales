@@ -15,7 +15,6 @@ import java.util.UUID;
 public class CategoryRequest {
 
     @NotNull(message = "Shop ID must not be null")
-    private UUID shopId;
 
     private UUID parentId;
 
@@ -27,5 +26,6 @@ public class CategoryRequest {
     @Size(max = 255)
     private String slug;
 
+    @Builder.Default
     private Integer sortOrder = 0;
 }

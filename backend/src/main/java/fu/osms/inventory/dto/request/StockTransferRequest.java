@@ -18,7 +18,6 @@ import java.util.UUID;
 public class StockTransferRequest {
 
     @NotNull(message = "Shop ID must not be null")
-    private UUID shopId;
 
     @NotNull(message = "Source warehouse must not be null")
     private UUID fromWarehouseId;

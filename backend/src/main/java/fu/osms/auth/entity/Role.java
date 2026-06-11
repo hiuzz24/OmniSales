@@ -26,9 +26,6 @@ public class Role {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(nullable = false, length = 10)
-    private String scope;
-
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

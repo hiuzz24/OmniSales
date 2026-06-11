@@ -42,6 +42,7 @@ public class User {
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
+    @Builder.Default
     private UserStatus status = UserStatus.INACTIVE;
 
     @CreationTimestamp
@@ -62,6 +63,7 @@ public class User {
     private String verificationToken;
 
     @Column(name = "failed_login_attempts")
+    @Builder.Default
     private Integer failedLoginAttempts = 0;
 
     @Column(name = "locked_until")

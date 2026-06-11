@@ -5,6 +5,8 @@ import fu.osms.auth.entity.UserRole;
 import fu.osms.auth.enums.UserStatus;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.auth.repository.UserRoleRepository;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.DisabledException;
@@ -30,12 +32,17 @@ public class CustomUserDetailService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + email));
 
-        if(!user.getStatus().equals(UserStatus.ACTIVE)){
-            throw new DisabledException("User is not ACTIVE or LOCKED");
+        if(user.getStatus().equals(UserStatus.LOCKED)){
+            throw new AppException(ErrorCode.ACCOUNT_LOCKED);
+        } else if (user.getStatus().equals(UserStatus.INACTIVE)) {
+            throw new AppException(ErrorCode.ACCOUNT_INACTIVE);
         }
 
-        UserRole userRole = userRoleRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new UsernameNotFoundException("No role assigned to user: " + email));
+        var roles = userRoleRepository.findByUserId(user.getId());
+        if (roles.isEmpty()) {
+            throw new UsernameNotFoundException("No role assigned to user: " + email);
+        }
+        UserRole userRole = roles.get(0);
 
         GrantedAuthority authority = new SimpleGrantedAuthority(userRole.getRole().getName());
 

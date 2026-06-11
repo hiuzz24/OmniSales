@@ -13,9 +13,7 @@ import java.util.UUID;
 @Repository
 public interface SyncLogRepository extends JpaRepository<SyncLog, UUID> {
 
-    Page<SyncLog> findByShopId(UUID shopId, Pageable pageable);
-
-    Page<SyncLog> findByShopIdAndStatus(UUID shopId, SyncStatus status, Pageable pageable);
+    Page<SyncLog> findByStatus(SyncStatus status, Pageable pageable);
 
     Optional<SyncLog> findByIdempotencyKey(String idempotencyKey);
 }
