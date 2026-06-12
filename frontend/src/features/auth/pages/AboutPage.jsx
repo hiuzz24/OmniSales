@@ -31,7 +31,7 @@ const VALUES = [
   {
     icon: Target,
     title: 'Định hướng kết quả',
-    desc: 'Chúng tôi đo thành công bằng kết quả kinh doanh thực tế của sellers, không phải số tính năng hay số lần update.',
+    desc: 'Chúng tôi đo thành công bằng hiệu quả quản lý thực tế của doanh nghiệp, không phải số tính năng hay số lần update.',
     iconBg: '#f5f3ff',
     iconColor: '#7c3aed',
   },
@@ -45,7 +45,7 @@ const VALUES = [
   {
     icon: Lightbulb,
     title: 'Không ngừng cải tiến',
-    desc: 'Thương mại điện tử Đông Nam Á thay đổi liên tục. Hệ thống được thiết kế linh hoạt để dễ dàng mở rộng và tích hợp thêm.',
+    desc: 'Thị trường kinh doanh thay đổi liên tục. Hệ thống được thiết kế linh hoạt để dễ dàng mở rộng và tích hợp thêm.',
     iconBg: '#fffbeb',
     iconColor: '#d97706',
   },
@@ -62,7 +62,7 @@ const MILESTONES = [
   {
     label: 'Giai đoạn 1',
     title: 'Khảo sát & Phân tích',
-    desc: 'Khảo sát nhu cầu quản lý bán hàng đa kênh, phân tích bài toán tồn kho, đơn hàng và phân quyền người dùng.',
+    desc: 'Khảo sát nhu cầu quản lý bán hàng, phân tích bài toán tồn kho, đơn hàng và phân quyền người dùng.',
   },
   {
     label: 'Giai đoạn 2',
@@ -72,27 +72,27 @@ const MILESTONES = [
   {
     label: 'Giai đoạn 3',
     title: 'Phát triển core modules',
-    desc: 'Hiện thực các module chính: xác thực, sản phẩm, kho hàng (nhập/xuất/chuyển/kiểm), đơn hàng và kênh bán.',
+    desc: 'Hiện thực các module chính: xác thực, sản phẩm, kho hàng (nhập/xuất/chuyển/kiểm), đơn hàng và báo cáo.',
   },
   {
     label: 'Giai đoạn 4',
-    title: 'POS & Báo cáo',
-    desc: 'Bổ sung module bán hàng trực tiếp (POS), thanh toán đa phương thức và dashboard phân tích doanh thu.',
+    title: 'Kết nối các nền tảng thương mại điện tử',
+    desc: 'Tích hợp API Shopee, TikTok Shop và Lazada để đồng bộ sản phẩm, đơn hàng và tồn kho tự động giữa các kênh.',
   },
   {
     label: 'Giai đoạn 5',
     title: 'Kiểm thử & Hoàn thiện',
-    desc: 'Kiểm thử toàn diện, tối ưu UX, sửa lỗi và hoàn thiện tài liệu kỹ thuật cho đồ án tốt nghiệp.',
+    desc: 'Kiểm thử toàn diện, tối ưu UX, sửa lỗi và hoàn thiện tài liệu kỹ thuật cho đồ án.',
   },
 ];
 
 const TEAM = [
-  { name: 'Nguyễn Xuân Núi', role: 'Lecturer', initials: '01', bg: 'linear-gradient(135deg, #7c3aed, #2563eb)' },
+  { name: 'Nguyễn Xuân Núi', role: 'Giảng viên hướng dẫn', initials: '01', bg: 'linear-gradient(135deg, #7c3aed, #2563eb)' },
   { name: 'Bùi Lê Đức Anh', role: 'Fullstack Developer', initials: '02', bg: 'linear-gradient(135deg, #2563eb, #0891b2)' },
   { name: 'Phạm Trung Hiếu', role: 'Fullstack Developer', initials: '03', bg: 'linear-gradient(135deg, #16a34a, #0d9488)' },
   { name: 'Lương Thị Diệu Linh', role: 'Fullstack Developer', initials: '04', bg: 'linear-gradient(135deg, #d97706, #ea580c)' },
   { name: 'Đinh Đức Hiếu', role: 'Fullstack Developer', initials: '05', bg: 'linear-gradient(135deg, #e11d48, #be185d)' },
-  { name: 'Nguyễn Thế Duy	', role: 'Fullstack Developer', initials: '06', bg: 'linear-gradient(135deg,rgb(58, 85, 237),rgb(13, 46, 117))' },
+  { name: 'Nguyễn Thế Duy', role: 'Fullstack Developer', initials: '06', bg: 'linear-gradient(135deg, rgb(58, 85, 237), rgb(13, 46, 117))' },
 ];
 
 const TECH_STACK = [
@@ -189,12 +189,12 @@ const HeroSection = () => (
     <div className={styles.heroInner}>
       <p className={styles.heroEyebrow}>Về dự án</p>
       <h1 className={styles.heroTitle}>
-        Nền tảng quản lý bán hàng đa kênh — Đồ án tốt nghiệp
+        Hệ thống quản lý bán hàng nội bộ — Đồ án tốt nghiệp
       </h1>
       <p className={styles.heroDesc}>
-        OmniSales là hệ thống quản lý bán hàng đa kênh được xây dựng nhằm giải quyết bài
-        toán đồng bộ tồn kho, xử lý đơn hàng và quản lý vận hành cho sellers kinh doanh trên
-        Shopee, TikTok Shop và Lazada.
+        OmniSales là hệ thống quản lý bán hàng được xây dựng nhằm giải quyết bài
+        toán quản lý sản phẩm, kho hàng, đơn hàng và phân tích doanh thu cho doanh nghiệp
+        vừa và nhỏ.
       </p>
 
       <div className={styles.heroImageWrap}>
@@ -218,12 +218,12 @@ const MissionSection = () => (
         <div>
           <p className={styles.missionEyebrow}>Mục tiêu</p>
           <h2 className={styles.missionTitle}>
-            Giải quyết bài toán thực tế của thương mại điện tử
+            Giải quyết bài toán thực tế của quản lý doanh nghiệp
           </h2>
           <p className={styles.missionText}>
-            Hệ thống được thiết kế để giúp các seller quản lý toàn bộ hoạt động kinh doanh
+            Hệ thống được thiết kế để giúp doanh nghiệp quản lý toàn bộ hoạt động kinh doanh
             trên một nền tảng duy nhất — từ quản lý sản phẩm, kho hàng, đơn hàng đến phân
-            tích doanh thu theo từng kênh.
+            tích doanh thu.
           </p>
           <p className={styles.missionText}>
             Với kiến trúc phân quyền theo vai trò (Admin / Shop Owner / Staff), hệ thống
@@ -359,18 +359,14 @@ const TeamSection = () => (
 const CtaSection = () => (
   <section className={styles.cta}>
     <div className={styles.ctaInner}>
-      <h2 className={styles.ctaTitle}>Bạn muốn trải nghiệm ngay?</h2>
+      <h2 className={styles.ctaTitle}>Hệ thống dành riêng cho nội bộ</h2>
       <p className={styles.ctaDesc}>
-        Tham gia cùng hơn 1.000 sellers đã tin dùng OmniSales. Bắt đầu miễn phí ngay hôm
-        nay.
+        Tài khoản được cấp phát bởi quản trị viên. Liên hệ Admin để được cấp quyền truy cập.
       </p>
       <div className={styles.ctaButtons}>
-        <Link to="/register" className={styles.ctaButtonPrimary}>
-          Đăng ký ngay
+        <Link to="/login" className={styles.ctaButtonPrimary}>
+          Đăng nhập hệ thống
           <ArrowRight className="w-5 h-5" />
-        </Link>
-        <Link to="/login" className={styles.ctaButtonSecondary}>
-          Đăng nhập
         </Link>
       </div>
     </div>

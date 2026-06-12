@@ -11,8 +11,6 @@ import {
   BarChart3,
   Shield,
   Globe,
-  CheckCircle,
-  Star,
   ChevronRight,
   Menu,
   X,
@@ -35,8 +33,8 @@ const PLATFORMS = [
 const FEATURES = [
   {
     icon: Package,
-    title: 'Quản lý sản phẩm đa kênh',
-    desc: 'Đồng bộ catalog, giá và tồn kho thời gian thực trên tất cả sàn thương mại điện tử.',
+    title: 'Quản lý sản phẩm',
+    desc: 'Phân loại, quản lý catalog sản phẩm với thông tin chi tiết về giá, tồn kho và mô tả.',
     iconBg: '#eff6ff',
     iconColor: '#2563eb',
   },
@@ -64,7 +62,7 @@ const FEATURES = [
   {
     icon: Shield,
     title: 'Phân quyền đa vai trò',
-    desc: 'Hỗ trợ Admin, Shop Owner và Staff với quyền truy cập kiểm soát chặt chẽ theo tính năng.',
+    desc: 'Hỗ trợ Admin, Quản lý và Nhân viên với quyền truy cập kiểm soát chặt chẽ theo từng tính năng.',
     iconBg: '#fff1f2',
     iconColor: '#e11d48',
   },
@@ -96,37 +94,9 @@ const STEPS = [
 ];
 
 const STATS = [
-  { value: '1,000+', label: 'Sellers tin dùng', icon: Users },
-  { value: '3 triệu+', label: 'Đơn hàng/tháng', icon: ShoppingCart },
+  { value: '3 nghìn+', label: 'Đơn hàng/tháng', icon: ShoppingCart },
   { value: '99.9%', label: 'Độ khả dụng', icon: Zap },
   { value: '< 2 giây', label: 'Thời gian đồng bộ', icon: Layers },
-];
-
-const TESTIMONIALS = [
-  {
-    name: 'Phạm Trung Hiếu',
-    role: 'Shop Owner · Thời trang nữ',
-    avatar: 'NM',
-    content:
-      'Trước đây mất 3 tiếng mỗi ngày để đối chiếu đơn hàng thủ công. Giờ mọi thứ tự động — tôi tập trung vào marketing và nhân đôi doanh thu chỉ trong 2 tháng.',
-    rating: 5,
-  },
-  {
-    name: 'Lương Thị Diệu Linh',
-    role: 'Shop Owner · Mỹ phẩm & Skincare',
-    avatar: 'TL',
-    content:
-      'Quản lý 3 shop trên 3 sàn cùng lúc mà không bị rối. Tính năng đồng bộ tồn kho là điểm mạnh nhất — không còn bán hàng khi đã hết kho.',
-    rating: 5,
-  },
-  {
-    name: 'Bùi Lê Đức Anh',
-    role: 'Shop Owner · Điện tử & Phụ kiện',
-    avatar: 'LH',
-    content:
-      'Dashboard analytics giúp tôi biết kênh nào đang chạy tốt, sản phẩm nào cần đẩy thêm ngân sách. Quyết định nhanh hơn và chính xác hơn nhiều.',
-    rating: 5,
-  },
 ];
 
 
@@ -152,7 +122,6 @@ const PublicNav = () => {
           {[
             { href: '#features', label: 'Tính năng' },
             { href: '#how-it-works', label: 'Cách hoạt động' },
-            { href: '#testimonials', label: 'Khách hàng' },
             { href: '/about', label: 'Về chúng tôi' },
           ].map(({ href, label }) => (
             href.startsWith('/') ? (
@@ -174,15 +143,9 @@ const PublicNav = () => {
               <ChevronRight className="w-4 h-4" />
             </Link>
           ) : (
-            <>
-              <Link to={ROUTES.LOGIN} className={styles.navLogin}>
-                Đăng nhập
-              </Link>
-              <Link to="/register" className={styles.navRegister}>
-                Đăng ký
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </>
+            <Link to={ROUTES.LOGIN} className={styles.navLogin}>
+              Đăng nhập
+            </Link>
           )}
           <button
             className={styles.menuButton}
@@ -199,7 +162,6 @@ const PublicNav = () => {
           {[
             { href: '#features', label: 'Tính năng' },
             { href: '#how-it-works', label: 'Cách hoạt động' },
-            { href: '#testimonials', label: 'Khách hàng' },
             { href: '/about', label: 'Về chúng tôi' },
           ].map(({ href, label }) =>
             href.startsWith('/') ? (
@@ -233,22 +195,13 @@ const PublicNav = () => {
                 Vào Dashboard
               </Link>
             ) : (
-              <>
-                <Link
-                  to={ROUTES.LOGIN}
-                  className={styles.mobileLogin}
-                  onClick={() => setOpen(false)}
-                >
-                  Đăng nhập
-                </Link>
-                <Link
-                  to="/register"
-                  className={styles.mobileRegister}
-                  onClick={() => setOpen(false)}
-                >
-                  Đăng ký
-                </Link>
-              </>
+              <Link
+                to={ROUTES.LOGIN}
+                className={styles.mobileLogin}
+                onClick={() => setOpen(false)}
+              >
+                Đăng nhập
+              </Link>
             )}
           </div>
         </div>
@@ -265,30 +218,25 @@ const HeroSection = () => (
       {/* Badge */}
       <div className={styles.heroBadge}>
         <span className={styles.heroBadgeDot} />
-        <span className={styles.heroBadgeText}>Hơn 1.000 sellers đang dùng OmniSales</span>
+        <span className={styles.heroBadgeText}>Hệ thống quản lý nội bộ doanh nghiệp</span>
       </div>
 
       {/* Title */}
       <h1 className={styles.heroTitle}>
-        Quản lý bán hàng{' '}
-        <span className={styles.heroTitleAccent}>đa kênh</span>{' '}
-        thông minh
+        Quản lý bán hàng đa kênh tập trung
       </h1>
 
       {/* Subtitle */}
       <p className={styles.heroSubtitle}>
-        Kết nối Shopee, TikTok Shop và Lazada,.... Đồng bộ sản phẩm, đơn hàng và tồn kho tự
+        Kết nối Shopee, TikTok Shop và Lazada, đồng bộ sản phẩm, đơn hàng và tồn kho tự
         động — tất cả trên một nền tảng duy nhất.
       </p>
 
       {/* CTAs */}
       <div className={styles.heroCtas}>
-        <Link to="/register" className={styles.ctaPrimary}>
-          Đăng ký ngay
+        <Link to={ROUTES.LOGIN} className={styles.ctaPrimary}>
+          Đăng nhập hệ thống
           <ArrowRight className="w-5 h-5" />
-        </Link>
-        <Link to={ROUTES.LOGIN} className={styles.ctaSecondary}>
-          Đăng nhập
         </Link>
       </div>
 
@@ -378,10 +326,10 @@ const FeaturesSection = () => (
         <span className={styles.sectionEyebrow}>Tính năng nổi bật</span>
         <h2 className={styles.sectionTitle}>
           Mọi thứ bạn cần để{' '}
-          <span className={styles.sectionTitleAccent}>scale</span>
+          <span className={styles.sectionTitleAccent}>quản lý</span>
         </h2>
         <p className={styles.sectionDesc}>
-          Bộ công cụ đầy đủ giúp sellers quản lý toàn bộ hoạt động kinh doanh đa kênh một
+          Bộ công cụ đầy đủ giúp doanh nghiệp quản lý toàn bộ hoạt động kinh doanh một
           cách hiệu quả.
         </p>
       </div>
@@ -411,7 +359,7 @@ const HowItWorksSection = () => (
     <div className={styles.howItWorksInner}>
       <div className={styles.sectionHeader}>
         <span className={styles.sectionEyebrow}>3 bước đơn giản</span>
-        <h2 className={styles.sectionTitle}>Bắt đầu trong vài phút</h2>
+        <h2 className={styles.sectionTitle}>Bắt đầu sử dụng trong vài phút</h2>
         <p className={styles.sectionDesc}>
           Không cần cài đặt phức tạp, không cần hỗ trợ kỹ thuật.
         </p>
@@ -431,70 +379,19 @@ const HowItWorksSection = () => (
   </section>
 );
 
-// ─── Testimonials ─────────────────────────────────────────────────────────────
-
-const TestimonialsSection = () => (
-  <section id="testimonials" className={styles.testimonials}>
-    <div className={styles.testimonialsInner}>
-      <div className={styles.sectionHeader}>
-        <span className={styles.sectionEyebrow}>Khách hàng nói gì</span>
-        <h2 className={styles.sectionTitle}>Được tin dùng bởi sellers</h2>
-      </div>
-
-      <div className={styles.testimonialsGrid}>
-        {TESTIMONIALS.map(({ name, role, avatar, content, rating }) => (
-          <div key={name} className={styles.testimonialCard}>
-            <div className={styles.testimonialStars}>
-              {Array.from({ length: rating }).map((_, i) => (
-                <Star
-                  key={i}
-                  className={styles.testimonialStar}
-                  fill="#f59e0b"
-                />
-              ))}
-            </div>
-
-            <span className={styles.testimonialQuoteIcon}>&ldquo;</span>
-            <p className={styles.testimonialContent}>{content}</p>
-
-            <hr className={styles.testimonialDivider} />
-
-            <div className={styles.testimonialAuthor}>
-              <div className={styles.authorAvatar}>{avatar}</div>
-              <div>
-                <p className={styles.authorName}>{name}</p>
-                <p className={styles.authorRole}>{role}</p>
-              </div>
-            </div>
-
-            <div className={styles.verifiedBadge}>
-              <CheckCircle className="w-3.5 h-3.5" />
-              Verified
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
-);
-
 // ─── CTA ─────────────────────────────────────────────────────────────────────
 
 const CtaSection = () => (
   <section className={styles.cta}>
     <div className={styles.ctaInner}>
-      <h2 className={styles.ctaTitle}>Sẵn sàng quản lý đa kênh?</h2>
+      <h2 className={styles.ctaTitle}>Hệ thống dành riêng cho nội bộ</h2>
       <p className={styles.ctaDesc}>
-        Tham gia cùng hơn 15.000 sellers đã tin dùng OmniSales. Bắt đầu miễn phí ngay
-        hôm nay — không cần thẻ tín dụng.
+        Tài khoản được cấp phát bởi quản trị viên. Liên hệ Admin để được cấp quyền truy cập.
       </p>
       <div className={styles.ctaButtons}>
-        <Link to="/register" className={styles.ctaButtonPrimary}>
-          Đăng ký ngay
+        <Link to={ROUTES.LOGIN} className={styles.ctaButtonPrimary}>
+          Đăng nhập hệ thống
           <ArrowRight className="w-5 h-5" />
-        </Link>
-        <Link to="/register" className={styles.ctaButtonSecondary}>
-          Liên hệ bán hàng
         </Link>
       </div>
     </div>
@@ -511,7 +408,6 @@ const HomePage = () => (
       <StatsBar />
       <FeaturesSection />
       <HowItWorksSection />
-      <TestimonialsSection />
       <CtaSection />
     </main>
     <Footer />
