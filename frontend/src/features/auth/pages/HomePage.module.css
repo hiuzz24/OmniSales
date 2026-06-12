@@ -316,7 +316,7 @@
   width: 100%;
   max-width: var(--container-max);
   margin: 0 auto;
-  padding: 5rem var(--spacing-margin-mobile) 4rem;
+  padding: 4rem var(--spacing-margin-mobile) 3rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -326,7 +326,7 @@
 
 @media (min-width: 768px) {
   .heroInner {
-    padding: 6rem var(--spacing-margin-desktop) 5rem;
+    padding: 5rem var(--spacing-margin-desktop) 4rem;
   }
 }
 
@@ -334,13 +334,13 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  padding: 0.375rem 0.875rem;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   animation: fadeInUp 0.6s ease-out 0.1s both;
 }
 
@@ -364,11 +364,11 @@
 }
 
 .heroTitle {
-  font-size: clamp(2.25rem, 5vw + 1rem, 4.5rem);
+  font-size: clamp(2.25rem, 5vw + 1rem, 4rem);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   line-height: 1.1;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   animation: fadeInUp 0.6s ease-out 0.2s both;
 }
 
@@ -380,11 +380,11 @@
 }
 
 .heroSubtitle {
-  font-size: clamp(1rem, 1.5vw + 0.5rem, 1.25rem);
-  line-height: 1.7;
+  font-size: clamp(1rem, 1.5vw + 0.5rem, 1.125rem);
+  line-height: 1.75;
   color: rgba(255, 255, 255, 0.65);
-  max-width: 640px;
-  margin-bottom: 2.5rem;
+  max-width: 580px;
+  margin-bottom: 2rem;
   animation: fadeInUp 0.6s ease-out 0.3s both;
 }
 
@@ -457,8 +457,8 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.625rem;
-  margin-bottom: 3rem;
+  gap: 0.75rem;
+  margin-bottom: 2.5rem;
   animation: fadeInUp 0.6s ease-out 0.5s both;
 }
 
@@ -502,7 +502,7 @@
 .heroDashboard {
   position: relative;
   width: 100%;
-  max-width: 960px;
+  max-width: 900px;
   border-radius: var(--radius-xl);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -566,28 +566,28 @@
 
 @media (min-width: 768px) {
   .heroStats {
-    bottom: 1.5rem;
+    bottom: 1.75rem;
     gap: 1rem;
   }
 }
 
 .statCard {
-  min-width: 160px;
+  min-width: 150px;
   flex: 1;
-  max-width: 200px;
+  max-width: 190px;
   border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  padding: 0.75rem 1rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  padding: 0.625rem 0.875rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   text-align: left;
 }
 
 @media (min-width: 768px) {
   .statCard {
-    padding: 1rem 1.25rem;
+    padding: 0.875rem 1.125rem;
   }
 }
 
@@ -644,7 +644,7 @@
   background-color: var(--color-surface-container);
   border-top: 1px solid var(--color-outline-variant);
   border-bottom: 1px solid var(--color-outline-variant);
-  padding: 3rem 0;
+  padding: 2.5rem 0;
 }
 
 .statsInner {
@@ -653,25 +653,21 @@
   margin: 0 auto;
   padding: 0 var(--spacing-margin-mobile);
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 2rem;
 }
 
 @media (min-width: 768px) {
   .statsInner {
     padding: 0 var(--spacing-margin-desktop);
-  }
-}
-
-@media (min-width: 1024px) {
-  .statsInner {
-    grid-template-columns: repeat(4, 1fr);
+    gap: 3rem;
   }
 }
 
 .statItem {
   text-align: center;
   position: relative;
+  padding: 0 1rem;
 }
 
 @media (min-width: 1024px) {
@@ -715,7 +711,7 @@
 
 /* Features */
 .features {
-  padding: 5rem 0;
+  padding: 4rem 0;
   background-color: var(--color-surface);
 }
 
@@ -767,7 +763,7 @@
 
 .sectionHeader {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 2.5rem;
 }
 
 .sectionHeader .sectionDesc {
@@ -845,7 +841,7 @@
 
 /* How It Works */
 .howItWorks {
-  padding: 5rem 0;
+  padding: 4rem 0;
   background-color: var(--color-surface-container-low);
 }
 
