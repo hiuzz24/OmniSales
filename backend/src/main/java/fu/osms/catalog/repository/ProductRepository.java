@@ -27,4 +27,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
            "AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')) " +
            "OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     Page<Product> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
+
+    boolean existsBySkuAndDeletedAtIsNull(String sku);
+
+    boolean existsByNameAndDeletedAtIsNull(String name);
+
+    boolean existsBySkuInAndDeletedAtIsNull(java.util.Collection<String> skus);
 }

@@ -35,8 +35,10 @@ public enum ErrorCode {
     VARIANT_NOT_FOUND(HttpStatus.NOT_FOUND, "Product variant not found"),
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Category not found"),
     PRODUCT_SKU_CONFLICT(HttpStatus.CONFLICT, "Product SKU already exists"),
+    PRODUCT_NAME_CONFLICT(HttpStatus.CONFLICT, "Product Name already exists"),
     VARIANT_SKU_CONFLICT(HttpStatus.CONFLICT, "Variant SKU already exists"),
     VARIANT_BARCODE_CONFLICT(HttpStatus.CONFLICT, "Variant barcode already exists"),
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST,"Request invalid"),
 
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "Order not found"),
     ORDER_STATUS_INVALID_TRANSITION(HttpStatus.BAD_REQUEST, "Invalid order status transition"),

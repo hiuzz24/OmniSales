@@ -23,7 +23,8 @@ public class ProductController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        ProductResponse productResponse = productService.create(request);
+        return ResponseEntity.ok(ApiResponse.success("Tạo sản phẩm thành công",productResponse));
     }
 
     @GetMapping("/{id}")

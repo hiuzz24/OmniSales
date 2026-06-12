@@ -24,7 +24,7 @@ import java.util.UUID;
 public class JwtService {
     private final UserRepository userRepository;
 
-    @Value("${JWT_SECRET}")
+    @Value("${app.security.jwt.secret}")
     private String jwtSecret;
 
     @Getter
