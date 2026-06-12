@@ -46,11 +46,6 @@ public class CustomUserDetailService implements UserDetailsService {
 
         GrantedAuthority authority = new SimpleGrantedAuthority(userRole.getRole().getName());
 
-        return org.springframework.security.core.userdetails.User
-                .builder()
-                .username(user.getEmail())
-                .password(user.getPasswordHash())
-                .roles(authority.getAuthority())
-                .build();
+        return new fu.osms.auth.security.CustomUserDetails(user, java.util.Collections.singletonList(authority));
     }
 }

@@ -27,4 +27,6 @@ public class ProductVariantResponse {
     private Integer weightGrams;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+
+    private java.util.List<ProductImageResponse> images;
 }

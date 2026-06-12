@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 @Getter
@@ -38,4 +39,6 @@ public class ProductVariantRequest {
     private Map<String, Object> optionValues;
 
     private Integer weightGrams;
+
+    private List<ProductImageRequest> images;
 }
