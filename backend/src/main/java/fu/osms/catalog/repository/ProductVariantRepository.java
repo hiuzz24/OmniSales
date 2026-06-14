@@ -4,6 +4,7 @@ import fu.osms.catalog.entity.ProductVariant;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,6 +14,8 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     List<ProductVariant> findByProductIdAndDeletedAtIsNull(UUID productId);
 
+    List<ProductVariant> findByProductIdInAndDeletedAtIsNull(Collection<UUID> productIds);
+
     List<ProductVariant> findByDeletedAtIsNull();
 
     Optional<ProductVariant> findBySkuAndDeletedAtIsNull(String sku);
@@ -21,7 +24,7 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     boolean existsByBarcodeAndDeletedAtIsNull(String barcode);
 
-    boolean existsBySkuInAndDeletedAtIsNull(java.util.Collection<String> skus);
+    boolean existsBySkuInAndDeletedAtIsNull(Collection<String> skus);
 
-    boolean existsByBarcodeInAndDeletedAtIsNull(java.util.Collection<String> barcodes);
+    boolean existsByBarcodeInAndDeletedAtIsNull(Collection<String> barcodes);
 }

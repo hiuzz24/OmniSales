@@ -9,7 +9,10 @@ import HomePage from '../../features/auth/pages/HomePage';
 import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
+import ProductManagementPage from '../../features/catalog/pages/ProductManagementPage';
+import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import EmptyLayout from '../layouts/EmptyLayout';
+import DashboardLayout from '../layouts/DashboardLayout';
 
 const AppRouter = () => {
   return (
@@ -29,7 +32,11 @@ const AppRouter = () => {
           </Route>
 
           <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-            <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+            <Route element={<DashboardLayout />}>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+              <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
+              <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
+            </Route>
           </Route>
         </Route>
 

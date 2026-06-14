@@ -8,7 +8,7 @@ public interface AuthService {
 
     TokenPairDTO login(LoginRequest request);
 
-    AuthResponse refreshToken(String refreshToken);
+    TokenPairDTO refreshToken(String refreshToken);
 
     void logout(String refreshToken);
 }

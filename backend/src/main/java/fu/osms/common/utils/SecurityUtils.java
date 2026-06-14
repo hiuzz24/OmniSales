@@ -14,11 +14,6 @@ public class SecurityUtils {
         throw new IllegalStateException("Utility class");
     }
 
-    /**
-     * Get the login of the current user.
-     *
-     * @return the login of the current user.
-     */
     public static Optional<String> getCurrentUserLogin() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null) {
@@ -34,11 +29,6 @@ public class SecurityUtils {
         return Optional.empty();
     }
 
-    /**
-     * Get the UUID of the current logged-in user.
-     *
-     * @return the UUID of the current user.
-     */
     public static Optional<UUID> getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null) {
@@ -52,12 +42,6 @@ public class SecurityUtils {
         return Optional.empty();
     }
 
-    /**
-     * Get the full User object of the current logged-in user.
-     * Use this method when you need more than just the ID or Email.
-     *
-     * @return the User entity of the current user.
-     */
     public static Optional<User> getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null) {

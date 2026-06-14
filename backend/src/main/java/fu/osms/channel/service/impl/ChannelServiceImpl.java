@@ -5,6 +5,7 @@ import fu.osms.channel.dto.response.ChannelCredentialResponse;
 import fu.osms.channel.dto.response.ChannelProductResponse;
 import fu.osms.channel.dto.response.ChannelResponse;
 import fu.osms.channel.entity.Channel;
+import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.mapper.ChannelCredentialMapper;
 import fu.osms.channel.mapper.ChannelMapper;
 import fu.osms.channel.mapper.ChannelProductMapper;
@@ -19,8 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -48,7 +53,10 @@ public class ChannelServiceImpl implements ChannelService {
     @Override
     @Transactional(readOnly = true)
     public List<ChannelResponse> getAll() {
-        throw new UnsupportedOperationException("Chưa code");
+        return channelRepository.findByDeletedAtIsNull()
+                .stream()
+                .map(channelMapper::toResponse)
+                .toList();
     }
 
     @Override
@@ -73,5 +81,26 @@ public class ChannelServiceImpl implements ChannelService {
     @Transactional(readOnly = true)
     public PageResponse<ChannelProductResponse> getChannelProducts(UUID channelId, int page, int size) {
         throw new UnsupportedOperationException("Chưa code");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<String>> getProductChannels(Collection<UUID> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdInAndMappingState(productIds, "ACTIVE");
+        return channelProducts.stream()
+                .filter(cp -> cp.getProduct() != null && cp.getChannel() != null)
+                .collect(Collectors.groupingBy(
+                        cp -> cp.getProduct().getId(),
+                        Collectors.mapping(
+                                cp -> cp.getChannel().getPlatform().name(),
+                                Collectors.collectingAndThen(
+                                        Collectors.toList(),
+                                        list -> list.stream().distinct().collect(Collectors.toList())
+                                )
+                        )
+                ));
     }
 }

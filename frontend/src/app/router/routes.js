@@ -7,4 +7,6 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   PROFILE: '/profile',
   ADMIN: '/admin',
+  PRODUCT_CREATE: '/products/create',
+  PRODUCTS: '/products',
 };

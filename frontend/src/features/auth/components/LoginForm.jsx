@@ -44,7 +44,6 @@ const LoginForm = () => {
     setApiError('');
     try {
       const result = await login(data);
-      console.log(result);
       toast.success("Đăng nhập thành công");
       navigate(getRoleHome(result?.user?.role));
     } catch (err) {

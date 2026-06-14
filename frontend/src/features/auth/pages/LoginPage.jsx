@@ -39,7 +39,7 @@ const LoginPage = () => {
       </main>
 
       <footer className={styles.footer}>
-        <div>OmniSales &copy; 2024 OmniSales. Đã đăng ký bản quyền.</div>
+        <div>OmniSales &copy; 2026 OmniSales. Đã đăng ký bản quyền.</div>
         <div className={styles.footerLinks}>
           <a href="#" className={styles.footerLink}>Điều khoản</a>
           <a href="#" className={styles.footerLink}>Bảo mật</a>
