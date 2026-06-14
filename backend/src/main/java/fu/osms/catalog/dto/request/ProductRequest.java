@@ -43,4 +43,6 @@ public class ProductRequest {
     private List<ProductVariantRequest> variants;
 
     private List<ProductImageRequest> images;
+
+    private List<UUID> channelIds;
 }

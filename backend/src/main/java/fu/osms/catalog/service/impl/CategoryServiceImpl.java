@@ -35,7 +35,10 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Transactional(readOnly = true)
     public List<CategoryResponse> getAll() {
-        throw new UnsupportedOperationException("Chưa code");
+        return categoryRepository.findAllByOrderBySortOrderAsc()
+                .stream()
+                .map(categoryMapper::toResponse)
+                .toList();
     }
 
     @Override

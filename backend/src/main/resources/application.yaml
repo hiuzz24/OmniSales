@@ -1,6 +1,5 @@
 server:
   port: 8080
-
 spring:
   application:
     name: OSMS
@@ -39,3 +38,5 @@ app:
   security:
     max-failed-attempts: 5
     lock-time-duration: 5
+    jwt:
+      secret: ${JWT_SECRET}

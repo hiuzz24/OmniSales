@@ -11,8 +11,6 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface InventoryIssueMapper {
 
-    // ── Issue ─────────────────────────────────────────────────────────────────
-
     @Mapping(target = "id", ignore = true)
 
     @Mapping(target = "warehouse", ignore = true)
@@ -33,8 +31,6 @@ public interface InventoryIssueMapper {
     @Mapping(target = "approvedByName", source = "approvedBy.fullName")
     @Mapping(target = "items", ignore = true)
     InventoryIssueResponse toResponse(InventoryIssue issue);
-
-    // ── Issue Item ────────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "issue", ignore = true)
