@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -33,7 +35,7 @@ public class ChannelProduct {
     @JoinColumn(name = "product_id")
     private Product product;
 
-    @Column(name = "external_product_id", nullable = false, length = 200)
+    @Column(name = "external_product_id", length = 200)
     private String externalProductId;
 
     @Column(name = "external_status", length = 50)
@@ -44,6 +46,7 @@ public class ChannelProduct {
     private String mappingState = "ACTIVE";
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "sync_status", nullable = false)
     @Builder.Default
     private SyncStatus syncStatus = SyncStatus.PENDING;

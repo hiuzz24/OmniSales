@@ -13,11 +13,34 @@ public class CookieServiceImpl implements CookieService {
         ResponseCookie cookie = ResponseCookie
                 .from("refreshToken",refreshToken)
                 .httpOnly(true)
-                .path("/api/auth/refresh")
+                .path("/api/auth")
                 .sameSite("Strict")
                 .maxAge(Duration.ofDays(7))
                 .secure(true)
                 .build();
         response.addHeader("Set-Cookie",cookie.toString());
+    }
+
+    @Override
+    public void clearRefreshTokenCookie(HttpServletResponse response) {
+        ResponseCookie cookie = ResponseCookie
+                .from("refreshToken", "")
+                .httpOnly(true)
+                .path("/api/auth")
+                .sameSite("Strict")
+                .maxAge(0)
+                .secure(true)
+                .build();
+        response.addHeader("Set-Cookie", cookie.toString());
+        
+        ResponseCookie oldCookie = ResponseCookie
+                .from("refreshToken", "")
+                .httpOnly(true)
+                .path("/api/auth/refresh")
+                .sameSite("Strict")
+                .maxAge(0)
+                .secure(true)
+                .build();
+        response.addHeader("Set-Cookie", oldCookie.toString());
     }
 }

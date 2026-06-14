@@ -1,7 +1,6 @@
 import { createContext, useState, useEffect } from 'react';
 import authService from '../services/authService';
 import { getAccessToken, clearAccessToken } from '../../../api/interceptors';
-import { isTokenExpired } from '../../../shared/utils/tokenUtils';
 
 export const AuthContext = createContext(null);
 
@@ -28,8 +27,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+    }
   };
 
   return (

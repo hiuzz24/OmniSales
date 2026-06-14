@@ -13,6 +13,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString
 public class ProductResponse {
 
     private UUID id;
@@ -36,4 +37,5 @@ public class ProductResponse {
 
     private List<ProductVariantResponse> variants;
     private List<ProductImageResponse> images;
+    private List<String> channels;
 }

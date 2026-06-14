@@ -8,4 +8,6 @@ export const ROUTES = {
   PROFILE: '/profile',
   ADMIN: '/admin',
   CHANGE_PASSWORD: '/change-password',
+  PRODUCT_CREATE: '/products/create',
+  PRODUCTS: '/products',
 };

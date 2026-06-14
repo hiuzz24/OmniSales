@@ -35,7 +35,8 @@ public class ChannelController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChannelResponse>>> getAll() {
-        throw new UnsupportedOperationException("Chưa code");
+        List<ChannelResponse> channels = channelService.getAll();
+        return ResponseEntity.ok(ApiResponse.success(channels));
     }
 
     @PutMapping("/{id}")

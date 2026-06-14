@@ -11,8 +11,6 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface StocktakeMapper {
 
-    // ── Session ───────────────────────────────────────────────────────────────
-
     @Mapping(target = "id", ignore = true)
 
     @Mapping(target = "warehouse", ignore = true)
@@ -28,8 +26,6 @@ public interface StocktakeMapper {
     @Mapping(target = "createdByName", source = "createdBy.fullName")
     @Mapping(target = "items", ignore = true)
     StocktakeSessionResponse toResponse(StocktakeSession session);
-
-    // ── Item ──────────────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "session", ignore = true)

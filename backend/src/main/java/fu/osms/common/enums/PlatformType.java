@@ -4,5 +4,6 @@ public enum PlatformType {
     SHOPEE,
     TIKTOK,
     LAZADA,
+    SHOPIFY,
     MANUAL
 }

@@ -5,6 +5,7 @@ import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
+import fu.osms.inventory.dto.response.StockSummaryDTO;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.InventoryTransaction;
 import fu.osms.inventory.mapper.InventoryItemMapper;
@@ -22,8 +23,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -80,5 +85,32 @@ public class InventoryServiceImpl implements InventoryService {
 
     private PageResponse<InventoryTransactionResponse> toTxnPageResponse(Page<InventoryTransaction> p, int page, int size) {
         throw new UnsupportedOperationException("Chưa code");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, StockSummaryDTO> getStockSummary(Collection<UUID> variantIds) {
+        if (variantIds == null || variantIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<InventoryItem> items = inventoryItemRepository.findByVariantIdIn(variantIds);
+        
+        return items.stream()
+                .collect(Collectors.groupingBy(
+                        item -> item.getVariant().getId(),
+                        Collectors.collectingAndThen(
+                                Collectors.toList(),
+                                list -> {
+                                    int totalAvailable = list.stream().mapToInt(i -> i.getAvailableQuantity() != null ? i.getAvailableQuantity() : 0).sum();
+                                    int totalOnHand = list.stream().mapToInt(i -> i.getQuantityOnHand() != null ? i.getQuantityOnHand() : 0).sum();
+                                    int totalReserved = list.stream().mapToInt(i -> i.getReservedQuantity() != null ? i.getReservedQuantity() : 0).sum();
+                                    return StockSummaryDTO.builder()
+                                            .availableQuantity(totalAvailable)
+                                            .quantityOnHand(totalOnHand)
+                                            .reservedQuantity(totalReserved)
+                                            .build();
+                                }
+                        )
+                ));
     }
 }
