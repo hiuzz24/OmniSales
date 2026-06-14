@@ -27,8 +27,22 @@ const authApi = {
     return data;
   },
 
-  changePassword: async (currentPassword, newPassword) => {
-    const data = await axiosClient.post('/auth/change-password', { currentPassword, newPassword });
+  validateResetToken: async (token) => {
+    const data = await axiosClient.get('/auth/change-password/validate', {
+      params: { token },
+    });
+    return data;
+  },
+
+  changePassword: async (token, password, confirmPassword) => {
+    const data = await axiosClient.post(
+      '/auth/change-password',
+      {
+        token,
+        password,
+        confirmPassword
+      }
+    );
     return data;
   },
 };

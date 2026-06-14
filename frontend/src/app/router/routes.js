@@ -7,4 +7,5 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   PROFILE: '/profile',
   ADMIN: '/admin',
+  CHANGE_PASSWORD: '/change-password',
 };
