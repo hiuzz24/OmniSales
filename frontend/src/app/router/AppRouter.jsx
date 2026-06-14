@@ -5,6 +5,8 @@ import PublicRoute from './PublicRoute';
 import RoleRoute from './RoleRoute';
 import { ROLES } from '../../features/auth/constants/roles';
 import LoginPage from '../../features/auth/pages/LoginPage';
+import ForgotPassword from '../../features/auth/pages/ForgotPasswordPage';
+import ChangePasswordPage from '../../features/auth/pages/ChangePasswordPage';
 import HomePage from '../../features/auth/pages/HomePage';
 import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
@@ -21,6 +23,9 @@ const AppRouter = () => {
             <Route path={ROUTES.ABOUT} element={<AboutPage />} />
           </Route>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+          <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
+          <Route path={ROUTES.CHANGE_PASSWORD} element={<ChangePasswordPage />} />
+          <Route path={ROUTES.RESET_PASSWORD} element={<ChangePasswordPage />} />
         </Route>
 
         <Route element={<PrivateRoute />}>

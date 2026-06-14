@@ -1,19 +1,23 @@
 package fu.osms.auth.service.impl;
 
 import fu.osms.auth.dto.request.LoginRequest;
+import fu.osms.auth.dto.request.ChangePasswordRequest;
 import fu.osms.auth.dto.response.AuthResponse;
 import fu.osms.auth.dto.response.TokenPairDTO;
 import fu.osms.auth.dto.response.UserResponse;
+import fu.osms.auth.entity.PasswordResetToken;
 import fu.osms.auth.entity.RefreshToken;
 import fu.osms.auth.entity.User;
 import fu.osms.auth.entity.UserRole;
 import fu.osms.auth.enums.UserStatus;
 import fu.osms.auth.mapper.UserMapper;
+import fu.osms.auth.repository.PasswordResetTokenRepository;
 import fu.osms.auth.repository.RefreshTokenRepository;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.auth.repository.UserRoleRepository;
 import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
+import fu.osms.auth.service.EmailService;
 import fu.osms.config.CustomUserDetailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +26,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.util.Base64;
+import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -47,7 +52,9 @@ public class AuthServiceImpl implements AuthService {
     private final CustomUserDetailService userDetailsService;
     private final JwtService jwtService;
     private final UserMapper userMapper;
-
+    private final PasswordResetTokenRepository tokenRepository;
+    private final EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
     @Value("${app.security.max-failed-attempts}")
     private int maxFailedAttempts;
 
@@ -167,6 +174,69 @@ public class AuthServiceImpl implements AuthService {
             token.setRevokedAt(OffsetDateTime.now());
             refreshTokenRepository.save(token);
         });
+    }
+
+    @Override
+    public void processForgotPassword(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Email không có trong hệ thống"));
+
+        String tokenStr = UUID.randomUUID().toString();
+
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setUser(user);
+        resetToken.setToken(tokenStr);
+        resetToken.setExpiresAt(OffsetDateTime.now().plusMinutes(15));
+
+        tokenRepository.save(resetToken);
+
+        emailService.sendResetPasswordEmail(user.getEmail(), tokenStr);
+
+    }
+
+    @Override
+    public void validateResetToken(String tokenStr) {
+        PasswordResetToken token = tokenRepository.findByToken(tokenStr)
+                .orElseThrow(() -> new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng"));
+
+        if (token.getUsedAt() != null) {
+            throw new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng");
+        }
+
+        if (token.getExpiresAt().isBefore(OffsetDateTime.now())) {
+            throw new IllegalArgumentException("Liên kết đã hết hạn, vui lòng yêu cầu lấy lại mật khẩu");
+        }
+    }
+
+    @Override
+    public void updatePassword(ChangePasswordRequest request) {
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("Mật khẩu xác nhận không trùng khớp");
+        }
+
+        // Kiểm tra tính hợp lệ của token trước khi update
+        PasswordResetToken token = tokenRepository.findByToken(request.getToken())
+                .orElseThrow(() -> new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng"));
+
+        if (token.getUsedAt() != null) {
+            throw new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng");
+        }
+
+        if (token.getExpiresAt().isBefore(OffsetDateTime.now())) {
+            throw new IllegalArgumentException("Liên kết đã hết hạn, vui lòng yêu cầu lấy lại mật khẩu");
+        }
+
+        // Tiến hành cập nhật mật khẩu mới của User
+        User user = token.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setUpdatedAt(OffsetDateTime.now());
+        userRepository.save(user);
+
+        // Đánh dấu token đã sử dụng
+        token.setUsedAt(OffsetDateTime.now());
+        tokenRepository.save(token);
+
     }
 
 
