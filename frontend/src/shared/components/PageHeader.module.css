@@ -1,0 +1,39 @@
+.headerContainer {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+
+@media (min-width: 640px) {
+  .headerContainer {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.titleWrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.subtitle {
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 400;
+  color: #6b7280;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

@@ -1,8 +1,10 @@
 package fu.osms.catalog.dto.response;
 
+import fu.osms.inventory.dto.response.InventoryItemResponse;
 import lombok.*;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,5 +30,8 @@ public class ProductVariantResponse {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
-    private java.util.List<ProductImageResponse> images;
+    private Integer availableQuantity;
+    private Integer quantityOnHand;
+
+    private List<ProductImageResponse> images;
 }

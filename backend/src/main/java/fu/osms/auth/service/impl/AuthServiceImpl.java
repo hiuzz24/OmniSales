@@ -124,7 +124,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthResponse refreshToken(String refreshToken) {
+    public TokenPairDTO refreshToken(String refreshToken) {
         String tokenHash = hashToken(refreshToken);
         RefreshToken storedToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new AppException(ErrorCode.TOKEN_INVALID));
@@ -151,10 +151,9 @@ public class AuthServiceImpl implements AuthService {
                 .expiresAt(OffsetDateTime.now().plusDays(7))
                 .build());
 
-        return AuthResponse.builder()
+        return TokenPairDTO.builder()
                 .accessToken(newAccessToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtService.getAccessTokenExpirationMs() / 1000)
+                .refreshToken(newRefreshToken)
                 .user(userMapper.toResponse(user))
                 .build();
     }

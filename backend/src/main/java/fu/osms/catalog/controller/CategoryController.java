@@ -32,7 +32,8 @@ public class CategoryController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<CategoryResponse>>> getAll() {
-        throw new UnsupportedOperationException("Chưa code");
+        List<CategoryResponse> categories = categoryService.getAll();
+        return ResponseEntity.ok(ApiResponse.success(categories));
     }
 
     @GetMapping("/roots")
