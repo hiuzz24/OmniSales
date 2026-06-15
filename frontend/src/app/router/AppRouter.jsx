@@ -11,14 +11,15 @@ import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
-import InventoryReceiptPage from '../../features/inventory/pages/InventoryReceiptPage';
-import InventoryReceiptCreatePage from '../../features/inventory/pages/InventoryReceiptCreatePage';
+import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
+import StockReceiveCreatePage from '../../features/inventory/pages/StockReceiveCreatePage';
+import StockReceiveDetailPage from '../../features/inventory/pages/StockReceiveDetailPage';
+import StockReceiveEditPage from '../../features/inventory/pages/StockReceiveEditPage';
 
 const AppRouter = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes */}
         <Route element={<PublicRoute />}>
           <Route element={<EmptyLayout />}>
             <Route path={ROUTES.HOME} element={<HomePage />} />
@@ -27,22 +28,22 @@ const AppRouter = () => {
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
         </Route>
 
-        {/* Private routes */}
         <Route element={<PrivateRoute />}>
-          {/* Admin — no sidebar */}
           <Route element={<RoleRoute allowedRoles={[ROLES.SYSTEM_ADMIN]} />}>
             <Route path={ROUTES.ADMIN} element={<AdminPage />} />
           </Route>
 
-          {/* All regular pages — wrapped in MainLayout (sidebar + topbar) */}
+          {/* All regular user pages use MainLayout (sidebar + topbar) */}
           <Route element={<MainLayout />}>
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
               <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
-              <Route path={ROUTES.WAREHOUSE_RECEIPTS} element={<InventoryReceiptPage />} />
-              <Route path={ROUTES.WAREHOUSE_RECEIPT_CREATE} element={<InventoryReceiptCreatePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
             </Route>
           </Route>
         </Route>

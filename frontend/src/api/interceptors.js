@@ -40,7 +40,7 @@ axiosClient.interceptors.request.use(
 );
 
 axiosClient.interceptors.response.use(
-  (response) => response.data?.data ?? response.data,
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
     const isAuthEndpoint = originalRequest.url.includes('/auth/login') || originalRequest.url.includes('/auth/refresh');
@@ -50,7 +50,7 @@ axiosClient.interceptors.response.use(
 
       try {
         console.log("send refresh");
-        const refreshed = await authApi.refreshToken;
+        const refreshed = await authApi.refreshToken();
         setAccessToken(refreshed.accessToken);
         originalRequest.headers.Authorization = `Bearer ${refreshed.accessToken}`;
         return axiosClient(originalRequest);

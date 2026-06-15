@@ -5,6 +5,8 @@ import fu.osms.channel.entity.Channel;
 import fu.osms.common.enums.SyncStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -33,6 +35,7 @@ public class SyncLog {
     private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     @Builder.Default
     private SyncStatus status = SyncStatus.PENDING;

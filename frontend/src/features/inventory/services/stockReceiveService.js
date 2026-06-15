@@ -1,0 +1,12 @@
+import axiosClient from '../../../api/axiosClient';
+import '../../../api/interceptors';
+
+const stockReceiveService = {
+  createReceipt: (data) => axiosClient.post('/receipts', data),
+  getReceipts: (params) => axiosClient.get('/receipts', { params }),
+  getReceiptById: (id) => axiosClient.get(`/receipts/${id}`),
+  updateReceipt: (id, data) => axiosClient.put(`/receipts/${id}`, data),
+  completeReceipt: (id) => axiosClient.patch(`/receipts/${id}/complete`),
+};
+
+export default stockReceiveService;
