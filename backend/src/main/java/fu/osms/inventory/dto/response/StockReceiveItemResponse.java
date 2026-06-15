@@ -10,7 +10,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class InventoryReceiptItemResponse {
+public class StockReceiveItemResponse {
 
     private UUID id;
     private UUID variantId;

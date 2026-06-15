@@ -38,7 +38,10 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Override
     @Transactional(readOnly = true)
     public List<WarehouseResponse> getAll() {
-        throw new UnsupportedOperationException("Chưa code");
+        return warehouseRepository.findByIsActiveTrueOrderByNameAsc()
+                .stream()
+                .map(warehouseMapper::toResponse)
+                .toList();
     }
 
     @Override

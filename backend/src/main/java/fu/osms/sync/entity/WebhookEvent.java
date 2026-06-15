@@ -29,6 +29,7 @@ public class WebhookEvent {
     private Channel channel;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)
     private PlatformType platform;
 
