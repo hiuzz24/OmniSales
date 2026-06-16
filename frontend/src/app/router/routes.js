@@ -7,4 +7,8 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   PROFILE: '/profile',
   ADMIN: '/admin',
+  WAREHOUSE_IMPORT_RECEIPTS: '/warehouse/receipts',
+  WAREHOUSE_IMPORT_RECEIPT_CREATE: '/warehouse/receipts/create',
+  WAREHOUSE_IMPORT_RECEIPT_EDIT: '/warehouse/receipts/:id/edit',
+  WAREHOUSE_IMPORT_RECEIPT_DETAIL: '/warehouse/receipts/:id',
 };

@@ -10,6 +10,11 @@ import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 import EmptyLayout from '../layouts/EmptyLayout';
+import MainLayout from '../layouts/MainLayout';
+import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
+import StockReceiveCreatePage from '../../features/inventory/pages/StockReceiveCreatePage';
+import StockReceiveDetailPage from '../../features/inventory/pages/StockReceiveDetailPage';
+import StockReceiveEditPage from '../../features/inventory/pages/StockReceiveEditPage';
 
 const AppRouter = () => {
   return (
@@ -28,8 +33,18 @@ const AppRouter = () => {
             <Route path={ROUTES.ADMIN} element={<AdminPage />} />
           </Route>
 
-          <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-            <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+          {/* All regular user pages use MainLayout (sidebar + topbar) */}
+          <Route element={<MainLayout />}>
+            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
+            </Route>
           </Route>
         </Route>
 
