@@ -1,5 +1,6 @@
 server:
   port: 8080
+
 spring:
   application:
     name: OSMS
@@ -15,6 +16,23 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
     show-sql: false
+
+  # Cấu hình SMTP Server cho Gmail (Đã chuyển về đúng nhóm spring)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${GMAIL_USERNAME}
+    password: ${GMAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connection timeout: 5000
+          timeout: 5000
+          write timeout: 5000
 
 app:
   security:

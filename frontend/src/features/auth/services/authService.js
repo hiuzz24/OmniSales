@@ -46,8 +46,17 @@ const authService = {
     return data;
   },
 
-  changePassword: async (currentPassword, newPassword) => {
-    const data = await authApi.changePassword(currentPassword, newPassword);
+  validateResetToken: async (token) => {
+    const data = await authApi.validateResetToken(token);
+    return data;
+  },
+
+  changePassword: async (token, password, confirmPassword) => {
+    const data = await authApi.changePassword(
+      token,
+      password,
+      confirmPassword
+    );
     return data;
   },
 };

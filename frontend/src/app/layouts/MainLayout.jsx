@@ -348,7 +348,10 @@ export default function MainLayout() {
               )}
             </div>
 
-export default MainLayout;
+            {/* User dropdown */}
+            <UserDropdown user={user} role={role} onLogout={handleLogout} />
+          </div>
+        </header>
 
         {/* Content */}
         <main style={{ flex: 1, padding: 24, overflowY: 'auto' }}>

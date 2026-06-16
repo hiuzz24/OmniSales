@@ -7,6 +7,7 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   PROFILE: '/profile',
   ADMIN: '/admin',
+  CHANGE_PASSWORD: '/change-password',
   WAREHOUSE_IMPORT_RECEIPTS: '/warehouse/receipts',
   WAREHOUSE_IMPORT_RECEIPT_CREATE: '/warehouse/receipts/create',
   WAREHOUSE_IMPORT_RECEIPT_EDIT: '/warehouse/receipts/:id/edit',
