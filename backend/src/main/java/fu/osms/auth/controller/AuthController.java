@@ -33,6 +33,8 @@ public class AuthController {
                                                            HttpServletResponse response) {
         TokenPairDTO tokenPairDTO = authService.login(request);
 
+        log.info("access={} ",tokenPairDTO.getAccessToken());
+
         cookieService.addRefreshTokenCookie(tokenPairDTO.getRefreshToken(),response);
 
         AuthResponse authResponse = AuthResponse.builder()

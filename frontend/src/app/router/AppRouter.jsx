@@ -11,6 +11,7 @@ import HomePage from '../../features/auth/pages/HomePage';
 import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
+import ProfilePage from '../../features/user/pages/ProfilePage';
 import ProductManagementPage from '../../features/catalog/pages/ProductManagementPage';
 import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
@@ -44,6 +45,12 @@ const AppRouter = () => {
 
           {/* All regular user pages use MainLayout (sidebar + topbar) */}
           <Route element={<MainLayout />}>
+            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+            </Route>
+
+            <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
+
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
