@@ -11,6 +11,8 @@ import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 import ProductManagementPage from '../../features/catalog/pages/ProductManagementPage';
 import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
+import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
+import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import DashboardLayout from '../layouts/DashboardLayout';
 
@@ -33,8 +35,10 @@ const AppRouter = () => {
 
           <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
             <Route element={<DashboardLayout />}>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
               <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
+              <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
+              <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
             </Route>
           </Route>

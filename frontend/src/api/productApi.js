@@ -13,6 +13,23 @@ const productApi = {
     create: async (data) => {
         const response = await axiosClient.post('/products', data);
         return response;
+    },
+
+    getById: async (id) => {
+        const response = await axiosClient.get(`/products/${id}`);
+        console.log(response);
+        
+        return response;
+    },
+
+    update: async (id, data) => {
+        const response = await axiosClient.put(`/products/${id}`, data);
+        return response;
+    },
+
+    delete: async (id) => {
+        const response = await axiosClient.delete(`/products/${id}/delete`); 
+        return response;
     }
 }
 export default productApi;

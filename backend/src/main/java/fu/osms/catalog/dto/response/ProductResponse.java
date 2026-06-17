@@ -23,6 +23,7 @@ public class ProductResponse {
     private String name;
     private String description;
     private String brand;
+    private Boolean hasOrders;
     private ProductStatus status;
     private Integer lowStockThreshold;
     private Integer weightGrams;

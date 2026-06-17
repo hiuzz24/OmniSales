@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import styles from './ProductForm.module.css';
 
-const ProductForm = ({ formData, onChange, categories = [], errors = {} }) => {
+const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrders = false }) => {
   const handleChange = (field, value) => {
     onChange({ ...formData, [field]: value });
   };
@@ -42,6 +42,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {} }) => {
             placeholder="ATN-001"
             value={formData.sku || ''}
             onChange={(e) => handleChange('sku', e.target.value)}
+            disabled={hasOrders}
           />
           {errors.sku && <span className={styles.errorText}>{errors.sku}</span>}
         </div>

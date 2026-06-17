@@ -105,11 +105,15 @@ const ProductCreatePage = () => {
     } else {
       requestVariants = [{
         sku: formData.sku,
-        name: 'Mặc định',
+        name: formData.name || 'Mặc định',
         price: Number(price),
         costPrice: costPrice ? Number(costPrice) : null,
         optionValues: {},
-        images: [],
+        images: images.map((img, i) => ({
+          url: img.url,
+          sortOrder: i,
+          isPrimary: i === 0,
+        })),
       }];
     }
 
@@ -250,6 +254,7 @@ const ProductCreatePage = () => {
               onRemove={handleRemoveVariant}
               onChange={setVariants}
               errors={variantErrors}
+              globalError={errors.variants}
             />
           )}
 

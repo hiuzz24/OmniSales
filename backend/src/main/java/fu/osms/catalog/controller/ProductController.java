@@ -33,7 +33,8 @@ public class ProductController {
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> getById(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        ProductResponse response = productService.getById(id);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping
@@ -50,7 +51,8 @@ public class ProductController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ProductResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ProductRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        ProductResponse response = productService.update(id, request);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật sản phẩm thành công", response));
     }
 
     @PatchMapping("/{id}/status")
@@ -59,8 +61,9 @@ public class ProductController {
         throw new UnsupportedOperationException("Chưa code");
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id}/delete")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        productService.delete(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 }

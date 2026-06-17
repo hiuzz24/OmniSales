@@ -26,6 +26,7 @@ import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.service.ChannelService;
+import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.AppException;
@@ -62,14 +63,13 @@ public class ProductServiceImpl implements ProductService {
     private final ChannelService channelService;
     private final ChannelRepository channelRepository;
     private final ChannelProductRepository channelProductRepository;
+    private final OrderItemRepository orderItemRepository;
 
     @Override
     @Transactional
     public ProductResponse create(ProductRequest request) {
         if(productRepository.existsBySkuAndDeletedAtIsNull(request.getSku())){
             throw new AppException(ErrorCode.PRODUCT_SKU_CONFLICT);
-        } else if (productRepository.existsByNameAndDeletedAtIsNull(request.getName())) {
-            throw new AppException(ErrorCode.PRODUCT_NAME_CONFLICT);
         }
 
         Product product = productMapper.toEntity(request);
@@ -116,8 +116,6 @@ public class ProductServiceImpl implements ProductService {
         }
 
         product.setCreatedBy(SecurityUtils.getCurrentUser().orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND)));
-
-
 
         Product savedProduct = productRepository.save(product);
 
@@ -196,6 +194,7 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
         ProductResponse response = productMapper.toResponse(product);
+        response.setHasOrders(orderItemRepository.existsByVariant_Product_Id(id));
 
         List<ProductImage> allImages = productImageRepository.findByProductIdOrderBySortOrderAsc(id);
 
@@ -272,7 +271,188 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public ProductResponse update(UUID id, ProductRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        Product product = productRepository.findById(id)
+                .filter(p -> p.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+
+        product.setVersion(request.getVersion());
+
+        if (!product.getSku().equals(request.getSku())) {
+            if (orderItemRepository.existsByVariant_Product_Id(id)) {
+                throw new AppException(ErrorCode.PRODUCT_HAS_ORDERS);
+            }
+            if (productRepository.existsBySkuAndDeletedAtIsNull(request.getSku())) {
+                throw new AppException(ErrorCode.PRODUCT_SKU_CONFLICT);
+            }
+        }
+
+        productMapper.updateEntityFromRequest(request, product);
+        if (product.getAttributes() == null) {
+            product.setAttributes(new HashMap<>());
+        }
+
+        Category category = categoryRepository.findById(request.getCategoryId())
+                .orElseThrow(() -> new AppException(ErrorCode.CATEGORY_NOT_FOUND));
+        product.setCategory(category);
+        product.setUpdatedBy(SecurityUtils.getCurrentUser().orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND)));
+
+
+        List<ProductVariant> existingVariants = productVariantRepository.findByProductIdAndDeletedAtIsNull(id);
+        Map<UUID, ProductVariant> existingVariantMap = existingVariants.stream()
+                .collect(Collectors.toMap(ProductVariant::getId, v -> v));
+
+        if (request.getVariants() != null && !request.getVariants().isEmpty()) {
+            List<String> variantSkus = request.getVariants().stream()
+                    .map(ProductVariantRequest::getSku)
+                    .toList();
+            if (!variantSkus.isEmpty()) {
+                Set<String> uniqueSkus = new HashSet<>(variantSkus);
+                if (uniqueSkus.size() < variantSkus.size()) {
+                    throw new AppException(ErrorCode.VARIANT_SKU_CONFLICT);
+                }
+                if (productVariantRepository.existsBySkuInAndProductIdNotAndDeletedAtIsNull(variantSkus, id)) {
+                    throw new AppException(ErrorCode.VARIANT_SKU_CONFLICT);
+                }
+            }
+
+            List<ProductVariant> updatedVariants = new ArrayList<>();
+            List<ProductImage> variantImages = new ArrayList<>();
+            Set<UUID> incomingVariantIds = new HashSet<>();
+
+            for (int i = 0; i < request.getVariants().size(); i++) {
+                ProductVariantRequest vr = request.getVariants().get(i);
+                ProductVariant variant;
+                if (vr.getId() != null) {
+                    if (existingVariantMap.containsKey(vr.getId())) {
+                        variant = existingVariantMap.get(vr.getId());
+                        incomingVariantIds.add(vr.getId());
+
+                        if (!variant.getSku().equals(vr.getSku()) && orderItemRepository.existsByVariant_Product_Id(id)) {
+                            throw new AppException(ErrorCode.PRODUCT_HAS_ORDERS);
+                        }
+                    } else {
+                        throw new AppException(ErrorCode.INVALID_REQUEST);
+                    }
+                } else {
+                    variant = new ProductVariant();
+                    variant.setProduct(product);
+                    variant.setCreatedBy(product.getUpdatedBy());
+                }
+
+                productVariantMapper.updateEntityFromRequest(vr, variant);
+                if (variant.getOptionValues() == null) {
+                    variant.setOptionValues(new HashMap<>());
+                }
+                if (variant.getIsActive() == null) {
+                    variant.setIsActive(true);
+                }
+                variant.setUpdatedBy(product.getUpdatedBy());
+
+                updatedVariants.add(variant);
+            }
+
+            List<ProductVariant> savedVariantsList = productVariantRepository.saveAll(updatedVariants);
+
+            for (int i = 0; i < request.getVariants().size(); i++) {
+                ProductVariantRequest variantRequest = request.getVariants().get(i);
+                if (variantRequest.getImages() != null && !variantRequest.getImages().isEmpty()) {
+                    long primaryCount = variantRequest.getImages().stream().filter(img -> Boolean.TRUE.equals(img.getIsPrimary())).count();
+                    if (primaryCount > 1) {
+                        throw new AppException(ErrorCode.INVALID_REQUEST);
+                    }
+                    ProductVariant savedVariant = savedVariantsList.get(i);
+                    variantImages.addAll(variantRequest.getImages().stream()
+                            .map(imgReq -> {
+                                ProductImage img = productImageMapper.toEntity(imgReq);
+                                img.setProduct(product);
+                                img.setVariant(savedVariant);
+                                return img;
+                            })
+                            .toList());
+                }
+            }
+
+            List<ProductVariant> variantsToDelete = existingVariants.stream()
+                    .filter(v -> !incomingVariantIds.contains(v.getId()))
+                    .toList();
+
+            if (!variantsToDelete.isEmpty()) {
+                List<UUID> variantIdsToDelete = variantsToDelete.stream().map(ProductVariant::getId).toList();
+                List<UUID> variantIdsWithOrders = orderItemRepository.findVariantIdsWithOrders(variantIdsToDelete);
+
+                for (ProductVariant v : variantsToDelete) {
+                    if (variantIdsWithOrders.contains(v.getId())) {
+                        v.setIsActive(false);
+                    } else {
+                        v.setDeletedAt(OffsetDateTime.now());
+                    }
+                }
+                productVariantRepository.saveAll(variantsToDelete);
+            }
+
+            productImageRepository.deleteByProductId(id);
+            if (!variantImages.isEmpty()) {
+                productImageRepository.saveAll(variantImages);
+            }
+
+
+            if (request.getImages() != null && !request.getImages().isEmpty()) {
+                long primaryCount = request.getImages().stream().filter(img -> Boolean.TRUE.equals(img.getIsPrimary())).count();
+                if (primaryCount > 1) {
+                    throw new AppException(ErrorCode.INVALID_REQUEST);
+                }
+                List<ProductImage> productImages = request.getImages().stream()
+                        .map(imgReq -> {
+                            ProductImage img = productImageMapper.toEntity(imgReq);
+                            img.setProduct(product);
+                            return img;
+                        })
+                        .toList();
+                productImageRepository.saveAll(productImages);
+            }
+
+            if (request.getChannelIds() != null) {
+                List<ChannelProduct> currentChannels = channelProductRepository.findByProductId(id);
+                Map<UUID, ChannelProduct> existingChannelProductMap = currentChannels.stream()
+                        .collect(Collectors.toMap(cp -> cp.getChannel().getId(), cp -> cp));
+
+                List<ChannelProduct> channelsToSave = new ArrayList<>();
+                Set<UUID> incomingChannelIds = new HashSet<>(request.getChannelIds());
+
+                if (!incomingChannelIds.isEmpty()) {
+                    List<Channel> channels = channelRepository.findAllById(incomingChannelIds);
+                    for (Channel channel : channels) {
+                        ChannelProduct existingCp = existingChannelProductMap.get(channel.getId());
+                        if (existingCp != null) {
+                            if (!"ACTIVE".equals(existingCp.getMappingState())) {
+                                existingCp.setMappingState("ACTIVE");
+                            }
+                            channelsToSave.add(existingCp);
+                            existingChannelProductMap.remove(channel.getId());
+                        } else {
+                            channelsToSave.add(ChannelProduct.builder()
+                                    .channel(channel)
+                                    .product(product)
+                                    .mappingState("ACTIVE")
+                                    .syncStatus(SyncStatus.PENDING)
+                                    .build());
+                        }
+                    }
+                }
+
+                for (ChannelProduct remainingCp : existingChannelProductMap.values()) {
+                    if (!"ARCHIVED".equals(remainingCp.getMappingState())) {
+                        remainingCp.setMappingState("ARCHIVED");
+                        channelsToSave.add(remainingCp);
+                    }
+                }
+
+                if (!channelsToSave.isEmpty()) {
+                    channelProductRepository.saveAll(channelsToSave);
+                }
+            }
+        }
+        return this.getById(product.getId());
     }
 
     @Override
@@ -284,7 +464,18 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public void delete(UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        Product product = productRepository.findById(id)
+                .filter(p -> p.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+
+        product.setDeletedAt(OffsetDateTime.now());
+        productRepository.save(product);
+
+        List<ProductVariant> variants = productVariantRepository.findByProductIdAndDeletedAtIsNull(id);
+        if (!variants.isEmpty()) {
+            variants.forEach(v -> v.setDeletedAt(OffsetDateTime.now()));
+            productVariantRepository.saveAll(variants);
+        }
     }
 
     private PageResponse<ProductResponse> toPageResponse(Page<Product> pageResult, int page, int size) {

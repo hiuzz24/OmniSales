@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, X, ImageIcon, Upload, Loader2 } from 'lucide-react';
+import { Plus, X, ImageIcon, Upload, Loader2, RefreshCcw } from 'lucide-react';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './ProductVariantForm.module.css';
 
@@ -12,7 +12,7 @@ const emptyVariant = () => ({
   images: [],
 });
 
-const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors = {} }) => {
+const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors = {}, globalError, hasOrders = false }) => {
   const [editingImageIndex, setEditingImageIndex] = useState(null);
   const [urlValue, setUrlValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -87,6 +87,7 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
       {variants.length === 0 ? (
         <div className={styles.emptyState}>
           Chưa có biến thể nào. Nhấn "Thêm biến thể" để tạo.
+          {globalError && <div style={{ color: '#ef4444', marginTop: '8px', fontSize: '14px', fontWeight: '500' }}>{globalError}</div>}
         </div>
       ) : (
         <div className={styles.tableWrapper}>
@@ -106,15 +107,17 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
               {variants.map((variant, index) => {
                 const variantErrors = errors[index] || {};
                 return (
-                  <tr key={index}>
+                  <tr key={index} style={{ opacity: variant.isActive === false ? 0.6 : 1 }}>
                     <td className={styles.imgCell}>
                       <div
                         className={styles.imgPlaceholder}
                         onClick={() => {
-                          setEditingImageIndex(index);
-                          setUrlValue(variant.images?.[0]?.url || '');
+                          if (variant.isActive !== false) {
+                            setEditingImageIndex(index);
+                            setUrlValue(variant.images?.[0]?.url || '');
+                          }
                         }}
-                        title="Thêm ảnh biến thể"
+                        title={variant.isActive === false ? '' : 'Thêm ảnh biến thể'}
                       >
                         {variant.images?.[0]?.url ? (
                           <img src={variant.images[0].url} alt={`Variant ${index}`} className={styles.imgThumbnail} />
@@ -130,6 +133,7 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         placeholder="S"
                         value={variant.optionValues?.Size || ''}
                         onChange={(e) => handleOptionChange(index, 'Size', e.target.value)}
+                        disabled={variant.isActive === false}
                       />
                     </td>
                     <td>
@@ -139,6 +143,7 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         placeholder="Trắng"
                         value={variant.optionValues?.['Màu'] || ''}
                         onChange={(e) => handleOptionChange(index, 'Màu', e.target.value)}
+                        disabled={variant.isActive === false}
                       />
                     </td>
                     <td>
@@ -148,7 +153,11 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         placeholder="ATN-001-S-W"
                         value={variant.sku}
                         onChange={(e) => handleFieldChange(index, 'sku', e.target.value)}
+                        disabled={hasOrders || variant.isActive === false}
                       />
+                      {variant.isActive === false && (
+                        <div className={styles.inactiveBadge}>Đã vô hiệu hóa</div>
+                      )}
                       {variantErrors.sku && <div className={styles.errorText}>{variantErrors.sku}</div>}
                     </td>
                     <td>
@@ -159,6 +168,7 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         value={variant.price}
                         onChange={(e) => handleFieldChange(index, 'price', e.target.value)}
                         min="0"
+                        disabled={variant.isActive === false}
                       />
                       {variantErrors.price && <div className={styles.errorText}>{variantErrors.price}</div>}
                     </td>
@@ -170,17 +180,29 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         value={variant.costPrice}
                         onChange={(e) => handleFieldChange(index, 'costPrice', e.target.value)}
                         min="0"
+                        disabled={variant.isActive === false}
                       />
                     </td>
                     <td className={styles.removeCell}>
-                      <button
-                        type="button"
-                        className={styles.removeRowBtn}
-                        onClick={() => onRemove(index)}
-                        title="Xóa biến thể"
-                      >
-                        <X size={16} />
-                      </button>
+                      {variant.isActive === false ? (
+                        <button
+                          type="button"
+                          className={styles.reactivateBtn}
+                          onClick={() => handleFieldChange(index, 'isActive', true)}
+                          title="Kích hoạt lại"
+                        >
+                          <RefreshCcw size={16} />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.removeRowBtn}
+                          onClick={() => onRemove(index)}
+                          title="Xóa biến thể"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

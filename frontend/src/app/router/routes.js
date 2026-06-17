@@ -8,5 +8,7 @@ export const ROUTES = {
   PROFILE: '/profile',
   ADMIN: '/admin',
   PRODUCT_CREATE: '/products/create',
+  PRODUCT_EDIT: '/products/:id/edit',
+  PRODUCT_DETAIL: '/products/:id',
   PRODUCTS: '/products',
 };
