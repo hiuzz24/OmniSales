@@ -2,6 +2,7 @@ import { MoreVertical } from 'lucide-react';
 import Badge from '../../../shared/components/Badge';
 import styles from './ProductTable.module.css';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import productApi from '../../../api/productApi';
 
 const getChannelBadge = (channel) => {
@@ -23,6 +24,7 @@ const getStatusBadge = (status) => {
 };
 
 const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(20);
@@ -97,9 +99,9 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                     <div className={styles.productCell}>
                       <div className={styles.productImage}>
                         {(() => {
-                          const imgUrl = product.images?.find(img => img.isPrimary)?.url 
-                                      || product.variants?.[0]?.images?.[0]?.url 
-                                      || product.images?.[0]?.url;
+                          const imgUrl = product.images?.find(img => img.isPrimary)?.url
+                            || product.variants?.[0]?.images?.[0]?.url
+                            || product.images?.[0]?.url;
                           return imgUrl ? (
                             <img src={imgUrl} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
@@ -121,7 +123,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                   </td>
                   <td className={styles.td}>
                     <div className={styles.channels} style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                      {product.channels && product.channels.length > 0 
+                      {product.channels && product.channels.length > 0
                         ? product.channels.map(channel => <span key={channel}>{getChannelBadge(channel)}</span>)
                         : <span style={{ color: '#64748b' }}>-</span>}
                     </div>
@@ -141,8 +143,8 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                   <td className={styles.td}>
                     <div className={`${styles.stock} ${styles.stockdefault}`}>
                       {(() => {
-                         const totalStock = product.variants?.reduce((sum, v) => sum + (v.availableQuantity || v.quantityOnHand || 0), 0) || 0;
-                         return totalStock;
+                        const totalStock = product.variants?.reduce((sum, v) => sum + (v.availableQuantity || v.quantityOnHand || 0), 0) || 0;
+                        return totalStock;
                       })()}
                     </div>
                   </td>
@@ -157,7 +159,11 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                     </div>
                   </td>
                   <td className={`${styles.td} ${styles.actionCell}`}>
-                    <button className={styles.actionBtn}>
+                    <button
+                      className={styles.actionBtn}
+                      onClick={() => navigate(`/products/${product.id}`)}
+                      title="Xem chi tiết"
+                    >
                       <MoreVertical className="h-5 w-5" />
                     </button>
                   </td>

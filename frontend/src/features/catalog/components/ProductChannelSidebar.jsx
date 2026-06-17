@@ -16,6 +16,7 @@ const ProductChannelSidebar = ({
   onSubmit,
   onCancel,
   isSubmitting = false,
+  isEditMode = false,
 }) => {
   const getIcon = (platform) => {
     const icon = PLATFORM_ICONS[platform?.toUpperCase()] || { label: '?', className: 'channelIconDefault' };
@@ -86,7 +87,7 @@ const ProductChannelSidebar = ({
           ) : (
             <Save className={styles.submitIcon} />
           )}
-          {isSubmitting ? 'Đang tạo...' : 'Tạo sản phẩm'}
+          {isSubmitting ? (isEditMode ? 'Đang cập nhật...' : 'Đang tạo...') : (isEditMode ? 'Cập nhật' : 'Tạo sản phẩm')}
         </button>
         <button
           type="button"

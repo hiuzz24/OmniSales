@@ -343,3 +343,34 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+.inactiveBadge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 6px;
+  background-color: #f3f4f6;
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+}
+
+.reactivateBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  color: #3b82f6;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.reactivateBtn:hover {
+  background: #eff6ff;
+  color: #2563eb;
+}
