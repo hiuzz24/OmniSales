@@ -418,7 +418,7 @@ function UserDropdown({ user, role, onLogout }) {
           </div>
 
           {[
-            { label: 'Hồ sơ', icon: User,     href: '/settings' },
+            { label: 'Hồ sơ', icon: User,     href: ROUTES.PROFILE },
             { label: 'Cài đặt', icon: Settings, href: '/settings' },
           ].map((m) => (
             <Link key={m.label} to={m.href} onClick={() => setShow(false)}
