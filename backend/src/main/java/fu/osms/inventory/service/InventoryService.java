@@ -6,8 +6,11 @@ import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import fu.osms.inventory.dto.response.StockSummaryDTO;
 
 public interface InventoryService {
 
@@ -24,4 +27,6 @@ public interface InventoryService {
     PageResponse<InventoryTransactionResponse> getTransactions(int page, int size);
 
     PageResponse<InventoryTransactionResponse> getTransactionsByVariant(UUID variantId, int page, int size);
+
+    Map<UUID, StockSummaryDTO> getStockSummary(Collection<UUID> variantIds);
 }

@@ -11,8 +11,6 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface StockReceiveMapper {
 
-    // ── Receipt ───────────────────────────────────────────────────────────────
-
     @Mapping(target = "id", ignore = true)
 
     @Mapping(target = "warehouse", ignore = true)
@@ -37,8 +35,6 @@ public interface StockReceiveMapper {
     @Mapping(target = "approvedByName", source = "approvedBy.fullName")
     @Mapping(target = "items", ignore = true)
     StockReceiveResponse toResponse(InventoryReceipt receipt);
-
-    // ── Receipt Item ──────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "receipt", ignore = true)

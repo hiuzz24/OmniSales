@@ -13,6 +13,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString
 public class ProductResponse {
 
     private UUID id;
@@ -22,6 +23,7 @@ public class ProductResponse {
     private String name;
     private String description;
     private String brand;
+    private Boolean hasOrders;
     private ProductStatus status;
     private Integer lowStockThreshold;
     private Integer weightGrams;
@@ -36,4 +38,5 @@ public class ProductResponse {
 
     private List<ProductVariantResponse> variants;
     private List<ProductImageResponse> images;
+    private List<String> channels;
 }

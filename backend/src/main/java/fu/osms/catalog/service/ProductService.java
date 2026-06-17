@@ -4,6 +4,7 @@ import fu.osms.catalog.dto.request.ProductRequest;
 import fu.osms.catalog.dto.response.ProductResponse;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.common.enums.PlatformType;
 
 import java.util.UUID;
 
@@ -13,9 +14,7 @@ public interface ProductService {
 
     ProductResponse getById(UUID id);
 
-    PageResponse<ProductResponse> getAll(int page, int size);
-
-    PageResponse<ProductResponse> search(String keyword, ProductStatus status, int page, int size);
+    PageResponse<ProductResponse> search(String keyword, ProductStatus status, PlatformType platform, int page, int size);
 
     ProductResponse update(UUID id, ProductRequest request);
 

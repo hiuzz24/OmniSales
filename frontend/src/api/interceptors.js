@@ -55,6 +55,7 @@ axiosClient.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${refreshed.accessToken}`;
         return axiosClient(originalRequest);
       } catch {
+        console.log('error refresh');
         clearAccessToken();
         localStorage.removeItem('osms_user');
         sessionStorage.removeItem('osms_user');
