@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import useAuth from '../hooks/useAuth';
 import { getRoleHome } from '../constants/roles';
 import styles from './LoginForm.module.css';
+import { ROUTES } from '../../../app/router/routes';
 
 const loginSchema = z.object({
   email: z
@@ -156,9 +157,9 @@ const LoginForm = () => {
             <input type="checkbox" {...register('rememberMe')} className={styles.checkbox} />
             <span className={styles.checkboxLabel}>Ghi nhớ đăng nhập</span>
           </label>
-          <a href="/forgot-password" className={styles.forgotLink}>
+          <Link to={ROUTES.FORGOT_PASSWORD} className={styles.forgotLink}>
             Quên mật khẩu?
-          </a>
+          </Link>
         </div>
 
         <button

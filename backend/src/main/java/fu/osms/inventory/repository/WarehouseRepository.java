@@ -13,4 +13,6 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
     List<Warehouse> findByIsActive(Boolean isActive);
 
     List<Warehouse> findByDeletedAtIsNull();
+
+    List<Warehouse> findByIsActiveTrueOrderByNameAsc();
 }

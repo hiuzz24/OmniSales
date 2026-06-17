@@ -4,7 +4,6 @@ import fu.osms.catalog.entity.ProductVariant;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,8 +12,6 @@ import java.util.UUID;
 public interface ProductVariantRepository extends JpaRepository<ProductVariant, UUID> {
 
     List<ProductVariant> findByProductIdAndDeletedAtIsNull(UUID productId);
-
-    List<ProductVariant> findByProductIdInAndDeletedAtIsNull(Collection<UUID> productIds);
 
     List<ProductVariant> findByDeletedAtIsNull();
 
@@ -31,4 +28,16 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
     boolean existsBySkuInAndProductIdNotAndDeletedAtIsNull(Collection<String> skus, UUID productId);
 
     boolean existsByBarcodeInAndProductIdNotAndDeletedAtIsNull(Collection<String> barcodes, UUID productId);
+
+    @Query("SELECT v FROM ProductVariant v JOIN v.product p " +
+           "WHERE v.isActive = true AND v.deletedAt IS NULL " +
+           "AND (:keyword IS NULL " +
+           "     OR LOWER(v.sku) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')) " +
+           "     OR LOWER(p.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS string), '%')))")
+    Page<ProductVariant> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query("SELECT v FROM ProductVariant v " +
+           "WHERE v.isActive = true AND v.deletedAt IS NULL " +
+           "ORDER BY v.createdAt DESC")
+    Page<ProductVariant> findAllActive(Pageable pageable);
 }
