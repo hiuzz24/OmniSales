@@ -5,4 +5,5 @@ import org.springframework.stereotype.Service;
 
 public interface CookieService {
     public  void addRefreshTokenCookie(String refreshToken, HttpServletResponse response);
+    public  void clearRefreshTokenCookie(HttpServletResponse response);
 }

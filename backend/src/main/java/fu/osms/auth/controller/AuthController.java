@@ -48,13 +48,28 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<AuthResponse>> refresh(@CookieValue String refreshToken) {
-        return ResponseEntity.ok(ApiResponse.success(authService.refreshToken(refreshToken)));
+    public ResponseEntity<ApiResponse<AuthResponse>> refresh(@CookieValue String refreshToken, HttpServletResponse response) {
+        TokenPairDTO pair = authService.refreshToken(refreshToken);
+        cookieService.addRefreshTokenCookie(pair.getRefreshToken(), response);
+
+        AuthResponse authResponse = AuthResponse.builder()
+                .accessToken(pair.getAccessToken())
+                .expiresIn(jwtService.getAccessTokenExpirationMs() / 1000)
+                .tokenType("Bearer")
+                .user(pair.getUser())
+                .build();
+
+        return ResponseEntity.ok(ApiResponse.success(authResponse));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(@CookieValue String refreshToken) {
-        authService.logout(refreshToken);
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletResponse response) {
+        if (refreshToken != null) {
+            authService.logout(refreshToken);
+        }
+        cookieService.clearRefreshTokenCookie(response);
         return ResponseEntity.ok(ApiResponse.success("Logged out successfully", null));
     }
 

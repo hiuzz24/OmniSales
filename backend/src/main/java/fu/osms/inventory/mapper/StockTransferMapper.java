@@ -11,8 +11,6 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface StockTransferMapper {
 
-    // ── Transfer ──────────────────────────────────────────────────────────────
-
     @Mapping(target = "id", ignore = true)
 
     @Mapping(target = "fromWarehouse", ignore = true)
@@ -34,8 +32,6 @@ public interface StockTransferMapper {
     @Mapping(target = "approvedByName", source = "approvedBy.fullName")
     @Mapping(target = "items", ignore = true)
     StockTransferResponse toResponse(StockTransfer transfer);
-
-    // ── Transfer Item ─────────────────────────────────────────────────────────
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "transfer", ignore = true)

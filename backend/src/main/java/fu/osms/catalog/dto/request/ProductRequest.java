@@ -2,6 +2,7 @@ package fu.osms.catalog.dto.request;
 
 import fu.osms.catalog.enums.ProductStatus;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -40,7 +41,12 @@ public class ProductRequest {
 
     private Map<String, Object> attributes;
 
+    @NotEmpty(message = "Sản phẩm phải có ít nhất một biến thể")
     private List<ProductVariantRequest> variants;
 
+    private Long version;
+
     private List<ProductImageRequest> images;
+
+    private List<UUID> channelIds;
 }

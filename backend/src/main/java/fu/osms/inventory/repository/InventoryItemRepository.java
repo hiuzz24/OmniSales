@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -30,4 +31,6 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
 
     @Query("SELECT i FROM InventoryItem i WHERE i.availableQuantity <= i.lowStockThreshold")
     List<InventoryItem> findLowStockItems();
+
+    List<InventoryItem> findByVariantIdIn(Collection<UUID> variantIds);
 }

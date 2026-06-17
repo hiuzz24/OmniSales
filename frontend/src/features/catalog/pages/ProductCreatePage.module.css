@@ -1,0 +1,145 @@
+.page {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.backBtn:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.backIcon {
+  width: 18px;
+  height: 18px;
+}
+
+.headerText {
+  flex: 1;
+}
+
+.headerTitle {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.01em;
+}
+
+.headerSubtitle {
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* Layout */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.mainColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Variant toggle */
+.variantToggleCard {
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.variantToggleInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.variantToggleTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.variantToggleSubtitle {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.variantToggleBtn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.variantToggleBtnInactive {
+  color: #374151;
+  background: #ffffff;
+  border-color: #d1d5db;
+}
+
+.variantToggleBtnInactive:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.variantToggleBtnActive {
+  color: #ffffff;
+  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  border: none;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+}
+
+.variantToggleBtnActive:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1024px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

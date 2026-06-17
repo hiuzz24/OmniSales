@@ -1,12 +1,11 @@
 server:
   port: 8080
-
 spring:
   application:
     name: OSMS
   datasource:
-    url: jdbc:postgresql://localhost:5432/OSMS
-    username: postgres
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/OSMS}
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
@@ -38,3 +37,5 @@ app:
   security:
     max-failed-attempts: 5
     lock-time-duration: 5
+    jwt:
+      secret: ${JWT_SECRET}

@@ -11,6 +11,11 @@ import HomePage from '../../features/auth/pages/HomePage';
 import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
+import ProfilePage from '../../features/user/pages/ProfilePage';
+import ProductManagementPage from '../../features/catalog/pages/ProductManagementPage';
+import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
+import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
+import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
@@ -44,11 +49,21 @@ const AppRouter = () => {
               <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
             </Route>
 
+            <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
+
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
+              <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
+              <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
+              <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
+              <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
             </Route>
           </Route>
         </Route>
