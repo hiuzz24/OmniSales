@@ -29,7 +29,8 @@ const ProductDetailPage = () => {
     try {
       setLoading(true);
       const data = await productApi.getById(id);
-      setProduct(data.data || data); // handle standard response wrapping
+      const responseData = data.data?.data || data.data || data;
+      setProduct(responseData);
     } catch (error) {
       toast.error('Không thể tải thông tin sản phẩm');
       navigate(ROUTES.PRODUCTS);

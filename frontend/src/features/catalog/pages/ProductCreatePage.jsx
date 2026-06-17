@@ -51,12 +51,14 @@ const ProductCreatePage = () => {
           categoryApi.getAll(),
           channelApi.getAll(),
         ]);
-        if (Array.isArray(catData)) {
-          setCategories(catData);
+        const catList = catData.data?.data || catData.data || catData;
+        if (Array.isArray(catList)) {
+          setCategories(catList);
         }
-        if (Array.isArray(chanData)) {
-          setChannels(chanData);
-          setSelectedChannels(chanData.map(c => c.id));
+        const chanList = chanData.data?.data || chanData.data || chanData;
+        if (Array.isArray(chanList)) {
+          setChannels(chanList);
+          setSelectedChannels(chanList.map(c => c.id));
         }
       } catch (error) {
         console.error('Failed to load initial data:', error);
