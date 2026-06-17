@@ -50,16 +50,16 @@ const AppRouter = () => {
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
             </Route>
-        </Route>
+
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-                <Route element={<DashboardLayout />}>
-                    <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
-                    <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
-                    <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
-                    <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
-                    <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
-                </Route>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
+              <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
+              <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
+              <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
+              <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
             </Route>
+          </Route>
+        </Route>
 
         <Route path="/" element={<Navigate to={ROUTES.HOME} replace />} />
         <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />

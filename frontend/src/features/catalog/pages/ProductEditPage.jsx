@@ -55,16 +55,18 @@ const ProductEditPage = () => {
           productApi.getById(id)
         ]);
 
-        if (Array.isArray(catData)) {
-          setCategories(catData);
+        const catList = catData.data?.data || catData.data || catData;
+        if (Array.isArray(catList)) {
+          setCategories(catList);
         }
         
-        const productData = productDataResponse.data || productDataResponse;
+        const productData = productDataResponse.data?.data || productDataResponse.data || productDataResponse;
         
-        if (Array.isArray(chanData)) {
-          setChannels(chanData);
+        const chanList = chanData.data?.data || chanData.data || chanData;
+        if (Array.isArray(chanList)) {
+          setChannels(chanList);
           // Match selected channels by platform names returned in productData.channels
-          const selectedChanIds = chanData
+          const selectedChanIds = chanList
             .filter(c => (productData.channels || []).includes(c.platform))
             .map(c => c.id);
           setSelectedChannels(selectedChanIds);

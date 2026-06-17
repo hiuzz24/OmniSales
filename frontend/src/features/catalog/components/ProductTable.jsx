@@ -36,15 +36,19 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
       try {
         setLoading(true);
         const response = await productApi.getAll(page, size, keyword, statusFilter, platformFilter);
-        if (response.content) {
-          setProducts(response.content);
-          setTotalElements(response.totalElements || 0);
-        } else if (Array.isArray(response.data)) {
-          setProducts(response.data);
-          setTotalElements(response.data.length);
-        } else if (response.data && response.data.data) {
-          setProducts(response.data.data);
-          setTotalElements(response.data.total || response.data.data.length);
+        const responseData = response.data?.data || response.data || response;
+        if (responseData.content) {
+          setProducts(responseData.content);
+          setTotalElements(responseData.totalElements || 0);
+        } else if (Array.isArray(responseData)) {
+          setProducts(responseData);
+          setTotalElements(responseData.length);
+        } else if (responseData.data) {
+          setProducts(responseData.data);
+          setTotalElements(responseData.total || responseData.data.length || 0);
+        } else {
+          setProducts([]);
+          setTotalElements(0);
         }
       } catch (error) {
         console.error("Failed to fetch products:", error);
