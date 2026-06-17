@@ -48,13 +48,22 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<ApiResponse<AuthResponse>> refresh(@CookieValue String refreshToken) {
+    public ResponseEntity<ApiResponse<AuthResponse>> refresh(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new fu.osms.common.exception.AppException(
+                    fu.osms.common.exception.ErrorCode.TOKEN_INVALID,
+                    "Refresh token không tồn tại hoặc đã hết hạn");
+        }
         return ResponseEntity.ok(ApiResponse.success(authService.refreshToken(refreshToken)));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<Void>> logout(@CookieValue String refreshToken) {
-        authService.logout(refreshToken);
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken) {
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            authService.logout(refreshToken);
+        }
         return ResponseEntity.ok(ApiResponse.success("Logged out successfully", null));
     }
 

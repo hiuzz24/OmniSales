@@ -11,12 +11,12 @@ public class CookieServiceImpl implements CookieService {
     @Override
     public void addRefreshTokenCookie(String refreshToken, HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie
-                .from("refreshToken",refreshToken)
+                .from("refreshToken", refreshToken)
                 .httpOnly(true)
-                .path("/api/auth/refresh")
-                .sameSite("Strict")
+                .path("/api/auth")
+                .sameSite("Lax")
                 .maxAge(Duration.ofDays(7))
-                .secure(true)
+                .secure(false)
                 .build();
         response.addHeader("Set-Cookie",cookie.toString());
     }
