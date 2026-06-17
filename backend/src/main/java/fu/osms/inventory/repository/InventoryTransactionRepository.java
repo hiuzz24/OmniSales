@@ -21,4 +21,10 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
     List<InventoryTransaction> findByType(InvTxnType type);
 
     List<InventoryTransaction> findByPerformedAtBetween(OffsetDateTime from, OffsetDateTime to);
+    
+    List<InventoryTransaction> findByReferenceTypeAndReferenceIdAndVariantId(
+            String referenceType, UUID referenceId, UUID variantId);
+    
+    List<InventoryTransaction> findByReferenceTypeAndReferenceId(
+            String referenceType, UUID referenceId);
 }
