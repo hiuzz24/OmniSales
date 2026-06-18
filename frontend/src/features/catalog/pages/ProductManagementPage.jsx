@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import useDebounce from '../../../shared/hooks/useDebounce';
-import { Plus, History, FileSpreadsheet } from 'lucide-react';
+import { Plus, History, FileSpreadsheet, FileUp } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';
 import ExportProductsModal from '../components/ExportProductsModal';
+import ImportProductsModal from '../components/ImportProductsModal';
 import styles from './ProductManagementPage.module.css';
 
 const ProductManagementPage = () => {
@@ -14,18 +15,27 @@ const ProductManagementPage = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [platformFilter, setPlatformFilter] = useState('');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [tableRefreshKey, setTableRefreshKey] = useState(0);
   const navigate = useNavigate();
 
   const debouncedKeyword = useDebounce(searchInput, 500);
 
   const actions = (
     <>
-      <button 
+      <button
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
       >
         <History className={styles.secondaryIcon} />
         Product Logs
+      </button>
+      <button
+        className={`${styles.actionBtn} ${styles.importBtn}`}
+        onClick={() => setIsImportModalOpen(true)}
+      >
+        <FileUp className={styles.importIcon} />
+        Import Excel
       </button>
       <button
         className={`${styles.actionBtn} ${styles.exportBtn}`}
@@ -56,10 +66,20 @@ const ProductManagementPage = () => {
         platformFilter={platformFilter}
         onPlatformChange={setPlatformFilter}
       />
-      <ProductTable keyword={debouncedKeyword} statusFilter={statusFilter} platformFilter={platformFilter} />
+      <ProductTable
+        key={tableRefreshKey}
+        keyword={debouncedKeyword}
+        statusFilter={statusFilter}
+        platformFilter={platformFilter}
+      />
       <ExportProductsModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+      />
+      <ImportProductsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => setTableRefreshKey((k) => k + 1)}
       />
     </div>
   );
