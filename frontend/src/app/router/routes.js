@@ -17,4 +17,11 @@ export const ROUTES = {
   WAREHOUSE_IMPORT_RECEIPT_CREATE: '/warehouse/receipts/create',
   WAREHOUSE_IMPORT_RECEIPT_EDIT: '/warehouse/receipts/:id/edit',
   WAREHOUSE_IMPORT_RECEIPT_DETAIL: '/warehouse/receipts/:id',
+  // Inventory
+  INVENTORY: '/inventory',
+  INVENTORY_DETAIL: '/inventory/detail/:id',
+  INVENTORY_RECEIPT: '/inventory/receipt',
+  INVENTORY_ISSUE: '/inventory/issue',
+  STOCK_TRANSFER: '/inventory/transfer',
+  STOCKTAKE: '/inventory/stocktake',
 };
