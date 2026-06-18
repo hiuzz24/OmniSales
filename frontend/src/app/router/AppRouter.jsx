@@ -16,6 +16,12 @@ import ProductManagementPage from '../../features/catalog/pages/ProductManagemen
 import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
 import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
+import InventoryPage from '../../features/inventory/pages/InventoryPage';
+import InventoryDetailPage from '../../features/inventory/pages/InventoryDetailPage';
+import InventoryReceiptPage from '../../features/inventory/pages/InventoryReceiptPage';
+import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
+import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
+import StocktakePage from '../../features/inventory/pages/StocktakePage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
@@ -29,7 +35,6 @@ const AppRouter = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes */}
         <Route element={<PublicRoute />}>
           <Route element={<EmptyLayout />}>
             <Route path={ROUTES.HOME} element={<HomePage />} />
@@ -41,9 +46,7 @@ const AppRouter = () => {
           <Route path={ROUTES.RESET_PASSWORD} element={<ChangePasswordPage />} />
         </Route>
 
-        {/* Private routes */}
         <Route element={<PrivateRoute />}>
-          {/* Admin — no sidebar */}
           <Route element={<RoleRoute allowedRoles={[ROLES.SYSTEM_ADMIN]} />}>
             <Route path={ROUTES.ADMIN} element={<AdminPage />} />
           </Route>
@@ -71,6 +74,13 @@ const AppRouter = () => {
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
               <Route path={ROUTES.WAREHOUSE_RECEIPTS} element={<InventoryReceiptPage />} />
               {/* <Route path={ROUTES.WAREHOUSE_RECEIPT_CREATE} element={<InventoryReceiptCreatePage />} /> */}
+              {/* Inventory */}
+              <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />
+              <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
+              <Route path={ROUTES.INVENTORY_RECEIPT} element={<InventoryReceiptPage />} />
+              <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} />
+              <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
+              <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
             </Route>
           </Route>
         </Route>
