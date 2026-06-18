@@ -80,13 +80,15 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         if (!isDraft) {
             // When confirming (not draft), validate all items have quantity and unitCost
             for (StockReceiveItemRequest item : request.getItems()) {
+                // Số lượng bắt buộc phải lớn hơn 0
                 if (item.getQuantity() == null || item.getQuantity() <= 0) {
                     throw new AppException(ErrorCode.VALIDATION_FAILED, 
                         "Tất cả sản phẩm phải có số lượng lớn hơn 0 khi xác nhận phiếu nhập");
                 }
-                if (item.getUnitCost() == null || item.getUnitCost().compareTo(BigDecimal.ZERO) <= 0) {
+                // Đơn giá phải lớn hơn hoặc bằng 0
+                if (item.getUnitCost() == null || item.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
                     throw new AppException(ErrorCode.VALIDATION_FAILED, 
-                        "Tất cả sản phẩm phải có đơn giá lớn hơn 0 khi xác nhận phiếu nhập");
+                        "Tất cả sản phẩm phải có đơn giá lớn hơn hoặc bằng 0 khi xác nhận phiếu nhập");
                 }
             }
             
@@ -96,13 +98,20 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     "Số hóa đơn là bắt buộc khi xác nhận phiếu nhập");
             }
         } else {
-            // For DRAFT: set default values for null quantity/unitCost
+            // For DRAFT: set default values for null quantity/unitCost and validate if provided
             for (StockReceiveItemRequest item : request.getItems()) {
                 if (item.getQuantity() == null) {
                     item.setQuantity(0);
+                } else if (item.getQuantity() <= 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED, 
+                        "Số lượng phải lớn hơn 0");
                 }
+                
                 if (item.getUnitCost() == null) {
                     item.setUnitCost(BigDecimal.ZERO);
+                } else if (item.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED, 
+                        "Đơn giá phải lớn hơn hoặc bằng 0");
                 }
             }
         }
