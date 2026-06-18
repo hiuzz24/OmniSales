@@ -26,4 +26,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     boolean existsByNameAndDeletedAtIsNull(String name);
 
     boolean existsBySkuInAndDeletedAtIsNull(Collection<String> skus);
+
+    boolean existsBySkuAndIdNotAndDeletedAtIsNull(String sku, UUID id);
+
+    boolean existsByNameAndIdNotAndDeletedAtIsNull(String name, UUID id);
+
+    boolean existsBySkuInAndIdNotAndDeletedAtIsNull(Collection<String> skus, UUID id);
 }

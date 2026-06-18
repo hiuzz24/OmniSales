@@ -11,4 +11,9 @@ import java.util.UUID;
 public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
 
     List<OrderItem> findByOrderId(UUID orderId);
+
+    boolean existsByVariant_Product_Id(UUID productId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT oi.variant.id FROM OrderItem oi WHERE oi.variant.id IN :variantIds")
+    List<UUID> findVariantIdsWithOrders(@org.springframework.data.repository.query.Param("variantIds") java.util.Collection<UUID> variantIds);
 }

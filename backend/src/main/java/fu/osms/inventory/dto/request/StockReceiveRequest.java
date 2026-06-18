@@ -1,12 +1,13 @@
 package fu.osms.inventory.dto.request;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,7 +16,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class InventoryReceiptRequest {
+public class StockReceiveRequest {
 
     @NotNull(message = "Shop ID must not be null")
 
@@ -24,9 +25,12 @@ public class InventoryReceiptRequest {
 
     private UUID supplierId;
 
-    @NotBlank(message = "Receipt code must not be blank")
     @Size(max = 100)
     private String receiptCode;
+
+    @NotNull(message = "Ngày nhập là bắt buộc")
+    @PastOrPresent(message = "Ngày nhập không được lớn hơn ngày hiện tại")
+    private LocalDate receivedAt;
 
     @Size(max = 100)
     private String invoiceNumber;
@@ -35,5 +39,9 @@ public class InventoryReceiptRequest {
 
     @NotEmpty(message = "Receipt must have at least one item")
     @Valid
-    private List<InventoryReceiptItemRequest> items;
+    private List<StockReceiveItemRequest> items;
+
+    // Flag to indicate if this receipt should be saved as DRAFT
+    @Builder.Default
+    private Boolean isDraft = false;
 }
