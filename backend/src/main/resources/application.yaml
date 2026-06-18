@@ -6,7 +6,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/OSMS
     username: postgres
-    password: ${DB_PASSWORD}
+    password: 123
   jpa:
     hibernate:
       ddl-auto: validate
