@@ -4,6 +4,7 @@ import fu.osms.channel.dto.request.ChannelRequest;
 import fu.osms.channel.dto.response.ChannelCredentialResponse;
 import fu.osms.channel.dto.response.ChannelProductResponse;
 import fu.osms.channel.dto.response.ChannelResponse;
+import fu.osms.channel.dto.response.ChannelSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.mapper.ChannelCredentialMapper;
@@ -100,6 +101,29 @@ public class ChannelServiceImpl implements ChannelService {
                                         Collectors.toList(),
                                         list -> list.stream().distinct().collect(Collectors.toList())
                                 )
+                        )
+                ));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<ChannelSyncResponse>> getProductChannelSyncs(Collection<UUID> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdInAndMappingState(productIds, "ACTIVE");
+        return channelProducts.stream()
+                .filter(cp -> cp.getProduct() != null && cp.getChannel() != null)
+                .collect(Collectors.groupingBy(
+                        cp -> cp.getProduct().getId(),
+                        Collectors.mapping(
+                                cp -> ChannelSyncResponse.builder()
+                                        .platform(cp.getChannel().getPlatform().name())
+                                        .syncStatus(cp.getSyncStatus())
+                                        .lastSyncedAt(cp.getLastSyncedAt())
+                                        .lastSyncError(cp.getLastSyncError())
+                                        .build(),
+                                Collectors.toList()
                         )
                 ));
     }

@@ -4,7 +4,8 @@ import styles from './ProductStatsGrid.module.css';
 const ProductStatsGrid = ({ product }) => {
   // Real calculation for Inventory
   const totalQuantity = product.variants?.reduce((sum, v) => sum + (v.quantityOnHand || 0), 0) || 0;
-  const isLowStock = totalQuantity < (product.lowStockThreshold || 10);
+  const lowStockThreshold = product.lowStockThreshold ?? 5;
+  const isLowStock = totalQuantity < lowStockThreshold;
 
   // Mock data for sales
   const mockSold = 1234;

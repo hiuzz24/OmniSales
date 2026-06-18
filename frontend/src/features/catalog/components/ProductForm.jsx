@@ -1,7 +1,7 @@
 import { ChevronDown } from 'lucide-react';
 import styles from './ProductForm.module.css';
 
-const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrders = false }) => {
+const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrders = false, hasVariants = false }) => {
   const handleChange = (field, value) => {
     onChange({ ...formData, [field]: value });
   };
@@ -46,18 +46,48 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
           />
           {errors.sku && <span className={styles.errorText}>{errors.sku}</span>}
         </div>
-        <div className={styles.field}>
-          <label className={styles.label}>Barcode</label>
-          <input
-            id="product-barcode"
-            type="text"
-            className={styles.input}
-            placeholder="8936012345678"
-            value={formData.barcode || ''}
-            onChange={(e) => handleChange('barcode', e.target.value)}
-          />
-        </div>
+        {!hasVariants && (
+          <div className={styles.field}>
+            <label className={styles.label}>Barcode</label>
+            <input
+              id="product-barcode"
+              type="text"
+              className={styles.input}
+              placeholder="8936012345678"
+              value={formData.barcode || ''}
+              onChange={(e) => handleChange('barcode', e.target.value)}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Thuộc tính cơ bản khi không có biến thể */}
+      {!hasVariants && (
+        <div className={styles.row}>
+          <div className={styles.field}>
+            <label className={styles.label}>Size</label>
+            <input
+              id="product-size"
+              type="text"
+              className={styles.input}
+              placeholder="Ví dụ: Freesize"
+              value={formData.size || ''}
+              onChange={(e) => handleChange('size', e.target.value)}
+            />
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Màu sắc</label>
+            <input
+              id="product-color"
+              type="text"
+              className={styles.input}
+              placeholder="Ví dụ: Đen"
+              value={formData.color || ''}
+              onChange={(e) => handleChange('color', e.target.value)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Mô tả */}
       <div className={styles.row}>
@@ -107,6 +137,21 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             placeholder="Basic Wear"
             value={formData.brand || ''}
             onChange={(e) => handleChange('brand', e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* Đơn vị tính */}
+      <div className={styles.row}>
+        <div className={styles.field}>
+          <label className={styles.label}>Đơn vị tính</label>
+          <input
+            id="product-unit"
+            type="text"
+            className={styles.input}
+            placeholder="Cái, Hộp, Chiếc..."
+            value={formData.unit || ''}
+            onChange={(e) => handleChange('unit', e.target.value)}
           />
         </div>
       </div>

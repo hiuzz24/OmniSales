@@ -11,6 +11,7 @@ import org.hibernate.type.SqlTypes;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "channels", uniqueConstraints = {
@@ -53,6 +54,10 @@ public class Channel {
     @Column(name = "sync_enabled", nullable = false)
     @Builder.Default
     private Boolean syncEnabled = true;
+
+    @Column(name = "commission_rate", precision = 5, scale = 2)
+    @Builder.Default
+    private BigDecimal commissionRate = BigDecimal.ZERO;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
