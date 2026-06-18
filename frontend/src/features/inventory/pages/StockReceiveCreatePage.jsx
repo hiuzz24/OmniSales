@@ -278,15 +278,20 @@ export default function StockReceiveCreatePage() {
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
 
     // Validate quantity and unitPrice for CONFIRMED receipts
+    // Số lượng bắt buộc phải lớn hơn 0
     const invalidQty = items.find((it) => !it.quantity || Number(it.quantity) <= 0);
     if (invalidQty) {
       toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`);
       return;
     }
 
-    const invalidPrice = items.find((it) => it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || Number(it.unitPrice) < 0);
+    // Đơn giá phải lớn hơn hoặc bằng 0
+    const invalidPrice = items.find((it) => {
+      const price = Number(it.unitPrice);
+      return it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || isNaN(price) || price < 0;
+    });
     if (invalidPrice) {
-      toast.error(`Vui lòng nhập đơn giá cho sản phẩm "${invalidPrice.productName}".`);
+      toast.error(`Đơn giá của sản phẩm "${invalidPrice.productName}" phải lớn hơn hoặc bằng 0.`);
       return;
     }
 
@@ -542,8 +547,11 @@ export default function StockReceiveCreatePage() {
                   </thead>
                   <tbody>
                     {items.map((item, idx) => {
-                      const qtyBad = item.quantity !== '' && Number(item.quantity) <= 0;
-                      const priceBad = item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined || Number(item.unitPrice) < 0;
+                      // Validation: Số lượng phải > 0
+                      const qtyBad = !item.quantity || item.quantity === '' || Number(item.quantity) <= 0;
+                      // Validation: Đơn giá phải >= 0
+                      const price = Number(item.unitPrice);
+                      const priceBad = item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined || isNaN(price) || price < 0;
                       const line = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
                       return (
                         <tr key={item.variantId ?? idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -555,13 +563,25 @@ export default function StockReceiveCreatePage() {
                             <span style={{ fontSize: 9, fontFamily: 'monospace', backgroundColor: '#f1f5f9', color: '#64748b', padding: '2px 4px', borderRadius: 3 }}>{item.sku}</span>
                           </td>
                           <td style={{ padding: '7px 10px', width: 90 }}>
-                            <input type="number" min="1" step="1" value={item.quantity}
+                            <input 
+                              type="number" 
+                              min="1" 
+                              step="1" 
+                              value={item.quantity}
                               onChange={(e) => onQtyChange(idx, e.target.value)}
+                              placeholder="Số lượng > 0"
+                              title="Số lượng phải lớn hơn 0"
                               style={{ width: '100%', padding: '4px 5px', borderRadius: 4, border: `1px solid ${qtyBad ? '#fca5a5' : '#e2e8f0'}`, backgroundColor: qtyBad ? '#fff5f5' : '#fff', fontSize: 11, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }} />
                           </td>
                           <td style={{ padding: '7px 10px', width: 120 }}>
-                            <input type="number" min="0" step="1000" value={item.unitPrice}
+                            <input 
+                              type="number" 
+                              min="0" 
+                              step="1000" 
+                              value={item.unitPrice}
                               onChange={(e) => onPriceChange(idx, e.target.value)}
+                              placeholder="Đơn giá ≥ 0"
+                              title="Đơn giá phải lớn hơn hoặc bằng 0"
                               style={{ width: '100%', padding: '4px 5px', borderRadius: 4, border: `1px solid ${priceBad ? '#fca5a5' : '#e2e8f0'}`, backgroundColor: priceBad ? '#fff5f5' : '#fff', fontSize: 11, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }} />
                           </td>
                           <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: line > 0 ? '#2563eb' : '#94a3b8', whiteSpace: 'nowrap', fontSize: 11 }}>
