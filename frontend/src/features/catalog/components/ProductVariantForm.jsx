@@ -5,6 +5,7 @@ import styles from './ProductVariantForm.module.css';
 
 const emptyVariant = () => ({
   sku: '',
+  barcode: '',
   name: '',
   price: '',
   costPrice: '',
@@ -12,7 +13,7 @@ const emptyVariant = () => ({
   images: [],
 });
 
-const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors = {}, globalError, hasOrders = false }) => {
+const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors = {}, globalError, hasOrders = false, channels = [], selectedChannels = [] }) => {
   const [editingImageIndex, setEditingImageIndex] = useState(null);
   const [urlValue, setUrlValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -71,6 +72,25 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
     }
   };
 
+  const renderSuggestedPrices = (price) => {
+    const numPrice = Number(price);
+    if (!numPrice || isNaN(numPrice) || numPrice <= 0) return '-';
+
+    const selectedList = channels.filter(c => selectedChannels.includes(c.id));
+    if (selectedList.length === 0) return '-';
+
+    return (
+      <div style={{ fontSize: '12px', color: '#059669', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        {selectedList.map(channel => {
+          const rate = (channel.commissionRate || 0) / 100;
+          if (rate >= 1) return <div key={channel.id}>{channel.platform}: N/A</div>;
+          const suggested = Math.round(numPrice / (1 - rate));
+          return <div key={channel.id}>{channel.platform}: {suggested.toLocaleString('vi-VN')}đ</div>;
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
@@ -98,7 +118,9 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                 <th>Size</th>
                 <th>Màu</th>
                 <th>SKU</th>
+                <th>Barcode</th>
                 <th>Giá</th>
+                <th style={{ width: '130px' }}>Giá đề xuất</th>
                 <th>Giá vốn</th>
                 <th className={styles.removeCell}></th>
               </tr>
@@ -162,6 +184,17 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                     </td>
                     <td>
                       <input
+                        type="text"
+                        className={`${styles.variantInput} ${variantErrors.barcode ? styles.inputError : ''}`}
+                        placeholder="Mã vạch"
+                        value={variant.barcode || ''}
+                        onChange={(e) => handleFieldChange(index, 'barcode', e.target.value)}
+                        disabled={variant.isActive === false}
+                      />
+                      {variantErrors.barcode && <div className={styles.errorText}>{variantErrors.barcode}</div>}
+                    </td>
+                    <td>
+                      <input
                         type="number"
                         className={`${styles.variantInput} ${variantErrors.price ? styles.inputError : ''}`}
                         placeholder="0"
@@ -171,6 +204,9 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         disabled={variant.isActive === false}
                       />
                       {variantErrors.price && <div className={styles.errorText}>{variantErrors.price}</div>}
+                    </td>
+                    <td>
+                      {renderSuggestedPrices(variant.price)}
                     </td>
                     <td>
                       <input

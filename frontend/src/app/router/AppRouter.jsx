@@ -16,6 +16,7 @@ import ProductManagementPage from '../../features/catalog/pages/ProductManagemen
 import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
 import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
+import ProductLogPage from '../../features/catalog/pages/ProductLogPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
@@ -45,9 +46,6 @@ const AppRouter = () => {
 
           {/* All regular user pages use MainLayout (sidebar + topbar) */}
           <Route element={<MainLayout />}>
-            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-            </Route>
 
             <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
 
@@ -60,6 +58,7 @@ const AppRouter = () => {
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
               <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
+              <Route path={ROUTES.PRODUCT_LOGS} element={<ProductLogPage />} />
               <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
               <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />

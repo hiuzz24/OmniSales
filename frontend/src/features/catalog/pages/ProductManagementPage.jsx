@@ -20,7 +20,10 @@ const ProductManagementPage = () => {
 
   const actions = (
     <>
-      <button className={`${styles.actionBtn} ${styles.secondaryBtn}`}>
+      <button 
+        className={`${styles.actionBtn} ${styles.secondaryBtn}`}
+        onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
+      >
         <History className={styles.secondaryIcon} />
         Product Logs
       </button>

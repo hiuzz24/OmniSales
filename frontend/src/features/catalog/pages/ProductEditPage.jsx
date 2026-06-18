@@ -26,6 +26,7 @@ const ProductEditPage = () => {
     description: '',
     categoryId: '',
     brand: '',
+    unit: '',
   });
   const [images, setImages] = useState([]);
   const [price, setPrice] = useState('');
@@ -34,6 +35,7 @@ const ProductEditPage = () => {
   const [variants, setVariants] = useState([]);
   const [weightGrams, setWeightGrams] = useState('');
   const [dimensions, setDimensions] = useState('');
+  const [lowStockThreshold, setLowStockThreshold] = useState('5');
   const [showProduct, setShowProduct] = useState(true);
 
   const [channels, setChannels] = useState([]);
@@ -78,8 +80,10 @@ const ProductEditPage = () => {
           description: productData.description || '',
           categoryId: productData.categoryId || '',
           brand: productData.brand || '',
-          brand: productData.brand || '',
+          unit: productData.unit || '',
           barcode: '',
+          size: '',
+          color: '',
           version: productData.version,
           hasOrders: productData.hasOrders,
         });
@@ -89,6 +93,7 @@ const ProductEditPage = () => {
 
         setWeightGrams(productData.weightGrams || '');
         setDimensions(productData.attributes?.dimensions || '');
+        setLowStockThreshold(productData.lowStockThreshold ?? '5');
         setShowProduct(productData.status === 'ACTIVE');
 
         if (productData.variants && productData.variants.length > 0) {
@@ -101,6 +106,13 @@ const ProductEditPage = () => {
             setHasVariants(false);
             setPrice(firstVariant.price || '');
             setCostPrice(firstVariant.costPrice || '');
+            setVariants(productData.variants);
+            setFormData(prev => ({ 
+              ...prev, 
+              barcode: firstVariant.barcode || '',
+              size: firstVariant.optionValues?.Size || '',
+              color: firstVariant.optionValues?.['Màu'] || ''
+            }));
           } else {
             setHasVariants(true);
             setVariants(productData.variants);
@@ -124,6 +136,7 @@ const ProductEditPage = () => {
       price: price,
       costPrice: costPrice,
       weightGrams: weightGrams,
+      lowStockThreshold: lowStockThreshold,
       dimensions: dimensions,
       variants: hasVariants ? variants : [],
     };
@@ -149,6 +162,7 @@ const ProductEditPage = () => {
       requestVariants = variants.map((v) => ({
         id: v.id || null, // Keep id to update existing variants
         sku: v.sku,
+        barcode: v.barcode || null,
         name: [v.optionValues?.Size, v.optionValues?.['Màu']].filter(Boolean).join(' / ') || v.sku,
         price: Number(v.price),
         costPrice: v.costPrice ? Number(v.costPrice) : null,
@@ -162,16 +176,14 @@ const ProductEditPage = () => {
       requestVariants = [{
         id: defaultVariantId,
         sku: formData.sku,
+        barcode: formData.barcode || null,
         name: formData.name || 'Mặc định',
         price: Number(price),
         costPrice: costPrice ? Number(costPrice) : null,
-        optionValues: {},
-        images: images.map((img, i) => ({
-          id: img.id || null,
-          url: img.url,
-          sortOrder: i,
-          isPrimary: i === 0,
-        })),
+        optionValues: Object.fromEntries(
+          Object.entries({ Size: formData.size, 'Màu': formData.color }).filter(([_, v]) => v)
+        ),
+        images: [],
       }];
     }
 
@@ -182,8 +194,10 @@ const ProductEditPage = () => {
       description: formData.description || null,
       categoryId: formData.categoryId || null,
       brand: formData.brand || null,
+      unit: formData.unit || null,
       status,
       weightGrams: weightGrams ? Number(weightGrams) : null,
+      lowStockThreshold: lowStockThreshold === '' ? 5 : Number(lowStockThreshold),
       attributes: dimensions ? { dimensions } : {},
       channelIds: selectedChannels,
       variants: requestVariants,
@@ -244,6 +258,7 @@ const ProductEditPage = () => {
   const handleShippingChange = (field, value) => {
     if (field === 'weightGrams') setWeightGrams(value);
     if (field === 'dimensions') setDimensions(value);
+    if (field === 'lowStockThreshold') setLowStockThreshold(value);
   };
 
   const handleAddVariant = (variant) => {
@@ -253,6 +268,12 @@ const ProductEditPage = () => {
   const handleRemoveVariant = (index) => {
     setVariants((prev) => prev.filter((_, i) => i !== index));
   };
+
+  const variantToggleSubtitle = hasVariants
+    ? 'Sản phẩm có nhiều biến thể (size, màu...)'
+    : variants.length > 0
+      ? 'Sản phẩm đang dùng biến thể mặc định. Cập nhật giá và barcode ở các mục bên dưới.'
+      : 'Sản phẩm không có biến thể. Nhấn để thêm biến thể.';
 
   if (isLoading) return <div style={{ padding: '20px' }}>Đang tải...</div>;
 
@@ -281,15 +302,14 @@ const ProductEditPage = () => {
             categories={categories}
             errors={errors}
             hasOrders={formData.hasOrders}
+            hasVariants={hasVariants}
           />
 
           <div className={styles.variantToggleCard}>
             <div className={styles.variantToggleInfo}>
               <div className={styles.variantToggleTitle}>Biến thể sản phẩm</div>
               <div className={styles.variantToggleSubtitle}>
-                {hasVariants
-                  ? 'Sản phẩm có nhiều biến thể (size, màu...)'
-                  : 'Sản phẩm không có biến thể. Nhấn để thêm biến thể.'}
+                {variantToggleSubtitle}
               </div>
             </div>
             <button
@@ -307,6 +327,8 @@ const ProductEditPage = () => {
               costPrice={costPrice}
               onChange={handlePriceChange}
               errors={errors}
+              channels={channels}
+              selectedChannels={selectedChannels}
             />
           )}
 
@@ -319,13 +341,17 @@ const ProductEditPage = () => {
               errors={variantErrors}
               globalError={errors.variants}
               hasOrders={formData.hasOrders}
+              channels={channels}
+              selectedChannels={selectedChannels}
             />
           )}
 
           <ProductShippingInfo
             weightGrams={weightGrams}
             dimensions={dimensions}
+            lowStockThreshold={lowStockThreshold}
             onChange={handleShippingChange}
+            errors={errors}
           />
         </div>
 

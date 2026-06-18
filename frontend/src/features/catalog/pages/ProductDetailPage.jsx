@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Loader2 } from 'lucide-react';
 import productApi from '../../../api/productApi';
+import channelApi from '../../../api/channelApi';
 import { ROUTES } from '../../../app/router/routes';
 import styles from './ProductDetailPage.module.css';
 import ProductDetailHeader from '../components/ProductDetailHeader';
@@ -18,6 +19,7 @@ const ProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
+  const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -28,9 +30,13 @@ const ProductDetailPage = () => {
   const fetchProduct = async () => {
     try {
       setLoading(true);
-      const data = await productApi.getById(id);
-      const responseData = data.data?.data || data.data || data;
+      const [prodRes, chanRes] = await Promise.all([
+        productApi.getById(id),
+        channelApi.getAll()
+      ]);
+      const responseData = prodRes.data?.data || prodRes.data || prodRes;
       setProduct(responseData);
+      setChannels(chanRes.data?.data || chanRes.data || chanRes);
     } catch (error) {
       toast.error('Không thể tải thông tin sản phẩm');
       navigate(ROUTES.PRODUCTS);
@@ -84,7 +90,7 @@ const ProductDetailPage = () => {
           <div className={styles.tabContent}>
             {activeTab === 'overview' && <TabOverview product={product} />}
             {activeTab === 'inventory' && <TabInventory product={product} />}
-            {activeTab === 'platform' && <TabPlatform product={product} />}
+            {activeTab === 'platform' && <TabPlatform product={product} channels={channels} />}
             {activeTab === 'images' && <TabImages product={product} />}
             {activeTab === 'variants' && <TabVariants product={product} />}
           </div>

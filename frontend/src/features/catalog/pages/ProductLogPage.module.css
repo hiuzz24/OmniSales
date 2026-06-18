@@ -1,0 +1,177 @@
+.page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 24px;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 16px;
+  transition: color 0.2s;
+}
+
+.backBtn:hover {
+  color: #111827;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.subtitle {
+  color: #6b7280;
+  margin: 0;
+  font-size: 14px;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th {
+  padding: 12px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table td {
+  padding: 16px 24px;
+  font-size: 14px;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover {
+  background-color: #f9fafb;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 48px;
+  color: #6b7280;
+}
+
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  color: #6b7280;
+  gap: 16px;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+  color: #3b82f6;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.badge {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badgeCreate {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.badgeUpdate {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.badgeDelete {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
+.skuPrimary {
+  font-weight: 600;
+  color: #111827;
+}
+
+.skuSecondary {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.changesMsg {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  border-top: 1px solid #e5e7eb;
+  gap: 16px;
+}
+
+.pageBtn {
+  padding: 6px 12px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 6px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+}
+
+.pageBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pageInfo {
+  font-size: 14px;
+  color: #6b7280;
+}

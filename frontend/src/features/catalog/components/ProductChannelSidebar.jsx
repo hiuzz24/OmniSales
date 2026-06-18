@@ -37,15 +37,22 @@ const ProductChannelSidebar = ({
             {channels.map((channel) => {
               const icon = getIcon(channel.platform);
               const isSelected = selectedChannels.includes(channel.id);
+              const commissionRate = channel.commissionRate || 0;
+
               return (
                 <div key={channel.id} className={styles.channelItem}>
                   <div className={styles.channelInfo}>
                     <div className={`${styles.channelIcon} ${styles[icon.className]}`}>
                       {icon.label}
                     </div>
-                    <span className={styles.channelName}>
-                      {channel.displayName || channel.platform}
-                    </span>
+                    <div className={styles.channelDetails}>
+                      <span className={styles.channelName}>
+                        {channel.displayName || channel.platform}
+                      </span>
+                      <span className={styles.commissionRate}>
+                        % hoa hồng: {commissionRate}%
+                      </span>
+                    </div>
                   </div>
                   <input
                     type="checkbox"

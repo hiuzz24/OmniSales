@@ -558,6 +558,12 @@ CREATE TABLE report_results (
 );
 
 ALTER TABLE channel_products ALTER COLUMN external_product_id DROP NOT NULL;
+ALTER TABLE channels ADD COLUMN commission_rate NUMERIC(5,2) DEFAULT 0;
+ALTER TABLE products ADD COLUMN unit VARCHAR(50);
+ALTER TYPE inv_txn_type ADD VALUE IF NOT EXISTS 'OUTBOUND';
+ALTER TABLE inventory_issues ADD COLUMN recipient VARCHAR(255);
+
+
 
 CREATE OR REPLACE FUNCTION fn_set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
