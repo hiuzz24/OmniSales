@@ -110,6 +110,10 @@ const TabOverview = ({ product }) => {
             <span className={styles.label}>Kích thước:</span>
             <span className={styles.value}>{product.attributes?.dimensions || 'N/A'}</span>
           </div>
+          <div className={styles.infoRow}>
+            <span className={styles.label}>Ngưỡng tồn thấp:</span>
+            <span className={styles.value}>{product.lowStockThreshold ?? 5}</span>
+          </div>
         </div>
       </div>
     </div>

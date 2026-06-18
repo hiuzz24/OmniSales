@@ -8,6 +8,9 @@ import lombok.*;
 
 import java.util.Map;
 import java.util.UUID;
+import java.math.BigDecimal;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 
 @Getter
 @Setter
@@ -33,4 +36,9 @@ public class ChannelRequest {
 
     @Builder.Default
     private Boolean syncEnabled = true;
+
+    @DecimalMin(value = "0.0", message = "Commission rate must be at least 0")
+    @DecimalMax(value = "100.0", message = "Commission rate must be at most 100")
+    @Builder.Default
+    private BigDecimal commissionRate = BigDecimal.ZERO;
 }
