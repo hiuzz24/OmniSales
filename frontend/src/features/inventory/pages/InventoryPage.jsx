@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import {
@@ -54,10 +54,10 @@ const deriveStatus = (item) => {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const map = {
-    'in-stock':    { label: 'Đủ hàng',  cls: styles.badgeGreen },
-    'low-stock':   { label: 'Sắp hết',  cls: styles.badgeOrange },
-    'out-of-stock':{ label: 'Hết hàng', cls: styles.badgeGray },
-    'negative':    { label: 'Tồn âm',   cls: styles.badgeRed },
+    'in-stock': { label: 'Đủ hàng', cls: styles.badgeGreen },
+    'low-stock': { label: 'Sắp hết', cls: styles.badgeOrange },
+    'out-of-stock': { label: 'Hết hàng', cls: styles.badgeGray },
+    'negative': { label: 'Tồn âm', cls: styles.badgeRed },
   };
   const { label, cls } = map[status] ?? { label: status, cls: '' };
   return <span className={`${styles.badge} ${cls}`}>{label}</span>;
@@ -154,7 +154,7 @@ const InventoryPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [warehouseFilter, setWarehouseFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  
+
   // 'none' | 'asc' | 'desc'
   const [nameSort, setNameSort] = useState('none');
   const [qtySort, setQtySort] = useState('none');
@@ -317,7 +317,7 @@ const InventoryPage = () => {
             <Box size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Total Quantity<br/><small>(Trang hiện tại)</small></span>
+            <span className={styles.summaryLabel}>Total Quantity<br /><small>(Trang hiện tại)</small></span>
             <span className={styles.summaryValue}>{totalQuantityCurrentPage}</span>
           </div>
         </div>
@@ -382,9 +382,9 @@ const InventoryPage = () => {
           />
         </div>
         <div className={styles.selectWrapper}>
-          <select 
-            className={styles.select} 
-            value={categoryFilter} 
+          <select
+            className={styles.select}
+            value={categoryFilter}
             onChange={e => {
               setCategoryFilter(e.target.value);
               setCurrentPage(0);

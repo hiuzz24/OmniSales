@@ -18,7 +18,6 @@ import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
 import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
 import InventoryPage from '../../features/inventory/pages/InventoryPage';
 import InventoryDetailPage from '../../features/inventory/pages/InventoryDetailPage';
-import InventoryReceiptPage from '../../features/inventory/pages/InventoryReceiptPage';
 import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
 import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
 import StocktakePage from '../../features/inventory/pages/StocktakePage';
@@ -28,7 +27,6 @@ import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
 import StockReceiveCreatePage from '../../features/inventory/pages/StockReceiveCreatePage';
 import StockReceiveDetailPage from '../../features/inventory/pages/StockReceiveDetailPage';
 import StockReceiveEditPage from '../../features/inventory/pages/StockReceiveEditPage';
-import InventoryReceiptPage from '../../features/inventory/pages/InventoryReceiptPage';
 // import InventoryReceiptCreatePage from '../../features/inventory/pages/InventoryReceiptCreatePage';
 
 const AppRouter = () => {
@@ -67,18 +65,16 @@ const AppRouter = () => {
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
               <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
               <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
-              <Route path={ROUTES.WAREHOUSE_RECEIPTS} element={<InventoryReceiptPage />} />
-              {/* <Route path={ROUTES.WAREHOUSE_RECEIPT_CREATE} element={<InventoryReceiptCreatePage />} /> */}
+
               {/* Inventory */}
               <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />
               <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
-              <Route path={ROUTES.INVENTORY_RECEIPT} element={<InventoryReceiptPage />} />
-              <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} />
+              {/* <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} /> */}
               <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
               <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
             </Route>

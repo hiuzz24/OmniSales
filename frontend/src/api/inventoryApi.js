@@ -1,4 +1,5 @@
 import axiosClient from './axiosClient';
+import './interceptors';
 
 const inventoryApi = {
   /**
@@ -10,22 +11,24 @@ const inventoryApi = {
    * @param {string|null} categoryId - category filter
    * @returns {Promise<PageResponse<InventoryItemResponse>>}
    */
-  getInventoryList: (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null) => {
+  getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null) => {
     const params = { page, size, sortBy, sortDir };
-    if (categoryId) {
-      return axiosClient.get(`/inventory/category/${categoryId}`, { params });
-    }
-    return axiosClient.get('/inventory', { params });
+    const res = categoryId
+      ? await axiosClient.get(`/inventory/category/${categoryId}`, { params })
+      : await axiosClient.get('/inventory', { params });
+    return res.data?.data ?? res.data;
   },
 
-  getInventoryItemDetail: (id) => {
-    return axiosClient.get(`/inventory/detail/${id}`);
+  getInventoryItemDetail: async (id) => {
+    const res = await axiosClient.get(`/inventory/detail/${id}`);
+    return res.data?.data ?? res.data;
   },
 
-  getTransactions: (variantId, page = 0, size = 10, sortBy = 'performedAt', sortDir = 'desc') => {
-    return axiosClient.get('/inventory/detail/transactions', {
+  getTransactions: async (variantId, page = 0, size = 10, sortBy = 'performedAt', sortDir = 'desc') => {
+    const res = await axiosClient.get('/inventory/detail/transactions', {
       params: { variantId, page, size, sortBy, sortDir }
     });
+    return res.data?.data ?? res.data;
   },
 };
 
