@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 const STATUS_LABELS = {
   ACTIVE: 'Hoạt động',
@@ -29,8 +29,17 @@ const getPrimaryImage = (product) => {
   );
 };
 
+const formatVariantName = (variant) => {
+  if (!variant) return '';
+  if (variant.name) return variant.name;
+  if (!variant.optionValues) return '';
+  return Object.values(variant.optionValues)
+    .filter((v) => v != null && v !== '')
+    .join(' / ');
+};
+
 export const PRODUCT_EXPORT_COLUMNS = [
-  { key: 'stt', label: 'STT', width: 6, defaultChecked: true, getValue: (_p, idx) => idx + 1 },
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true, getValue: () => '' },
   {
     key: 'id',
     label: 'Mã sản phẩm',
@@ -43,14 +52,15 @@ export const PRODUCT_EXPORT_COLUMNS = [
     label: 'Tên sản phẩm',
     width: 40,
     defaultChecked: true,
-    getValue: (p) => p.name || '',
+    getValue: (p, _idx, ctx) => (ctx?.rowType === 'variant' ? `↳ ${formatVariantName(ctx.variant)}` : p.name || ''),
   },
   {
     key: 'sku',
     label: 'SKU',
     width: 18,
     defaultChecked: true,
-    getValue: (p) => p.sku || p.variants?.[0]?.sku || '',
+    getValue: (p, _idx, ctx) =>
+      ctx?.rowType === 'variant' ? ctx.variant?.sku || '' : p.sku || '',
   },
   {
     key: 'barcode',
@@ -92,21 +102,30 @@ export const PRODUCT_EXPORT_COLUMNS = [
     label: 'Giá bán (VNĐ)',
     width: 18,
     defaultChecked: true,
-    getValue: (p) => getPriceRange(p.variants),
+    getValue: (p, _idx, ctx) =>
+      ctx?.rowType === 'variant'
+        ? ctx.variant?.price ?? ''
+        : getPriceRange(p.variants),
   },
   {
     key: 'costPrice',
     label: 'Giá vốn (VNĐ)',
     width: 14,
     defaultChecked: false,
-    getValue: (p) => p.variants?.[0]?.costPrice ?? '',
+    getValue: (p, _idx, ctx) =>
+      ctx?.rowType === 'variant'
+        ? ctx.variant?.costPrice ?? ''
+        : p.variants?.[0]?.costPrice ?? '',
   },
   {
     key: 'stock',
     label: 'Tồn kho',
     width: 10,
     defaultChecked: true,
-    getValue: (p) => getTotalStock(p.variants),
+    getValue: (p, _idx, ctx) =>
+      ctx?.rowType === 'variant'
+        ? ctx.variant?.availableQuantity ?? ctx.variant?.quantityOnHand ?? 0
+        : getTotalStock(p.variants),
   },
   {
     key: 'variantCount',
@@ -159,14 +178,111 @@ export const PRODUCT_EXPORT_COLUMNS = [
   },
 ];
 
-const buildRows = (products, selectedColumns) => {
-  return products.map((p, idx) => {
-    const row = {};
-    selectedColumns.forEach((col) => {
-      row[col.label] = col.getValue(p, idx);
+const thinBorder = { style: 'thin', color: { rgb: 'FF7F7F7F' } };
+
+const allBorders = {
+  top: thinBorder,
+  bottom: thinBorder,
+  left: thinBorder,
+  right: thinBorder,
+};
+
+const HEADER_STYLE = {
+  font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 12 },
+  fill: { patternType: 'solid', fgColor: { rgb: 'FF1F4E78' } },
+  alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+  border: allBorders,
+};
+
+const PRODUCT_STYLE = {
+  font: { bold: true, color: { rgb: 'FF1F4E78' }, sz: 11 },
+  fill: { patternType: 'solid', fgColor: { rgb: 'FFEAF2FB' } },
+  border: allBorders,
+  alignment: { vertical: 'center' },
+};
+
+const VARIANT_STYLE = {
+  font: { bold: false, color: { rgb: 'FF404040' }, sz: 11 },
+  border: allBorders,
+  alignment: { vertical: 'center' },
+};
+
+const PRICE_BOLD_STYLE = {
+  numFmt: '#,##0',
+  font: { bold: true, color: { rgb: 'FF1F4E78' }, sz: 11 },
+  fill: { patternType: 'solid', fgColor: { rgb: 'FFEAF2FB' } },
+  border: allBorders,
+};
+
+const PRICE_VARIANT_STYLE = {
+  numFmt: '#,##0',
+  font: { bold: false, color: { rgb: 'FF404040' }, sz: 11 },
+  border: allBorders,
+};
+
+const colLetter = (index) => {
+  let s = '';
+  let n = index;
+  while (n >= 0) {
+    s = String.fromCharCode(65 + (n % 26)) + s;
+    n = Math.floor(n / 26) - 1;
+  }
+  return s;
+};
+
+const setCellStyle = (worksheet, ref, style) => {
+  const cell = worksheet[ref] || { t: 's', v: '' };
+  cell.s = { ...(cell.s || {}), ...style };
+  worksheet[ref] = cell;
+};
+
+const applyRowStyle = (worksheet, rowIndex, style, numCols) => {
+  for (let c = 0; c < numCols; c += 1) {
+    setCellStyle(worksheet, `${colLetter(c)}${rowIndex + 1}`, style);
+  }
+};
+
+const PRICE_KEYS = new Set(['price', 'costPrice', 'stock']);
+
+const buildAoa = (products, selectedColumns) => {
+  const header = selectedColumns.map((c) => c.label);
+  const aoa = [header];
+  const rowMeta = [];
+  const cellType = [];
+
+  const isNumericValue = (v) => typeof v === 'number' && !Number.isNaN(v);
+
+  const toCell = (v) => {
+    if (isNumericValue(v)) return { t: 'n', v };
+    return { t: 's', v: v == null ? '' : String(v) };
+  };
+
+  products.forEach((p, productIdx) => {
+    const productCtx = { rowType: 'product' };
+    const productRow = selectedColumns.map((col) => {
+      if (col.key === 'stt') return productIdx + 1;
+      return col.getValue(p, productIdx, productCtx);
     });
-    return row;
+    const productCells = productRow.map((v) => toCell(v));
+    aoa.push(productCells);
+    cellType.push(productCells);
+    rowMeta.push('product');
+
+    const variants = p.variants && p.variants.length > 0 ? p.variants : [];
+    variants.forEach((variant) => {
+      const variantCtx = { rowType: 'variant', variant };
+      const variantRow = selectedColumns.map((col) => {
+        if (col.key === 'stt') return '';
+        return col.getValue(p, productIdx, variantCtx);
+      });
+      const variantCells = variantRow.map((v) => toCell(v));
+      aoa.push(variantCells);
+      cellType.push(variantCells);
+      rowMeta.push('variant');
+    });
   });
+
+  return { aoa, rowMeta, cellType };
 };
 
 export const exportProductsToExcel = (
@@ -187,10 +303,32 @@ export const exportProductsToExcel = (
     return { success: false, message: 'Vui lòng chọn ít nhất 1 cột để xuất' };
   }
 
-  const rows = buildRows(products, selectedColumns);
-  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const { aoa, rowMeta, cellType } = buildAoa(products, selectedColumns);
+  const worksheet = XLSX.utils.aoa_to_sheet(aoa);
 
   worksheet['!cols'] = selectedColumns.map((c) => ({ wch: c.width }));
+  worksheet['!rows'] = [{ hpt: 24 }];
+  rowMeta.forEach(() => worksheet['!rows'].push({ hpt: 20 }));
+
+  const numCols = selectedColumns.length;
+  applyRowStyle(worksheet, 0, HEADER_STYLE, numCols);
+
+  cellType.forEach((cells, i) => {
+    const rowIndex = i + 1;
+    const baseStyle = rowMeta[i] === 'product' ? PRODUCT_STYLE : VARIANT_STYLE;
+    cells.forEach((cell, c) => {
+      const colKey = selectedColumns[c].key;
+      if (PRICE_KEYS.has(colKey) && cell.t === 'n') {
+        setCellStyle(
+          worksheet,
+          `${colLetter(c)}${rowIndex}`,
+          rowMeta[i] === 'product' ? PRICE_BOLD_STYLE : PRICE_VARIANT_STYLE,
+        );
+      } else {
+        setCellStyle(worksheet, `${colLetter(c)}${rowIndex}`, baseStyle);
+      }
+    });
+  });
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sản phẩm');
