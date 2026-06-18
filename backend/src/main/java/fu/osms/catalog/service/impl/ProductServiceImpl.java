@@ -15,9 +15,13 @@ import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.mapper.ProductImageMapper;
-import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.dto.response.ProductImageResponse;
 import fu.osms.catalog.dto.response.ProductVariantResponse;
+import fu.osms.channel.dto.response.ChannelSyncResponse;
+import fu.osms.catalog.entity.ProductLog;
+import fu.osms.catalog.enums.ProductLogAction;
+import fu.osms.catalog.repository.ProductLogRepository;
+import fu.osms.auth.entity.User;
 import fu.osms.inventory.dto.response.StockSummaryDTO;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.catalog.service.ProductService;
@@ -64,6 +68,7 @@ public class ProductServiceImpl implements ProductService {
     private final ChannelRepository channelRepository;
     private final ChannelProductRepository channelProductRepository;
     private final OrderItemRepository orderItemRepository;
+    private final ProductLogRepository productLogRepository;
 
     @Override
     @Transactional
@@ -183,6 +188,17 @@ public class ProductServiceImpl implements ProductService {
             }
         }
 
+        logProductAction(
+                savedProduct,
+                null,
+                ProductLogAction.CREATE,
+                Map.of("message", "Tạo mới sản phẩm"),
+                savedProduct.getCreatedBy(),
+                null,
+                null,
+                "Tạo mới sản phẩm"
+        );
+
         return this.getById(savedProduct.getId());
     }
 
@@ -209,6 +225,7 @@ public class ProductServiceImpl implements ProductService {
         List<UUID> variantIds = variants.stream().map(ProductVariant::getId).toList();
         Map<UUID, StockSummaryDTO> stockMap = inventoryService.getStockSummary(variantIds);
         Map<UUID, List<String>> channelMap = channelService.getProductChannels(Collections.singletonList(id));
+        Map<UUID, List<ChannelSyncResponse>> channelSyncMap = channelService.getProductChannelSyncs(Collections.singletonList(id));
 
         List<ProductVariantResponse> variantResponses = variants.stream().map(v -> {
             ProductVariantResponse vr = productVariantMapper.toResponse(v);
@@ -227,6 +244,7 @@ public class ProductServiceImpl implements ProductService {
 
         response.setVariants(variantResponses);
         response.setChannels(channelMap.getOrDefault(id, Collections.emptyList()));
+        response.setChannelSyncs(channelSyncMap.getOrDefault(id, Collections.emptyList()));
 
         return response;
     }
@@ -275,13 +293,15 @@ public class ProductServiceImpl implements ProductService {
                 .filter(p -> p.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
-        product.setVersion(request.getVersion());
+        if (request.getVersion() != null && !Objects.equals(product.getVersion(), request.getVersion())) {
+            throw new AppException(ErrorCode.CONCURRENT_UPDATE);
+        }
 
-        if (!product.getSku().equals(request.getSku())) {
+        if (!Objects.equals(product.getSku(), request.getSku())) {
             if (orderItemRepository.existsByVariant_Product_Id(id)) {
                 throw new AppException(ErrorCode.PRODUCT_HAS_ORDERS);
             }
-            if (productRepository.existsBySkuAndDeletedAtIsNull(request.getSku())) {
+            if (productRepository.existsBySkuAndIdNotAndDeletedAtIsNull(request.getSku(), id)) {
                 throw new AppException(ErrorCode.PRODUCT_SKU_CONFLICT);
             }
         }
@@ -313,11 +333,66 @@ public class ProductServiceImpl implements ProductService {
                 if (productVariantRepository.existsBySkuInAndProductIdNotAndDeletedAtIsNull(variantSkus, id)) {
                     throw new AppException(ErrorCode.VARIANT_SKU_CONFLICT);
                 }
+                if (productRepository.existsBySkuInAndIdNotAndDeletedAtIsNull(variantSkus, id)) {
+                    throw new AppException(ErrorCode.PRODUCT_SKU_CONFLICT);
+                }
+            }
+
+            List<String> variantBarcodes = request.getVariants().stream()
+                    .map(ProductVariantRequest::getBarcode)
+                    .filter(barcode -> barcode != null && !barcode.trim().isEmpty())
+                    .toList();
+            if (!variantBarcodes.isEmpty()) {
+                Set<String> uniqueBarcodes = new HashSet<>(variantBarcodes);
+                if (uniqueBarcodes.size() < variantBarcodes.size()) {
+                    throw new AppException(ErrorCode.VARIANT_BARCODE_CONFLICT);
+                }
+                if (productVariantRepository.existsByBarcodeInAndProductIdNotAndDeletedAtIsNull(variantBarcodes, id)) {
+                    throw new AppException(ErrorCode.VARIANT_BARCODE_CONFLICT);
+                }
             }
 
             List<ProductVariant> updatedVariants = new ArrayList<>();
             List<ProductImage> variantImages = new ArrayList<>();
             Set<UUID> incomingVariantIds = new HashSet<>();
+
+            for (ProductVariantRequest vr : request.getVariants()) {
+                if (vr.getId() != null) {
+                    incomingVariantIds.add(vr.getId());
+                }
+            }
+
+            List<ProductVariant> variantsToDelete = existingVariants.stream()
+                    .filter(v -> !incomingVariantIds.contains(v.getId()))
+                    .toList();
+
+            if (!variantsToDelete.isEmpty()) {
+                List<UUID> variantIdsToDelete = variantsToDelete.stream().map(ProductVariant::getId).toList();
+                List<UUID> variantIdsWithOrders = orderItemRepository.findVariantIdsWithOrders(variantIdsToDelete);
+
+                for (ProductVariant v : variantsToDelete) {
+                    if (variantIdsWithOrders.contains(v.getId())) {
+                        v.setIsActive(false);
+                    } else {
+                        v.setDeletedAt(OffsetDateTime.now());
+                    }
+                }
+                productVariantRepository.saveAll(variantsToDelete);
+                productVariantRepository.flush();
+            }
+
+            if (request.getVariants() != null && !request.getVariants().isEmpty()) {
+                for (ProductVariantRequest vr : request.getVariants()) {
+                    ProductVariant matchingExisting = existingVariants.stream()
+                            .filter(ev -> ev.getSku().equals(vr.getSku()))
+                            .findFirst().orElse(null);
+                    if (matchingExisting != null && !matchingExisting.getId().equals(vr.getId())) {
+                        if (matchingExisting.getDeletedAt() == null) {
+                            throw new AppException(ErrorCode.VARIANT_SKU_CONFLICT);
+                        }
+                    }
+                }
+            }
 
             for (int i = 0; i < request.getVariants().size(); i++) {
                 ProductVariantRequest vr = request.getVariants().get(i);
@@ -325,9 +400,8 @@ public class ProductServiceImpl implements ProductService {
                 if (vr.getId() != null) {
                     if (existingVariantMap.containsKey(vr.getId())) {
                         variant = existingVariantMap.get(vr.getId());
-                        incomingVariantIds.add(vr.getId());
 
-                        if (!variant.getSku().equals(vr.getSku()) && orderItemRepository.existsByVariant_Product_Id(id)) {
+                        if (!Objects.equals(variant.getSku(), vr.getSku()) && orderItemRepository.existsByVariant_Product_Id(id)) {
                             throw new AppException(ErrorCode.PRODUCT_HAS_ORDERS);
                         }
                     } else {
@@ -372,25 +446,8 @@ public class ProductServiceImpl implements ProductService {
                 }
             }
 
-            List<ProductVariant> variantsToDelete = existingVariants.stream()
-                    .filter(v -> !incomingVariantIds.contains(v.getId()))
-                    .toList();
-
-            if (!variantsToDelete.isEmpty()) {
-                List<UUID> variantIdsToDelete = variantsToDelete.stream().map(ProductVariant::getId).toList();
-                List<UUID> variantIdsWithOrders = orderItemRepository.findVariantIdsWithOrders(variantIdsToDelete);
-
-                for (ProductVariant v : variantsToDelete) {
-                    if (variantIdsWithOrders.contains(v.getId())) {
-                        v.setIsActive(false);
-                    } else {
-                        v.setDeletedAt(OffsetDateTime.now());
-                    }
-                }
-                productVariantRepository.saveAll(variantsToDelete);
-            }
-
             productImageRepository.deleteByProductId(id);
+            productImageRepository.flush();
             if (!variantImages.isEmpty()) {
                 productImageRepository.saveAll(variantImages);
             }
@@ -452,6 +509,18 @@ public class ProductServiceImpl implements ProductService {
                 }
             }
         }
+
+        logProductAction(
+                product,
+                null,
+                ProductLogAction.UPDATE,
+                Map.of("message", "Cập nhật sản phẩm"),
+                product.getUpdatedBy(),
+                null,
+                null,
+                "Cập nhật thông tin sản phẩm"
+        );
+
         return this.getById(product.getId());
     }
 
@@ -467,6 +536,17 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+
+        logProductAction(
+                product,
+                null,
+                ProductLogAction.DELETE,
+                Map.of("message", "Xóa sản phẩm"),
+                SecurityUtils.getCurrentUser().orElse(null),
+                null,
+                null,
+                "Xóa sản phẩm"
+        );
 
         product.setDeletedAt(OffsetDateTime.now());
         productRepository.save(product);
@@ -492,6 +572,7 @@ public class ProductServiceImpl implements ProductService {
             List<UUID> allVariantIds = allVariants.stream().map(ProductVariant::getId).toList();
             Map<UUID, StockSummaryDTO> stockMap = inventoryService.getStockSummary(allVariantIds);
             Map<UUID, List<String>> channelMap = channelService.getProductChannels(productIds);
+            Map<UUID, List<ChannelSyncResponse>> channelSyncMap = channelService.getProductChannelSyncs(productIds);
 
             Map<UUID, List<ProductVariant>> variantsByProductId = allVariants.stream()
                     .collect(Collectors.groupingBy(v -> v.getProduct().getId()));
@@ -526,6 +607,7 @@ public class ProductServiceImpl implements ProductService {
                 }).toList();
                 res.setVariants(variantResponses);
                 res.setChannels(channelMap.getOrDefault(pId, Collections.emptyList()));
+                res.setChannelSyncs(channelSyncMap.getOrDefault(pId, Collections.emptyList()));
             });
         }
 
@@ -538,5 +620,21 @@ public class ProductServiceImpl implements ProductService {
                 .first(pageResult.isFirst())
                 .last(pageResult.isLast())
                 .build();
+    }
+
+    private void logProductAction(Product product, ProductVariant variant, ProductLogAction action, Map<String, Object> fieldChanges, User performedBy, String referenceType, UUID referenceId, String notes) {
+        ProductLog productLog = ProductLog.builder()
+                .product(product)
+                .variant(variant)
+                .sku(variant != null ? variant.getSku() : product.getSku())
+                .action(action)
+                .fieldChanges(fieldChanges != null ? fieldChanges : new HashMap<>())
+                .performedBy(performedBy)
+                .performedByEmail(performedBy != null ? performedBy.getEmail() : null)
+                .referenceType(referenceType)
+                .referenceId(referenceId)
+                .notes(notes)
+                .build();
+        productLogRepository.save(productLog);
     }
 }

@@ -42,6 +42,9 @@ public class Product {
     @Column(length = 255)
     private String brand;
 
+    @Column(length = 50)
+    private String unit;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)

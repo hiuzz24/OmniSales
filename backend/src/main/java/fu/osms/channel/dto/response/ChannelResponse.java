@@ -6,6 +6,7 @@ import lombok.*;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Getter
 @Setter
@@ -22,6 +23,7 @@ public class ChannelResponse {
     private String region;
     private Map<String, Object> metadata;
     private Boolean syncEnabled;
+    private BigDecimal commissionRate;
     private OffsetDateTime lastSyncedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

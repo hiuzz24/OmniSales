@@ -31,6 +31,9 @@ public class ProductRequest {
     @Size(max = 255)
     private String brand;
 
+    @Size(max = 50)
+    private String unit;
+
     @Builder.Default
     private ProductStatus status = ProductStatus.DRAFT;
 

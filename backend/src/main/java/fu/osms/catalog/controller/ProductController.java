@@ -43,7 +43,7 @@ public class ProductController {
             @RequestParam(required = false) ProductStatus status,
             @RequestParam(required = false) PlatformType platform,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "6") int size) {
         PageResponse<ProductResponse> response = productService.search(keyword, status, platform, page, size);
         return ResponseEntity.ok(ApiResponse.success(response));
     }

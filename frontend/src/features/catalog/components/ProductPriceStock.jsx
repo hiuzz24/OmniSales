@@ -1,7 +1,27 @@
 import { Info } from 'lucide-react';
 import styles from './ProductPriceStock.module.css';
 
-const ProductPriceStock = ({ price, costPrice, onChange, errors = {} }) => {
+const ProductPriceStock = ({ price, costPrice, onChange, errors = {}, channels = [], selectedChannels = [] }) => {
+  const renderSuggestedPrices = () => {
+    const numPrice = Number(price);
+    if (!numPrice || isNaN(numPrice) || numPrice <= 0) return null;
+
+    const selectedList = channels.filter(c => selectedChannels.includes(c.id));
+    if (selectedList.length === 0) return null;
+
+    return (
+      <div style={{ marginTop: '8px', fontSize: '13px', color: '#059669', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontWeight: 500, color: '#374151' }}>Giá bán đề xuất:</div>
+        {selectedList.map(channel => {
+          const rate = (channel.commissionRate || 0) / 100;
+          if (rate >= 1) return <div key={channel.id}>• {channel.platform}: N/A</div>;
+          const suggested = Math.round(numPrice / (1 - rate));
+          return <div key={channel.id}>• {channel.platform}: {suggested.toLocaleString('vi-VN')}đ</div>;
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className={styles.card}>
       <div className={styles.cardTitle}>Giá & Chi phí</div>
@@ -20,6 +40,7 @@ const ProductPriceStock = ({ price, costPrice, onChange, errors = {} }) => {
             onChange={(e) => onChange('price', e.target.value)}
             min="0"
           />
+          {renderSuggestedPrices()}
           {errors.price && <span className={styles.errorText}>{errors.price}</span>}
         </div>
         <div className={styles.field}>
