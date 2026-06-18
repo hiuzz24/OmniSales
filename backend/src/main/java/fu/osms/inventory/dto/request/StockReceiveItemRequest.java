@@ -13,16 +13,17 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class InventoryReceiptItemRequest {
+public class StockReceiveItemRequest {
 
     @NotNull(message = "Variant ID must not be null")
     private UUID variantId;
 
-    @Min(value = 1, message = "Quantity must be greater than 0")
+    // For DRAFT: can be null
+    // For CONFIRM: will be validated in service layer
     private Integer quantity;
 
-    @NotNull(message = "Unit cost must not be null")
-    @DecimalMin(value = "0", message = "Unit cost must not be negative")
+    // For DRAFT: can be null
+    // For CONFIRM: will be validated in service layer
     private BigDecimal unitCost;
 
     private String notes;

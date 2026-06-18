@@ -9,6 +9,7 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestCookieException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -39,7 +40,7 @@ public class GlobalExceptionHandler {
         log.debug("[Validation] {}", errors);
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "Validation failed", errors));
+                .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "Dữ liệu đầu vào không hợp lệ", errors));
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -47,7 +48,7 @@ public class GlobalExceptionHandler {
         log.warn("[Auth] {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Authentication failed: " + ex.getMessage()));
+                .body(ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Xác thực thất bại: " + ex.getMessage()));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -55,7 +56,23 @@ public class GlobalExceptionHandler {
         log.warn("[AccessDenied] {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(HttpStatus.FORBIDDEN.value(), "You do not have permission to perform this action"));
+                .body(ApiResponse.error(HttpStatus.FORBIDDEN.value(), "Bạn không có quyền thực hiện hành động này"));
+    }
+
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLocking(org.springframework.dao.OptimisticLockingFailureException ex) {
+        log.warn("[OptimisticLocking] {}", ex.getMessage());
+        return ResponseEntity
+                .status(ErrorCode.CONCURRENT_UPDATE.getHttpStatus())
+                .body(ApiResponse.error(ErrorCode.CONCURRENT_UPDATE.getHttpStatus().value(), ErrorCode.CONCURRENT_UPDATE.getMessage()));
+    }
+
+    @ExceptionHandler(MissingRequestCookieException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingCookie(MissingRequestCookieException ex) {
+        log.warn("[MissingCookie] {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Cookie '" + ex.getCookieName() + "' không tồn tại hoặc đã hết hạn"));
     }
 
     @ExceptionHandler(Exception.class)
@@ -65,6 +82,6 @@ public class GlobalExceptionHandler {
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.error(
                         HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                        "Internal server error, please try again later"));
+                        "Lỗi máy chủ nội bộ, vui lòng thử lại sau"));
     }
 }

@@ -9,6 +9,7 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -16,6 +17,8 @@ import java.util.Map;
 @AllArgsConstructor
 @Builder
 public class ProductVariantRequest {
+
+    private UUID id;
 
     @NotBlank(message = "SKU must not be blank")
     @Size(max = 100)

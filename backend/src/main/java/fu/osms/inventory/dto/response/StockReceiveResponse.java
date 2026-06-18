@@ -12,7 +12,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class InventoryReceiptResponse {
+public class StockReceiveResponse {
 
     private UUID id;
 
@@ -34,5 +34,9 @@ public class InventoryReceiptResponse {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
-    private List<InventoryReceiptItemResponse> items;
+    private List<StockReceiveItemResponse> items;
+    
+    // Computed fields
+    private Integer totalSkuCount;  // Tổng số lượng SKU (số items)
+    private Integer totalQuantity;  // Tổng số lượng sản phẩm (tổng quantity của các items)
 }

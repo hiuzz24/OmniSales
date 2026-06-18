@@ -20,9 +20,8 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: anhbldhe181672@fpt.edu.vn
-    # QUAN TRỌNG: Đây phải là "Mật khẩu ứng dụng" (App Password)
-    password: gskc mixx izew ughr
+    username: ${GMAIL_USERNAME}
+    password: ${GMAIL_PASSWORD}
     properties:
       mail:
         smtp:
