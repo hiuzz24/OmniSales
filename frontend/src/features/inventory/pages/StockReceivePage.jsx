@@ -23,8 +23,8 @@ const formatDate = (s) => {
 // Status config — matches reference project (DRAFT/COMPLETED/RETURNED)
 const STATUS_CFG = {
   CONFIRMED: { label: 'Hoàn thành', icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
-  DRAFT:     { label: 'Lưu tạm',    icon: Save,         color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
-  CANCELLED: { label: 'Trả hàng',   icon: Undo2,        color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
+  DRAFT: { label: 'Lưu tạm', icon: Save, color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  CANCELLED: { label: 'Trả hàng', icon: Undo2, color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
 };
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
@@ -295,10 +295,10 @@ export default function StockReceivePage() {
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-        <StatCard label="Tổng phiếu"  value={stats.total}     icon={FileText}     color="#475569" bg="#f8fafc" />
-        <StatCard label="Hoàn thành"  value={stats.completed} icon={CheckCircle2} color="#059669" bg="#ecfdf5" />
-        <StatCard label="Lưu tạm"     value={stats.draft}     icon={Save}         color="#d97706" bg="#fffbeb" />
-        <StatCard label="Trả hàng"    value={stats.cancelled} icon={Undo2}        color="#e11d48" bg="#fff1f2" />
+        <StatCard label="Tổng phiếu" value={stats.total} icon={FileText} color="#475569" bg="#f8fafc" />
+        <StatCard label="Hoàn thành" value={stats.completed} icon={CheckCircle2} color="#059669" bg="#ecfdf5" />
+        <StatCard label="Lưu tạm" value={stats.draft} icon={Save} color="#d97706" bg="#fffbeb" />
+        <StatCard label="Trả hàng" value={stats.cancelled} icon={Undo2} color="#e11d48" bg="#fff1f2" />
       </div>
 
       {/* Filters */}
@@ -395,7 +395,7 @@ export default function StockReceivePage() {
             <span>Trang {pagination.page + 1} / {pagination.totalPages}</span>
             <div style={{ display: 'flex', gap: 6 }}>
               {[{ icon: ChevronLeft, label: 'Trước', disabled: pagination.page === 0, onClick: () => setPagination((p) => ({ ...p, page: Math.max(0, p.page - 1) })) },
-                { icon: ChevronRight, label: 'Sau', disabled: pagination.page >= pagination.totalPages - 1, onClick: () => setPagination((p) => ({ ...p, page: Math.min(p.totalPages - 1, p.page + 1) })) }
+              { icon: ChevronRight, label: 'Sau', disabled: pagination.page >= pagination.totalPages - 1, onClick: () => setPagination((p) => ({ ...p, page: Math.min(p.totalPages - 1, p.page + 1) })) }
               ].map((btn) => (
                 <button key={btn.label} onClick={btn.onClick} disabled={btn.disabled}
                   style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '5px 10px', borderRadius: 7, border: '1px solid #e2e8f0', backgroundColor: '#fff', fontSize: 12, color: btn.disabled ? '#cbd5e1' : '#374151', cursor: btn.disabled ? 'not-allowed' : 'pointer' }}

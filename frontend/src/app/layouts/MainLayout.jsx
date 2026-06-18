@@ -13,33 +13,33 @@ import useAuth from '../../features/auth/hooks/useAuth';
 
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
-  { name: 'Dashboard',      href: ROUTES.DASHBOARD, icon: LayoutDashboard, roles: [] },
-  { name: 'Sản phẩm',       href: '/products',       icon: Package,         roles: [] },
+  { name: 'Dashboard', href: ROUTES.DASHBOARD, icon: LayoutDashboard, roles: [] },
+  { name: 'Sản phẩm', href: '/products', icon: Package, roles: [] },
   {
     name: 'Kho hàng',
     href: '/warehouse',
     icon: Warehouse,
     roles: [],
     children: [
-      { name: 'Tổng quan kho',    href: '/warehouse',                  icon: Warehouse      },
-      { name: 'Phiếu nhập kho',   href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS,     icon: PackagePlus    },
-      { name: 'Phiếu xuất kho',   href: '/warehouse/issues',           icon: PackageMinus   },
-      { name: 'Phiếu chuyển kho', href: '/warehouse/transfers',        icon: ArrowRightLeft },
-      { name: 'Phiếu kiểm kho',   href: '/warehouse/stocktakes',       icon: ClipboardList  },
+      { name: 'Tổng quan kho', href: '/inventory', icon: Warehouse },
+      { name: 'Phiếu nhập kho', href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS, icon: PackagePlus },
+      { name: 'Phiếu xuất kho', href: '/warehouse/issues', icon: PackageMinus },
+      { name: 'Phiếu chuyển kho', href: '/warehouse/transfers', icon: ArrowRightLeft },
+      { name: 'Phiếu kiểm kho', href: '/warehouse/stocktakes', icon: ClipboardList },
     ],
   },
-  { name: 'Bán hàng (POS)', href: '/pos',      icon: Store,    roles: [] },
-  { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
-  { name: 'Kênh bán hàng',  href: '/channels', icon: Share2,   roles: [] },
-  { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
-  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER] },
-  { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
+  { name: 'Bán hàng (POS)', href: '/pos', icon: Store, roles: [] },
+  { name: 'Đơn hàng', href: '/orders', icon: ShoppingCart, roles: [] },
+  { name: 'Kênh bán hàng', href: '/channels', icon: Share2, roles: [] },
+  { name: 'Phân tích', href: '/analytics', icon: BarChart3, roles: [] },
+  { name: 'Nhân sự', href: '/users', icon: Users, roles: [ROLES.OWNER] },
+  { name: 'Cài đặt', href: '/settings', icon: Settings, roles: [] },
 ];
 
 const ROLE_HIDDEN = {
-  [ROLES.SALES]:      ['Sản phẩm', 'Kho hàng', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
+  [ROLES.SALES]: ['Sản phẩm', 'Kho hàng', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
   [ROLES.OPERATIONS]: ['Phân tích', 'Nhân sự'],
-  [ROLES.OWNER]:      [],
+  [ROLES.OWNER]: [],
   [ROLES.SYSTEM_ADMIN]: [],
 };
 
@@ -50,18 +50,18 @@ const isVisible = (item, role) => {
 };
 
 const NOTIFS = [
-  { id: 'n1', type: 'ALERT',     title: 'Cảnh báo hết hàng',         body: 'Giày sneaker chỉ còn 3 đơn vị',   time: '8 phút trước'  },
-  { id: 'n2', type: 'ORDER',     title: '15 đơn hàng chờ xử lý',     body: 'Từ Shopee · cần xử lý trong 24h', time: '23 phút trước' },
-  { id: 'n3', type: 'SYNC',      title: 'Đồng bộ TikTok Shop xong',  body: '247 sản phẩm · 38 đơn hàng',      time: '1 giờ trước'   },
-  { id: 'n4', type: 'INVENTORY', title: 'Phiếu nhập kho PN-2026-018',body: 'Hoàn thành · 5 SP · 320 đơn vị',  time: 'Hôm qua'       },
+  { id: 'n1', type: 'ALERT', title: 'Cảnh báo hết hàng', body: 'Giày sneaker chỉ còn 3 đơn vị', time: '8 phút trước' },
+  { id: 'n2', type: 'ORDER', title: '15 đơn hàng chờ xử lý', body: 'Từ Shopee · cần xử lý trong 24h', time: '23 phút trước' },
+  { id: 'n3', type: 'SYNC', title: 'Đồng bộ TikTok Shop xong', body: '247 sản phẩm · 38 đơn hàng', time: '1 giờ trước' },
+  { id: 'n4', type: 'INVENTORY', title: 'Phiếu nhập kho PN-2026-018', body: 'Hoàn thành · 5 SP · 320 đơn vị', time: 'Hôm qua' },
 ];
 
 const NOTIF_META = {
-  ALERT:     { icon: AlertTriangle, color: '#dc2626', bg: '#fef2f2' },
-  ORDER:     { icon: ShoppingCart,  color: '#2563eb', bg: '#eff6ff' },
-  SYNC:      { icon: RefreshCw,     color: '#059669', bg: '#ecfdf5' },
-  INVENTORY: { icon: Package,       color: '#d97706', bg: '#fffbeb' },
-  SYSTEM:    { icon: Info,          color: '#475569', bg: '#f8fafc' },
+  ALERT: { icon: AlertTriangle, color: '#dc2626', bg: '#fef2f2' },
+  ORDER: { icon: ShoppingCart, color: '#2563eb', bg: '#eff6ff' },
+  SYNC: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
+  INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
+  SYSTEM: { icon: Info, color: '#475569', bg: '#f8fafc' },
 };
 
 const ROLE_LABEL = {
@@ -76,7 +76,7 @@ const getInitials = (name) => {
 };
 
 // ── Sidebar widths ────────────────────────────────────────────────────────────
-const SIDEBAR_OPEN  = 256; // px — 16rem / w-64
+const SIDEBAR_OPEN = 256; // px — 16rem / w-64
 const SIDEBAR_CLOSE = 80;  // px — 5rem  / w-20
 
 export default function MainLayout() {
@@ -418,7 +418,7 @@ function UserDropdown({ user, role, onLogout }) {
           </div>
 
           {[
-            { label: 'Hồ sơ', icon: User,     href: ROUTES.PROFILE },
+            { label: 'Hồ sơ', icon: User, href: ROUTES.PROFILE },
             { label: 'Cài đặt', icon: Settings, href: '/settings' },
           ].map((m) => (
             <Link key={m.label} to={m.href} onClick={() => setShow(false)}
