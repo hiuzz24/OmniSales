@@ -9,5 +9,12 @@ export const ROUTES = {
   ADMIN: '/admin',
   CHANGE_PASSWORD: '/change-password',
   PRODUCT_CREATE: '/products/create',
+  PRODUCT_EDIT: '/products/:id/edit',
+  PRODUCT_DETAIL: '/products/:id',
   PRODUCTS: '/products',
+  CHANGE_PASSWORD: '/change-password',
+  WAREHOUSE_IMPORT_RECEIPTS: '/warehouse/receipts',
+  WAREHOUSE_IMPORT_RECEIPT_CREATE: '/warehouse/receipts/create',
+  WAREHOUSE_IMPORT_RECEIPT_EDIT: '/warehouse/receipts/:id/edit',
+  WAREHOUSE_IMPORT_RECEIPT_DETAIL: '/warehouse/receipts/:id',
 };

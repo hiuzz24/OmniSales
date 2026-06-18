@@ -2,6 +2,8 @@ import { createContext, useState, useEffect } from 'react';
 import authService from '../services/authService';
 import { getAccessToken, clearAccessToken } from '../../../api/interceptors';
 
+const USER_KEY = 'osms_user';
+
 export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
@@ -36,8 +38,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * Update the in-memory and storage user object (called after profile update).
+   */
+  const updateUser = (updatedFields) => {
+    const updated = { ...user, ...updatedFields };
+    setUser(updated);
+    const storage = localStorage.getItem(USER_KEY) ? localStorage : sessionStorage;
+    storage.setItem(USER_KEY, JSON.stringify(updated));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, isLoading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
