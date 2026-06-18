@@ -23,7 +23,7 @@ const formatVND = (v) =>
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
   warehouseId: z.string().min(1, 'Vui lòng chọn kho nhập.'),
-  supplierId:  z.string().optional().nullable(),
+  supplierId: z.string().optional().nullable(),
   invoiceNumber: z.string().max(100).optional(),
   receivedAt: z.string().min(1, 'Ngày nhập là bắt buộc.').refine(
     (v) => v <= new Date().toISOString().split('T')[0],
@@ -215,13 +215,13 @@ export default function StockReceiveCreatePage() {
         setWarehouses(extract(wRes));
         setSuppliers(extract(sRes));
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // ── Item handlers ─────────────────────────────────────────────────────────
-  const onQtyChange   = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
+  const onQtyChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
-  const onRemove      = (i)    => setItems((p) => p.filter((_, idx) => idx !== i));
+  const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
 
   const onAddProducts = (newItems) => {
     setItems((p) => {
@@ -276,18 +276,18 @@ export default function StockReceiveCreatePage() {
   // ── Submit ────────────────────────────────────────────────────────────────
   const onSubmit = handleSubmit(async (data) => {
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
-    
+
     // Validate quantity and unitPrice for CONFIRMED receipts
     const invalidQty = items.find((it) => !it.quantity || Number(it.quantity) <= 0);
-    if (invalidQty) { 
-      toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`); 
-      return; 
+    if (invalidQty) {
+      toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`);
+      return;
     }
-    
+
     const invalidPrice = items.find((it) => it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || Number(it.unitPrice) < 0);
-    if (invalidPrice) { 
-      toast.error(`Vui lòng nhập đơn giá cho sản phẩm "${invalidPrice.productName}".`); 
-      return; 
+    if (invalidPrice) {
+      toast.error(`Vui lòng nhập đơn giá cho sản phẩm "${invalidPrice.productName}".`);
+      return;
     }
 
     // Validate invoice number for CONFIRMED receipts
@@ -295,7 +295,7 @@ export default function StockReceiveCreatePage() {
       toast.error('Số hóa đơn là bắt buộc khi xác nhận phiếu nhập.');
       return;
     }
-    
+
     try {
       await stockReceiveService.createReceipt({
         warehouseId: data.warehouseId,
@@ -308,7 +308,7 @@ export default function StockReceiveCreatePage() {
       });
       toast.success('Tạo phiếu nhập thành công.');
       navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
-    } catch (error) { 
+    } catch (error) {
       // Handle validation errors from backend
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') {
         // Validation errors: { field: message, ... }
@@ -325,10 +325,10 @@ export default function StockReceiveCreatePage() {
   // ── Save as draft ─────────────────────────────────────────────────────────
   const onSaveDraft = handleSubmit(async (data) => {
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
-    
+
     // For DRAFT: quantity and unitPrice can be 0 or null, but we'll set defaults
     // No validation needed for draft
-    
+
     try {
       await stockReceiveService.createReceipt({
         warehouseId: data.warehouseId,
@@ -336,16 +336,16 @@ export default function StockReceiveCreatePage() {
         invoiceNumber: data.invoiceNumber || null,
         receivedAt: data.receivedAt,
         notes: data.notes || null,
-        items: items.map((it) => ({ 
-          variantId: it.variantId, 
-          quantity: it.quantity ? Number(it.quantity) : null, 
-          unitCost: it.unitPrice !== '' && it.unitPrice !== null && it.unitPrice !== undefined ? Number(it.unitPrice) : null 
+        items: items.map((it) => ({
+          variantId: it.variantId,
+          quantity: it.quantity ? Number(it.quantity) : null,
+          unitCost: it.unitPrice !== '' && it.unitPrice !== null && it.unitPrice !== undefined ? Number(it.unitPrice) : null
         })),
         isDraft: true, // Draft receipt
       });
       toast.success('Lưu tạm phiếu nhập thành công.');
       navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
-    } catch (error) { 
+    } catch (error) {
       // Handle validation errors from backend
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') {
         // Validation errors: { field: message, ... }
@@ -393,10 +393,102 @@ export default function StockReceiveCreatePage() {
         </div>
       </div>
 
-      {/* Two-column layout - Compact */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* CARD 1: THÔNG TIN PHIẾU NHẬP - Full Width */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <div style={{ backgroundColor: '#fff', borderRadius: 8, border: '1px solid #e2e8f0', padding: '14px 16px', marginBottom: 12, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Thông tin phiếu nhập</div>
+        </div>
+
+        {/* Form Fields - Horizontal */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {/* Kho nhập */}
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
+              Kho nhập <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <select {...register('warehouseId')}
+              style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: `1px solid ${errors.warehouseId ? '#fca5a5' : '#e2e8f0'}`, fontSize: 11, color: '#0f172a', outline: 'none', backgroundColor: '#fff', boxSizing: 'border-box' }}>
+              <option value="">Chọn kho</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}{w.address ? ` - ${w.address}` : ''}
+                </option>
+              ))}
+            </select>
+            {errors.warehouseId && <p style={{ margin: '2px 0 0', fontSize: 10, color: '#dc2626' }}>{errors.warehouseId.message}</p>}
+          </div>
+
+          {/* Nhà cung cấp */}
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>Nhà cung cấp</label>
+            <select {...register('supplierId')}
+              style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11, color: '#0f172a', outline: 'none', backgroundColor: '#fff', boxSizing: 'border-box' }}>
+              <option value="">Chọn nhà cung cấp</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          {/* Số hóa đơn */}
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
+              Số hóa đơn <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input {...register('invoiceNumber')} maxLength={100} placeholder="INV-2026-001"
+              style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+
+          {/* Ngày nhập */}
+          <div>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
+              Ngày nhập <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input type="date" max={today} {...register('receivedAt')}
+              style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: `1px solid ${errors.receivedAt ? '#fca5a5' : '#e2e8f0'}`, fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
+            {errors.receivedAt && <p style={{ margin: '2px 0 0', fontSize: 10, color: '#dc2626' }}>{errors.receivedAt.message}</p>}
+          </div>
+        </div>
+
+        {/* Ghi chú - Full width below */}
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>Ghi chú</label>
+          <textarea {...register('notes')} rows={2} placeholder="Ghi chú về phiếu nhập..."
+            style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+        </div>
+
+        {/* Action Buttons - Right side */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={handleCancel}
+            style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', fontSize: 12, fontWeight: 500, color: '#374151', cursor: 'pointer' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+          >
+            Hủy
+          </button>
+          <button onClick={onSaveDraft} disabled={isSubmitting}
+            style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: isSubmitting ? '#f8fafc' : '#fff', color: isSubmitting ? '#94a3b8' : '#374151', fontSize: 12, fontWeight: 500, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+            onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+            onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#fff'; }}
+          >
+            {isSubmitting ? 'Đang xử lý...' : 'Lưu tạm'}
+          </button>
+          <button onClick={onSubmit} disabled={isSubmitting}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 6, border: 'none', backgroundColor: isSubmitting ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+            onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#1d4ed8'; }}
+            onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#2563eb'; }}
+          >
+            <PackagePlus size={14} /> {isSubmitting ? 'Đang xử lý...' : 'Hoàn thành nhập kho'}
+          </button>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* 2-COLUMN LAYOUT: Danh sách sản phẩm | Lưu ý */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 12, flex: 1, minHeight: 0 }}>
 
-        {/* ── Left column - Product list ───────────────────────────── */}
+        {/* ── LEFT: Danh sách sản phẩm nhập ───────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
           {/* Product table card */}
@@ -450,9 +542,9 @@ export default function StockReceiveCreatePage() {
                   </thead>
                   <tbody>
                     {items.map((item, idx) => {
-                      const qtyBad   = item.quantity !== '' && Number(item.quantity) <= 0;
+                      const qtyBad = item.quantity !== '' && Number(item.quantity) <= 0;
                       const priceBad = item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined || Number(item.unitPrice) < 0;
-                      const line     = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+                      const line = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
                       return (
                         <tr key={item.variantId ?? idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                           <td style={{ padding: '7px 10px' }}>
@@ -506,111 +598,24 @@ export default function StockReceiveCreatePage() {
           </div>
         </div>
 
-        {/* ── Right column — receipt info ──────────────────────────────── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, overflow: 'auto' }}>
-
-          {/* Info card - Compact */}
-          <div style={{ backgroundColor: '#fff', borderRadius: 8, border: '1px solid #e2e8f0', padding: '12px 14px', flex: '0 0 auto' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>Thông tin phiếu nhập</div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Kho nhập */}
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
-                  Kho nhập <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <select {...register('warehouseId')}
-                  style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: `1px solid ${errors.warehouseId ? '#fca5a5' : '#e2e8f0'}`, fontSize: 11, color: '#0f172a', outline: 'none', backgroundColor: '#fff', boxSizing: 'border-box' }}>
-                  <option value="">Chọn kho</option>
-                  {warehouses.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}{w.address ? ` - ${w.address}` : ''}
-                    </option>
-                  ))}
-                </select>
-                {errors.warehouseId && <p style={{ margin: '2px 0 0', fontSize: 10, color: '#dc2626' }}>{errors.warehouseId.message}</p>}
-              </div>
-
-              {/* Nhà cung cấp */}
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>Nhà cung cấp</label>
-                <select {...register('supplierId')}
-                  style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #e2e8f0', fontSize: 11, color: '#0f172a', outline: 'none', backgroundColor: '#fff', boxSizing: 'border-box' }}>
-                  <option value="">Tên nhà cung cấp</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-
-              {/* Số hóa đơn */}
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
-                  Số hóa đơn <span style={{ color: '#ef4444' }}>*</span>
-                  <span style={{ fontSize: 9, color: '#94a3b8', marginLeft: 4 }}>(Bắt buộc khi xác nhận)</span>
-                </label>
-                <input {...register('invoiceNumber')} maxLength={100} placeholder="INV-2026-001"
-                  style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
-              </div>
-
-              {/* Ngày nhập */}
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
-                  Ngày nhập <span style={{ color: '#ef4444' }}>*</span>
-                </label>
-                <input type="date" max={today} {...register('receivedAt')}
-                  style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: `1px solid ${errors.receivedAt ? '#fca5a5' : '#e2e8f0'}`, fontSize: 11, outline: 'none', boxSizing: 'border-box' }} />
-                {errors.receivedAt && <p style={{ margin: '2px 0 0', fontSize: 10, color: '#dc2626' }}>{errors.receivedAt.message}</p>}
-              </div>
-
-              {/* Ghi chú */}
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>Ghi chú</label>
-                <textarea {...register('notes')} rows={2} placeholder="Ghi chú về phiếu nhập..."
-                  style={{ width: '100%', padding: '6px 8px', borderRadius: 5, border: '1px solid #e2e8f0', fontSize: 11, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
-              </div>
-            </div>
+        {/* ── RIGHT: Lưu ý khi nhập kho ──────────────────────────────── */}
+        <div style={{ backgroundColor: '#eff6ff', borderRadius: 8, border: '1px solid #bfdbfe', padding: '12px 14px', alignSelf: 'start' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+            <AlertCircle size={14} color="#1e40af" />
+            <h3 style={{ fontSize: 12, fontWeight: 600, color: '#1e40af', margin: 0 }}>Lưu ý khi nhập kho</h3>
           </div>
-
-          {/* Actions - Compact */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '0 0 auto' }}>
-            <button onClick={onSubmit} disabled={isSubmitting}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 14px', borderRadius: 6, border: 'none', backgroundColor: isSubmitting ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isSubmitting ? 'not-allowed' : 'pointer', width: '100%' }}
-              onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#1d4ed8'; }}
-              onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#2563eb'; }}
-            >
-              <PackagePlus size={14} /> {isSubmitting ? 'Đang xử lý...' : 'Hoàn thành nhập kho'}
-            </button>
-            <button onClick={onSaveDraft} disabled={isSubmitting}
-              style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: isSubmitting ? '#f8fafc' : '#fff', color: isSubmitting ? '#94a3b8' : '#374151', fontSize: 12, fontWeight: 500, cursor: isSubmitting ? 'not-allowed' : 'pointer', width: '100%' }}
-              onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
-              onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#fff'; }}
-            >
-              {isSubmitting ? 'Đang xử lý...' : 'Lưu tạm'}
-            </button>
-            <button onClick={handleCancel}
-              style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #e2e8f0', backgroundColor: '#fff', fontSize: 12, fontWeight: 500, color: '#374151', cursor: 'pointer', width: '100%' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
-            >
-              Hủy
-            </button>
-          </div>
-
-          {/* Notes - Compact */}
-          <div style={{ backgroundColor: '#eff6ff', borderRadius: 6, border: '1px solid #bfdbfe', padding: '8px 10px', flex: '0 0 auto' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#1e40af', margin: '0 0 5px', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <AlertCircle size={12} /> Lưu ý khi nhập kho
-            </p>
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {[
-                'Kiểm tra số lượng và đơn giá trước khi hoàn thành.',
-                'Tồn kho sẽ cập nhật sau khi hoàn thành nhập kho.',
-                'Lưu tạm để tiếp tục chỉnh sửa sau.',
-                'Import Excel để nhập nhanh nhiều sản phẩm.',
-              ].map((note) => (
-                <li key={note} style={{ fontSize: 10, color: '#1e40af', lineHeight: 1.4 }}>· {note}</li>
-              ))}
-            </ul>
-          </div>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              'Kiểm tra số lượng và đơn giá trước khi hoàn thành.',
+              'Tồn kho sẽ cập nhật sau khi hoàn thành nhập kho.',
+              'Lưu tạm để tiếp tục chỉnh sửa sau.',
+              'Import Excel để nhập nhanh nhiều sản phẩm.',
+            ].map((note) => (
+              <li key={note} style={{ fontSize: 10, color: '#1e40af', lineHeight: 1.5, paddingLeft: 12, position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 0 }}>•</span> {note}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 
