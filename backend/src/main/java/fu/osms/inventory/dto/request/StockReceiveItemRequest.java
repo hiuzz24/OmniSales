@@ -22,8 +22,6 @@ public class StockReceiveItemRequest {
     @Min(value = 1, message = "Số lượng phải lớn hơn 0")
     private Integer quantity;
 
-    // Đơn giá phải lớn hơn hoặc bằng 0
-    // For DRAFT: can be null
     @DecimalMin(value = "0.0", inclusive = true, message = "Đơn giá phải lớn hơn hoặc bằng 0")
     private BigDecimal unitCost;
 

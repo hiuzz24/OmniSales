@@ -38,8 +38,26 @@ public class InventoryController {
     public ResponseEntity<ApiResponse<PageResponse<InventoryItemResponse>>> getItems(
             @RequestParam UUID warehouseId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        throw new UnsupportedOperationException("Chưa code");
+            @RequestParam(defaultValue = "10") int size) {
+        PageResponse<InventoryItemResponse> response = inventoryService.getItems(warehouseId, page, size);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/warehouses/{warehouseId}/items")
+    public ResponseEntity<ApiResponse<PageResponse<InventoryItemResponse>>> getItemsByWarehouse(
+            @PathVariable UUID warehouseId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        PageResponse<InventoryItemResponse> response = inventoryService.getItems(warehouseId, page, size);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/warehouses/{warehouseId}/variants/{variantId}")
+    public ResponseEntity<ApiResponse<InventoryItemResponse>> getItemByWarehouseAndVariant(
+            @PathVariable UUID warehouseId,
+            @PathVariable UUID variantId) {
+        InventoryItemResponse response = inventoryService.getItemByWarehouseAndVariant(warehouseId, variantId);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/items/low-stock")

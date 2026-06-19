@@ -3,11 +3,12 @@ package fu.osms.inventory.entity;
 import fu.osms.auth.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -40,6 +41,9 @@ public class InventoryIssue {
     @Column(name = "reference_id")
     private UUID referenceId;
 
+    @Column(name = "recipient", length = 255)
+    private String recipient;
+
     @Column(name = "total_cost", nullable = false, precision = 14, scale = 2)
     @Builder.Default
     private BigDecimal totalCost = BigDecimal.ZERO;
@@ -58,11 +62,39 @@ public class InventoryIssue {
     @Column(name = "confirmed_at")
     private OffsetDateTime confirmedAt;
 
-    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
+
+    @OneToMany(mappedBy = "inventoryIssue", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<InventoryIssueItem> items = new ArrayList<>();
+
+    // Helper methods
+    public void addItem(InventoryIssueItem item) {
+        items.add(item);
+        item.setInventoryIssue(this);
+    }
+
+    public void removeItem(InventoryIssueItem item) {
+        items.remove(item);
+        item.setInventoryIssue(null);
+    }
+
+    public void calculateTotals() {
+        this.totalCost = items.stream()
+                .map(item -> {
+                    if (item.getTotalCost() != null) {
+                        return item.getTotalCost();
+                    }
+                    if (item.getQuantity() == null || item.getUnitCost() == null) {
+                        return BigDecimal.ZERO;
+                    }
+                    return item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()));
+                })
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }

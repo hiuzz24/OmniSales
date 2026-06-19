@@ -8,10 +8,10 @@ import {
   ArrowLeft, Save, Loader2, AlertCircle, Edit3, Trash2,
 } from 'lucide-react';
 
-import warehouseService from '../services/warehouseService';
-import supplierService from '../services/supplierService';
-import stockReceiveService from '../services/stockReceiveService';
-import { ROUTES } from '../../../app/router/routes';
+import warehouseService from '../../services/warehouseService';
+import supplierService from '../../services/supplierService';
+import stockReceiveService from '../../services/stockReceiveService';
+import { ROUTES } from '../../../../app/router/routes';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
