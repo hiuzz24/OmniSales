@@ -110,17 +110,6 @@
   font-weight: 500;
 }
 
-/* ── Address grid ── */
-.addressGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-@media (max-width: 640px) {
-  .addressGrid { grid-template-columns: 1fr; }
-}
-
 /* ── Actions ── */
 .formActions {
   display: flex;

@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
 import { ArrowLeft, Save } from 'lucide-react';
 import { ROUTES } from '../../../app/router/routes';
 import customerService from '../services/customerService';
+import CountrySelector from '../components/CountrySelector';
+import CascadingAddress from '../components/CascadingAddress';
 import styles from './CustomerFormPage.module.css';
 
 const schema = z.object({
@@ -16,6 +18,7 @@ const schema = z.object({
   phone: z.string().min(1, 'Số điện thoại là bắt buộc').max(20),
   email: z.string().email('Email không hợp lệ').or(z.literal('')).optional(),
   address: z.object({
+    country: z.string().optional(),
     detail: z.string().optional(),
     ward: z.string().optional(),
     district: z.string().optional(),
@@ -27,10 +30,13 @@ const schema = z.object({
 const CustomerCreatePage = () => {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [countryCode, setCountryCode] = useState('');
 
   const {
     register,
     handleSubmit,
+    control,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(schema),
@@ -40,10 +46,18 @@ const CustomerCreatePage = () => {
       birth: '',
       phone: '',
       email: '',
-      address: { detail: '', ward: '', district: '', province: '' },
+      address: { country: '', detail: '', ward: '', district: '', province: '' },
       notes: '',
     },
   });
+
+  // Sync address.country when countryCode actually changes (not on mount)
+  const countryCodeRef = useRef(countryCode);
+  useEffect(() => {
+    if (countryCodeRef.current === countryCode) return;
+    countryCodeRef.current = countryCode;
+    setValue('address', { country: countryCode, detail: '', ward: '', district: '', province: '' });
+  }, [countryCode, setValue]);
 
   const onSubmit = async (data) => {
     setIsSubmitting(true);
@@ -175,44 +189,18 @@ const CustomerCreatePage = () => {
             </div>
             <h2 className={styles.sectionTitle}>Địa chỉ</h2>
           </div>
-          <div className={styles.addressGrid}>
-            <div className={styles.field}>
-              <label className={styles.label}>Tỉnh / Thành phố</label>
-              <input
-                type="text"
-                {...register('address.province')}
-                className={styles.input}
-                placeholder="Ví dụ: Hồ Chí Minh"
+          <CountrySelector value={countryCode} onChange={setCountryCode} />
+          <Controller
+            name="address"
+            control={control}
+            render={({ field }) => (
+              <CascadingAddress
+                value={field.value || {}}
+                onChange={field.onChange}
+                countryCode={countryCode}
               />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Quận / Huyện</label>
-              <input
-                type="text"
-                {...register('address.district')}
-                className={styles.input}
-                placeholder="Ví dụ: Quận 1"
-              />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Phường / Xã</label>
-              <input
-                type="text"
-                {...register('address.ward')}
-                className={styles.input}
-                placeholder="Ví dụ: Phường Bến Nghé"
-              />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Địa chỉ chi tiết</label>
-              <input
-                type="text"
-                {...register('address.detail')}
-                className={styles.input}
-                placeholder="Ví dụ: 123 Nguyễn Huệ, Tầng 3"
-              />
-            </div>
-          </div>
+            )}
+          />
         </div>
 
         {/* Section: Ghi chú */}
