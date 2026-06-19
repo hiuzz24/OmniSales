@@ -1,8 +1,10 @@
 package fu.osms.catalog.controller;
 
 import fu.osms.catalog.dto.request.ProductRequest;
+import fu.osms.catalog.dto.response.ProductImportResult;
 import fu.osms.catalog.dto.response.ProductResponse;
 import fu.osms.catalog.enums.ProductStatus;
+import fu.osms.catalog.service.ProductImportService;
 import fu.osms.catalog.service.ProductService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
@@ -10,10 +12,11 @@ import fu.osms.common.enums.PlatformType;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -24,6 +27,7 @@ import java.util.UUID;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductImportService productImportService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductRequest request) {
@@ -65,5 +69,16 @@ public class ProductController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         productService.delete(id);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ProductImportResult>> importExcel(
+            @RequestParam("file") MultipartFile file) {
+        log.info("Importing products from file: {} ({} bytes)",
+                file.getOriginalFilename(), file.getSize());
+        ProductImportResult result = productImportService.importFromExcel(file);
+        return ResponseEntity.ok(ApiResponse.success(
+                String.format("Import thành công: %d tạo mới, %d cập nhật", result.getCreatedCount(), result.getUpdatedCount()),
+                result));
     }
 }
