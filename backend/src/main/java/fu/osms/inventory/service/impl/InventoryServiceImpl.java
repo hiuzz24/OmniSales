@@ -1,6 +1,8 @@
 package fu.osms.inventory.service.impl;
 
 import fu.osms.common.dto.PageResponse;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
@@ -56,7 +58,31 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<InventoryItemResponse> getItems(UUID warehouseId, int page, int size) {
-        throw new UnsupportedOperationException("Chưa code");
+        if (!warehouseRepository.existsById(warehouseId)) {
+            throw new AppException(ErrorCode.WAREHOUSE_NOT_FOUND);
+        }
+
+        Page<InventoryItem> items = inventoryItemRepository.findByWarehouseId(warehouseId, PageRequest.of(page, size));
+        List<InventoryItemResponse> content = items.getContent().stream()
+                .map(inventoryItemMapper::toResponse)
+                .toList();
+
+        return PageResponse.<InventoryItemResponse>builder()
+                .content(content)
+                .page(items.getNumber())
+                .size(items.getSize())
+                .totalElements(items.getTotalElements())
+                .totalPages(items.getTotalPages())
+                .first(items.isFirst())
+                .last(items.isLast())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryItemResponse getItemByWarehouseAndVariant(UUID warehouseId, UUID variantId) {
+        InventoryItem item = inventoryItemRepository.findByWarehouseIdAndVariantId(warehouseId, variantId)
+                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+        return inventoryItemMapper.toResponse(item);
     }
 
     @Override

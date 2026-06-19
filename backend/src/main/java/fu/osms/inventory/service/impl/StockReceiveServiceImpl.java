@@ -27,8 +27,10 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -651,5 +653,16 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 .sum());
 
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Object getReceiptStatistics() {
+        Map<String, Object> statistics = new HashMap<>();
+        statistics.put("totalCount", stockReceiveRepository.count());
+        statistics.put("confirmedCount", stockReceiveRepository.countByStatus("CONFIRMED"));
+        statistics.put("draftCount", stockReceiveRepository.countByStatus("DRAFT"));
+        statistics.put("cancelledCount", stockReceiveRepository.countByStatus("CANCELLED"));
+        return statistics;
     }
 }

@@ -23,7 +23,7 @@ const NAV_ITEMS = [
     children: [
       { name: 'Tổng quan kho',    href: '/warehouse',                  icon: Warehouse      },
       { name: 'Phiếu nhập kho',   href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS,     icon: PackagePlus    },
-      { name: 'Phiếu xuất kho',   href: '/warehouse/issues',           icon: PackageMinus   },
+      { name: 'Phiếu xuất kho',   href: ROUTES.STOCK_DELIVERIES,      icon: PackageMinus   },
       { name: 'Phiếu chuyển kho', href: '/warehouse/transfers',        icon: ArrowRightLeft },
       { name: 'Phiếu kiểm kho',   href: '/warehouse/stocktakes',       icon: ClipboardList  },
     ],

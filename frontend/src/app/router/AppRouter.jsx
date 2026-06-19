@@ -19,10 +19,13 @@ import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
 import ProductLogPage from '../../features/catalog/pages/ProductLogPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
-import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
-import StockReceiveCreatePage from '../../features/inventory/pages/StockReceiveCreatePage';
-import StockReceiveDetailPage from '../../features/inventory/pages/StockReceiveDetailPage';
-import StockReceiveEditPage from '../../features/inventory/pages/StockReceiveEditPage';
+import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
+import StockReceiveCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveCreatePage';
+import StockReceiveDetailPage from '../../features/inventory/pages/stockreceive/StockReceiveDetailPage';
+import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/StockReceiveEditPage';
+import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
+import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
+import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
 
 const AppRouter = () => {
   return (
@@ -54,6 +57,9 @@ const AppRouter = () => {
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
+              <Route path={ROUTES.STOCK_DELIVERIES} element={<StockDeliveryPage />} />
+              <Route path={ROUTES.STOCK_DELIVERY_CREATE} element={<StockDeliveryCreatePage />} />
+              <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
