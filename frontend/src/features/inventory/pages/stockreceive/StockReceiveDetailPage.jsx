@@ -6,8 +6,8 @@ import {
   CheckCircle2, Save, Undo2, Printer, Edit, Check,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import stockReceiveService from '../services/stockReceiveService';
-import { ROUTES } from '../../../app/router/routes';
+import stockReceiveService from '../../services/stockReceiveService';
+import { ROUTES } from '../../../../app/router/routes';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>

@@ -22,11 +22,11 @@ public class InventoryIssueItem {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "issue_id", nullable = false)
-    private InventoryIssue issue;
+    private InventoryIssue inventoryIssue;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "variant_id", nullable = false)
-    private ProductVariant variant;
+    private ProductVariant productVariant;
 
     @Column(nullable = false)
     private Integer quantity;

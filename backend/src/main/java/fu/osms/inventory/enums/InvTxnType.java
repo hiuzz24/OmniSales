@@ -5,5 +5,7 @@ public enum InvTxnType {
     EXPORT,
     ADJUSTMENT,
     ORDER_DEDUCT,
-    ORDER_CANCEL
+    ORDER_CANCEL,
+    OUTBOUND,
+    INBOUND
 }
