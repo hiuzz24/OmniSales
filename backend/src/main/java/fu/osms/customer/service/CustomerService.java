@@ -3,6 +3,7 @@ package fu.osms.customer.service;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.customer.dto.request.CustomerRequest;
 import fu.osms.customer.dto.response.CustomerResponse;
+import fu.osms.customer.dto.response.CustomerStatsResponse;
 
 import java.util.UUID;
 
@@ -12,7 +13,9 @@ public interface CustomerService {
 
     CustomerResponse getById(UUID id);
 
-    PageResponse<CustomerResponse> getAll(int page, int size, String search);
+    PageResponse<CustomerResponse> getAll(int page, int size, String search, String status, String gender);
+
+    CustomerStatsResponse getStats();
 
     CustomerResponse update(UUID id, CustomerRequest request);
 
