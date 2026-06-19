@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { User, Phone, Mail, MapPin, Calendar, StickyNote } from 'lucide-react';
+import CascadingAddress from './CascadingAddress';
 import styles from './CustomerForm.module.css';
 
 const customerSchema = z.object({
@@ -12,10 +13,10 @@ const customerSchema = z.object({
   phone: z.string().min(1, 'Số điện thoại là bắt buộc').max(20, 'Số điện thoại không quá 20 ký tự'),
   email: z.string().email('Email không hợp lệ').or(z.literal('')).optional(),
   address: z.object({
+    province: z.string(),
+    district: z.string(),
+    ward: z.string(),
     detail: z.string().optional(),
-    ward: z.string().optional(),
-    district: z.string().optional(),
-    province: z.string().optional(),
   }).optional().nullable(),
   notes: z.string().optional(),
 });
@@ -24,6 +25,7 @@ const CustomerForm = ({ customer, onSubmit, isSubmitting }) => {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
     reset,
   } = useForm({
@@ -34,7 +36,7 @@ const CustomerForm = ({ customer, onSubmit, isSubmitting }) => {
       birth: '',
       phone: '',
       email: '',
-      address: { detail: '', ward: '', district: '', province: '' },
+      address: { province: '', district: '', ward: '', detail: '' },
       notes: '',
     },
   });
@@ -47,19 +49,21 @@ const CustomerForm = ({ customer, onSubmit, isSubmitting }) => {
         birth: customer.birth || '',
         phone: customer.phone || '',
         email: customer.email || '',
-        address: customer.address || { detail: '', ward: '', district: '', province: '' },
+        address: customer.address || { province: '', district: '', ward: '', detail: '' },
         notes: customer.notes || '',
       });
     }
   }, [customer, reset]);
 
   const onFormSubmit = (data) => {
-    const submitData = {
-      ...data,
-      address: data.address ? Object.fromEntries(
-        Object.entries(data.address).filter(([_, v]) => v && v.trim())
-      ) : undefined,
-    };
+    const submitData = { ...data };
+    if (data.address) {
+      const { detail, ...rest } = data.address;
+      submitData.address = {
+        ...rest,
+        ...(detail ? { detail } : {}),
+      };
+    }
     if (!submitData.email) submitData.email = null;
     if (!submitData.phone) submitData.phone = null;
     onSubmit(submitData);
@@ -149,24 +153,16 @@ const CustomerForm = ({ customer, onSubmit, isSubmitting }) => {
           <MapPin size={16} />
           Địa chỉ
         </h3>
-        <div className={styles.addressGrid}>
-          <div className={styles.field}>
-            <label className={styles.label}>Tỉnh / Thành phố</label>
-            <input type="text" {...register('address.province')} className={styles.input} placeholder="Ví dụ: Hồ Chí Minh" />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Quận / Huyện</label>
-            <input type="text" {...register('address.district')} className={styles.input} placeholder="Ví dụ: Quận 1" />
-          </div>
-          <div className={styles.field}>
-            <label className={styles.label}>Phường / Xã</label>
-            <input type="text" {...register('address.ward')} className={styles.input} placeholder="Ví dụ: Phường Bến Nghé" />
-          </div>
-          <div className={styles.field} style={{ gridColumn: '1 / -1' }}>
-            <label className={styles.label}>Địa chỉ chi tiết</label>
-            <input type="text" {...register('address.detail')} className={styles.input} placeholder="Ví dụ: 123 Nguyễn Huệ, Tầng 3" />
-          </div>
-        </div>
+        <Controller
+          name="address"
+          control={control}
+          render={({ field }) => (
+            <CascadingAddress
+              value={field.value || {}}
+              onChange={field.onChange}
+            />
+          )}
+        />
       </div>
 
       {/* Ghi chú */}

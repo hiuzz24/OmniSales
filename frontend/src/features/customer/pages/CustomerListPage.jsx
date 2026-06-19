@@ -5,7 +5,7 @@ import { ROLES } from '../../auth/constants/roles';
 import useAuth from '../../auth/hooks/useAuth';
 import useDebounce from '../../../shared/hooks/useDebounce';
 import {
-  Plus, Search, Eye, Pencil, Trash2, MoreHorizontal,
+  Plus, Search, Eye, Pencil, Trash2,
   Download, UserCheck, UserX, TrendingUp, Phone, Mail, Users,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
@@ -32,7 +32,6 @@ const CustomerListPage = () => {
   const [totalElements, setTotalElements] = useState(0);
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [openMenuId, setOpenMenuId] = useState(null);
   const [stats, setStats] = useState({ totalCustomers: 0, activeCustomers: 0, totalOrders: 0, totalSpent: 0 });
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
@@ -84,10 +83,6 @@ const CustomerListPage = () => {
     } finally {
       setDeleting(false);
     }
-  };
-
-  const handleMenuToggle = (id) => {
-    setOpenMenuId(openMenuId === id ? null : id);
   };
 
   const formatAddress = (address) => {
@@ -203,7 +198,7 @@ const CustomerListPage = () => {
               <th className={styles.textRight}>Đơn hàng</th>
               <th className={styles.textRight}>Chi tiêu</th>
               <th>Trạng thái</th>
-              <th className={styles.thPr}></th>
+              <th className={styles.thAction}></th>
             </tr>
           </thead>
           <tbody>
@@ -266,33 +261,32 @@ const CustomerListPage = () => {
                       </span>
                     )}
                   </td>
-                  <td className={styles.thPr}>
-                    <div className={styles.menuWrapper}>
+                  <td className={styles.tdAction}>
+                    <div className={styles.actionGroup}>
                       <button
-                        className={styles.menuTrigger}
-                        onClick={() => handleMenuToggle(c.id)}
+                        className={styles.actionBtn}
+                        onClick={() => navigate(ROUTES.CUSTOMER_DETAIL.replace(':id', c.id))}
+                        title="Xem chi tiết"
                       >
-                        <MoreHorizontal size={16} />
+                        <Eye size={14} />
                       </button>
-                      {openMenuId === c.id && (
-                        <div className={styles.menuDropdown}>
-                          <button className={styles.menuItem} onClick={() => { navigate(ROUTES.CUSTOMER_DETAIL.replace(':id', c.id)); setOpenMenuId(null); }}>
-                            <Eye size={14} />
-                            Xem chi tiết
-                          </button>
-                          {canEdit && (
-                            <button className={styles.menuItem} onClick={() => { navigate(ROUTES.CUSTOMER_EDIT.replace(':id', c.id)); setOpenMenuId(null); }}>
-                              <Pencil size={14} />
-                              Chỉnh sửa
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => { setDeleteId(c.id); setOpenMenuId(null); }}>
-                              <Trash2 size={14} />
-                              Xóa
-                            </button>
-                          )}
-                        </div>
+                      {canEdit && (
+                        <button
+                          className={styles.actionBtn}
+                          onClick={() => navigate(ROUTES.CUSTOMER_EDIT.replace(':id', c.id))}
+                          title="Chỉnh sửa"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
+                          onClick={() => setDeleteId(c.id)}
+                          title="Xóa"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       )}
                     </div>
                   </td>

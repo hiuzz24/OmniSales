@@ -247,12 +247,13 @@
   background: #ffffff;
   border: 1px solid #f1f5f9;
   border-radius: 14px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13.5px;
 }
 
@@ -274,6 +275,28 @@
 
 .thPl { padding-left: 22px !important; }
 .thPr { padding-right: 18px !important; text-align: right; }
+
+.thAction {
+  position: sticky;
+  right: 0;
+  background: #fafafa;
+  z-index: 2;
+  text-align: center;
+  min-width: 48px;
+  border-left: 1px solid #f1f5f9;
+}
+
+.tdAction {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  text-align: center;
+  padding: 14px 0 14px 14px;
+  background: #ffffff;
+  border-left: 1px solid #f8fafc;
+}
+
+.tableRow:hover .tdAction { background: #f8fafc; }
 
 .textRight { text-align: center; }
 
@@ -400,6 +423,44 @@
 
 .statusActive   { background: #f0fdfa; color: #0d9488; }
 .statusInactive { background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; }
+
+/* ── Action Buttons (sticky column) ── */
+.actionGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.actionBtn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.actionBtn:hover {
+  background: #f0fdfa;
+  border-color: #0d9488;
+  color: #0d9488;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.15);
+}
+
+.actionBtnDanger:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+  color: #ef4444;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+}
 
 /* Menu dropdown */
 .menuWrapper {
