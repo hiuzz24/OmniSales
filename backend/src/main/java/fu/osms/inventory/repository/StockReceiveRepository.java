@@ -18,6 +18,8 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
 
     Page<InventoryReceipt> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
+    long countByStatus(String status);
+
     boolean existsByInvoiceNumber(String invoiceNumber);
 
     boolean existsByInvoiceNumberAndIdNot(String invoiceNumber, UUID id);

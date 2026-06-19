@@ -17,4 +17,7 @@ export const ROUTES = {
   WAREHOUSE_IMPORT_RECEIPT_CREATE: '/warehouse/receipts/create',
   WAREHOUSE_IMPORT_RECEIPT_EDIT: '/warehouse/receipts/:id/edit',
   WAREHOUSE_IMPORT_RECEIPT_DETAIL: '/warehouse/receipts/:id',
+  STOCK_DELIVERIES: '/inventory/stock-deliveries',
+  STOCK_DELIVERY_CREATE: '/inventory/stock-deliveries/create',
+  STOCK_DELIVERY_DETAIL: '/inventory/stock-deliveries/:id',
 };
