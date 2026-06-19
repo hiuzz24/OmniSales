@@ -32,4 +32,6 @@ public class CustomerRequest {
     private Map<String, Object> address;
 
     private String notes;
+
+    private Boolean isActive;
 }

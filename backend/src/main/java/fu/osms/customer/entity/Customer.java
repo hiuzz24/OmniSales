@@ -25,6 +25,9 @@ public class Customer {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "code", length = 20, unique = true, nullable = false)
+    private String code;
+
     @Column(name = "full_name", length = 255)
     private String fullName;
 
@@ -46,6 +49,18 @@ public class Customer {
 
     @Column(columnDefinition = "TEXT")
     private String notes;
+
+    @Column(name = "is_active", nullable = false)
+    @Builder.Default
+    private Boolean isActive = true;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.code == null || this.code.isEmpty()) {
+            String uuidPart = this.id != null ? this.id.toString().replace("-", "").substring(0, 6).toUpperCase() : UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+            this.code = "KH" + uuidPart;
+        }
+    }
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

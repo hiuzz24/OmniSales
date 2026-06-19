@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +24,12 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     Optional<Order> findByExternalOrderId(String externalOrderId);
 
     Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId")
+    Long countByCustomerId(@Param("customerId") UUID customerId);
+
+    @Query("SELECT COALESCE(SUM(o.subtotal - o.discountAmount + o.shippingFee), 0) FROM Order o WHERE o.customer.id = :customerId")
+    BigDecimal sumTotalSpentByCustomerId(@Param("customerId") UUID customerId);
 
     @Query("SELECT o FROM Order o WHERE o.createdAt BETWEEN :from AND :to")
     Page<Order> findByDateRange(@Param("from") OffsetDateTime from,
