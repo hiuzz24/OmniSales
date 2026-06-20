@@ -565,6 +565,7 @@ ALTER TABLE inventory_issues ADD COLUMN recipient VARCHAR(255);
 ALTER TABLE channel_product_variants ADD COLUMN metadata JSONB DEFAULT '{}';
 
 
+
 CREATE OR REPLACE FUNCTION fn_set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN

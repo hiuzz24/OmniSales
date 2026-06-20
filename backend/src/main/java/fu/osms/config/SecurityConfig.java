@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/categories").permitAll()
                         .requestMatchers("/api/channels/shopify/callback").permitAll()
                         .requestMatchers("/api/products/**").authenticated()
+                        .requestMatchers("/api/address/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
