@@ -28,6 +28,7 @@ const NAV_ITEMS = [
       { name: 'Phiếu kiểm kho',   href: '/warehouse/stocktakes',       icon: ClipboardList  },
     ],
   },
+  { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
   { name: 'Bán hàng (POS)', href: '/pos',      icon: Store,    roles: [] },
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Kênh bán hàng',  href: '/channels', icon: Share2,   roles: [] },

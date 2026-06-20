@@ -17,6 +17,10 @@ import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
 import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
 import ProductLogPage from '../../features/catalog/pages/ProductLogPage';
+import CustomerListPage from '../../features/customer/pages/CustomerListPage';
+import CustomerDetailPage from '../../features/customer/pages/CustomerDetailPage';
+import CustomerCreatePage from '../../features/customer/pages/CustomerCreatePage';
+import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
@@ -69,6 +73,10 @@ const AppRouter = () => {
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
               <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
+              <Route path={ROUTES.CUSTOMER_LIST} element={<CustomerListPage />} />
+              <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />
+              <Route path={ROUTES.CUSTOMER_EDIT} element={<CustomerEditPage />} />
+              <Route path={ROUTES.CUSTOMER_DETAIL} element={<CustomerDetailPage />} />
             </Route>
           </Route>
         </Route>

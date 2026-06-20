@@ -9,14 +9,18 @@ import org.mapstruct.*;
 public interface CustomerMapper {
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "code", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "isActive", ignore = true)
     Customer toEntity(CustomerRequest request);
 
     CustomerResponse toResponse(Customer customer);
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "code", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "isActive", ignore = true)
     void updateEntityFromRequest(CustomerRequest request, @MappingTarget Customer customer);
 }
