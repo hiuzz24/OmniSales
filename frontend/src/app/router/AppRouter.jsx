@@ -21,6 +21,9 @@ import CustomerListPage from '../../features/customer/pages/CustomerListPage';
 import CustomerDetailPage from '../../features/customer/pages/CustomerDetailPage';
 import CustomerCreatePage from '../../features/customer/pages/CustomerCreatePage';
 import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
+import OrderListPage from '../../features/order/pages/OrderListPage';
+import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
+import OrderLogPage from '../../features/order/pages/OrderLogPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
@@ -77,6 +80,9 @@ const AppRouter = () => {
               <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />
               <Route path={ROUTES.CUSTOMER_EDIT} element={<CustomerEditPage />} />
               <Route path={ROUTES.CUSTOMER_DETAIL} element={<CustomerDetailPage />} />
+              <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
+              <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
+              <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
             </Route>
           </Route>
         </Route>
