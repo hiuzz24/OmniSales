@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Warehouse, ShoppingCart, Share2,
@@ -30,7 +30,7 @@ const NAV_ITEMS = [
   },
   { name: 'Bán hàng (POS)', href: '/pos',      icon: Store,    roles: [] },
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
-  { name: 'Kênh bán hàng',  href: '/channels', icon: Share2,   roles: [] },
+  { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
   { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
   { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER] },
   { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
@@ -112,7 +112,7 @@ export default function MainLayout() {
 
   const isActive = (href) => {
     if (href === ROUTES.DASHBOARD) return location.pathname === ROUTES.DASHBOARD;
-    return location.pathname === href || (href !== '/warehouse' && location.pathname.startsWith(href));
+    return location.pathname === href || (href !== '/warehouse' && href !== '/settings' && location.pathname.startsWith(href));
   };
 
   const toggleMenu = (name) =>

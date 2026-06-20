@@ -43,6 +43,8 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import fu.osms.sync.dto.SyncResult;
+import fu.osms.sync.service.ProductSyncOrchestratorService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -52,6 +54,9 @@ import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductServiceImpl implements ProductService {
@@ -69,6 +74,7 @@ public class ProductServiceImpl implements ProductService {
     private final ChannelProductRepository channelProductRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductLogRepository productLogRepository;
+    private final ProductSyncOrchestratorService productSyncOrchestratorService;
 
     @Override
     @Transactional
@@ -556,6 +562,12 @@ public class ProductServiceImpl implements ProductService {
             variants.forEach(v -> v.setDeletedAt(OffsetDateTime.now()));
             productVariantRepository.saveAll(variants);
         }
+    }
+
+
+    @Override
+    public SyncResult syncProductToAllChannels(UUID productId) {
+        return productSyncOrchestratorService.syncProductToAllChannels(productId);
     }
 
     private PageResponse<ProductResponse> toPageResponse(Page<Product> pageResult, int page, int size) {

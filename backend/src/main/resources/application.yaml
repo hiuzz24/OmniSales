@@ -20,7 +20,6 @@ spring:
       max-file-size: 20MB
       max-request-size: 20MB
 
-  # Cấu hình SMTP Server cho Gmail (Đã chuyển về đúng nhóm spring)
   mail:
     host: smtp.gmail.com
     port: 587
@@ -43,3 +42,10 @@ app:
     lock-time-duration: 5
     jwt:
       secret: ${JWT_SECRET}
+  frontend-url: ${FRONTEND_URL:http://localhost:5174}
+
+shopify:
+  api-key: ${SHOPIFY_API_KEY:}
+  api-secret: ${SHOPIFY_API_SECRET:}
+  redirect-uri: ${SHOPIFY_REDIRECT_URI:}
+  scopes: ${SHOPIFY_SCOPES:write_products,read_products,write_inventory,read_inventory,read_orders,write_orders}

@@ -32,6 +32,11 @@ const productApi = {
         return response;
     },
 
+    sync: async (productId) => {
+        const response = await axiosClient.post(`/products/${productId}/sync`);
+        return response;
+    },
+
     importExcel: async (file) => {
         const formData = new FormData();
         formData.append('file', file);

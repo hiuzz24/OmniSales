@@ -1,6 +1,7 @@
 package fu.osms.channel.service;
 
 import fu.osms.channel.dto.request.ChannelRequest;
+import fu.osms.channel.dto.request.CreateManualChannelRequest;
 import fu.osms.channel.dto.response.ChannelCredentialResponse;
 import fu.osms.channel.dto.response.ChannelProductResponse;
 import fu.osms.channel.dto.response.ChannelResponse;
@@ -16,6 +17,7 @@ import java.util.UUID;
 public interface ChannelService {
 
     ChannelResponse create(ChannelRequest request);
+    ChannelResponse createManual(CreateManualChannelRequest request);
 
     ChannelResponse getById(UUID id);
 
@@ -32,4 +34,6 @@ public interface ChannelService {
     Map<UUID, List<String>> getProductChannels(Collection<UUID> productIds);
 
     Map<UUID, List<ChannelSyncResponse>> getProductChannelSyncs(Collection<UUID> productIds);
+
+    ChannelResponse connectShopify(String shop, String accessToken);
 }

@@ -26,6 +26,7 @@ import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/St
 import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
 import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
 import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
+import ChannelConnectionPage from '../../features/channel/pages/ChannelConnectionPage';
 
 const AppRouter = () => {
   return (
@@ -69,6 +70,7 @@ const AppRouter = () => {
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
               <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
+              <Route path={ROUTES.CHANNELS} element={<ChannelConnectionPage />} />
             </Route>
           </Route>
         </Route>

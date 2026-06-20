@@ -21,6 +21,7 @@ const ProductDetailPage = () => {
   const [product, setProduct] = useState(null);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -57,6 +58,19 @@ const ProductDetailPage = () => {
     }
   };
 
+  const handleSync = async () => {
+    try {
+      setIsSyncing(true);
+      await productApi.sync(id);
+      toast.success('Đồng bộ thành công!');
+      await fetchProduct();
+    } catch (error) {
+      toast.error('Đồng bộ thất bại. Vui lòng thử lại.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
@@ -75,6 +89,8 @@ const ProductDetailPage = () => {
         onBack={() => navigate(ROUTES.PRODUCTS)} 
         onDelete={handleDelete}
         onEdit={() => navigate(ROUTES.PRODUCT_EDIT.replace(':id', product.id))}
+        onSync={handleSync}
+        isSyncing={isSyncing}
       />
       
       <div className={styles.mainContent}>
