@@ -237,6 +237,7 @@ CREATE TABLE orders (
                         status            order_status NOT NULL DEFAULT 'PENDING',
                         payment_status    VARCHAR(20) NOT NULL DEFAULT 'UNPAID'
                             CHECK (payment_status IN ('UNPAID', 'PAID', 'REFUNDED')),
+                            -- NOTE: PARTIAL was removed on 2026-06-20, keeping schema for reference
                         status_changed_at TIMESTAMPTZ,
                         buyer_name        VARCHAR(255),
                         buyer_phone       VARCHAR(50),
@@ -506,8 +507,8 @@ CREATE TABLE audit_logs (
                             id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                             actor_id     UUID REFERENCES users(id) ON DELETE SET NULL,
                             actor_email  VARCHAR(255) NOT NULL,
-                            action       VARCHAR(15) NOT NULL
-                                CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'CONNECT', 'DISCONNECT')),
+                            action       VARCHAR(30) NOT NULL
+                                CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'CONNECT', 'DISCONNECT', 'STATUS_CHANGE', 'ORDER_CANCEL', 'PAYMENT_STATUS_CHANGE')),
     entity_type  VARCHAR(10) NOT NULL
                  CHECK (entity_type IN ('PRODUCT', 'VARIANT', 'ORDER', 'INVENTORY', 'CHANNEL', 'WAREHOUSE', 'USER')),
     entity_id    UUID,
@@ -789,8 +790,8 @@ INSERT INTO system_logs (id, level, component, message, context) VALUES
 INSERT INTO notifications (id, user_id, type, title, body, entity_type, entity_id) VALUES
     ('c0b1c2d3-0002-0000-0000-000000000001', 'b0b1c2d3-0000-0000-0000-000000000002', 'LOW_STOCK', 'Sắp hết hàng', 'Áo thun Đen L chỉ còn 80 sản phẩm', 'PRODUCT', 'f0b1c2d3-0000-0000-0000-000000000001');
 
-INSERT INTO audit_logs (id, actor_id, actor_email, action, entity_type, entity_id, entity_name, changes) VALUES
-    ('d0b1c2d3-0002-0000-0000-000000000001', 'b0b1c2d3-0000-0000-0000-000000000001', 'admin@osms.vn', 'CREATE', 'PRODUCT', 'f0b1c2d3-0000-0000-0000-000000000001', 'Áo thun nam', '{"action":"created"}');
+INSERT INTO audit_logs (id, actor_id, actor_email, action, entity_type, entity_id, entity_name, performed_at, changes) VALUES
+    ('d0b1c2d3-0002-0000-0000-000000000001', 'b0b1c2d3-0000-0000-0000-000000000001', 'admin@osms.vn', 'CREATE', 'PRODUCT', 'f0b1c2d3-0000-0000-0000-000000000001', 'Áo thun nam', NOW(), '{"action":"created"}');
 
 INSERT INTO daily_sales_summary (id, channel_id, date, order_count, revenue, units_sold) VALUES
                                                                                              ('e0b1c2d3-0002-0000-0000-000000000001', NULL, CURRENT_DATE, 2, 800000, 4),
