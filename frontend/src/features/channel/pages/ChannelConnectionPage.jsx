@@ -7,11 +7,11 @@ import ChannelFormModal from '../components/ChannelFormModal';
 import styles from './ChannelConnectionPage.module.css';
 
 const PLATFORM_META = {
-  SHOPEE:  { label: 'Shopee',       color: '#ee4d2d', bg: '#fff1ee', abbr: 'S' },
-  TIKTOK:  { label: 'TikTok Shop',  color: '#010101', bg: '#f0f0f0', abbr: 'T' },
-  LAZADA:  { label: 'Lazada',       color: '#0f146d', bg: '#eef0ff', abbr: 'L' },
-  SHOPIFY: { label: 'Shopify',      color: '#96bf48', bg: '#f3f9ea', abbr: 'SH' },
-  MANUAL:  { label: 'Thủ công',     color: '#6b7280', bg: '#f3f4f6', abbr: 'M' },
+  SHOPEE: { label: 'Shopee', color: '#ee4d2d', bg: '#fff1ee', abbr: 'S' },
+  TIKTOK: { label: 'TikTok Shop', color: '#010101', bg: '#f0f0f0', abbr: 'T' },
+  LAZADA: { label: 'Lazada', color: '#0f146d', bg: '#eef0ff', abbr: 'L' },
+  SHOPIFY: { label: 'Shopify', color: '#96bf48', bg: '#f3f9ea', abbr: 'SH' },
+  MANUAL: { label: 'Thủ công', color: '#6b7280', bg: '#f3f4f6', abbr: 'M' },
 };
 
 const ChannelConnectionPage = () => {
