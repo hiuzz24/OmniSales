@@ -24,7 +24,7 @@ public class RestCountriesServiceImpl implements RestCountriesService {
     private static final String BASE_URL = "https://api.restcountries.com/countries/v5";
     private static final int CACHE_TTL_MS = 60 * 60 * 1000;
 
-    @Value("${app.rest-countries.api-key}")
+    @Value("${rest-countries.api-key}")
     private String apiKey;
 
     private final RestTemplate restCountriesRestTemplate;

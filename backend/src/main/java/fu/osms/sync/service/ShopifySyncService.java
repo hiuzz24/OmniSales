@@ -64,11 +64,8 @@ public class ShopifySyncService implements PlatformSyncService {
             }
 
             if (isNew) {
-                log.info("Creating product '{}' on Shopify shop '{}'", product.getName(), shopDomain);
                 shopifyResponse = shopifyApiClient.createProduct(shopDomain, accessToken, payload);
             } else {
-                log.info("Updating product '{}' (extId={}) on Shopify shop '{}'",
-                        product.getName(), channelProduct.getExternalProductId(), shopDomain);
                 shopifyResponse = shopifyApiClient.updateProduct(
                         shopDomain, accessToken, channelProduct.getExternalProductId(), payload);
             }
@@ -134,15 +131,6 @@ public class ShopifySyncService implements PlatformSyncService {
         }
     }
 
-    public boolean syncProductToShopify(Product product,
-                                        List<ProductVariant> variants,
-                                        List<ProductImage> images,
-                                        Channel channel,
-                                        ChannelCredential credential,
-                                        ChannelProduct channelProduct) {
-        return syncProduct(product, variants, images, channel, channelProduct);
-    }
-
     private void attachExistingVariantIds(ShopifyProductPayload payload, ChannelProduct channelProduct) {
         if (payload.getVariants() == null || payload.getVariants().isEmpty()) {
             return;
@@ -166,7 +154,6 @@ public class ShopifySyncService implements PlatformSyncService {
     private String extractShopDomain(Channel channel) {
         if (channel.getMetadata() == null) return null;
         Object shopDomain = channel.getMetadata().get("shopDomain");
-        if (shopDomain == null) shopDomain = channel.getMetadata().get("shop");
         return shopDomain != null ? shopDomain.toString() : null;
     }
 }

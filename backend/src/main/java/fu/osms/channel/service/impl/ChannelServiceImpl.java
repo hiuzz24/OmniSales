@@ -212,7 +212,7 @@ public class ChannelServiceImpl implements ChannelService {
         log.info("[ChannelService] connectShopify — shop={}", normalizedShop);
 
         Map<String, Object> metadata = new HashMap<>();
-        metadata.put("shop", normalizedShop);
+        metadata.put("shopDomain", normalizedShop);
 
         Channel channel = channelRepository
                 .findActiveShopifyByShopDomain(normalizedShop)

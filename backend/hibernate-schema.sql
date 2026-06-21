@@ -557,6 +557,34 @@ CREATE TABLE report_results (
                                 created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE countries (
+                           id          BIGSERIAL PRIMARY KEY,
+                           code        VARCHAR(10)  NOT NULL UNIQUE,
+                           name        VARCHAR(255) NOT NULL,
+                           flag_emoji  VARCHAR(10)
+);
+
+CREATE TABLE administrative_divisions (
+                                          id          BIGSERIAL PRIMARY KEY,
+                                          country_code VARCHAR(10) NOT NULL,
+                                          parent_code VARCHAR(20),
+                                          code        VARCHAR(20)  NOT NULL,
+                                          name        VARCHAR(255) NOT NULL,
+                                          level       INTEGER      NOT NULL,
+
+                                          CONSTRAINT fk_adm_country FOREIGN KEY (country_code)
+                                              REFERENCES countries (code)
+                                              ON UPDATE CASCADE
+                                              ON DELETE RESTRICT
+
+);
+
+CREATE INDEX idx_adm_country_level ON administrative_divisions (country_code, level);
+
+CREATE INDEX idx_adm_parent ON administrative_divisions (country_code, parent_code);
+
+
+--Alter table
 ALTER TABLE channel_products ALTER COLUMN external_product_id DROP NOT NULL;
 ALTER TABLE channels ADD COLUMN commission_rate NUMERIC(5,2) DEFAULT 0;
 ALTER TABLE products ADD COLUMN unit VARCHAR(50);
@@ -564,6 +592,22 @@ ALTER TYPE inv_txn_type ADD VALUE IF NOT EXISTS 'OUTBOUND';
 ALTER TABLE inventory_issues ADD COLUMN recipient VARCHAR(255);
 ALTER TABLE channel_product_variants ADD COLUMN metadata JSONB DEFAULT '{}';
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'customers' AND column_name = 'code'
+    ) THEN
+ALTER TABLE customers ADD COLUMN code VARCHAR(20);
+END IF;
+END $$;
+
+UPDATE customers
+SET code = 'KH' || UPPER(LEFT(MD5(id::text), 18));
+
+ALTER TABLE customers ALTER COLUMN code SET NOT NULL;
+ALTER TABLE customers ADD CONSTRAINT uq_customers_code UNIQUE (code);
+--
 
 
 CREATE OR REPLACE FUNCTION fn_set_updated_at()
