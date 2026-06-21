@@ -18,7 +18,7 @@ const productApi = {
     getById: async (id) => {
         const response = await axiosClient.get(`/products/${id}`);
         console.log(response);
-        
+
         return response;
     },
 
@@ -28,7 +28,16 @@ const productApi = {
     },
 
     delete: async (id) => {
-        const response = await axiosClient.delete(`/products/${id}/delete`); 
+        const response = await axiosClient.delete(`/products/${id}/delete`);
+        return response;
+    },
+
+    importExcel: async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await axiosClient.post('/products/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
         return response;
     }
 }

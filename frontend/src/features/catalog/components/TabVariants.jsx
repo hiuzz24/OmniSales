@@ -32,8 +32,8 @@ const TabVariants = ({ product }) => {
                   ? variant.images[0].url 
                   : 'https://via.placeholder.com/40';
                 
-                const size = variant.optionValues?.['Kích thước'] || '-';
-                const color = variant.optionValues?.['Màu sắc'] || '-';
+                const size = variant.optionValues?.['Size'] || '-';
+                const color = variant.optionValues?.['Màu'] || '-';
                 const stock = variant.quantityOnHand || 0;
                 
                 // Mock sold for variant

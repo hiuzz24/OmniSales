@@ -22,6 +22,8 @@ public interface InventoryService {
 
     PageResponse<InventoryItemResponse> getItems(UUID warehouseId, int page, int size);
 
+    InventoryItemResponse getItemByWarehouseAndVariant(UUID warehouseId, UUID variantId);
+
     List<InventoryItemResponse> getLowStockItems();
 
     InventoryTransactionResponse recordTransaction(InventoryTransactionRequest request);

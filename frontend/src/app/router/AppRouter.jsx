@@ -16,6 +16,13 @@ import ProductManagementPage from '../../features/catalog/pages/ProductManagemen
 import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
 import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
+import ProductLogPage from '../../features/catalog/pages/ProductLogPage';
+import CustomerListPage from '../../features/customer/pages/CustomerListPage';
+import CustomerDetailPage from '../../features/customer/pages/CustomerDetailPage';
+import CustomerCreatePage from '../../features/customer/pages/CustomerCreatePage';
+import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
+import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
+import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
 import InventoryPage from '../../features/inventory/pages/InventoryPage';
 import InventoryDetailPage from '../../features/inventory/pages/InventoryDetailPage';
 import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
@@ -23,11 +30,13 @@ import StockTransferPage from '../../features/inventory/pages/StockTransferPage'
 import StocktakePage from '../../features/inventory/pages/StocktakePage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
-import StockReceivePage from '../../features/inventory/pages/StockReceivePage';
-import StockReceiveCreatePage from '../../features/inventory/pages/StockReceiveCreatePage';
-import StockReceiveDetailPage from '../../features/inventory/pages/StockReceiveDetailPage';
-import StockReceiveEditPage from '../../features/inventory/pages/StockReceiveEditPage';
-// import InventoryReceiptCreatePage from '../../features/inventory/pages/InventoryReceiptCreatePage';
+import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
+import StockReceiveCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveCreatePage';
+import StockReceiveDetailPage from '../../features/inventory/pages/stockreceive/StockReceiveDetailPage';
+import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/StockReceiveEditPage';
+import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
+import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
+import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
 
 const AppRouter = () => {
   return (
@@ -49,11 +58,8 @@ const AppRouter = () => {
             <Route path={ROUTES.ADMIN} element={<AdminPage />} />
           </Route>
 
-          {/* All regular pages — wrapped in MainLayout (sidebar + topbar) */}
+          {/* All regular user pages use MainLayout (sidebar + topbar) */}
           <Route element={<MainLayout />}>
-            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-            </Route>
 
             <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
 
@@ -62,14 +68,22 @@ const AppRouter = () => {
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
+              <Route path={ROUTES.STOCK_DELIVERIES} element={<StockDeliveryPage />} />
+              <Route path={ROUTES.STOCK_DELIVERY_CREATE} element={<StockDeliveryCreatePage />} />
+              <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
+              <Route path={ROUTES.PRODUCT_LOGS} element={<ProductLogPage />} />
               <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
               <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
+              <Route path={ROUTES.CUSTOMER_LIST} element={<CustomerListPage />} />
+              <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />
+              <Route path={ROUTES.CUSTOMER_EDIT} element={<CustomerEditPage />} />
+              <Route path={ROUTES.CUSTOMER_DETAIL} element={<CustomerDetailPage />} />
 
               {/* Inventory */}
               <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />

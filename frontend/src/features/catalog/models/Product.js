@@ -42,6 +42,11 @@ const baseProductSchema = z.object({
     .transform((val) => (val === '' || val === undefined || val === null ? null : Number(val)))
     .pipe(z.number().nonnegative('Khối lượng phải >= 0').nullable())
     .optional(),
+  lowStockThreshold: z
+    .union([z.string(), z.number()])
+    .transform((val) => (val === '' || val === undefined || val === null ? null : Number(val)))
+    .pipe(z.number().int('Ngưỡng tồn thấp phải là số nguyên').nonnegative('Ngưỡng tồn thấp phải >= 0').nullable())
+    .optional(),
   dimensions: z.string().optional(),
 });
 

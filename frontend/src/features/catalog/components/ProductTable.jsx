@@ -27,7 +27,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(20);
+  const [size, setSize] = useState(6);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
 

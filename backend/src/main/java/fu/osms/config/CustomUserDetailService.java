@@ -44,7 +44,7 @@ public class CustomUserDetailService implements UserDetailsService {
         }
         UserRole userRole = roles.get(0);
 
-        GrantedAuthority authority = new SimpleGrantedAuthority(userRole.getRole().getName());
+        GrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + userRole.getRole().getName());
 
         return new fu.osms.auth.security.CustomUserDetails(user, java.util.Collections.singletonList(authority));
     }

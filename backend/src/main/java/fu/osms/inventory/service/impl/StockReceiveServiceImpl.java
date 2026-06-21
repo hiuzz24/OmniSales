@@ -27,8 +27,10 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -80,13 +82,15 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         if (!isDraft) {
             // When confirming (not draft), validate all items have quantity and unitCost
             for (StockReceiveItemRequest item : request.getItems()) {
+                // Số lượng bắt buộc phải lớn hơn 0
                 if (item.getQuantity() == null || item.getQuantity() <= 0) {
                     throw new AppException(ErrorCode.VALIDATION_FAILED, 
                         "Tất cả sản phẩm phải có số lượng lớn hơn 0 khi xác nhận phiếu nhập");
                 }
-                if (item.getUnitCost() == null || item.getUnitCost().compareTo(BigDecimal.ZERO) <= 0) {
-                    throw new AppException(ErrorCode.VALIDATION_FAILED, 
-                        "Tất cả sản phẩm phải có đơn giá lớn hơn 0 khi xác nhận phiếu nhập");
+                // Đơn giá phải lớn hơn hoặc bằng 0
+                if (item.getUnitCost() == null || item.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "Tất cả sản phẩm phải có đơn giá lớn hơn hoặc bằng 0 khi xác nhận phiếu nhập");
                 }
             }
             
@@ -96,13 +100,20 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     "Số hóa đơn là bắt buộc khi xác nhận phiếu nhập");
             }
         } else {
-            // For DRAFT: set default values for null quantity/unitCost
+            // For DRAFT: set default values for null quantity/unitCost and validate if provided
             for (StockReceiveItemRequest item : request.getItems()) {
                 if (item.getQuantity() == null) {
                     item.setQuantity(0);
+                } else if (item.getQuantity() <= 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "Số lượng phải lớn hơn 0");
                 }
+
                 if (item.getUnitCost() == null) {
                     item.setUnitCost(BigDecimal.ZERO);
+                } else if (item.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "Đơn giá phải lớn hơn hoặc bằng 0");
                 }
             }
         }
@@ -642,5 +653,16 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 .sum());
 
         return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Object getReceiptStatistics() {
+        Map<String, Object> statistics = new HashMap<>();
+        statistics.put("totalCount", stockReceiveRepository.count());
+        statistics.put("confirmedCount", stockReceiveRepository.countByStatus("CONFIRMED"));
+        statistics.put("draftCount", stockReceiveRepository.countByStatus("DRAFT"));
+        statistics.put("cancelledCount", stockReceiveRepository.countByStatus("CANCELLED"));
+        return statistics;
     }
 }
