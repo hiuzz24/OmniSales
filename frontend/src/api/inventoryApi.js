@@ -26,7 +26,7 @@ const inventoryApi = {
     searchVariants: async (params) => {
         const response = await axiosClient.get('/products/variants/search', { params });
         return response;
-    }
+    },
 
 
   getInventoryItemDetail: async (id) => {

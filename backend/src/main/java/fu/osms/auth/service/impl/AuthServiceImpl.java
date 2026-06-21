@@ -1,20 +1,18 @@
 package fu.osms.auth.service.impl;
 
+import fu.osms.audit.entity.AuditLog;
+import fu.osms.audit.repository.AuditLogRepository;
 import fu.osms.auth.dto.request.LoginRequest;
 import fu.osms.auth.dto.request.ChangePasswordRequest;
+import fu.osms.auth.dto.request.ResetPasswordRequest;
 import fu.osms.auth.dto.response.AuthResponse;
+import fu.osms.auth.dto.response.ResetPasswordResponse;
 import fu.osms.auth.dto.response.TokenPairDTO;
 import fu.osms.auth.dto.response.UserResponse;
-import fu.osms.auth.entity.PasswordResetToken;
-import fu.osms.auth.entity.RefreshToken;
-import fu.osms.auth.entity.User;
-import fu.osms.auth.entity.UserRole;
+import fu.osms.auth.entity.*;
 import fu.osms.auth.enums.UserStatus;
 import fu.osms.auth.mapper.UserMapper;
-import fu.osms.auth.repository.PasswordResetTokenRepository;
-import fu.osms.auth.repository.RefreshTokenRepository;
-import fu.osms.auth.repository.UserRepository;
-import fu.osms.auth.repository.UserRoleRepository;
+import fu.osms.auth.repository.*;
 import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.EmailService;
@@ -35,10 +33,11 @@ import fu.osms.common.exception.ErrorCode;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.OffsetDateTime;
-import java.util.Base64;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.ZonedDateTime;
+import java.util.*;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -55,6 +54,8 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordResetTokenRepository tokenRepository;
     private final EmailService emailService;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogRepository auditLogRepository;
+    private final RoleRepository roleRepository;
     @Value("${app.security.max-failed-attempts}")
     private int maxFailedAttempts;
 
@@ -89,7 +90,7 @@ public class AuthServiceImpl implements AuthService {
         }catch(AuthenticationException e){
             int attempts = user.getFailedLoginAttempts() + 1;
             user.setFailedLoginAttempts(attempts);
-            
+
             if(attempts >= maxFailedAttempts){
                 user.setLockedUntil(OffsetDateTime.now().plusMinutes(lockTimeDuration));
                 user.setStatus(UserStatus.LOCKED);
@@ -101,6 +102,9 @@ public class AuthServiceImpl implements AuthService {
             }
         }
 
+        if (Boolean.TRUE.equals(user.getPasswordExpired())) {
+            log.info("User {} đăng nhập bằng mật khẩu tạm thời. Yêu cầu đổi mật khẩu sau khi đăng nhập.", user.getEmail());
+        }
         var roles = userRoleRepository.findByUserId(user.getId());
         if (roles.isEmpty()) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
@@ -190,7 +194,7 @@ public class AuthServiceImpl implements AuthService {
 
         tokenRepository.save(resetToken);
 
-        emailService.sendResetPasswordEmail(user.getEmail(), tokenStr);
+        emailService.sendForgetPasswordEmail(user.getEmail(), tokenStr);
 
     }
 
@@ -229,6 +233,7 @@ public class AuthServiceImpl implements AuthService {
         // Tiến hành cập nhật mật khẩu mới của User
         User user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+
         user.setUpdatedAt(OffsetDateTime.now());
         userRepository.save(user);
 
@@ -247,5 +252,162 @@ public class AuthServiceImpl implements AuthService {
         } catch (Exception e) {
             throw new AppException(ErrorCode.TOKEN_INVALID,e.getMessage());
         }
+    }
+
+    public boolean isValidPasswordFormat(String password) {
+        if (password == null || password.length() < 8) {
+            return false;
+        }
+        String passwordRegex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@#$%^&+=!\\-_]).{8,}$";
+        Pattern pattern = Pattern.compile(passwordRegex);
+        return pattern.matcher(password).matches();
+    }
+
+    private String generateTemporaryPassword() {
+        String upperCaseChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        String lowerCaseChars = "abcdefghijklmnopqrstuvwxyz";
+        String numberChars = "0123456789";
+        String specialChars = "!@#$%^&*()-_=+";
+
+        SecureRandom random = new SecureRandom();
+        List<Character> passwordChars = new ArrayList<>();
+
+        passwordChars.add(upperCaseChars.charAt(random.nextInt(upperCaseChars.length())));
+        passwordChars.add(lowerCaseChars.charAt(random.nextInt(lowerCaseChars.length())));
+        passwordChars.add(numberChars.charAt(random.nextInt(numberChars.length())));
+        passwordChars.add(specialChars.charAt(random.nextInt(specialChars.length())));
+
+        String allChars = upperCaseChars + lowerCaseChars + numberChars + specialChars;
+        for (int i = 0; i < 8; i++) {
+            passwordChars.add(allChars.charAt(random.nextInt(allChars.length())));
+        }
+
+        Collections.shuffle(passwordChars, random);
+
+        StringBuilder password = new StringBuilder();
+        for (char c : passwordChars) {
+            password.append(c);
+        }
+
+        return password.toString();
+    }
+    @Override
+    @Transactional
+    public ResetPasswordResponse resetUserPassword(ResetPasswordRequest request, UUID userRequestId) {
+        UUID targetUserId = request.getUserId();
+        Optional<Role> userRole = roleRepository.findRoleByUserId(targetUserId);
+
+        if (userRole.isPresent()) {
+            String roleName = userRole.get().getName();
+
+            if ("ADMIN".equals(roleName) || "OWNER".equals(roleName)) {
+                return new ResetPasswordResponse(
+                        false,
+                        "You cannot reset your own password. Please use 'Forgot Password' instead.",
+                        null,
+                        null
+                );
+            }
+        }
+
+        User targetUser = userRepository.findActiveById(targetUserId).orElse(null);
+        if (targetUser == null) {
+            return new ResetPasswordResponse(
+                    false,
+                    "User not found. Please refresh the page and try again.",
+                    null,
+                    null
+            );
+        }
+      if (!"ACTIVE".equals(targetUser.getStatus().toString())) {
+            return new ResetPasswordResponse(
+                    false,
+                    "Cannot reset password for inactive or locked accounts. Please enable the account first.",
+                    targetUser.getEmail(),
+                    null
+            );
+        }
+
+        String tempPassword = generateTemporaryPassword();
+
+        if (!isValidPasswordFormat(tempPassword)) {
+            return new ResetPasswordResponse(
+                    false,
+                    "Unable to reset password. Please try again.",
+                    targetUser.getEmail(),
+                    null
+            );
+        }
+
+
+        targetUser.setPasswordHash(passwordEncoder.encode(tempPassword));
+        targetUser.setPasswordExpired(true);
+        userRepository.save(targetUser);
+
+
+        refreshTokenRepository.revokeAllByUserId(targetUserId);
+
+        User admin = userRepository.findUserById(userRequestId);
+
+
+        AuditLog log = new AuditLog();
+        log.setActor(admin);
+        log.setActorEmail(admin.getEmail());
+        log.setAction("UPDATE");
+        log.setEntityType("USER");
+        log.setEntityId(targetUserId);
+        log.setEntityName(targetUser.getFullName());
+        java.util.Map<String, Object> changesMap = new java.util.HashMap<>();
+        changesMap.put("action", "RESET_PASSWORD");
+        changesMap.put("password_expired", true);
+        log.setChanges(changesMap);
+        log.setPerformedAt(java.time.OffsetDateTime.now());
+
+        auditLogRepository.save(log);
+
+
+        try {
+            emailService.sentResetPasswordEmail(targetUser.getEmail(), targetUser.getFullName(), tempPassword);
+        } catch (Exception e) {return new ResetPasswordResponse(
+                    true,
+                    "Password was reset but email failed to send. Please provide the temporary password manually to the user.",
+                    targetUser.getEmail(),
+                    tempPassword
+            );
+        }
+
+        return new ResetPasswordResponse(
+                true,
+                "Password reset successfully. A new temporary password has been sent to " + targetUser.getEmail(),
+                targetUser.getEmail(),
+                null
+        );
+    }
+
+    @Override
+    @Transactional
+    public void changePasswordAfterLogin(UUID userId, String oldPassword, String newPassword, String confirmPassword) {
+        if (!newPassword.equals(confirmPassword)) {
+            throw new IllegalArgumentException("Mật khẩu xác nhận không trùng khớp");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("Mật khẩu cũ không chính xác");
+        }
+
+        if (!isValidPasswordFormat(newPassword)) {
+            throw new IllegalArgumentException("Mật khẩu mới không đúng định dạng quy định");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordExpired(false);
+        user.setUpdatedAt(OffsetDateTime.now());
+
+        userRepository.save(user);
+
+        refreshTokenRepository.revokeAllByUserId(userId);
     }
 }

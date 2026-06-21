@@ -2,9 +2,11 @@ package fu.osms.auth.service.impl;
 
 import fu.osms.auth.service.EmailService;
 
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -20,9 +22,9 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async
-    public void sendResetPasswordEmail(String toEmail, String token) {
+    public void sendForgetPasswordEmail(String toEmail, String token) {
         try {
-            String resetLink = "http://localhost:5173/change-password?token=" + token;
+            String resetLink = "http://localhost:5174/change-password?token=" + token;
 
             SimpleMailMessage message = new SimpleMailMessage();
             message.setTo(toEmail);
@@ -38,6 +40,39 @@ public class EmailServiceImpl implements EmailService {
             // Log error but don't throw exception to avoid breaking async flow
             System.err.println("Failed to send email to " + toEmail + ": " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void sentResetPasswordEmail(String toEmail, String fullName, String newPassword) {
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "UTF-8");
+
+            helper.setTo(toEmail);
+            helper.setSubject("[OSMS] Tài khoản của bạn đã được đặt lại mật khẩu");
+
+
+            String htmlContent = String.format(
+                    "<h3>Xin chào %s,</h3>" +
+                            "<p>Quản trị viên hệ thống đã đặt lại mật khẩu cho tài khoản của bạn.</p>" +
+                            "<p>Dưới đây là thông tin đăng nhập tạm thời:</p>" +
+                            "<ul>" +
+                            "  <li><strong>Email:</strong> %s</li>" +
+                            "  <li><strong>Mật khẩu tạm thời:</strong> <span style='color: #d9534f; font-family: monospace; font-size: 16px;'>%s</span></li>" +
+                            "</ul>" +
+                            "<p style='color: #f0ad4e;'><strong>Lưu ý bảo mật:</strong> Mật khẩu này chỉ có giá trị cho lần đăng nhập đầu tiên. Bạn bắt buộc phải thay đổi mật khẩu ngay sau khi đăng nhập thành công vào hệ thống.</p>" +
+                            "<p>Trân trọng,<br/>Đội ngũ OSMS.</p>",
+                    fullName, toEmail, newPassword
+            );
+
+            helper.setText(htmlContent, true);
+
+            mailSender.send(mimeMessage);
+            System.out.println("Reset password email sent successfully to: " + toEmail);
+        } catch (Exception e) {
+            System.err.println("Failed to send reset password email to " + toEmail + ": " + e.getMessage());
+            throw new RuntimeException("Email sending failed", e);
         }
     }
 }
