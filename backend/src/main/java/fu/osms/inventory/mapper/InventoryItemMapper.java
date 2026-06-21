@@ -5,14 +5,17 @@ import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.entity.InventoryItem;
 import org.mapstruct.*;
 
+import java.util.List;
+
 @Mapper(componentModel = "spring")
 public interface InventoryItemMapper {
 
     @Mapping(target = "id", ignore = true)
-
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "variant", ignore = true)
     @Mapping(target = "availableQuantity", ignore = true)
+
+
     @Mapping(target = "version", ignore = true)
     @Mapping(target = "updatedBy", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
@@ -24,13 +27,13 @@ public interface InventoryItemMapper {
     @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "variantSku", source = "variant.sku")
     @Mapping(target = "variantName", source = "variant.name")
-    @Mapping(target = "productName", source = "variant.product.name")
     @Mapping(target = "isLowStock",
-             expression = "java(item.getAvailableQuantity() != null && item.getAvailableQuantity() <= item.getLowStockThreshold())")
+            expression = "java(item.getAvailableQuantity() != null && item.getAvailableQuantity() <= item.getLowStockThreshold())")
     InventoryItemResponse toResponse(InventoryItem item);
 
-    @Mapping(target = "id", ignore = true)
+    List<InventoryItemResponse> toResponseList(List<InventoryItem> items);
 
+    @Mapping(target = "id", ignore = true)
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "variant", ignore = true)
     @Mapping(target = "availableQuantity", ignore = true)

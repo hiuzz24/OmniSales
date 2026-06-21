@@ -11,15 +11,12 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class InventoryItemResponse {
-
     private UUID id;
-
     private UUID warehouseId;
     private String warehouseName;
     private UUID variantId;
     private String variantSku;
     private String variantName;
-    private String productName;
     private Integer quantityOnHand;
     private Integer reservedQuantity;
     private Integer availableQuantity;

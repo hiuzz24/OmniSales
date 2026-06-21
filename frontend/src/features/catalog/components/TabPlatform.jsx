@@ -48,11 +48,11 @@ const TabPlatform = ({ product, channels = [] }) => {
               productChannels.map(channel => {
                 const isExpanded = expandedPlatform === channel.platform;
                 const commissionRate = channel.commissionRate || 0;
-                
+
                 const syncInfo = (product?.channelSyncs || []).find(s => s.platform === channel.platform) || {};
                 const syncStatus = syncInfo.syncStatus || 'PENDING';
                 const lastSyncedAt = syncInfo.lastSyncedAt ? new Date(syncInfo.lastSyncedAt).toLocaleString('vi-VN') : 'Chưa đồng bộ';
-                
+
                 return (
                   <React.Fragment key={channel.id}>
                     <tr onClick={() => toggleExpand(channel.platform)} style={{ cursor: 'pointer', backgroundColor: isExpanded ? '#f9fafb' : 'white' }}>
@@ -90,7 +90,7 @@ const TabPlatform = ({ product, channels = [] }) => {
                                   const rate = commissionRate / 100;
                                   const numPrice = Number(v.price);
                                   const suggestedPrice = (rate >= 1 || !numPrice) ? 'N/A' : Math.round(numPrice / (1 - rate)).toLocaleString('vi-VN') + 'đ';
-                                  
+
                                   return (
                                     <tr key={v.id || v.sku} style={{ borderBottom: '1px solid #e5e7eb' }}>
                                       <td style={{ padding: '10px 8px', fontWeight: 500 }}>{v.sku}</td>

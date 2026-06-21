@@ -509,6 +509,12 @@ CREATE TABLE audit_logs (
                             actor_email  VARCHAR(255) NOT NULL,
                             action       VARCHAR(30) NOT NULL
                                 CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'CONNECT', 'DISCONNECT', 'STATUS_CHANGE', 'ORDER_CANCEL', 'PAYMENT_STATUS_CHANGE')),
+                            entity_type  VARCHAR(10) NOT NULL
+                                CHECK (entity_type IN ('PRODUCT', 'VARIANT', 'ORDER', 'INVENTORY', 'CHANNEL', 'WAREHOUSE', 'USER')),
+                            entity_id    UUID,
+                            entity_name  VARCHAR(500),
+                            changes      JSONB,
+                            performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     entity_type  VARCHAR(10) NOT NULL
                  CHECK (entity_type IN ('PRODUCT', 'VARIANT', 'ORDER', 'INVENTORY', 'CHANNEL', 'WAREHOUSE', 'USER')),
     entity_id    UUID,
@@ -568,35 +574,35 @@ ALTER TABLE channel_product_variants ADD COLUMN metadata JSONB DEFAULT '{}';
 
 
 CREATE OR REPLACE FUNCTION fn_set_updated_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     NEW.updated_at = NOW();
-RETURN NEW;
+    RETURN NEW;
 END;
 $$;
 
 DO $$
-DECLARE tbl TEXT;
-BEGIN
-FOR tbl IN SELECT unnest(ARRAY[
-                             'users', 'channels', 'channel_credentials', 'products',
-                         'product_variants', 'channel_products', 'channel_product_variants',
-                         'warehouses', 'inventory_items', 'daily_sales_summary', 'report_configs',
-                         'customers', 'suppliers', 'categories', 'inventory_receipts',
-                         'inventory_issues', 'stock_transfers', 'stocktake_sessions'
-                             ]) LOOP
-               EXECUTE format('CREATE TRIGGER trg_%I_updated_at BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at()', tbl, tbl);
-END LOOP;
-END;
+    DECLARE tbl TEXT;
+    BEGIN
+        FOR tbl IN SELECT unnest(ARRAY[
+            'users', 'channels', 'channel_credentials', 'products',
+            'product_variants', 'channel_products', 'channel_product_variants',
+            'warehouses', 'inventory_items', 'daily_sales_summary', 'report_configs',
+            'customers', 'suppliers', 'categories', 'inventory_receipts',
+            'inventory_issues', 'stock_transfers', 'stocktake_sessions'
+            ]) LOOP
+                EXECUTE format('CREATE TRIGGER trg_%I_updated_at BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at()', tbl, tbl);
+            END LOOP;
+    END;
 $$;
 
 CREATE OR REPLACE FUNCTION fn_receipt_immutable()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF OLD.status = 'CONFIRMED' THEN
         RAISE EXCEPTION 'Cannot update or delete a confirmed receipt (id: %)', OLD.id;
-END IF;
-RETURN NEW;
+    END IF;
+    RETURN NEW;
 END;
 $$;
 CREATE TRIGGER trg_receipt_immutable
@@ -604,12 +610,12 @@ CREATE TRIGGER trg_receipt_immutable
     FOR EACH ROW EXECUTE FUNCTION fn_receipt_immutable();
 
 CREATE OR REPLACE FUNCTION fn_issue_immutable()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF OLD.status = 'CONFIRMED' THEN
         RAISE EXCEPTION 'Cannot update or delete a confirmed issue (id: %)', OLD.id;
-END IF;
-RETURN NEW;
+    END IF;
+    RETURN NEW;
 END;
 $$;
 CREATE TRIGGER trg_issue_immutable
@@ -617,14 +623,14 @@ CREATE TRIGGER trg_issue_immutable
     FOR EACH ROW EXECUTE FUNCTION fn_issue_immutable();
 
 CREATE OR REPLACE FUNCTION fn_inventory_transactions_immutable()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
         RAISE EXCEPTION 'inventory_transactions is immutable — UPDATE not allowed (id: %)', OLD.id;
     ELSIF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'inventory_transactions is immutable — DELETE not allowed (id: %)', OLD.id;
-END IF;
-RETURN NULL;
+    END IF;
+    RETURN NULL;
 END;
 $$;
 CREATE TRIGGER trg_inventory_transactions_immutable
@@ -632,13 +638,13 @@ CREATE TRIGGER trg_inventory_transactions_immutable
     FOR EACH ROW EXECUTE FUNCTION fn_inventory_transactions_immutable();
 
 CREATE OR REPLACE FUNCTION fn_orders_before_update()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     NEW.updated_at = NOW();
     IF NEW.status IS DISTINCT FROM OLD.status THEN
         NEW.status_changed_at = NOW();
-END IF;
-RETURN NEW;
+    END IF;
+    RETURN NEW;
 END;
 $$;
 CREATE TRIGGER trg_orders_before_update
@@ -646,14 +652,14 @@ CREATE TRIGGER trg_orders_before_update
     FOR EACH ROW EXECUTE FUNCTION fn_orders_before_update();
 
 CREATE OR REPLACE FUNCTION fn_audit_logs_immutable()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
         RAISE EXCEPTION 'audit_logs is immutable — UPDATE not allowed (id: %)', OLD.id;
     ELSIF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'audit_logs is immutable — DELETE not allowed (id: %)', OLD.id;
-END IF;
-RETURN NULL;
+    END IF;
+    RETURN NULL;
 END;
 $$;
 CREATE TRIGGER trg_audit_logs_immutable
@@ -805,3 +811,6 @@ INSERT INTO report_results (id, report_config_id, generated_at, parameters_used,
 
 INSERT INTO product_logs (id, product_id, sku, action, field_changes, performed_by, performed_by_email, performed_at) VALUES
     ('20b1c2d3-0002-0000-0000-000000000001', 'f0b1c2d3-0000-0000-0000-000000000001', 'AO-001', 'CREATE', '{"name":"Áo thun nam"}', 'b0b1c2d3-0000-0000-0000-000000000001', 'admin@osms.vn', NOW());
+
+
+ALTER TABLE users ADD COLUMN password_expired BOOLEAN NOT NULL DEFAULT FALSE;

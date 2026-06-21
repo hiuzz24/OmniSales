@@ -70,23 +70,23 @@ const ProductDetailPage = () => {
 
   return (
     <div className={styles.page}>
-      <ProductDetailHeader 
-        product={product} 
-        onBack={() => navigate(ROUTES.PRODUCTS)} 
+      <ProductDetailHeader
+        product={product}
+        onBack={() => navigate(ROUTES.PRODUCTS)}
         onDelete={handleDelete}
         onEdit={() => navigate(ROUTES.PRODUCT_EDIT.replace(':id', product.id))}
       />
-      
+
       <div className={styles.mainContent}>
         <ProductStatsGrid product={product} />
 
         <div className={styles.tabsSection}>
-          <ProductDetailTabs 
-            activeTab={activeTab} 
-            onChange={setActiveTab} 
+          <ProductDetailTabs
+            activeTab={activeTab}
+            onChange={setActiveTab}
             variantsCount={product.variants?.length || 0}
           />
-          
+
           <div className={styles.tabContent}>
             {activeTab === 'overview' && <TabOverview product={product} />}
             {activeTab === 'inventory' && <TabInventory product={product} />}
@@ -101,3 +101,4 @@ const ProductDetailPage = () => {
 };
 
 export default ProductDetailPage;
+

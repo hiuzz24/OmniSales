@@ -1,22 +1,25 @@
 package fu.osms.auth.controller;
 
-import fu.osms.auth.dto.request.ForgotPasswordRequest;
-import fu.osms.auth.dto.request.LoginRequest;
-import fu.osms.auth.dto.request.ChangePasswordRequest;
+import fu.osms.auth.dto.request.*;
 import fu.osms.auth.dto.response.AuthResponse;
+import fu.osms.auth.dto.response.ResetPasswordResponse;
 import fu.osms.auth.dto.response.TokenPairDTO;
 import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.CookieService;
+import fu.osms.auth.service.UserService;
 import fu.osms.common.dto.ApiResponse;
+import fu.osms.common.exception.AppException;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -25,6 +28,7 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final UserService userService;
     private final CookieService cookieService;
     private final JwtService jwtService;
 
@@ -113,16 +117,65 @@ public class AuthController {
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         try {
-            System.out.println(request.getPassword());
-            System.out.println(request.getToken());
-
-            System.out.println(request.getConfirmPassword());
-
             authService.updatePassword(request);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "Cập nhật mật khẩu thành công. Vui lòng đăng nhập lại"
             ));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", ex.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request,
+            Authentication authentication) {
+
+        String email = authentication.getName();
+
+        UUID requestUserId = userService.findUserIdByEmail(email);
+
+        ResetPasswordResponse response =
+                authService.resetUserPassword(
+                        request,
+                        requestUserId);
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/changes-password-after-login")
+    public ResponseEntity<?> changePasswordAfterLogin(
+            @Valid @RequestBody ChangePasswordAfterLoginRequest request,
+            Authentication authentication) {
+
+        try {
+            if (authentication == null || !authentication.isAuthenticated()) {
+                return ResponseEntity.status(401).body(Map.of(
+                        "success", false,
+                        "message", "Phiên làm việc không hợp lệ hoặc đã hết hạn"
+                ));
+            }
+
+            String email = authentication.getName();
+
+            UUID userId = userService.findUserIdByEmail(email);
+
+            authService.changePasswordAfterLogin(
+                    userId,
+                    request.getOldPassword(),
+                    request.getNewPassword(),
+                    request.getConfirmPassword()
+            );
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Đổi mật khẩu thành công. Vui lòng sử dụng mật khẩu mới cho lần đăng nhập sau."
+            ));
+
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of(
                     "success", false,

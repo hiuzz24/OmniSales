@@ -45,6 +45,15 @@ const authApi = {
     );
     return data;
   },
+
+  changePasswordAfterLogin: async (oldPassword, newPassword, confirmPassword) => {
+    const res = await axiosClient.post('/auth/changes-password-after-login', {
+      oldPassword,
+      newPassword,
+      confirmPassword,
+    });
+    return res.data?.data ?? res.data;
+  },
 };
 
 export default authApi;
