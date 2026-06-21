@@ -24,6 +24,15 @@ export const ROUTES = {
   STOCK_DELIVERIES: '/inventory/stock-deliveries',
   STOCK_DELIVERY_CREATE: '/inventory/stock-deliveries/create',
   STOCK_DELIVERY_DETAIL: '/inventory/stock-deliveries/:id',
+
+  // Inventory
+  INVENTORY: '/inventory',
+  INVENTORY_DETAIL: '/inventory/detail/:id',
+  INVENTORY_RECEIPT: '/inventory/receipt',
+  INVENTORY_ISSUE: '/inventory/issue',
+  STOCK_TRANSFER: '/inventory/transfer',
+  STOCKTAKE: '/inventory/stocktake',
+  FORCE_CHANGE_PASSWORD: '/force-change-password',
   ORDER_LIST: '/orders',
   ORDER_DETAIL: '/orders/:id',
   ORDER_LOGS: '/orders/logs',

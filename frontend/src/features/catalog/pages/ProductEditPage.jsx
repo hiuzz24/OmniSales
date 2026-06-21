@@ -61,9 +61,9 @@ const ProductEditPage = () => {
         if (Array.isArray(catList)) {
           setCategories(catList);
         }
-        
+
         const productData = productDataResponse.data?.data || productDataResponse.data || productDataResponse;
-        
+
         const chanList = chanData.data?.data || chanData.data || chanData;
         if (Array.isArray(chanList)) {
           setChannels(chanList);
@@ -99,7 +99,7 @@ const ProductEditPage = () => {
         if (productData.variants && productData.variants.length > 0) {
           // If there's only 1 variant and it has no optionValues, it might be the default variant
           const firstVariant = productData.variants[0];
-          const isDefaultVariant = productData.variants.length === 1 && 
+          const isDefaultVariant = productData.variants.length === 1 &&
             (!firstVariant.optionValues || Object.keys(firstVariant.optionValues).length === 0);
 
           if (isDefaultVariant) {
@@ -107,8 +107,8 @@ const ProductEditPage = () => {
             setPrice(firstVariant.price || '');
             setCostPrice(firstVariant.costPrice || '');
             setVariants(productData.variants);
-            setFormData(prev => ({ 
-              ...prev, 
+            setFormData(prev => ({
+              ...prev,
               barcode: firstVariant.barcode || '',
               size: firstVariant.optionValues?.Size || '',
               color: firstVariant.optionValues?.['Màu'] || ''
@@ -372,3 +372,4 @@ const ProductEditPage = () => {
 };
 
 export default ProductEditPage;
+

@@ -20,4 +20,5 @@ public class UserResponse {
     private UserStatus status;
     private String role;
     private OffsetDateTime createdAt;
+    private Boolean passwordExpired;
 }

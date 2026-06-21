@@ -33,4 +33,26 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
     List<InventoryItem> findLowStockItems();
 
     List<InventoryItem> findByVariantIdIn(Collection<UUID> variantIds);
+
+    @Query(value = "SELECT i FROM InventoryItem i " +
+            "LEFT JOIN FETCH i.warehouse " +
+            "LEFT JOIN FETCH i.variant",
+            countQuery = "SELECT COUNT(i) FROM InventoryItem i")
+    Page<InventoryItem> findAllWithVariantRelationships(Pageable pageable);
+
+    @Query("SELECT i FROM InventoryItem i " +
+            "JOIN i.variant v " +
+            "JOIN v.product p " +
+            "WHERE p.category.id IN :categoryIds")
+    Page<InventoryItem> findByCategoryIdIn(@Param("categoryIds") List<UUID> categoryIds, Pageable pageable);
+
+    @Query("SELECT i FROM InventoryItem i " +
+            "JOIN FETCH i.warehouse w " +
+            "JOIN FETCH i.variant v " +
+            "JOIN FETCH v.product p " +
+            "JOIN FETCH p.category c " +
+            "WHERE i.id = :id")
+    Optional<InventoryItem> findDetailById(@Param("id") UUID id);
 }
+
+

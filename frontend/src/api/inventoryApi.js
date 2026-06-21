@@ -1,4 +1,5 @@
-﻿import axiosClient from "./axiosClient";
+import axiosClient from "./axiosClient";
+import './interceptors';
 
 const inventoryApi = {
     // Get inventory items by warehouse
@@ -6,6 +7,14 @@ const inventoryApi = {
         const response = await axiosClient.get(`/inventory/warehouses/${warehouseId}/items`, { params });
         return response;
     },
+
+    getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null) => {
+    const params = { page, size, sortBy, sortDir };
+    const res = categoryId
+      ? await axiosClient.get(`/inventory/category/${categoryId}`, { params })
+      : await axiosClient.get('/inventory', { params });
+    return res.data?.data ?? res.data;
+  },
 
     // Get inventory item by variant
     getByVariant: async (warehouseId, variantId) => {
@@ -17,7 +26,20 @@ const inventoryApi = {
     searchVariants: async (params) => {
         const response = await axiosClient.get('/products/variants/search', { params });
         return response;
-    }
+    },
+
+
+  getInventoryItemDetail: async (id) => {
+    const res = await axiosClient.get(`/inventory/detail/${id}`);
+    return res.data?.data ?? res.data;
+  },
+
+  getTransactions: async (variantId, page = 0, size = 10, sortBy = 'performedAt', sortDir = 'desc') => {
+    const res = await axiosClient.get('/inventory/detail/transactions', {
+      params: { variantId, page, size, sortBy, sortDir }
+    });
+    return res.data?.data ?? res.data;
+  },
 };
 
 export default inventoryApi;

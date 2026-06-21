@@ -70,4 +70,7 @@ public class User {
 
     @Column(name = "locked_until")
     private OffsetDateTime lockedUntil;
+
+    @Column(name = "password_expired")
+    private Boolean passwordExpired;
 }
