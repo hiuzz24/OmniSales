@@ -33,4 +33,7 @@ export const ROUTES = {
   STOCK_TRANSFER: '/inventory/transfer',
   STOCKTAKE: '/inventory/stocktake',
   FORCE_CHANGE_PASSWORD: '/force-change-password',
+  ORDER_LIST: '/orders',
+  ORDER_DETAIL: '/orders/:id',
+  ORDER_LOGS: '/orders/logs',
 };

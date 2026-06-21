@@ -237,7 +237,7 @@ CREATE TABLE orders (
                         status            order_status NOT NULL DEFAULT 'PENDING',
                         payment_status    VARCHAR(20) NOT NULL DEFAULT 'UNPAID'
                             CHECK (payment_status IN ('UNPAID', 'PAID', 'REFUNDED')),
-    -- NOTE: PARTIAL was removed on 2026-06-20, keeping schema for reference
+                            -- NOTE: PARTIAL was removed on 2026-06-20, keeping schema for reference
                         status_changed_at TIMESTAMPTZ,
                         buyer_name        VARCHAR(255),
                         buyer_phone       VARCHAR(50),
@@ -515,6 +515,12 @@ CREATE TABLE audit_logs (
                             entity_name  VARCHAR(500),
                             changes      JSONB,
                             performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    entity_type  VARCHAR(10) NOT NULL
+                 CHECK (entity_type IN ('PRODUCT', 'VARIANT', 'ORDER', 'INVENTORY', 'CHANNEL', 'WAREHOUSE', 'USER')),
+    entity_id    UUID,
+    entity_name  VARCHAR(500),
+    changes      JSONB,
+    performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE daily_sales_summary (
