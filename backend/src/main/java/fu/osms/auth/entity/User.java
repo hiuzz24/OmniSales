@@ -1,6 +1,7 @@
 package fu.osms.auth.entity;
 
 import fu.osms.auth.enums.UserStatus;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -18,6 +19,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class User {
 
     @Id
@@ -68,4 +70,7 @@ public class User {
 
     @Column(name = "locked_until")
     private OffsetDateTime lockedUntil;
+
+    @Column(name = "password_expired")
+    private Boolean passwordExpired;
 }

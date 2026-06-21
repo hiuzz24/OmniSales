@@ -67,7 +67,7 @@ public enum ErrorCode {
 
     SYNC_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy nhật ký đồng bộ"),
     SYNC_ALREADY_RUNNING(HttpStatus.CONFLICT, "Đang có tiến trình đồng bộ chạy cho kênh này"),
-
+    PASSWORD_EXPIRED(HttpStatus.FORBIDDEN, "Mật khẩu tạm thời đã hết hạn, vui lòng đổi mật khẩu mới."),
     REPORT_CONFIG_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy cấu hình báo cáo");
 
     private final HttpStatus httpStatus;

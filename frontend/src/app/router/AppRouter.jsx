@@ -21,6 +21,14 @@ import CustomerListPage from '../../features/customer/pages/CustomerListPage';
 import CustomerDetailPage from '../../features/customer/pages/CustomerDetailPage';
 import CustomerCreatePage from '../../features/customer/pages/CustomerCreatePage';
 import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
+import InventoryPage from '../../features/inventory/pages/InventoryPage';
+import InventoryDetailPage from '../../features/inventory/pages/InventoryDetailPage';
+import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
+import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
+import StocktakePage from '../../features/inventory/pages/StocktakePage';
+import OrderListPage from '../../features/order/pages/OrderListPage';
+import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
+import OrderLogPage from '../../features/order/pages/OrderLogPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
@@ -31,6 +39,8 @@ import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/Stoc
 import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
 import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
 import ChannelConnectionPage from '../../features/channel/pages/ChannelConnectionPage';
+
+import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 
 const AppRouter = () => {
   return (
@@ -48,6 +58,8 @@ const AppRouter = () => {
         </Route>
 
         <Route element={<PrivateRoute />}>
+          <Route path={ROUTES.FORCE_CHANGE_PASSWORD} element={<ForceChangePasswordPage />} />
+
           <Route element={<RoleRoute allowedRoles={[ROLES.SYSTEM_ADMIN]} />}>
             <Route path={ROUTES.ADMIN} element={<AdminPage />} />
           </Route>
@@ -68,7 +80,7 @@ const AppRouter = () => {
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />}/>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
               <Route path={ROUTES.PRODUCT_LOGS} element={<ProductLogPage />} />
               <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
@@ -79,6 +91,16 @@ const AppRouter = () => {
               <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />
               <Route path={ROUTES.CUSTOMER_EDIT} element={<CustomerEditPage />} />
               <Route path={ROUTES.CUSTOMER_DETAIL} element={<CustomerDetailPage />} />
+
+              {/* Inventory */}
+              <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />
+              <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
+              {/* <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} /> */}
+              <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
+              <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
+              <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
+              <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
+              <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
             </Route>
           </Route>
         </Route>

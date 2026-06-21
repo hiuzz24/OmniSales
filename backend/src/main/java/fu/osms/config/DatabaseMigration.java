@@ -24,5 +24,59 @@ public class DatabaseMigration {
         } catch (Exception e) {
             log.warn("Migration skipped or already applied: {}", e.getMessage());
         }
+
+        try {
+            // Drop old constraint (if exists) and recreate with STATUS_CHANGE and PAYMENT_STATUS_CHANGE
+            jdbcTemplate.execute("""
+                ALTER TABLE audit_logs
+                DROP CONSTRAINT IF EXISTS chk_audit_action,
+                DROP CONSTRAINT IF EXISTS audit_logs_action_check,
+                ADD CONSTRAINT audit_logs_action_check
+                CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'CONNECT', 'DISCONNECT', 'STATUS_CHANGE', 'ORDER_CANCEL', 'PAYMENT_STATUS_CHANGE'))
+            """);
+            // Verify the constraint includes both STATUS_CHANGE and PAYMENT_STATUS_CHANGE
+            Boolean hasStatusChange = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'audit_logs_action_check'
+                      AND pg_get_constraintdef(oid) LIKE '%STATUS_CHANGE%'
+                )
+            """, Boolean.class);
+            Boolean hasPaymentStatusChange = jdbcTemplate.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'audit_logs_action_check'
+                      AND pg_get_constraintdef(oid) LIKE '%PAYMENT_STATUS_CHANGE%'
+                )
+            """, Boolean.class);
+            if (Boolean.TRUE.equals(hasStatusChange) && Boolean.TRUE.equals(hasPaymentStatusChange)) {
+                log.info("Migration: audit_logs_action_check constraint updated with STATUS_CHANGE and PAYMENT_STATUS_CHANGE");
+            } else {
+                log.error("Migration FAILED: audit_logs_action_check missing PAYMENT_STATUS_CHANGE!");
+            }
+        } catch (Exception e) {
+            log.error("Migration error updating audit_logs constraint: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                ALTER TABLE audit_logs ALTER COLUMN action TYPE VARCHAR(30)
+            """);
+            log.info("Migration: widened audit_logs.action column to VARCHAR(30)");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for audit_logs.action widening: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                ALTER TABLE orders
+                DROP CONSTRAINT IF EXISTS orders_payment_status_check,
+                ADD CONSTRAINT orders_payment_status_check
+                CHECK (payment_status IN ('UNPAID', 'PAID', 'REFUNDED'))
+            """);
+            log.info("Migration: orders payment_status constraint updated (removed PARTIAL)");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders payment_status: {}", e.getMessage());
+        }
     }
 }

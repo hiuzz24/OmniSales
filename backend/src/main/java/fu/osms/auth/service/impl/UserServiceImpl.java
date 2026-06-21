@@ -2,6 +2,7 @@ package fu.osms.auth.service.impl;
 
 import fu.osms.auth.dto.request.UpdateProfileRequest;
 import fu.osms.auth.dto.request.UserRequest;
+import fu.osms.auth.dto.response.ResetPasswordResponse;
 import fu.osms.auth.dto.response.UserProfileResponse;
 import fu.osms.auth.dto.response.UserResponse;
 import fu.osms.auth.entity.User;
@@ -16,6 +17,7 @@ import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.coyote.BadRequestException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -164,6 +167,21 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
         log.info("Password changed for user: {}", email);
     }
+    public boolean isValidPasswordFormat(String password) {
+        if (password == null || password.length() < 8) {
+            return false;
+        }
+        String passwordRegex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@#$%^&+=!\\-_]).{8,}$";
+        Pattern pattern = Pattern.compile(passwordRegex);
+        return pattern.matcher(password).matches();
+    }
+    @Override
+    public UUID findUserIdByEmail(String email) {
+        return userRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("User not found"))
+                .getId();
+    }
 
     // ── Helper ────────────────────────────────────────────────────────────
 
@@ -185,4 +203,6 @@ public class UserServiceImpl implements UserService {
                 .createdAt(user.getCreatedAt())
                 .build();
     }
+
+
 }

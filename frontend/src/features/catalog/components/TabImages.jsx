@@ -3,7 +3,7 @@ import styles from './TabImages.module.css';
 
 const TabImages = ({ product }) => {
   const images = product.images || [];
-  
+
   const variantImages = (product.variants || []).flatMap(v => {
     return (v.images || []).map(img => ({
       ...img,

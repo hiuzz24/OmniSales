@@ -1,6 +1,7 @@
 package fu.osms.catalog.controller;
 
 import fu.osms.catalog.dto.request.CategoryRequest;
+import fu.osms.catalog.dto.response.CategoryNodeResponse;
 import fu.osms.catalog.dto.response.CategoryResponse;
 import fu.osms.catalog.service.CategoryService;
 import fu.osms.common.dto.ApiResponse;
@@ -55,5 +56,11 @@ public class CategoryController {
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         throw new UnsupportedOperationException("Chưa code");
+    }
+
+    @GetMapping("/tree")
+    public ResponseEntity<List<CategoryNodeResponse>> getCategoryTree() {
+        List<CategoryNodeResponse> tree = categoryService.getCategoryTree();
+        return ResponseEntity.ok(tree);
     }
 }
