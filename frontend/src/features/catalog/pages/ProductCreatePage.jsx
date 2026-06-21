@@ -22,9 +22,12 @@ const ProductCreatePage = () => {
     name: '',
     sku: '',
     barcode: '',
+    size: '',
+    color: '',
     description: '',
     categoryId: '',
     brand: '',
+    unit: '',
   });
   const [images, setImages] = useState([]);
   const [price, setPrice] = useState('');
@@ -33,6 +36,7 @@ const ProductCreatePage = () => {
   const [variants, setVariants] = useState([]);
   const [weightGrams, setWeightGrams] = useState('');
   const [dimensions, setDimensions] = useState('');
+  const [lowStockThreshold, setLowStockThreshold] = useState('5');
   const [showProduct, setShowProduct] = useState(true);
 
   const [channels, setChannels] = useState([]);
@@ -74,6 +78,7 @@ const ProductCreatePage = () => {
       price: price,
       costPrice: costPrice,
       weightGrams: weightGrams,
+      lowStockThreshold: lowStockThreshold,
       dimensions: dimensions,
       variants: hasVariants ? variants : [],
     };
@@ -98,6 +103,7 @@ const ProductCreatePage = () => {
     if (hasVariants) {
       requestVariants = variants.map((v) => ({
         sku: v.sku,
+        barcode: v.barcode || null,
         name: [v.optionValues?.Size, v.optionValues?.['Màu']].filter(Boolean).join(' / ') || v.sku,
         price: Number(v.price),
         costPrice: v.costPrice ? Number(v.costPrice) : null,
@@ -107,14 +113,17 @@ const ProductCreatePage = () => {
     } else {
       requestVariants = [{
         sku: formData.sku,
+        barcode: formData.barcode || null,
         name: formData.name || 'Mặc định',
         price: Number(price),
         costPrice: costPrice ? Number(costPrice) : null,
-        optionValues: {},
+        optionValues: Object.fromEntries(
+          Object.entries({ Size: formData.size, 'Màu': formData.color }).filter(([_, v]) => v)
+        ),
         images: images.map((img, i) => ({
           url: img.url,
           sortOrder: i,
-          isPrimary: i === 0,
+          isPrimary: false,
         })),
       }];
     }
@@ -125,8 +134,10 @@ const ProductCreatePage = () => {
       description: formData.description || null,
       categoryId: formData.categoryId || null,
       brand: formData.brand || null,
+      unit: formData.unit || null,
       status,
       weightGrams: weightGrams ? Number(weightGrams) : null,
+      lowStockThreshold: lowStockThreshold === '' ? 5 : Number(lowStockThreshold),
       attributes: dimensions ? { dimensions } : {},
       channelIds: selectedChannels,
       variants: requestVariants,
@@ -186,6 +197,7 @@ const ProductCreatePage = () => {
   const handleShippingChange = (field, value) => {
     if (field === 'weightGrams') setWeightGrams(value);
     if (field === 'dimensions') setDimensions(value);
+    if (field === 'lowStockThreshold') setLowStockThreshold(value);
   };
 
   const handleAddVariant = (variant) => {
@@ -220,6 +232,7 @@ const ProductCreatePage = () => {
             onChange={setFormData}
             categories={categories}
             errors={errors}
+            hasVariants={hasVariants}
           />
 
           <div className={styles.variantToggleCard}>
@@ -246,6 +259,8 @@ const ProductCreatePage = () => {
               costPrice={costPrice}
               onChange={handlePriceChange}
               errors={errors}
+              channels={channels}
+              selectedChannels={selectedChannels}
             />
           )}
 
@@ -257,13 +272,17 @@ const ProductCreatePage = () => {
               onChange={setVariants}
               errors={variantErrors}
               globalError={errors.variants}
+              channels={channels}
+              selectedChannels={selectedChannels}
             />
           )}
 
           <ProductShippingInfo
             weightGrams={weightGrams}
             dimensions={dimensions}
+            lowStockThreshold={lowStockThreshold}
             onChange={handleShippingChange}
+            errors={errors}
           />
         </div>
 

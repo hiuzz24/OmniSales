@@ -1,6 +1,7 @@
 package fu.osms.catalog.dto.response;
 
 import fu.osms.catalog.enums.ProductStatus;
+import fu.osms.channel.dto.response.ChannelSyncResponse;
 import lombok.*;
 
 import java.time.OffsetDateTime;
@@ -23,6 +24,7 @@ public class ProductResponse {
     private String name;
     private String description;
     private String brand;
+    private String unit;
     private Boolean hasOrders;
     private ProductStatus status;
     private Integer lowStockThreshold;
@@ -39,4 +41,5 @@ public class ProductResponse {
     private List<ProductVariantResponse> variants;
     private List<ProductImageResponse> images;
     private List<String> channels;
+    private List<ChannelSyncResponse> channelSyncs;
 }

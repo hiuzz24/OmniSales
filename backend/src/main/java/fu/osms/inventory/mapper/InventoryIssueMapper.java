@@ -33,13 +33,13 @@ public interface InventoryIssueMapper {
     InventoryIssueResponse toResponse(InventoryIssue issue);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "issue", ignore = true)
-    @Mapping(target = "variant", ignore = true)
+    @Mapping(target = "inventoryIssue", ignore = true)
+    @Mapping(target = "productVariant", ignore = true)
     @Mapping(target = "totalCost", ignore = true)
     InventoryIssueItem toItemEntity(InventoryIssueItemRequest request);
 
-    @Mapping(target = "variantId", source = "variant.id")
-    @Mapping(target = "variantSku", source = "variant.sku")
-    @Mapping(target = "variantName", source = "variant.name")
+    @Mapping(target = "variantId", source = "productVariant.id")
+    @Mapping(target = "variantSku", source = "productVariant.sku")
+    @Mapping(target = "variantName", source = "productVariant.name")
     InventoryIssueItemResponse toItemResponse(InventoryIssueItem item);
 }

@@ -86,3 +86,57 @@
   height: 18px;
   width: 18px;
 }
+
+.exportBtn {
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.3);
+}
+
+.exportBtn:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.exportBtn:active {
+  transform: translateY(0);
+}
+
+.exportBtn:focus {
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25);
+}
+
+.exportIcon {
+  margin-right: 8px;
+  height: 18px;
+  width: 18px;
+}
+
+.importBtn {
+  color: #ffffff;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: none;
+  box-shadow: 0 4px 14px 0 rgba(245, 158, 11, 0.3);
+}
+
+.importBtn:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+}
+
+.importBtn:active {
+  transform: translateY(0);
+}
+
+.importBtn:focus {
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25);
+}
+
+.importIcon {
+  margin-right: 8px;
+  height: 18px;
+  width: 18px;
+}

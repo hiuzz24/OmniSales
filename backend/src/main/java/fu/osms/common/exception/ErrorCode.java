@@ -42,6 +42,10 @@ public enum ErrorCode {
     PRODUCT_HAS_ORDERS(HttpStatus.BAD_REQUEST, "Không thể thay đổi SKU vì sản phẩm đã phát sinh đơn hàng"),
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
 
+    EXCEL_IMPORT_INVALID_FILE(HttpStatus.BAD_REQUEST, "File Excel không hợp lệ"),
+    EXCEL_IMPORT_VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Dữ liệu Excel không hợp lệ"),
+    EXCEL_IMPORT_EMPTY(HttpStatus.BAD_REQUEST, "File Excel không có dữ liệu"),
+
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng"),
     ORDER_STATUS_INVALID_TRANSITION(HttpStatus.BAD_REQUEST, "Không thể chuyển đổi trạng thái đơn hàng này"),
     ORDER_ALREADY_CANCELLED(HttpStatus.CONFLICT, "Đơn hàng đã bị hủy trước đó"),

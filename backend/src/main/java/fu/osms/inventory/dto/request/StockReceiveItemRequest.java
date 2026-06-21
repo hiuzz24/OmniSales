@@ -18,12 +18,11 @@ public class StockReceiveItemRequest {
     @NotNull(message = "Variant ID must not be null")
     private UUID variantId;
 
-    // For DRAFT: can be null
-    // For CONFIRM: will be validated in service layer
+
+    @Min(value = 1, message = "Số lượng phải lớn hơn 0")
     private Integer quantity;
 
-    // For DRAFT: can be null
-    // For CONFIRM: will be validated in service layer
+    @DecimalMin(value = "0.0", inclusive = true, message = "Đơn giá phải lớn hơn hoặc bằng 0")
     private BigDecimal unitCost;
 
     private String notes;
