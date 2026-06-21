@@ -59,6 +59,11 @@ const authService = {
     );
     return data;
   },
+
+  changePasswordAfterLogin: async (oldPassword, newPassword, confirmPassword) => {
+    const data = await authApi.changePasswordAfterLogin(oldPassword, newPassword, confirmPassword);
+    return data;
+  },
 };
 
 export default authService;

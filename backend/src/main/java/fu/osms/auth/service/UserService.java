@@ -2,6 +2,7 @@ package fu.osms.auth.service;
 
 import fu.osms.auth.dto.request.UpdateProfileRequest;
 import fu.osms.auth.dto.request.UserRequest;
+import fu.osms.auth.dto.response.ResetPasswordResponse;
 import fu.osms.auth.dto.response.UserProfileResponse;
 import fu.osms.auth.dto.response.UserResponse;
 import fu.osms.common.dto.PageResponse;
@@ -33,4 +34,8 @@ public interface UserService {
     UserProfileResponse getProfileById(UUID userId);
 
     void changePassword(String email, String oldPassword, String newPassword);
+
+    UUID findUserIdByEmail(String email);
+
+
 }
