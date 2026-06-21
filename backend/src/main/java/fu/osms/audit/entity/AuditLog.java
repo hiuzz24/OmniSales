@@ -1,6 +1,7 @@
 package fu.osms.audit.entity;
 
 import fu.osms.auth.entity.User;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -25,12 +26,13 @@ public class AuditLog {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "actor_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private User actor;
 
     @Column(name = "actor_email", nullable = false, length = 255)
     private String actorEmail;
 
-    @Column(nullable = false, length = 15)
+    @Column(nullable = false, length = 30)
     private String action;
 
     @Column(name = "entity_type", nullable = false, length = 10)
