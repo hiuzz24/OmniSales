@@ -21,11 +21,10 @@ import CustomerListPage from '../../features/customer/pages/CustomerListPage';
 import CustomerDetailPage from '../../features/customer/pages/CustomerDetailPage';
 import CustomerCreatePage from '../../features/customer/pages/CustomerCreatePage';
 import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
-import InventoryPage from '../../features/inventory/pages/InventoryPage';
-import InventoryDetailPage from '../../features/inventory/pages/InventoryDetailPage';
+import InventoryPage from '../../features/inventory/pages/inventory/InventoryPage';
+import InventoryDetailPage from '../../features/inventory/pages/inventory/InventoryDetailPage';
 import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
 import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
-import StocktakePage from '../../features/inventory/pages/StocktakePage';
 import OrderListPage from '../../features/order/pages/OrderListPage';
 import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
 import OrderLogPage from '../../features/order/pages/OrderLogPage';
@@ -38,6 +37,9 @@ import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/St
 import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
 import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
 import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
+import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/StockDeliveryEditPage';
+import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
+import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 
@@ -75,7 +77,10 @@ const AppRouter = () => {
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
               <Route path={ROUTES.STOCK_DELIVERIES} element={<StockDeliveryPage />} />
               <Route path={ROUTES.STOCK_DELIVERY_CREATE} element={<StockDeliveryCreatePage />} />
+              <Route path={ROUTES.STOCK_DELIVERY_EDIT} element={<StockDeliveryEditPage />} />
               <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
+              <Route path={ROUTES.STOCKTAKES} element={<StocktakePage />} />
+              <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>

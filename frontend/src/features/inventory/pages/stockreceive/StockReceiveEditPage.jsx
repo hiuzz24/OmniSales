@@ -5,13 +5,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
 import {
-  ArrowLeft, Save, Loader2, AlertCircle, Edit3, Trash2,
+  ArrowLeft, Save, Loader2, AlertCircle, Edit3, Trash2, Plus, Search, X,
 } from 'lucide-react';
 
 import warehouseService from '../../services/warehouseService';
 import supplierService from '../../services/supplierService';
 import stockReceiveService from '../../services/stockReceiveService';
 import { ROUTES } from '../../../../app/router/routes';
+import axiosClient from '../../../../api/axiosClient';
+import useConfirmDialog from '../../hooks/useConfirmDialog';
+import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
@@ -29,15 +32,124 @@ const schema = z.object({
   notes: z.string().optional(),
 });
 
+function AddProductModal({ open, onClose, onAdd, existingVariantIds }) {
+  const [keyword, setKeyword] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let ignore = false;
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const params = { page: 0, size: 50 };
+        if (keyword.trim()) params.search = keyword.trim();
+        const response = await axiosClient.get('/catalog/variants', { params });
+        if (ignore) return;
+        const data = response.data?.data ?? response.data ?? {};
+        setResults(data.content ?? (Array.isArray(data) ? data : []));
+      } catch {
+        if (!ignore) setResults([]);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    }, keyword.trim() ? 250 : 0);
+    return () => {
+      ignore = true;
+      clearTimeout(timer);
+    };
+  }, [keyword, open]);
+
+  if (!open) return null;
+
+  return (
+    <div style={modalBackdropStyle} onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <div style={modalStyle}>
+        <div style={modalHeaderStyle}>
+          <div>
+            <h2 style={modalTitleStyle}>Thêm sản phẩm nhập</h2>
+            <p style={modalSubtitleStyle}>Tìm và chọn sản phẩm cần thêm vào phiếu lưu tạm</p>
+          </div>
+          <button type="button" onClick={onClose} style={modalCloseButtonStyle}><X size={18} /></button>
+        </div>
+        <div style={modalSearchWrapStyle}>
+          <Search size={16} color="#8aa0bd" />
+          <input autoFocus value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm theo tên sản phẩm hoặc SKU..." style={modalSearchInputStyle} />
+        </div>
+        <div style={modalListStyle}>
+          {loading ? (
+            <div style={modalEmptyStyle}>Đang tải...</div>
+          ) : results.length ? results.map((item, index) => {
+            const exists = existingVariantIds.includes(item.id);
+            return (
+              <button key={item.id} type="button" disabled={exists} onClick={() => onAdd(item)} style={{ ...modalRowStyle, opacity: exists ? 0.45 : 1, cursor: exists ? 'default' : 'pointer' }}>
+                <span style={modalOrdinalStyle}>{String(index + 1).padStart(3, '0')}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={modalProductNameStyle}>{item.productName}{item.name ? ` - ${item.name}` : ''}</span>
+                  <span style={modalProductMetaStyle}>{item.sku}</span>
+                </span>
+                {exists ? <span style={modalAddedStyle}>Đã thêm</span> : <Plus size={18} color="#2563eb" />}
+              </button>
+            );
+          }) : (
+            <div style={modalEmptyStyle}>Không tìm thấy sản phẩm phù hợp.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const modalBackdropStyle = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 1000,
+  background: 'rgba(15, 23, 42, 0.48)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 20,
+};
+
+const modalStyle = {
+  width: 'min(520px, 100%)',
+  maxHeight: '76vh',
+  background: '#fff',
+  borderRadius: 10,
+  boxShadow: '0 22px 60px rgba(15, 23, 42, 0.28)',
+  border: '1px solid #e2e8f0',
+  padding: 20,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 14,
+};
+
+const modalHeaderStyle = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 };
+const modalTitleStyle = { margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' };
+const modalSubtitleStyle = { margin: '5px 0 0', fontSize: 13, color: '#64748b' };
+const modalCloseButtonStyle = { width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const modalSearchWrapStyle = { display: 'flex', alignItems: 'center', gap: 9, border: '1px solid #cbd5e1', borderRadius: 8, padding: '0 12px', height: 40, background: '#f8fafc' };
+const modalSearchInputStyle = { flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#0f172a' };
+const modalListStyle = { border: '1px solid #e2e8f0', borderRadius: 8, overflowY: 'auto', maxHeight: 320, background: '#fff' };
+const modalRowStyle = { width: '100%', border: 'none', borderBottom: '1px solid #f1f5f9', background: '#fff', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' };
+const modalOrdinalStyle = { width: 40, height: 34, borderRadius: 8, background: '#ecfdf5', color: '#009688', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const modalProductNameStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+const modalProductMetaStyle = { display: 'block', marginTop: 2, fontSize: 12, color: '#8aa0bd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+const modalAddedStyle = { fontSize: 12, color: '#94a3b8', fontWeight: 600 };
+const modalEmptyStyle = { padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 };
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function StockReceiveEditPage() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const { id } = useParams();
   const [receipt, setReceipt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, setValue } = useForm({
     resolver: zodResolver(schema),
@@ -47,6 +159,8 @@ export default function StockReceiveEditPage() {
     () => items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0),
     [items]
   );
+  const hasUnsavedChanges = Boolean(receipt);
+  const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
   useEffect(() => {
     if (!id) {
@@ -88,11 +202,11 @@ export default function StockReceiveEditPage() {
       // Set items
       setItems((receiptData.items || []).map(item => ({
         variantId: item.variantId,
-        sku: item.sku,
+        sku: item.sku ?? item.variantSku,
         productName: item.productName,
         variantName: item.variantName || '',
         quantity: item.quantity || 0,
-        unitPrice: item.unitCost || 0,
+        unitPrice: item.unitCost ?? item.unitPrice ?? 0,
       })));
       
       // Extract data from responses
@@ -120,12 +234,22 @@ export default function StockReceiveEditPage() {
   // ── Item handlers ─────────────────────────────────────────────────────────
   const onQtyChange   = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
-  const onRemove      = (i)    => {
-    if (items.length === 1) {
-      toast.error('Phải có ít nhất một sản phẩm trong phiếu nhập');
-      return;
-    }
-    setItems((p) => p.filter((_, idx) => idx !== i));
+  const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
+  const onAddProduct = (item) => {
+    setItems((current) => {
+      if (current.some((entry) => entry.variantId === item.id)) return current;
+      return [
+        ...current,
+        {
+          variantId: item.id,
+          sku: item.sku,
+          productName: item.productName,
+          variantName: item.name || '',
+          quantity: 1,
+          unitPrice: item.costPrice ?? item.price ?? 0,
+        },
+      ];
+    });
   };
 
   // ── Submit - Save Draft ────────────────────────────────────────────────────
@@ -150,7 +274,7 @@ export default function StockReceiveEditPage() {
         isDraft: true,
       });
       toast.success('Cập nhật phiếu nhập thành công.');
-      navigate(`/warehouse/receipts/${id}`);
+      runWithoutGuard(() => navigate(`/warehouse/receipts/${id}`));
     } catch (error) { 
       const errorMessage = error?.response?.data?.message || error?.message || 'Không thể cập nhật phiếu nhập. Vui lòng thử lại.';
       toast.error(errorMessage);
@@ -211,9 +335,15 @@ export default function StockReceiveEditPage() {
 
         {/* Left - Items table */}
         <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc' }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: 0 }}>Danh sách sản phẩm</h3>
-            <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Cập nhật số lượng và đơn giá</p>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: 0 }}>Danh sách sản phẩm</h3>
+              <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Cập nhật số lượng và đơn giá</p>
+            </div>
+            <button type="button" onClick={() => setModalOpen(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none', background: '#009688', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <Plus size={14} /> Thêm sản phẩm
+            </button>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -251,10 +381,10 @@ export default function StockReceiveEditPage() {
                         {line > 0 ? formatVND(line) : '—'}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <button onClick={() => onRemove(idx)} disabled={items.length === 1}
-                          style={{ width: 24, height: 24, borderRadius: 4, border: 'none', background: 'none', cursor: items.length === 1 ? 'not-allowed' : 'pointer', color: items.length === 1 ? '#cbd5e1' : '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          onMouseEnter={(e) => { if (items.length > 1) { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; } }}
-                          onMouseLeave={(e) => { if (items.length > 1) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94a3b8'; } }}>
+                        <button onClick={() => onRemove(idx)}
+                          style={{ width: 24, height: 24, borderRadius: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}>
                           <Trash2 size={13} />
                         </button>
                       </td>
@@ -354,6 +484,13 @@ export default function StockReceiveEditPage() {
           </div>
         </div>
       </div>
+      <AddProductModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onAdd={onAddProduct}
+        existingVariantIds={items.map((item) => item.variantId)}
+      />
+      {ConfirmDialog}
     </div>
   );
 }

@@ -56,12 +56,12 @@ public class InventoryController {
     @PostMapping("/items")
     public ResponseEntity<ApiResponse<InventoryItemResponse>> createItem(
             @Valid @RequestBody InventoryItemRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @GetMapping("/items/{id}")
-    public ResponseEntity<ApiResponse<Page<InventoryItemResponse>>> getItemById(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+    public ResponseEntity<ApiResponse<InventoryItemResponse>> getItemById(@PathVariable UUID id) {
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @GetMapping
@@ -163,20 +163,21 @@ public class InventoryController {
 
     @GetMapping("/items/low-stock")
     public ResponseEntity<ApiResponse<List<InventoryItemResponse>>> getLowStock() {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @PostMapping("/transactions")
     public ResponseEntity<ApiResponse<InventoryTransactionResponse>> recordTransaction(
             @Valid @RequestBody InventoryTransactionRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        InventoryTransactionResponse response = inventoryService.recordTransaction(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
-//    @GetMapping("/transactions")
-//    public ResponseEntity<ApiResponse<PageResponse<InventoryTransactionResponse>>> getTransactions(
-//            @RequestParam(required = false) UUID variantId,
-//            @RequestParam(defaultValue = "0") int page,
-//            @RequestParam(defaultValue = "20") int size) {
-//        throw new UnsupportedOperationException("Chưa code");
-//    }
+    @GetMapping("/transactions")
+    public ResponseEntity<ApiResponse<PageResponse<InventoryTransactionResponse>>> getTransactions(
+            @RequestParam(required = false) UUID variantId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        throw new UnsupportedOperationException("Not implemented");
+    }
 }

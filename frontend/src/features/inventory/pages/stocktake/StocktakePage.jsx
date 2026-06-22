@@ -1,0 +1,296 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  Eye,
+  MoreHorizontal,
+  PlayCircle,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
+} from 'lucide-react';
+import { toast } from 'react-toastify';
+import { ROUTES } from '../../../../app/router/routes';
+import stocktakeService from '../../services/stocktakeService';
+import warehouseService from '../../services/warehouseService';
+import InventoryDocumentListPage, {
+  ActionMenuItem,
+  ActionMenuShell,
+  Badge,
+  FilterSelect,
+  SearchInput,
+} from '../components/InventoryDocumentListPage';
+import {
+  formatDate,
+  formatDateTime,
+  formatNumber,
+  getResponseData,
+  tableCellStyle,
+} from '../components/inventoryDocumentListUtils';
+
+const STATUS_CONFIG = {
+  DRAFT: { label: 'Nháp', icon: ClipboardList, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
+  IN_PROGRESS: { label: 'Đang kiểm', icon: Clock3, color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  COMPLETED: { label: 'Hoàn thành', icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
+  CANCELLED: { label: 'Đã hủy', icon: XCircle, color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
+};
+
+const columns = [
+  { label: 'Mã phiếu' },
+  { label: 'Kho kiểm' },
+  { label: 'Tổng SKU', align: 'right' },
+  { label: 'Đã kiểm', align: 'right' },
+  { label: 'Thừa (SP)', align: 'right' },
+  { label: 'Thiếu (SP)', align: 'right' },
+  { label: 'Kết quả' },
+  { label: 'Trạng thái' },
+  { label: 'Người tạo' },
+  { label: 'Ngày tạo' },
+  { label: '', align: 'right' },
+];
+
+const StatusBadge = ({ status }) => {
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.DRAFT;
+  return <Badge {...config} />;
+};
+
+const DeltaCell = ({ value, type }) => {
+  if (!value) return <span style={{ color: '#cbd5e1' }}>-</span>;
+  const Icon = type === 'up' ? TrendingUp : TrendingDown;
+  const color = type === 'up' ? '#2563eb' : '#dc2626';
+  const prefix = type === 'up' ? '+' : '-';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, color, fontWeight: 800 }}>
+      <Icon size={14} />
+      {prefix} {formatNumber(value)}
+    </span>
+  );
+};
+
+const ResultCell = ({ surplus, shortage }) => {
+  if (surplus && shortage) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#f97316', fontWeight: 800 }}>
+        <AlertTriangle size={14} /> Thừa & Thiếu
+      </span>
+    );
+  }
+  if (surplus) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#2563eb', fontWeight: 800 }}>
+        <TrendingUp size={14} /> Thừa hàng
+      </span>
+    );
+  }
+  if (shortage) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#dc2626', fontWeight: 800 }}>
+        <TrendingDown size={14} /> Thiếu hàng
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#059669', fontWeight: 800 }}>
+      <CheckCircle2 size={14} /> Khớp
+    </span>
+  );
+};
+
+const ActionMenu = ({ stocktake, onStatus }) => {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const isClosed = stocktake.status === 'COMPLETED' || stocktake.status === 'CANCELLED';
+
+  return (
+    <ActionMenuShell menuRef={menuRef} open={open} buttonIcon={MoreHorizontal} onToggle={() => setOpen((current) => !current)}>
+      <ActionMenuItem onClick={() => { setOpen(false); toast.info('Chi tiết phiếu kiểm đang được phát triển.'); }}>
+        <Eye size={14} /> Xem chi tiết
+      </ActionMenuItem>
+      {!isClosed && stocktake.status !== 'IN_PROGRESS' && (
+        <ActionMenuItem color="#2563eb" onClick={() => { setOpen(false); onStatus(stocktake, 'IN_PROGRESS'); }}>
+          <PlayCircle size={14} /> Chuyển đang kiểm
+        </ActionMenuItem>
+      )}
+      {!isClosed && (
+        <ActionMenuItem color="#059669" onClick={() => { setOpen(false); onStatus(stocktake, 'COMPLETED'); }}>
+          <CheckCircle2 size={14} /> Hoàn thành kiểm kho
+        </ActionMenuItem>
+      )}
+      {!isClosed && (
+        <ActionMenuItem color="#dc2626" onClick={() => { setOpen(false); onStatus(stocktake, 'CANCELLED'); }}>
+          <XCircle size={14} /> Hủy phiếu kiểm
+        </ActionMenuItem>
+      )}
+    </ActionMenuShell>
+  );
+};
+
+export default function StocktakePage() {
+  const navigate = useNavigate();
+  const [stocktakes, setStocktakes] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [statistics, setStatistics] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState('');
+  const [warehouseId, setWarehouseId] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage] = useState(10);
+  const [totalElements, setTotalElements] = useState(0);
+
+  const fetchStocktakes = async () => {
+    setLoading(true);
+    try {
+      const params = { page, size: rowsPerPage, sortBy: 'createdAt', sortDirection: 'DESC' };
+      if (keyword.trim()) params.keyword = keyword.trim();
+      if (status) params.status = status;
+      if (warehouseId) params.warehouseId = warehouseId;
+      const response = await stocktakeService.getStocktakes(params);
+      const data = getResponseData(response);
+      const content = data.content ?? [];
+      setStocktakes(Array.isArray(content) ? content : []);
+      setTotalElements(data.totalElements ?? content.length ?? 0);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể tải danh sách phiếu kiểm kho.');
+      setStocktakes([]);
+      setTotalElements(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    warehouseService.getAll()
+      .then((response) => {
+        const data = getResponseData(response);
+        setWarehouses(Array.isArray(data) ? data : data.content ?? []);
+      })
+      .catch(() => setWarehouses([]));
+    stocktakeService.getStatistics()
+      .then((response) => setStatistics(getResponseData(response)))
+      .catch(() => setStatistics({}));
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(fetchStocktakes, keyword.trim() ? 250 : 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, keyword, status, warehouseId]);
+
+  const refresh = async () => {
+    await Promise.all([
+      fetchStocktakes(),
+      stocktakeService.getStatistics()
+        .then((response) => setStatistics(getResponseData(response)))
+        .catch(() => setStatistics({})),
+    ]);
+  };
+
+  const handleStatus = async (stocktake, nextStatus) => {
+    if (nextStatus === 'COMPLETED') {
+      const hasMissingActual = (stocktake.items ?? []).some((item) => item.actualQuantity === null || item.actualQuantity === undefined || item.actualQuantity < 0);
+      if (hasMissingActual || !(stocktake.items ?? []).length) {
+        toast.error('Cần nhập đủ số lượng tồn kho thực tế trước khi hoàn thành.');
+        return;
+      }
+    }
+    try {
+      await stocktakeService.changeStatus(stocktake.id, nextStatus);
+      toast.success('Cập nhật trạng thái phiếu kiểm thành công.');
+      refresh();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể cập nhật trạng thái phiếu kiểm.');
+    }
+  };
+
+  const stats = useMemo(() => ([
+    { key: 'total', label: 'Tổng phiếu', value: statistics.totalCount ?? totalElements, icon: ClipboardList, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
+    { key: 'completed', label: 'Hoàn thành', value: statistics.completedCount ?? 0, icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
+    { key: 'progress', label: 'Đang kiểm', value: statistics.inProgressCount ?? 0, icon: Clock3, color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+    { key: 'diff', label: 'Có sai lệch', value: stocktakes.filter((item) => (item.items ?? []).some((line) => line.difference !== 0)).length, icon: AlertTriangle, color: '#f97316', bg: '#fff7ed', border: '#fed7aa' },
+  ]), [statistics, stocktakes, totalElements]);
+
+  const rows = stocktakes.map((stocktake) => {
+    const items = stocktake.items ?? [];
+    const checkedCount = items.filter((item) => item.actualQuantity !== null && item.actualQuantity !== undefined).length;
+    const surplus = items.reduce((sum, item) => sum + Math.max(Number(item.difference ?? item.actualQuantity - item.systemQuantity) || 0, 0), 0);
+    const shortage = items.reduce((sum, item) => sum + Math.abs(Math.min(Number(item.difference ?? item.actualQuantity - item.systemQuantity) || 0, 0)), 0);
+    return (
+      <tr key={stocktake.id}>
+        <td style={{ ...tableCellStyle, color: '#009688', fontFamily: 'monospace', fontWeight: 700 }}>{stocktake.sessionCode}</td>
+        <td style={tableCellStyle}>{stocktake.warehouseName ?? '-'}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(items.length)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right', fontWeight: 700 }}>{formatNumber(checkedCount)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}><DeltaCell value={surplus} type="up" /></td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}><DeltaCell value={shortage} type="down" /></td>
+        <td style={tableCellStyle}><ResultCell surplus={surplus} shortage={shortage} /></td>
+        <td style={tableCellStyle}><StatusBadge status={stocktake.status} /></td>
+        <td style={tableCellStyle}>{stocktake.createdByName ?? '-'}</td>
+        <td style={tableCellStyle}>{formatDateTime(stocktake.createdAt) || formatDate(stocktake.scheduledDate)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}>
+          <ActionMenu stocktake={stocktake} onStatus={handleStatus} />
+        </td>
+      </tr>
+    );
+  });
+
+  const totalPages = Math.max(1, Math.ceil(totalElements / rowsPerPage));
+  const firstVisible = totalElements === 0 ? 0 : page * rowsPerPage + 1;
+  const lastVisible = Math.min(totalElements, (page + 1) * rowsPerPage);
+
+  return (
+    <InventoryDocumentListPage
+      icon={ClipboardList}
+      iconBg="#ecfeff"
+      iconColor="#009688"
+      title="Danh sách phiếu kiểm kho"
+      description="Quản lý các phiếu kiểm kê hàng hóa định kỳ và đột xuất"
+      createLabel="Tạo phiếu kiểm"
+      onCreate={() => navigate(ROUTES.STOCKTAKE_CREATE)}
+      onExport={() => toast.info('Xuất Excel phiếu kiểm kho đang được phát triển.')}
+      stats={stats}
+      filters={(
+        <>
+          <SearchInput value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(0); }} placeholder="Tìm theo mã phiếu, kho, người tạo..." />
+          <FilterSelect value={status} onChange={(event) => { setStatus(event.target.value); setPage(0); }}>
+            <option value="">Tất cả trạng thái</option>
+            <option value="DRAFT">Nháp</option>
+            <option value="IN_PROGRESS">Đang kiểm</option>
+            <option value="COMPLETED">Hoàn thành</option>
+            <option value="CANCELLED">Đã hủy</option>
+          </FilterSelect>
+          <FilterSelect value={warehouseId} onChange={(event) => { setWarehouseId(event.target.value); setPage(0); }} minWidth={210}>
+            <option value="">Tất cả kho</option>
+            {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}
+          </FilterSelect>
+        </>
+      )}
+      columns={columns}
+      rows={rows}
+      loading={loading}
+      emptyText="Không có phiếu kiểm kho phù hợp"
+      footerLeft={`Hiển thị ${formatNumber(stocktakes.length)} / ${formatNumber(totalElements)} phiếu`}
+      pagination={{
+        page,
+        totalPages,
+        totalElements,
+        label: `Hiển thị ${formatNumber(firstVisible)} - ${formatNumber(lastVisible)} / ${formatNumber(totalElements)} phiếu`,
+        onPrevious: () => setPage((current) => Math.max(0, current - 1)),
+        onNext: () => setPage((current) => Math.min(totalPages - 1, current + 1)),
+      }}
+    />
+  );
+}
