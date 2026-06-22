@@ -2,6 +2,7 @@ package fu.osms.inventory.dto.response;
 
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -20,6 +21,7 @@ public class InventoryItemResponse {
     private Integer quantityOnHand;
     private Integer reservedQuantity;
     private Integer availableQuantity;
+    private BigDecimal averageCost;
     private Integer lowStockThreshold;
     private Boolean isLowStock;
     private OffsetDateTime updatedAt;

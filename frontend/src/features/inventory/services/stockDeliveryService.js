@@ -11,6 +11,16 @@ const stockDeliveryService = {
     }
   },
 
+  // Update draft stock delivery
+  updateStockDelivery: async (deliveryId, deliveryData) => {
+    try {
+      const response = await stockDeliveryApi.updateStockDelivery(deliveryId, deliveryData);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Get stock delivery by ID
   getStockDeliveryById: async (deliveryId) => {
     try {
