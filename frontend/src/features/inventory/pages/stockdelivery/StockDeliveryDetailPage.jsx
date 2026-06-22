@@ -20,6 +20,7 @@ import stockDeliveryService from '../../services/stockDeliveryService';
 import useAuth from '../../../auth/hooks/useAuth';
 import { ROLES } from '../../../auth/constants/roles';
 import { ROUTES } from '../../../../app/router/routes';
+import useConfirmDialog from '../../hooks/useConfirmDialog';
 
 const ISSUE_TYPES = {
   ORDER: 'Xuất bán hàng',
@@ -95,6 +96,7 @@ const InfoRow = ({ icon: Icon, label, value, color = '#0f172a' }) => (
 
 export default function StockDeliveryDetailPage() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const { id } = useParams();
   const { user } = useAuth();
   const [delivery, setDelivery] = useState(null);
@@ -136,7 +138,13 @@ export default function StockDeliveryDetailPage() {
 
   const handleCancel = async () => {
     if (!delivery || delivery.status === 'CANCELLED' || !isOwner) return;
-    if (!window.confirm(`Hủy phiếu xuất "${delivery.issueCode}"?\n\nTồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`)) {
+    const ok = await confirm({
+      title: 'Hủy phiếu xuất?',
+      message: `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
+      confirmText: 'Hủy phiếu',
+      tone: 'danger',
+    });
+    if (!ok) {
       return;
     }
 
@@ -154,7 +162,12 @@ export default function StockDeliveryDetailPage() {
 
   const handleComplete = async () => {
     if (!delivery || delivery.status !== 'DRAFT' || !canComplete) return;
-    if (!window.confirm(`Xác nhận hoàn thành phiếu xuất "${delivery.issueCode}"?\n\nSau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`)) {
+    const ok = await confirm({
+      title: 'Hoàn thành phiếu xuất?',
+      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`,
+      confirmText: 'Hoàn thành',
+    });
+    if (!ok) {
       return;
     }
 
@@ -189,6 +202,7 @@ export default function StockDeliveryDetailPage() {
   }
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -306,6 +320,8 @@ export default function StockDeliveryDetailPage() {
         </div>
       </div>
     </div>
+    {ConfirmDialog}
+    </>
   );
 }
 

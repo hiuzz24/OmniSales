@@ -40,6 +40,19 @@ public class StockDeliveryController {
     }
 
     /**
+     * Update a draft stock delivery document
+     */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<StockDeliveryResponse>> updateStockDelivery(
+            @PathVariable UUID id,
+            @Valid @RequestBody StockDeliveryRequest request) {
+
+        StockDeliveryResponse response = stockDeliveryService.updateStockDelivery(id, request);
+        return ResponseEntity.ok(ApiResponse.success("Stock delivery updated successfully", response));
+    }
+
+    /**
      * Get stock delivery by ID
      */
     @GetMapping("/{id}")

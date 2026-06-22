@@ -16,8 +16,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import styles from './InventoryDetailPage.module.css';
-import inventoryApi from '../../../api/inventoryApi';
-import { ROUTES } from '../../../app/router/routes';
+import inventoryApi from '../../../../api/inventoryApi';
+import { ROUTES } from '../../../../app/router/routes';
 
 const PAGE_SIZE = 10;
 

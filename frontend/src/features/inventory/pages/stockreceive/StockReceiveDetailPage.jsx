@@ -8,6 +8,7 @@ import {
 import { toast } from 'react-toastify';
 import stockReceiveService from '../../services/stockReceiveService';
 import { ROUTES } from '../../../../app/router/routes';
+import useConfirmDialog from '../../hooks/useConfirmDialog';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
@@ -132,6 +133,7 @@ const InfoRow = ({ icon: Icon, label, value, color = '#0f172a' }) => (
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function StockReceiveDetailPage() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const { id } = useParams();
   const [receipt, setReceipt] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -188,11 +190,12 @@ export default function StockReceiveDetailPage() {
       return;
     }
     
-    if (
-      !window.confirm(
-        `Xác nhận hoàn thành phiếu nhập "${receipt.receiptCode}"?\n\nTồn kho sẽ được cập nhật sau khi xác nhận.`
-      )
-    ) {
+    const ok = await confirm({
+      title: 'Hoàn thành phiếu nhập?',
+      message: `Xác nhận hoàn thành phiếu "${receipt.receiptCode}". Tồn kho sẽ được cập nhật sau khi xác nhận.`,
+      confirmText: 'Hoàn thành',
+    });
+    if (!ok) {
       return;
     }
 
@@ -274,6 +277,7 @@ export default function StockReceiveDetailPage() {
   );
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
       <div
@@ -835,5 +839,7 @@ export default function StockReceiveDetailPage() {
         </div>
       </div>
     </div>
+    {ConfirmDialog}
+    </>
   );
 }

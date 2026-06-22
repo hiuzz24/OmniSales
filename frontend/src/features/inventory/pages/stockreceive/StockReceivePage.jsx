@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Check,
   CheckCircle2,
+  Edit3,
   Eye,
   FileText,
   MoreHorizontal,
@@ -14,6 +15,7 @@ import {
 import { toast } from 'react-toastify';
 import stockReceiveService from '../../services/stockReceiveService';
 import { ROUTES } from '../../../../app/router/routes';
+import useConfirmDialog from '../../hooks/useConfirmDialog';
 import InventoryDocumentListPage, {
   ActionMenuItem,
   ActionMenuShell,
@@ -53,7 +55,7 @@ const StatusBadge = ({ status }) => {
   return <Badge {...config} />;
 };
 
-const ActionMenu = ({ receipt, onComplete, onRefresh }) => {
+const ActionMenu = ({ receipt, onComplete, onRefresh, confirm }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -61,9 +63,7 @@ const ActionMenu = ({ receipt, onComplete, onRefresh }) => {
   useEffect(() => {
     if (!open) return undefined;
     const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(event.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -71,34 +71,37 @@ const ActionMenu = ({ receipt, onComplete, onRefresh }) => {
 
   const handleComplete = async () => {
     setOpen(false);
-    if (!window.confirm(`Xác nhận hoàn thành phiếu nhập "${receipt.receiptCode}"?\n\nTồn kho sẽ được cập nhật sau khi xác nhận.`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Hoàn thành phiếu nhập',
+      message: `Xác nhận hoàn thành phiếu nhập "${receipt.receiptCode}"?\nTồn kho sẽ được cập nhật sau khi xác nhận.`,
+      confirmLabel: 'Hoàn thành',
+      cancelLabel: 'Hủy',
+    });
+    if (!ok) return;
 
     try {
       await onComplete(receipt.id);
       toast.success('Hoàn thành phiếu nhập thành công.');
       onRefresh();
     } catch (error) {
-      const errorMessage = error?.response?.data?.message || error?.message || 'Không thể hoàn thành phiếu nhập. Vui lòng thử lại.';
-      toast.error(errorMessage);
+      toast.error(error?.response?.data?.message || error?.message || 'Không thể hoàn thành phiếu nhập. Vui lòng thử lại.');
     }
   };
 
   return (
-    <ActionMenuShell
-      menuRef={menuRef}
-      open={open}
-      buttonIcon={MoreHorizontal}
-      onToggle={() => setOpen((current) => !current)}
-    >
+    <ActionMenuShell menuRef={menuRef} open={open} buttonIcon={MoreHorizontal} onToggle={() => setOpen((current) => !current)}>
       <ActionMenuItem onClick={() => { setOpen(false); navigate(`/warehouse/receipts/${receipt.id}`); }}>
         <Eye size={14} /> Xem chi tiết
       </ActionMenuItem>
       {receipt.status === 'DRAFT' && (
-        <ActionMenuItem color="#059669" onClick={handleComplete}>
-          <Check size={14} /> Hoàn thành nhập kho
-        </ActionMenuItem>
+        <>
+          <ActionMenuItem onClick={() => { setOpen(false); navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT.replace(':id', receipt.id)); }}>
+            <Edit3 size={14} /> Chỉnh sửa
+          </ActionMenuItem>
+          <ActionMenuItem color="#059669" onClick={handleComplete}>
+            <Check size={14} /> Hoàn thành nhập kho
+          </ActionMenuItem>
+        </>
       )}
       <ActionMenuItem onClick={() => { setOpen(false); toast.info('In phiếu đang được phát triển'); }}>
         <Printer size={14} /> In phiếu
@@ -109,6 +112,7 @@ const ActionMenu = ({ receipt, onComplete, onRefresh }) => {
 
 export default function StockReceivePage() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
@@ -156,7 +160,6 @@ export default function StockReceivePage() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page]);
@@ -170,10 +173,6 @@ export default function StockReceivePage() {
     const matchesStatus = statusFilter === 'ALL' || receipt.status === statusFilter;
     return matchesKeyword && matchesStatus;
   });
-
-  const handleCompleteReceipt = async (receiptId) => {
-    await stockReceiveService.completeReceipt(receiptId);
-  };
 
   const stats = [
     { key: 'total', label: 'Tổng phiếu', value: statistics.totalCount, icon: FileText, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
@@ -195,7 +194,7 @@ export default function StockReceivePage() {
       <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
       <td style={tableCellStyle}>{formatDate(receipt.createdAt)}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right' }}>
-        <ActionMenu receipt={receipt} onComplete={handleCompleteReceipt} onRefresh={refreshData} />
+        <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} />
       </td>
     </tr>
   ));
@@ -205,49 +204,48 @@ export default function StockReceivePage() {
   const lastVisible = Math.min(pagination.totalElements, pagination.page * pagination.size + receipts.length);
 
   return (
-    <InventoryDocumentListPage
-      icon={PackagePlus}
-      iconBg="#eff6ff"
-      iconColor="#2563eb"
-      title="Danh sách phiếu nhập kho"
-      description="Quản lý tất cả phiếu nhập hàng từ nhà cung cấp"
-      createLabel="Tạo phiếu nhập"
-      onCreate={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
-      stats={stats}
-      filters={(
-        <>
-          <SearchInput
-            value={search}
-            onChange={(event) => { setSearch(event.target.value); }}
-            placeholder="Tìm theo mã phiếu, nhà cung cấp, số hóa đơn..."
-          />
-          <FilterSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            <option value="ALL">Tất cả trạng thái</option>
-            <option value="DRAFT">Lưu tạm</option>
-            <option value="CONFIRMED">Hoàn thành</option>
-            <option value="CANCELLED">Trả hàng</option>
-          </FilterSelect>
-        </>
-      )}
-      columns={columns}
-      rows={rows}
-      loading={loading}
-      emptyText={receipts.length === 0 ? 'Chưa có phiếu nhập kho' : 'Không tìm thấy phiếu nhập kho phù hợp'}
-      footerLeft={`Hiển thị ${formatNumber(filteredReceipts.length)} / ${formatNumber(receipts.length)} phiếu trong trang`}
-      footerRight={Object.values(STATUS_CONFIG).map((status) => (
-        <span key={status.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: status.color }} />
-          {status.label}
-        </span>
-      ))}
-      pagination={{
-        page: pagination.page,
-        totalPages,
-        totalElements: pagination.totalElements,
-        label: `Hiển thị ${formatNumber(firstVisible)} - ${formatNumber(lastVisible)} / ${formatNumber(pagination.totalElements)} phiếu`,
-        onPrevious: () => setPagination((current) => ({ ...current, page: Math.max(0, current.page - 1) })),
-        onNext: () => setPagination((current) => ({ ...current, page: Math.min(totalPages - 1, current.page + 1) })),
-      }}
-    />
+    <>
+      <InventoryDocumentListPage
+        icon={PackagePlus}
+        iconBg="#eff6ff"
+        iconColor="#2563eb"
+        title="Danh sách phiếu nhập kho"
+        description="Quản lý tất cả phiếu nhập hàng từ nhà cung cấp"
+        createLabel="Tạo phiếu nhập"
+        onCreate={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
+        stats={stats}
+        filters={(
+          <>
+            <SearchInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm theo mã phiếu, nhà cung cấp, số hóa đơn..." />
+            <FilterSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="DRAFT">Lưu tạm</option>
+              <option value="CONFIRMED">Hoàn thành</option>
+              <option value="CANCELLED">Trả hàng</option>
+            </FilterSelect>
+          </>
+        )}
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        emptyText={receipts.length === 0 ? 'Chưa có phiếu nhập kho' : 'Không tìm thấy phiếu nhập kho phù hợp'}
+        footerLeft={`Hiển thị ${formatNumber(filteredReceipts.length)} / ${formatNumber(receipts.length)} phiếu trong trang`}
+        footerRight={Object.values(STATUS_CONFIG).map((status) => (
+          <span key={status.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: status.color }} />
+            {status.label}
+          </span>
+        ))}
+        pagination={{
+          page: pagination.page,
+          totalPages,
+          totalElements: pagination.totalElements,
+          label: `Hiển thị ${formatNumber(firstVisible)} - ${formatNumber(lastVisible)} / ${formatNumber(pagination.totalElements)} phiếu`,
+          onPrevious: () => setPagination((current) => ({ ...current, page: Math.max(0, current.page - 1) })),
+          onNext: () => setPagination((current) => ({ ...current, page: Math.min(totalPages - 1, current.page + 1) })),
+        }}
+      />
+      {ConfirmDialog}
+    </>
   );
 }

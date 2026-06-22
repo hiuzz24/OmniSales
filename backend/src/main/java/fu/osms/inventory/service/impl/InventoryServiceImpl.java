@@ -2,6 +2,10 @@ package fu.osms.inventory.service.impl;
 
 import fu.osms.catalog.entity.Category;
 import fu.osms.catalog.repository.CategoryRepository;
+import fu.osms.auth.entity.User;
+import fu.osms.auth.repository.UserRepository;
+import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
@@ -16,6 +20,7 @@ import fu.osms.inventory.entity.InventoryTransaction;
 import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.mapper.InventoryDetailMapper;
 import fu.osms.inventory.mapper.InventoryItemMapper;
+import fu.osms.inventory.mapper.InventoryTransactionMapper;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
@@ -24,9 +29,12 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -38,10 +46,11 @@ public class InventoryServiceImpl implements InventoryService {
     private final InventoryTransactionRepository transactionRepository;
     private final WarehouseRepository warehouseRepository;
     private final ProductVariantRepository variantRepository;
+    private final UserRepository userRepository;
     private final InventoryItemMapper inventoryItemMapper;
     private final CategoryRepository categoryRepository;
     private final InventoryDetailMapper inventoryDetailMapper;
-    //private final InventoryTransactionMapper transactionMapper;
+    private final InventoryTransactionMapper transactionMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -64,13 +73,13 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     @Transactional
     public InventoryItemResponse createItem(InventoryItemRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
     @Transactional(readOnly = true)
     public InventoryItemResponse getItemById(UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
@@ -106,29 +115,69 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     @Transactional(readOnly = true)
     public List<InventoryItemResponse> getLowStockItems() {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
     @Transactional
     public InventoryTransactionResponse recordTransaction(InventoryTransactionRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        if (request.getQuantityChange() == null || request.getQuantityChange() == 0) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Adjustment quantity must be greater than 0");
+        }
+        if (!warehouseRepository.existsById(request.getWarehouseId())) {
+            throw new AppException(ErrorCode.WAREHOUSE_NOT_FOUND);
+        }
+        ProductVariant variant = variantRepository.findById(request.getVariantId())
+                .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
+
+        InventoryItem item = inventoryItemRepository
+                .findByWarehouseIdAndVariantIdWithLock(request.getWarehouseId(), request.getVariantId())
+                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND,
+                        "Product is not available in selected warehouse."));
+
+        int quantityBefore = item.getQuantityOnHand() != null ? item.getQuantityOnHand() : 0;
+        int quantityAfter = quantityBefore + request.getQuantityChange();
+        if (quantityAfter < 0) {
+            throw new AppException(ErrorCode.NEGATIVE_STOCK_NOT_ALLOWED,
+                    "Adjustment would result in negative inventory. Please reduce quantity.");
+        }
+
+        User currentUser = getCurrentUser();
+        item.setQuantityOnHand(quantityAfter);
+        item.setUpdatedBy(currentUser);
+        inventoryItemRepository.save(item);
+
+        InventoryTransaction transaction = InventoryTransaction.builder()
+                .warehouse(item.getWarehouse())
+                .variant(variant)
+                .type(request.getType())
+                .referenceType(request.getReferenceType())
+                .referenceId(request.getReferenceId())
+                .quantityChange(request.getQuantityChange())
+                .quantityBefore(quantityBefore)
+                .quantityAfter(quantityAfter)
+                .unitCost(item.getAverageCost())
+                .note(request.getNote())
+                .performedBy(currentUser)
+                .performedAt(OffsetDateTime.now())
+                .build();
+        return transactionMapper.toResponse(transactionRepository.save(transaction));
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageResponse<InventoryTransactionResponse> getTransactions(int page, int size) {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageResponse<InventoryTransactionResponse> getTransactionsByVariant(UUID variantId, int page, int size) {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     private PageResponse<InventoryTransactionResponse> toTxnPageResponse(Page<InventoryTransaction> p, int page, int size) {
-        throw new UnsupportedOperationException("Chưa code");
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
@@ -207,5 +256,12 @@ public class InventoryServiceImpl implements InventoryService {
                 .ifPresent(txn -> dto.setLastImportedAt(txn.getPerformedAt()));
 
         return dto;
+    }
+
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        return userRepository.findByEmail(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
 }

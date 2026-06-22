@@ -1,6 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ROUTES } from '../../../app/router/routes';
 import {
   Search,
   Download,
@@ -21,8 +20,9 @@ import {
   Box,
 } from 'lucide-react';
 import styles from './InventoryPage.module.css';
-import inventoryService from '../services/inventoryService';
-import categoryApi from '../../../api/categoryApi';
+import { ROUTES } from '../../../../app/router/routes';
+import categoryApi from '../../../../api/categoryApi';
+import inventoryService from '../../services/inventoryService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;

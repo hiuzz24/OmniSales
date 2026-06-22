@@ -7,6 +7,11 @@ const stockDeliveryApi = {
     return axiosClient.post('/stock-deliveries', deliveryData);
   },
 
+  // Update draft stock delivery
+  updateStockDelivery: (deliveryId, deliveryData) => {
+    return axiosClient.put(`/stock-deliveries/${deliveryId}`, deliveryData);
+  },
+
   // Get stock delivery by ID
   getStockDeliveryById: (deliveryId) => {
     return axiosClient.get(`/stock-deliveries/${deliveryId}`);

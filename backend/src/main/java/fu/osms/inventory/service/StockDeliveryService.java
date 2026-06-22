@@ -18,6 +18,14 @@ public interface StockDeliveryService {
     StockDeliveryResponse createStockDelivery(StockDeliveryRequest request);
 
     /**
+     * Update a draft stock delivery document
+     * @param id Delivery ID
+     * @param request Stock delivery request
+     * @return Updated stock delivery response
+     */
+    StockDeliveryResponse updateStockDelivery(UUID id, StockDeliveryRequest request);
+
+    /**
      * Get stock delivery by ID
      * @param id Delivery ID
      * @return Stock delivery response
