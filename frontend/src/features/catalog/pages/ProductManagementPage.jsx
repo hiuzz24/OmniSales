@@ -28,7 +28,7 @@ const ProductManagementPage = () => {
         onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
       >
         <History className={styles.secondaryIcon} />
-        Product Logs
+        Nhật ký sản phẩm
       </button>
       <button
         className={`${styles.actionBtn} ${styles.importBtn}`}
