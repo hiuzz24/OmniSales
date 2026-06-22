@@ -1,5 +1,7 @@
 package fu.osms.inventory.service.impl;
 
+import fu.osms.audit.entity.AuditLog;
+import fu.osms.audit.repository.AuditLogRepository;
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
@@ -50,21 +52,14 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final UserRepository userRepository;
     private final StockDeliveryMapper stockDeliveryMapper;
+    private final AuditLogRepository auditLogRepository;
 
     @Override
     @Transactional
     public StockDeliveryResponse createStockDelivery(StockDeliveryRequest request) {
         log.info("Creating stock delivery for warehouse: {}", request.getWarehouseId());
 
-        // Validate warehouse
-        Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
-
-        if (!warehouse.getIsActive()) {
-            throw new IllegalStateException("Warehouse is not active");
-        }
-
-        // Get current user
+        Warehouse warehouse = getActiveWarehouse(request.getWarehouseId());
         User currentUser = getCurrentUser();
         String issueType = normalizeIssueType(request.getDeliveryType());
         String notes = request.getNote() != null ? request.getNote() : request.getNotes();
@@ -90,77 +85,63 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                 .build();
         inventoryIssue = inventoryIssueRepository.save(inventoryIssue);
 
-        // Process delivery items
         for (StockDeliveryItemRequest itemRequest : request.getItems()) {
-            ProductVariant productVariant = productVariantRepository.findById(itemRequest.getProductVariantId())
-                    .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
-
-            // Check inventory availability
-            InventoryItem inventoryItem = inventoryItemRepository
-                    .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
-
-            int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-            int reservedQuantity = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-            int availableQuantity = inventoryItem.getAvailableQuantity() != null
-                    ? inventoryItem.getAvailableQuantity()
-                    : quantityOnHand - reservedQuantity;
-
-            if (availableQuantity < itemRequest.getQuantity()) {
-                throw new AppException(
-                        ErrorCode.INSUFFICIENT_STOCK,
-                        String.format("Insufficient inventory for %s. Available: %d, requested: %d",
-                                productVariant.getName(),
-                                availableQuantity,
-                                itemRequest.getQuantity()));
-            }
-
-            // Get unit cost from inventory
-            BigDecimal unitCost = inventoryItem.getAverageCost() != null
-                    ? inventoryItem.getAverageCost()
-                    : BigDecimal.ZERO;
-
-            // Create delivery item
-            InventoryIssueItem issueItem = InventoryIssueItem.builder()
-                    .productVariant(productVariant)
-                    .quantity(itemRequest.getQuantity())
-                    .unitCost(unitCost)
-                    .notes(itemRequest.getNote())
-                    .build();
-
-            inventoryIssue.addItem(issueItem);
-
-            // Update inventory - decrease available quantity
-            inventoryItem.setQuantityOnHand(quantityOnHand - itemRequest.getQuantity());
-            inventoryItem.setUpdatedBy(currentUser);
-            inventoryItemRepository.save(inventoryItem);
-
-            // Create inventory transaction
-            InventoryTransaction transaction = InventoryTransaction.builder()
-                    .warehouse(warehouse)
-                    .variant(productVariant)
-                    .type(InvTxnType.OUTBOUND)
-                    .quantityChange(-itemRequest.getQuantity())
-                    .quantityBefore(quantityOnHand)
-                    .quantityAfter(quantityOnHand - itemRequest.getQuantity())
-                    .unitCost(unitCost)
-                    .referenceId(inventoryIssue.getId())
-                    .referenceType("ISSUE")
-                    .performedBy(currentUser)
-                    .note("Stock delivery: " + issueType)
-                    .build();
-
-            inventoryTransactionRepository.save(transaction);
+            inventoryIssue.addItem(buildIssueItem(warehouse, itemRequest));
         }
 
-        // Calculate totals
         inventoryIssue.calculateTotals();
-
-        // Save inventory issue
         InventoryIssue savedIssue = inventoryIssueRepository.save(inventoryIssue);
+        recordAudit(currentUser, "CREATE", savedIssue, Map.of(
+                "status", savedIssue.getStatus(),
+                "warehouseId", warehouse.getId().toString(),
+                "totalQuantity", savedIssue.getItems().stream().mapToInt(InventoryIssueItem::getQuantity).sum()
+        ));
 
         log.info("Stock delivery created successfully with ID: {}", savedIssue.getId());
         return stockDeliveryMapper.toResponse(savedIssue);
+    }
+
+    @Override
+    @Transactional
+    public StockDeliveryResponse updateStockDelivery(UUID id, StockDeliveryRequest request) {
+        log.info("Updating stock delivery: {}", id);
+
+        InventoryIssue inventoryIssue = inventoryIssueRepository.findByIdWithDetails(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ISSUE_NOT_FOUND));
+
+        if (!"DRAFT".equals(inventoryIssue.getStatus())) {
+            throw new AppException(ErrorCode.ISSUE_ALREADY_CONFIRMED, "Confirmed delivery documents are read-only.");
+        }
+
+        Warehouse warehouse = getActiveWarehouse(request.getWarehouseId());
+        User currentUser = getCurrentUser();
+        String notes = request.getNote() != null ? request.getNote() : request.getNotes();
+        String issueType = normalizeIssueType(request.getDeliveryType());
+        OffsetDateTime issuedAt = request.getIssuedDate()
+                .atStartOfDay(ZoneOffset.UTC)
+                .toOffsetDateTime();
+
+        inventoryIssue.setWarehouse(warehouse);
+        inventoryIssue.setIssueType(issueType);
+        inventoryIssue.setRecipient(request.getRecipient());
+        inventoryIssue.setNotes(notes);
+        inventoryIssue.setCreatedAt(issuedAt);
+        inventoryIssue.getItems().clear();
+
+        for (StockDeliveryItemRequest itemRequest : request.getItems()) {
+            inventoryIssue.addItem(buildIssueItem(warehouse, itemRequest));
+        }
+
+        inventoryIssue.calculateTotals();
+        InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
+        recordAudit(currentUser, "UPDATE", updatedIssue, Map.of(
+                "status", updatedIssue.getStatus(),
+                "warehouseId", warehouse.getId().toString(),
+                "totalQuantity", updatedIssue.getItems().stream().mapToInt(InventoryIssueItem::getQuantity).sum()
+        ));
+
+        log.info("Stock delivery updated successfully: {}", id);
+        return stockDeliveryMapper.toResponse(updatedIssue);
     }
 
     @Override
@@ -239,19 +220,23 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     public StockDeliveryResponse confirmStockDelivery(UUID id) {
         log.info("Confirming stock delivery: {}", id);
 
-        InventoryIssue inventoryIssue = inventoryIssueRepository.findById(id)
+        InventoryIssue inventoryIssue = inventoryIssueRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ISSUE_NOT_FOUND));
 
         if (!"DRAFT".equals(inventoryIssue.getStatus())) {
-            throw new IllegalStateException("Only DRAFT deliveries can be confirmed");
+            throw new AppException(ErrorCode.ISSUE_ALREADY_CONFIRMED, "Order has already been processed for delivery.");
         }
 
         User currentUser = getCurrentUser();
+        for (InventoryIssueItem item : inventoryIssue.getItems()) {
+            applyOutboundInventory(inventoryIssue, item, currentUser);
+        }
         inventoryIssue.setStatus("CONFIRMED");
         inventoryIssue.setApprovedBy(currentUser);
         inventoryIssue.setConfirmedAt(java.time.OffsetDateTime.now());
 
         InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
+        recordAudit(currentUser, "CONFIRM", updatedIssue, Map.of("status", "CONFIRMED"));
 
         log.info("Stock delivery confirmed successfully: {}", id);
         return stockDeliveryMapper.toResponse(updatedIssue);
@@ -271,41 +256,41 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         User currentUser = getCurrentUser();
 
-        // Restore inventory quantities
-        for (InventoryIssueItem item : inventoryIssue.getItems()) {
-            InventoryItem inventoryItem = inventoryItemRepository
-                    .findByWarehouseIdAndVariantIdWithLock(
-                            inventoryIssue.getWarehouse().getId(),
-                            item.getProductVariant().getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+        if ("CONFIRMED".equals(inventoryIssue.getStatus())) {
+            for (InventoryIssueItem item : inventoryIssue.getItems()) {
+                InventoryItem inventoryItem = inventoryItemRepository
+                        .findByWarehouseIdAndVariantIdWithLock(
+                                inventoryIssue.getWarehouse().getId(),
+                                item.getProductVariant().getId())
+                        .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
 
-            // Restore quantities
-            int quantityBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-            inventoryItem.setQuantityOnHand(quantityBefore + item.getQuantity());
-            inventoryItem.setUpdatedBy(currentUser);
-            inventoryItemRepository.save(inventoryItem);
+                int quantityBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
+                inventoryItem.setQuantityOnHand(quantityBefore + item.getQuantity());
+                inventoryItem.setUpdatedBy(currentUser);
+                inventoryItemRepository.save(inventoryItem);
 
-            // Create reversal transaction
-            InventoryTransaction reversalTransaction = InventoryTransaction.builder()
-                    .warehouse(inventoryIssue.getWarehouse())
-                    .variant(item.getProductVariant())
-                    .type(InvTxnType.INBOUND)
-                    .quantityChange(item.getQuantity())
-                    .quantityBefore(quantityBefore)
-                    .quantityAfter(quantityBefore + item.getQuantity())
-                    .unitCost(item.getUnitCost())
-                    .referenceId(inventoryIssue.getId())
-                    .referenceType("ISSUE")
-                    .performedBy(currentUser)
-                    .note("Stock delivery cancelled - inventory restored")
-                    .build();
+                InventoryTransaction reversalTransaction = InventoryTransaction.builder()
+                        .warehouse(inventoryIssue.getWarehouse())
+                        .variant(item.getProductVariant())
+                        .type(InvTxnType.INBOUND)
+                        .quantityChange(item.getQuantity())
+                        .quantityBefore(quantityBefore)
+                        .quantityAfter(quantityBefore + item.getQuantity())
+                        .unitCost(item.getUnitCost())
+                        .referenceId(inventoryIssue.getId())
+                        .referenceType("ISSUE")
+                        .performedBy(currentUser)
+                        .note("Stock delivery cancelled - inventory restored")
+                        .build();
 
-            inventoryTransactionRepository.save(reversalTransaction);
+                inventoryTransactionRepository.save(reversalTransaction);
+            }
         }
 
         inventoryIssue.setStatus("CANCELLED");
         inventoryIssue.setApprovedBy(currentUser);
         InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
+        recordAudit(currentUser, "CANCEL", updatedIssue, Map.of("status", "CANCELLED"));
 
         log.info("Stock delivery cancelled successfully: {}", id);
         return stockDeliveryMapper.toResponse(updatedIssue);
@@ -335,6 +320,134 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         String username = authentication.getName();
         return userRepository.findByEmail(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private Warehouse getActiveWarehouse(UUID warehouseId) {
+        if (warehouseId == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Please select a delivery warehouse.");
+        }
+
+        Warehouse warehouse = warehouseRepository.findById(warehouseId)
+                .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
+
+        if (!warehouse.getIsActive()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Please select a delivery warehouse.");
+        }
+        return warehouse;
+    }
+
+    private InventoryIssueItem buildIssueItem(Warehouse warehouse, StockDeliveryItemRequest itemRequest) {
+        ProductVariant productVariant = productVariantRepository.findById(itemRequest.getProductVariantId())
+                .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
+
+        InventoryItem inventoryItem = inventoryItemRepository
+                .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+
+        validateAvailableQuantity(inventoryItem, itemRequest.getQuantity());
+
+        BigDecimal unitCost = inventoryItem.getAverageCost() != null
+                ? inventoryItem.getAverageCost()
+                : BigDecimal.ZERO;
+
+        return InventoryIssueItem.builder()
+                .productVariant(productVariant)
+                .quantity(itemRequest.getQuantity())
+                .unitCost(unitCost)
+                .notes(itemRequest.getNote())
+                .build();
+    }
+
+    private void applyOutboundInventory(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
+        InventoryItem inventoryItem = inventoryItemRepository
+                .findByWarehouseIdAndVariantIdWithLock(
+                        inventoryIssue.getWarehouse().getId(),
+                        item.getProductVariant().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+
+        validateAvailableQuantity(inventoryItem, item.getQuantity());
+
+        int quantityBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
+        int quantityAfter = quantityBefore - item.getQuantity();
+        if (quantityAfter < 0) {
+            throw new AppException(
+                    ErrorCode.NEGATIVE_STOCK_NOT_ALLOWED,
+                    "Delivery quantity exceeds available inventory. Please review the document before saving.");
+        }
+
+        inventoryItem.setQuantityOnHand(quantityAfter);
+        inventoryItem.setUpdatedBy(currentUser);
+        inventoryItemRepository.save(inventoryItem);
+
+        InventoryTransaction transaction = InventoryTransaction.builder()
+                .warehouse(inventoryIssue.getWarehouse())
+                .variant(item.getProductVariant())
+                .type(InvTxnType.OUTBOUND)
+                .quantityChange(-item.getQuantity())
+                .quantityBefore(quantityBefore)
+                .quantityAfter(quantityAfter)
+                .unitCost(item.getUnitCost())
+                .referenceId(inventoryIssue.getId())
+                .referenceType("ISSUE")
+                .performedBy(currentUser)
+                .note("Stock delivery: " + inventoryIssue.getIssueType())
+                .build();
+
+        inventoryTransactionRepository.save(transaction);
+    }
+
+    private void validateAvailableQuantity(InventoryItem inventoryItem, Integer requestedQuantity) {
+        int quantity = requestedQuantity == null ? 0 : requestedQuantity;
+        if (quantity <= 0) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Delivery quantity must be greater than 0.");
+        }
+
+        int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
+        int reservedQuantity = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
+        int availableQuantity = inventoryItem.getAvailableQuantity() != null
+                ? inventoryItem.getAvailableQuantity()
+                : quantityOnHand - reservedQuantity;
+
+        if (availableQuantity < quantity) {
+            throw new AppException(
+                    ErrorCode.INSUFFICIENT_STOCK,
+                    "Insufficient inventory to complete delivery.");
+        }
+
+        if (quantityOnHand - quantity < 0) {
+            throw new AppException(
+                    ErrorCode.NEGATIVE_STOCK_NOT_ALLOWED,
+                    "Delivery quantity exceeds available inventory. Please review the document before saving.");
+        }
+    }
+
+    private void recordAudit(User actor, String action, InventoryIssue issue, Object changes) {
+        Map<String, Object> changeMap = new HashMap<>();
+        if (changes instanceof Map<?, ?> map) {
+            map.forEach((key, value) -> changeMap.put(String.valueOf(key), value));
+        } else if (changes != null) {
+            changeMap.put("changes", changes);
+        }
+
+        auditLogRepository.save(AuditLog.builder()
+                .actor(actor)
+                .actorEmail(actor.getEmail())
+                .action(normalizeAuditAction(action))
+                .entityType("INVENTORY")
+                .entityId(issue.getId())
+                .entityName(issue.getIssueCode())
+                .changes(changeMap)
+                .performedAt(OffsetDateTime.now())
+                .build());
+    }
+
+    private String normalizeAuditAction(String action) {
+        return switch (action) {
+            case "CREATE", "UPDATE", "DELETE", "LOGIN", "LOGOUT", "EXPORT", "CONNECT", "DISCONNECT",
+                    "STATUS_CHANGE", "ORDER_CANCEL", "PAYMENT_STATUS_CHANGE" -> action;
+            case "CONFIRM", "CANCEL" -> "STATUS_CHANGE";
+            default -> "UPDATE";
+        };
     }
 
     private String normalizeIssueType(String issueType) {

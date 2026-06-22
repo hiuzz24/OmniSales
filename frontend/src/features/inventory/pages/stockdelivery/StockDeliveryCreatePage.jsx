@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -15,6 +15,8 @@ import stockDeliveryService from '../../services/stockDeliveryService';
 import inventoryApi from '../../../../api/inventoryApi';
 import axiosClient from '../../../../api/axiosClient';
 import { ROUTES } from '../../../../app/router/routes';
+import useConfirmDialog from '../../hooks/useConfirmDialog';
+import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
@@ -24,11 +26,28 @@ const formatNumber = (v) => new Intl.NumberFormat('vi-VN').format(v ?? 0);
 
 const getResponseData = (response) => response?.data?.data ?? response?.data ?? response ?? {};
 
+const getErrorMessage = (error) => {
+  const rawMessage = error?.response?.data?.message || error?.message || error;
+  if (typeof rawMessage !== 'string') return 'Unable to save stock delivery.';
+  if (rawMessage.includes('Insufficient inventory')) return 'Insufficient inventory to complete delivery.';
+  if (rawMessage.includes('already been processed')) return 'Order has already been processed for delivery.';
+  if (rawMessage.includes('current status')) return 'Order cannot be delivered in its current status.';
+  if (rawMessage.includes('delivery warehouse')) return 'Please select a delivery warehouse.';
+  if (rawMessage.includes('exceeds available inventory')) return 'Delivery quantity exceeds available inventory. Please review the document before saving.';
+  if (rawMessage.includes('read-only')) return 'Confirmed delivery documents are read-only.';
+  return rawMessage;
+};
+
+const toDateInputValue = (value, fallback) => {
+  if (!value) return fallback;
+  return String(value).split('T')[0];
+};
+
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
-  warehouseId: z.string().min(1, 'Vui lòng chọn kho xuất.'),
-  issuedDate: z.string().min(1, 'Vui lòng chọn ngày xuất.'),
-  recipient: z.string().min(1, 'Vui lòng nhập người nhận.').max(255, 'Người nhận tối đa 255 ký tự.'),
+  warehouseId: z.string().min(1, 'Please select a delivery warehouse.'),
+  issuedDate: z.string().min(1, 'Please select a delivery date.'),
+  recipient: z.string().min(1, 'Please enter a recipient.').max(255, 'Recipient must be 255 characters or fewer.'),
   notes: z.string().optional(),
 });
 
@@ -178,16 +197,20 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [] }
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function StockDeliveryCreatePage() {
+export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const fileRef = useRef(null);
   const [items, setItems] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
   const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL or BY_ORDER
+  const [loadingDelivery, setLoadingDelivery] = useState(mode === 'edit');
+  const isEdit = mode === 'edit';
 
   const today = new Date().toISOString().split('T')[0];
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting, isDirty } } = useForm({
+  const { register, handleSubmit, watch, reset, formState: { errors, isSubmitting, isDirty } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: { warehouseId: '', issuedDate: today, recipient: '', notes: '' },
   });
@@ -198,6 +221,8 @@ export default function StockDeliveryCreatePage() {
     () => items.reduce((s, i) => s + (Number(i.quantity) || 0), 0),
     [items]
   );
+  const hasUnsavedChanges = !loadingDelivery && (isDirty || (!isEdit && items.length > 0));
+  const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
   const overAvailableItem = useMemo(
     () => items.find((item) =>
       item.availableQuantity != null && Number(item.quantity || 0) > Number(item.availableQuantity)
@@ -218,6 +243,48 @@ export default function StockDeliveryCreatePage() {
       })
       .catch(() => { });
   }, []);
+
+  useEffect(() => {
+    if (!isEdit || !id) return;
+
+    let ignore = false;
+    setLoadingDelivery(true);
+    stockDeliveryService.getStockDeliveryById(id)
+      .then((response) => {
+        if (ignore) return;
+        const delivery = getResponseData(response);
+        if (delivery.status !== 'DRAFT') {
+          toast.info('Confirmed delivery documents are read-only.');
+          navigate(ROUTES.STOCK_DELIVERY_DETAIL.replace(':id', id), { replace: true });
+          return;
+        }
+
+        reset({
+          warehouseId: delivery.warehouseId ? String(delivery.warehouseId) : '',
+          issuedDate: toDateInputValue(delivery.issuedAt ?? delivery.createdAt, today),
+          recipient: delivery.recipient ?? '',
+          notes: delivery.note ?? delivery.notes ?? '',
+        });
+        setItems((delivery.items ?? []).map((item) => ({
+          variantId: item.productVariantId,
+          sku: item.sku,
+          productName: item.productName ?? item.productVariantName ?? item.sku,
+          variantName: item.productVariantName,
+          quantity: item.quantity ?? 1,
+        })));
+      })
+      .catch((error) => {
+        if (!ignore) {
+          toast.error(getErrorMessage(error));
+          navigate(ROUTES.STOCK_DELIVERIES, { replace: true });
+        }
+      })
+      .finally(() => {
+        if (!ignore) setLoadingDelivery(false);
+      });
+
+    return () => { ignore = true; };
+  }, [id, isEdit, navigate, reset, today]);
 
   useEffect(() => {
     if (!selectedWarehouseId || items.length === 0) return;
@@ -305,7 +372,7 @@ export default function StockDeliveryCreatePage() {
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
-  const onSubmit = handleSubmit(async (data) => {
+  const submitDelivery = (submitAction) => handleSubmit(async (data) => {
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
 
     // Validate quantity
@@ -316,43 +383,61 @@ export default function StockDeliveryCreatePage() {
     }
 
     if (overAvailableItem) {
-      toast.error(`Sản phẩm "${overAvailableItem.productName}" chỉ còn ${formatNumber(overAvailableItem.availableQuantity)} có thể xuất.`);
+      toast.error('Delivery quantity exceeds available inventory. Please review the document before saving.');
       return;
     }
 
+    const payload = {
+      warehouseId: data.warehouseId,
+      issuedDate: data.issuedDate,
+      recipient: data.recipient.trim(),
+      notes: data.notes || null,
+      deliveryType: 'ADJUSTMENT',
+      items: items.map((it) => ({
+        productVariantId: it.variantId,
+        quantity: Number(it.quantity),
+        note: null
+      })),
+    };
+
     try {
-      await stockDeliveryService.createStockDelivery({
-        warehouseId: data.warehouseId,
-        issuedDate: data.issuedDate,
-        recipient: data.recipient.trim(),
-        notes: data.notes || null,
-        deliveryType: 'ADJUSTMENT',
-        items: items.map((it) => ({ 
-          productVariantId: it.variantId, 
-          quantity: Number(it.quantity),
-          note: null
-        })),
-      });
-      toast.success('Tạo phiếu xuất kho thành công.');
-      navigate(ROUTES.STOCK_DELIVERIES);
+      const savedResponse = isEdit
+        ? await stockDeliveryService.updateStockDelivery(id, payload)
+        : await stockDeliveryService.createStockDelivery(payload);
+      const savedDelivery = getResponseData(savedResponse);
+
+      if (submitAction === 'complete') {
+        await stockDeliveryService.confirmStockDelivery(savedDelivery.id);
+      }
+      if (submitAction === 'complete') {
+        toast.success('Hoàn thành phiếu xuất kho thành công.');
+      } else {
+        toast.success(isEdit ? 'Cập nhật phiếu xuất kho thành công.' : 'Lưu tạm phiếu xuất kho thành công.');
+      }
+      runWithoutGuard(() => navigate(ROUTES.STOCK_DELIVERIES));
     } catch (error) {
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') {
         const validationErrors = error.response.data.data;
         const firstError = Object.values(validationErrors)[0];
         toast.error(firstError || 'Có lỗi xảy ra. Vui lòng kiểm tra lại thông tin.');
       } else {
-        const errorMessage = error?.response?.data?.message || error?.message || 'Không thể tạo phiếu xuất kho. Vui lòng thử lại.';
-        toast.error(errorMessage);
+        toast.error(getErrorMessage(error));
       }
     }
   });
 
   const handleCancel = () => {
-    if (isDirty || items.length > 0) {
-      if (!window.confirm('Bạn có chắc muốn hủy? Các thay đổi chưa lưu sẽ bị mất.')) return;
-    }
     navigate(ROUTES.STOCK_DELIVERIES);
   };
+
+  if (loadingDelivery) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 64px - 48px)', color: '#64748b', gap: 8, fontSize: 13 }}>
+        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+        Loading stock delivery...
+      </div>
+    );
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -372,7 +457,7 @@ export default function StockDeliveryCreatePage() {
               <PackageMinus size={14} color="#dc2626" />
             </div>
             <div>
-              <h1 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0, lineHeight: 1.2 }}>Tạo phiếu xuất kho</h1>
+              <h1 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0, lineHeight: 1.2 }}>{isEdit ? 'Sửa phiếu xuất kho' : 'Tạo phiếu xuất kho'}</h1>
               <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>Xuất hàng hóa từ kho theo đơn hàng hoặc thủ công</p>
             </div>
           </div>
@@ -484,7 +569,14 @@ export default function StockDeliveryCreatePage() {
           >
             Hủy
           </button>
-          <button onClick={onSubmit} disabled={isSubmitting}
+          <button onClick={submitDelivery('draft')} disabled={isSubmitting}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 6, border: '1px solid #dc2626', backgroundColor: '#fff', color: '#dc2626', fontSize: 12, fontWeight: 600, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+            onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#fef2f2'; }}
+            onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#fff'; }}
+          >
+            {isSubmitting ? 'Đang xử lý...' : 'Lưu tạm'}
+          </button>
+          <button onClick={submitDelivery('complete')} disabled={isSubmitting}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 6, border: 'none', backgroundColor: isSubmitting ? '#fca5a5' : '#dc2626', color: '#fff', fontSize: 12, fontWeight: 600, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
             onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#b91c1c'; }}
             onMouseLeave={(e) => { if (!isSubmitting) e.currentTarget.style.backgroundColor = '#dc2626'; }}
@@ -674,6 +766,7 @@ export default function StockDeliveryCreatePage() {
         onConfirm={onAddProducts}
         existingVariantIds={items.map((it) => it.variantId)}
       />
+      {ConfirmDialog}
     </div>
   );
 }

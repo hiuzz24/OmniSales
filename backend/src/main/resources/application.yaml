@@ -6,10 +6,10 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/OSMS
     username: postgres
-    password: 123
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
