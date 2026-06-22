@@ -26,7 +26,6 @@ public class DatabaseMigration {
         }
 
         try {
-            // Drop old constraint (if exists) and recreate with STATUS_CHANGE and PAYMENT_STATUS_CHANGE
             jdbcTemplate.execute("""
                 ALTER TABLE audit_logs
                 DROP CONSTRAINT IF EXISTS chk_audit_action,
@@ -34,7 +33,6 @@ public class DatabaseMigration {
                 ADD CONSTRAINT audit_logs_action_check
                 CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'CONNECT', 'DISCONNECT', 'STATUS_CHANGE', 'ORDER_CANCEL', 'PAYMENT_STATUS_CHANGE'))
             """);
-            // Verify the constraint includes both STATUS_CHANGE and PAYMENT_STATUS_CHANGE
             Boolean hasStatusChange = jdbcTemplate.queryForObject("""
                 SELECT EXISTS (
                     SELECT 1 FROM pg_constraint
@@ -77,6 +75,24 @@ public class DatabaseMigration {
             log.info("Migration: orders payment_status constraint updated (removed PARTIAL)");
         } catch (Exception e) {
             log.warn("Migration skipped or already applied for orders payment_status: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id)
+            """);
+            log.info("Migration: added product_id column to sync_logs table");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for sync_logs product_id: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS password_expired BOOLEAN
+            """);
+            log.info("Migration: added password_expired column to users table");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for users password_expired: {}", e.getMessage());
         }
     }
 }

@@ -1,0 +1,9 @@
+{
+  "name": "omnisales-tests",
+  "version": "1.0.0",
+  "description": "Playwright tests for OmniSales",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
