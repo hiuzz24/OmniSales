@@ -6,6 +6,7 @@ import {
   Eye,
   MoreHorizontal,
   Package,
+  Pencil,
   RotateCcw,
   ShoppingCart,
   Trash2,
@@ -17,6 +18,7 @@ import warehouseService from '../../services/warehouseService';
 import useAuth from '../../../auth/hooks/useAuth';
 import { ROLES } from '../../../auth/constants/roles';
 import { ROUTES } from '../../../../app/router/routes';
+import useConfirmDialog from '../../hooks/useConfirmDialog';
 import InventoryDocumentListPage, {
   ActionMenuItem,
   ActionMenuShell,
@@ -98,7 +100,7 @@ const StatusBadge = ({ status }) => {
   return <Badge {...config} />;
 };
 
-const ActionMenu = ({ delivery, canComplete, isOwner, completingId, cancellingId, onDetail, onComplete, onCancel }) => {
+const ActionMenu = ({ delivery, canComplete, isOwner, completingId, cancellingId, onDetail, onEdit, onComplete, onCancel }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -123,6 +125,11 @@ const ActionMenu = ({ delivery, canComplete, isOwner, completingId, cancellingId
       <ActionMenuItem onClick={() => { setOpen(false); onDetail(delivery.id); }}>
         <Eye size={14} /> Xem chi tiết
       </ActionMenuItem>
+      {delivery.status === 'DRAFT' && (
+        <ActionMenuItem onClick={() => { setOpen(false); onEdit(delivery.id); }}>
+          <Pencil size={14} /> Chỉnh sửa
+        </ActionMenuItem>
+      )}
       {canComplete && delivery.status === 'DRAFT' && (
         <ActionMenuItem
           color="#059669"
@@ -147,6 +154,7 @@ const ActionMenu = ({ delivery, canComplete, isOwner, completingId, cancellingId
 
 export default function StockDeliveryPage() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const { user } = useAuth();
   const [deliveries, setDeliveries] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -240,9 +248,23 @@ export default function StockDeliveryPage() {
     navigate(ROUTES.STOCK_DELIVERY_DETAIL.replace(':id', deliveryId));
   };
 
+  const goToEdit = (deliveryId) => {
+    if (!deliveryId) {
+      toast.error('KhÃ´ng thá»ƒ má»Ÿ mÃ n chá»‰nh sá»­a vÃ¬ thiáº¿u ID phiáº¿u xuáº¥t.');
+      return;
+    }
+    navigate(ROUTES.STOCK_DELIVERY_EDIT.replace(':id', deliveryId));
+  };
+
   const handleCancelDelivery = async (delivery) => {
     if (!isOwner || !delivery?.id || delivery.status === 'CANCELLED') return;
-    if (!window.confirm(`Hủy phiếu xuất "${delivery.issueCode}"?\n\nTồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`)) {
+    const ok = await confirm({
+      title: 'Hủy phiếu xuất?',
+      message: `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
+      confirmText: 'Hủy phiếu',
+      tone: 'danger',
+    });
+    if (!ok) {
       return;
     }
 
@@ -260,7 +282,12 @@ export default function StockDeliveryPage() {
 
   const handleCompleteDelivery = async (delivery) => {
     if (!canComplete || !delivery?.id || delivery.status !== 'DRAFT') return;
-    if (!window.confirm(`Xác nhận hoàn thành phiếu xuất "${delivery.issueCode}"?\n\nSau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`)) {
+    const ok = await confirm({
+      title: 'Hoàn thành phiếu xuất?',
+      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`,
+      confirmText: 'Hoàn thành',
+    });
+    if (!ok) {
       return;
     }
 
@@ -309,6 +336,7 @@ export default function StockDeliveryPage() {
           completingId={completingId}
           cancellingId={cancellingId}
           onDetail={goToDetail}
+          onEdit={goToEdit}
           onComplete={handleCompleteDelivery}
           onCancel={handleCancelDelivery}
         />
@@ -321,6 +349,7 @@ export default function StockDeliveryPage() {
   const lastVisible = Math.min(totalElements, (page + 1) * rowsPerPage);
 
   return (
+    <>
     <InventoryDocumentListPage
       icon={Package}
       iconBg="#fff3e6"
@@ -371,5 +400,7 @@ export default function StockDeliveryPage() {
         onNext: () => setPage((currentPage) => Math.min(totalPages - 1, currentPage + 1)),
       }}
     />
+    {ConfirmDialog}
+    </>
   );
 }

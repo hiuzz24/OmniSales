@@ -15,6 +15,8 @@ import supplierService from '../../services/supplierService';
 import stockReceiveService from '../../services/stockReceiveService';
 import axiosClient from '../../../../api/axiosClient';
 import { ROUTES } from '../../../../app/router/routes';
+import useConfirmDialog from '../../hooks/useConfirmDialog';
+import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
@@ -186,6 +188,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [] }
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function StockReceiveCreatePage() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const fileRef = useRef(null);
   const [items, setItems] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -201,6 +204,8 @@ export default function StockReceiveCreatePage() {
     () => items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0),
     [items]
   );
+  const hasUnsavedChanges = isDirty || items.length > 0;
+  const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
   useEffect(() => {
     Promise.all([warehouseService.getAll(), supplierService.getAll()])
@@ -312,7 +317,7 @@ export default function StockReceiveCreatePage() {
         isDraft: false, // Confirmed receipt
       });
       toast.success('Tạo phiếu nhập thành công.');
-      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
+      runWithoutGuard(() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS));
     } catch (error) {
       // Handle validation errors from backend
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') {
@@ -349,7 +354,7 @@ export default function StockReceiveCreatePage() {
         isDraft: true, // Draft receipt
       });
       toast.success('Lưu tạm phiếu nhập thành công.');
-      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
+      runWithoutGuard(() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS));
     } catch (error) {
       // Handle validation errors from backend
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') {
@@ -365,9 +370,6 @@ export default function StockReceiveCreatePage() {
   });
 
   const handleCancel = () => {
-    if (isDirty || items.length > 0) {
-      if (!window.confirm('Bạn có chắc muốn hủy? Các thay đổi chưa lưu sẽ bị mất.')) return;
-    }
     navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
   };
 
@@ -646,6 +648,7 @@ export default function StockReceiveCreatePage() {
         onConfirm={onAddProducts}
         existingVariantIds={items.map((i) => i.variantId)}
       />
+      {ConfirmDialog}
     </div>
   );
 }
