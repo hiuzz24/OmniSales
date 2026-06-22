@@ -119,7 +119,8 @@ CREATE TABLE users (
                        email_verified_at     TIMESTAMPTZ,
                        verification_token    VARCHAR(255),
                        failed_login_attempts INT          DEFAULT 0,
-                       locked_until          TIMESTAMPTZ
+                       locked_until          TIMESTAMPTZ,
+                       password_expired      BOOLEAN
 );
 CREATE UNIQUE INDEX uq_users_email_active ON users(email) WHERE deleted_at IS NULL;
 
@@ -586,6 +587,9 @@ CREATE TABLE sync_logs (
                            completed_at    TIMESTAMPTZ
 );
 CREATE UNIQUE INDEX uq_sync_logs_running ON sync_logs(channel_id, job_type) WHERE status = 'PENDING';
+
+-- Migration: add product_id to sync_logs (for per-product sync tracking)
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
 
 CREATE TABLE sync_tasks (
                             id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
