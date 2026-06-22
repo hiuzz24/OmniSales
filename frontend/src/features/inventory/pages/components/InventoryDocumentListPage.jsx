@@ -55,8 +55,8 @@ export const ActionMenuItem = ({ children, color = '#020617', disabled, onClick 
 );
 
 export const SearchInput = ({ value, onChange, placeholder }) => (
-  <div style={{ position: 'relative', minWidth: 260, flex: '1 1 320px' }}>
-    <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#8aa0bd' }} />
+  <div style={{ position: 'relative', flex: '1', minWidth: 240 }}>
+    <Search size={17} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: '#8aa0bd', pointerEvents: 'none' }} />
     <input
       value={value}
       onChange={onChange}
@@ -99,70 +99,88 @@ export default function InventoryDocumentListPage({
 }) {
   return (
     <div style={pageStyle}>
-      <div style={headerStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <HeaderIcon size={20} color={iconColor} />
-          </div>
-          <div>
-            <h1 style={{ margin: 0, color: '#020617', fontSize: 24, lineHeight: 1.2, fontWeight: 700 }}>{title}</h1>
-            <p style={{ margin: '4px 0 0', color: '#536b8f', fontSize: 14 }}>{description}</p>
+      {/* ── Page Header ── */}
+      <div style={headerContainerStyle}>
+        <div style={titleWrapperStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <HeaderIcon size={22} color={iconColor} />
+            </div>
+            <div>
+              <h1 style={{ margin: 0, color: '#111827', fontSize: 26, lineHeight: 1.2, fontWeight: 800, letterSpacing: '-0.3px' }}>{title}</h1>
+              <p style={{ margin: '5px 0 0', color: '#6b7280', fontSize: 14, fontWeight: 400 }}>{description}</p>
+            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onExport} style={secondaryButtonStyle}>
-            <Download size={16} />
-            Xuất Excel
-          </button>
-          <button type="button" onClick={onCreate} style={primaryButtonStyle}>
-            <Plus size={17} />
-            {createLabel}
-          </button>
-        </div>
-      </div>
-
-      <div style={statsGridStyle}>
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <button
-              key={stat.key ?? stat.label}
-              type="button"
-              disabled={!stat.onClick}
-              onClick={stat.onClick}
-              style={{
-                ...statCardStyle,
-                borderColor: stat.active ? stat.color : '#e5e7eb',
-                background: stat.active ? stat.bg : '#fff',
-                boxShadow: stat.active ? `0 0 0 3px ${stat.border ?? stat.bg}` : 'none',
-                cursor: stat.onClick ? 'pointer' : 'default',
-              }}
-            >
-              <span>
-                <span style={{ display: 'block', fontSize: 14, color: '#475569', marginBottom: 22 }}>{stat.label}</span>
-                <strong style={{ display: 'block', fontSize: 24, color: '#020617', lineHeight: 1 }}>{formatNumber(stat.value ?? 0)}</strong>
-                <span style={{ display: 'block', fontSize: 12, color: '#8aa0bd', marginTop: 8 }}>phiếu</span>
-              </span>
-              <span style={{
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                background: stat.bg,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <Icon size={17} color={stat.color} />
-              </span>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {onExport && (
+            <button type="button" onClick={onExport} style={secondaryButtonStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px 0 rgba(16, 185, 129, 0.35)'; }}>
+              <Download size={15} />
+              Xuất Excel
             </button>
-          );
-        })}
+          )}
+          {onCreate && (
+            <button type="button" onClick={onCreate} style={primaryButtonStyle}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(99, 102, 241, 0.4)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px 0 rgba(99, 102, 241, 0.39)'; }}>
+              <Plus size={16} />
+              {createLabel}
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* ── Stats Cards ── */}
+      {stats.length > 0 && (
+        <div style={statsGridStyle}>
+          {stats.map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <button
+                key={stat.key ?? stat.label}
+                type="button"
+                disabled={!stat.onClick}
+                onClick={stat.onClick}
+                style={{
+                  ...statCardStyle,
+                  borderColor: stat.active ? (stat.border ?? stat.color) : '#e5e7eb',
+                  background: stat.active ? stat.bg : '#ffffff',
+                  boxShadow: stat.active
+                    ? `0 0 0 3px ${stat.border ?? stat.bg}`
+                    : '0 1px 4px rgba(0,0,0,0.06)',
+                  cursor: stat.onClick ? 'pointer' : 'default',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 500 }}>{stat.label}</span>
+                  <strong style={{ fontSize: 28, color: '#111827', lineHeight: 1.1, fontWeight: 800, letterSpacing: '-0.5px', marginTop: 4 }}>
+                    {formatNumber(stat.value ?? 0)}
+                  </strong>
+                  <span style={{ fontSize: 12, color: '#9ca3af', marginTop: 6 }}>phiếu</span>
+                </div>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 12,
+                  background: stat.bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: `0 4px 12px ${stat.bg}80`,
+                }}>
+                  <Icon size={19} color={stat.color} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Filter Bar ── */}
       <div style={filterBarStyle}>
         {filters}
       </div>
 
+      {/* ── Table Card ── */}
       <div style={tableCardStyle}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', minWidth: minTableWidth, borderCollapse: 'collapse', fontSize: 14 }}>
@@ -172,13 +190,16 @@ export default function InventoryDocumentListPage({
                   <th
                     key={column.key ?? column.label}
                     style={{
-                      padding: '14px 12px',
+                      padding: '13px 12px',
                       textAlign: column.align ?? 'left',
-                      color: '#020617',
+                      color: '#374151',
+                      fontSize: 12,
                       fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
                       whiteSpace: 'nowrap',
-                      borderBottom: '1px solid #dfe7f2',
-                      background: '#f8fafc',
+                      borderBottom: '1px solid #e5e7eb',
+                      background: '#f9fafb',
                     }}
                   >
                     {column.label}
@@ -213,12 +234,12 @@ export default function InventoryDocumentListPage({
                 type="button"
                 disabled={pagination.page <= 0}
                 onClick={pagination.onPrevious}
-                style={{ ...paginationButtonStyle, opacity: pagination.page <= 0 ? 0.5 : 1, cursor: pagination.page <= 0 ? 'not-allowed' : 'pointer' }}
+                style={{ ...paginationButtonStyle, opacity: pagination.page <= 0 ? 0.4 : 1, cursor: pagination.page <= 0 ? 'not-allowed' : 'pointer' }}
               >
-                <ChevronLeft size={16} />
+                <ChevronLeft size={15} />
                 Trước
               </button>
-              <span style={{ minWidth: 92, textAlign: 'center', color: '#020617', fontWeight: 700 }}>
+              <span style={{ minWidth: 100, textAlign: 'center', color: '#111827', fontWeight: 700, fontSize: 13 }}>
                 Trang {pagination.page + 1} / {pagination.totalPages}
               </span>
               <button
@@ -227,12 +248,12 @@ export default function InventoryDocumentListPage({
                 onClick={pagination.onNext}
                 style={{
                   ...paginationButtonStyle,
-                  opacity: pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0 ? 0.5 : 1,
+                  opacity: pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0 ? 0.4 : 1,
                   cursor: pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0 ? 'not-allowed' : 'pointer',
                 }}
               >
                 Sau
-                <ChevronRight size={16} />
+                <ChevronRight size={15} />
               </button>
             </div>
           </div>
@@ -242,13 +263,14 @@ export default function InventoryDocumentListPage({
   );
 }
 
+/* ─── Layout ─────────────────────────────────────────────────────────────────── */
 const pageStyle = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 24,
+  gap: 20,
 };
 
-const headerStyle = {
+const headerContainerStyle = {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
@@ -256,53 +278,77 @@ const headerStyle = {
   flexWrap: 'wrap',
 };
 
+const titleWrapperStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 0,
+};
+
+/* ─── Action Buttons ─────────────────────────────────────────────────────────── */
 const primaryButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 8,
+  gap: 7,
   border: 'none',
-  borderRadius: 8,
-  background: '#020617',
+  borderRadius: 10,
+  background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
   color: '#fff',
-  fontSize: 14,
+  fontSize: 13.5,
   fontWeight: 700,
-  padding: '10px 16px',
+  padding: '9px 18px',
   cursor: 'pointer',
+  boxShadow: '0 4px 14px 0 rgba(99, 102, 241, 0.39)',
+  transition: 'all 0.2s ease',
+  letterSpacing: '0.01em',
 };
 
 const secondaryButtonStyle = {
-  ...primaryButtonStyle,
-  border: '1px solid #e5e7eb',
-  background: '#fff',
-  color: '#020617',
-  fontWeight: 600,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 7,
+  border: 'none',
+  borderRadius: 10,
+  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+  color: '#fff',
+  fontSize: 13.5,
+  fontWeight: 700,
+  padding: '9px 16px',
+  cursor: 'pointer',
+  boxShadow: '0 4px 14px 0 rgba(16, 185, 129, 0.35)',
+  transition: 'all 0.2s ease',
 };
 
+/* ─── Stats Grid ─────────────────────────────────────────────────────────────── */
 const statsGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(4, minmax(180px, 1fr))',
-  gap: 16,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+  gap: 14,
 };
 
 const statCardStyle = {
-  minHeight: 128,
+  minHeight: 120,
   border: '1px solid #e5e7eb',
-  borderRadius: 10,
-  padding: '20px 22px',
+  borderRadius: 14,
+  padding: '18px 20px',
   textAlign: 'left',
   display: 'flex',
   justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  transition: 'all 0.2s ease',
+  outline: 'none',
 };
 
+/* ─── Filter Bar ─────────────────────────────────────────────────────────────── */
 const filterBarStyle = {
   border: '1px solid #e5e7eb',
-  borderRadius: 10,
-  background: '#fff',
-  padding: 16,
+  borderRadius: 14,
+  background: '#ffffff',
+  padding: '14px 16px',
   display: 'flex',
   alignItems: 'center',
-  gap: 12,
+  gap: 10,
   flexWrap: 'wrap',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
 };
 
 const filterControlStyle = {
@@ -311,74 +357,85 @@ const filterControlStyle = {
   border: '1px solid #dbe4ef',
   borderRadius: 8,
   background: '#fff',
-  color: '#020617',
-  fontSize: 14,
+  color: '#111827',
+  fontSize: 13.5,
   outline: 'none',
-  padding: '0 14px',
+  padding: '0 12px',
   boxSizing: 'border-box',
+  fontFamily: 'inherit',
+  transition: 'border-color 0.15s',
 };
 
+/* ─── Table Card ─────────────────────────────────────────────────────────────── */
 const tableCardStyle = {
-  border: '1px solid #dfe7f2',
-  borderRadius: 10,
+  border: '1px solid #e5e7eb',
+  borderRadius: 14,
   background: '#fff',
   overflow: 'hidden',
+  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
 };
 
 const emptyCellStyle = {
-  padding: '64px 10px',
+  padding: '60px 10px',
   textAlign: 'center',
-  color: '#8aa0bd',
-  borderBottom: '1px solid #e5e7eb',
+  color: '#9ca3af',
+  borderBottom: '1px solid #f3f4f6',
+  fontSize: 14,
 };
 
+/* ─── Footer ──────────────────────────────────────────────────────────────────── */
 const footerStyle = {
   minHeight: 46,
   padding: '0 16px',
-  borderTop: '1px solid #eef2f7',
-  background: '#f8fafc',
+  borderTop: '1px solid #f3f4f6',
+  background: '#f9fafb',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: 12,
-  color: '#536b8f',
+  color: '#6b7280',
   fontSize: 13,
   flexWrap: 'wrap',
 };
 
+/* ─── Pagination ──────────────────────────────────────────────────────────────── */
 const paginationStyle = {
-  padding: '14px 16px',
-  borderTop: '1px solid #eef2f7',
+  padding: '13px 16px',
+  borderTop: '1px solid #f3f4f6',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: 12,
-  color: '#536b8f',
+  color: '#6b7280',
   fontSize: 13,
   flexWrap: 'wrap',
+  background: '#f9fafb',
 };
 
 const paginationButtonStyle = {
   height: 34,
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 6,
-  border: '1px solid #dbe4ef',
+  gap: 5,
+  border: '1px solid #d1d5db',
   borderRadius: 8,
   background: '#fff',
-  color: '#020617',
+  color: '#374151',
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 600,
   padding: '0 12px',
+  cursor: 'pointer',
+  transition: 'all 0.15s',
 };
 
+/* ─── Action Menu ─────────────────────────────────────────────────────────────── */
 const menuButtonStyle = {
   width: 30,
   height: 30,
   border: 'none',
   borderRadius: 8,
   background: 'transparent',
-  color: '#020617',
+  color: '#374151',
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -390,12 +447,12 @@ const actionMenuStyle = {
   right: 0,
   top: 36,
   zIndex: 20,
-  minWidth: 168,
+  minWidth: 170,
   padding: 6,
   border: '1px solid #e5e7eb',
-  borderRadius: 8,
+  borderRadius: 10,
   background: '#fff',
-  boxShadow: '0 12px 24px rgba(15, 23, 42, 0.14)',
+  boxShadow: '0 12px 28px rgba(15, 23, 42, 0.13)',
 };
 
 const actionMenuItemStyle = {
@@ -403,11 +460,13 @@ const actionMenuItemStyle = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: '8px 10px',
+  padding: '9px 11px',
   border: 'none',
-  borderRadius: 6,
+  borderRadius: 7,
   background: 'transparent',
-  fontSize: 13,
+  fontSize: 13.5,
   fontWeight: 600,
   textAlign: 'left',
+  fontFamily: 'inherit',
+  transition: 'background 0.12s',
 };

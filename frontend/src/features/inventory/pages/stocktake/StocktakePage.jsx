@@ -282,7 +282,6 @@ export default function StocktakePage() {
       rows={rows}
       loading={loading}
       emptyText="Không có phiếu kiểm kho phù hợp"
-      footerLeft={`Hiển thị ${formatNumber(stocktakes.length)} / ${formatNumber(totalElements)} phiếu`}
       pagination={{
         page,
         totalPages,

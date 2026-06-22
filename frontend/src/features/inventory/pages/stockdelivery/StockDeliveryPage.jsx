@@ -358,6 +358,7 @@ export default function StockDeliveryPage() {
       description="Quản lý tất cả phiếu xuất hàng theo loại"
       createLabel="Tạo phiếu xuất"
       onCreate={() => navigate(ROUTES.STOCK_DELIVERY_CREATE)}
+      onExport={() => toast.info('Xuất Excel phiếu xuất kho đang được phát triển.')}
       stats={stats}
       filters={(
         <>
