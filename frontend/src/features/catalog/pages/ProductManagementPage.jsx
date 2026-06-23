@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import useDebounce from '../../../shared/hooks/useDebounce';
-import { Plus, History, FileSpreadsheet, FileUp } from 'lucide-react';
+import { Plus, History, FileDown, FileUp, Package } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';
@@ -35,14 +35,14 @@ const ProductManagementPage = () => {
         onClick={() => setIsImportModalOpen(true)}
       >
         <FileUp className={styles.importIcon} />
-        Import Excel
+        Nhập Excel
       </button>
       <button
         className={`${styles.actionBtn} ${styles.exportBtn}`}
         onClick={() => setIsExportModalOpen(true)}
       >
-        <FileSpreadsheet className={styles.exportIcon} />
-        Export Excel
+        <FileDown className={styles.exportIcon} />
+        Xuất Excel
       </button>
       <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={() => navigate(ROUTES.PRODUCT_CREATE)}>
         <Plus className={styles.primaryIcon} />
@@ -56,6 +56,7 @@ const ProductManagementPage = () => {
       <PageHeader
         title="Sản phẩm"
         subtitle="Quản lý kho hàng và các sản phẩm trên hệ thống"
+        icon={() => <Package size={20}/>}
         actions={actions}
       />
       <ProductFilterBar

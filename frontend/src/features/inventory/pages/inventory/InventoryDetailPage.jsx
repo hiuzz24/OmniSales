@@ -45,6 +45,7 @@ const InventoryDetailPage = () => {
         setLoadingDetail(true);
         const res = await inventoryApi.getInventoryItemDetail(id);
         setDetail(res);
+        window.dispatchEvent(new Event('notifications:refresh'));
       } catch (err) {
         console.error('Error fetching inventory detail', err);
         setErrorDetail('Không thể tải thông tin chi tiết tồn kho.');
@@ -124,6 +125,16 @@ const InventoryDetailPage = () => {
 
   const isLowStock = detail.quantityOnHand < detail.lowStockThreshold;
   const progressPercent = Math.min(100, Math.max(0, (detail.quantityOnHand / (detail.lowStockThreshold * 3)) * 100));
+  const handleReceiveStock = () => {
+    const params = new URLSearchParams({
+      warehouseId: detail.warehouseId || '',
+      variantId: detail.variantId || variantId,
+      sku: detail.variantSku || '',
+      productName: detail.productVariantName || '',
+      unitCost: detail.averageCost ?? 0,
+    });
+    navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?${params.toString()}`);
+  };
 
   return (
     <div className={styles.page}>
@@ -142,7 +153,7 @@ const InventoryDetailPage = () => {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <button className={styles.btnOutline}>
+          <button className={styles.btnOutline} onClick={handleReceiveStock}>
             <Download size={16} /> Nhập kho
           </button>
           <button className={styles.btnOutline}>

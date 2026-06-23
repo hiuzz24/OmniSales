@@ -163,7 +163,7 @@ public class InventoryController {
 
     @GetMapping("/items/low-stock")
     public ResponseEntity<ApiResponse<List<InventoryItemResponse>>> getLowStock() {
-        throw new UnsupportedOperationException("Not implemented");
+        return ResponseEntity.ok(ApiResponse.success(inventoryService.getLowStockItems()));
     }
 
     @PostMapping("/transactions")
