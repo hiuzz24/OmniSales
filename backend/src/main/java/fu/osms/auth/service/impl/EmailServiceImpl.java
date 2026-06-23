@@ -75,4 +75,18 @@ public class EmailServiceImpl implements EmailService {
             throw new RuntimeException("Email sending failed", e);
         }
     }
+
+    @Override
+    @Async
+    public void sendNotificationEmail(String toEmail, String subject, String body) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(toEmail);
+            message.setSubject(subject);
+            message.setText(body);
+            mailSender.send(message);
+        } catch (Exception e) {
+            System.err.println("Failed to send notification email to " + toEmail + ": " + e.getMessage());
+        }
+    }
 }

@@ -15,6 +15,7 @@ import fu.osms.inventory.entity.*;
 import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.mapper.StockDeliveryMapper;
 import fu.osms.inventory.repository.*;
+import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.inventory.service.StockDeliveryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     private final UserRepository userRepository;
     private final StockDeliveryMapper stockDeliveryMapper;
     private final AuditLogRepository auditLogRepository;
+    private final InventoryAlertService inventoryAlertService;
 
     @Override
     @Transactional
@@ -378,6 +380,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         inventoryItem.setQuantityOnHand(quantityAfter);
         inventoryItem.setUpdatedBy(currentUser);
         inventoryItemRepository.save(inventoryItem);
+        inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
 
         InventoryTransaction transaction = InventoryTransaction.builder()
                 .warehouse(inventoryIssue.getWarehouse())

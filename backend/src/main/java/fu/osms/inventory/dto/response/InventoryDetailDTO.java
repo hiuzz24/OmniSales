@@ -4,12 +4,15 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class InventoryDetailDTO {
+    private UUID warehouseId;
+    private UUID variantId;
     private Integer quantityOnHand;      // quantity_on_hand
     private BigDecimal averageCost;      // average_cost
     private BigDecimal totalInventoryValue; // quantity_on_hand * average_cost

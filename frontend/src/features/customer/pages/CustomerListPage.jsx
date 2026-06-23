@@ -6,7 +6,7 @@ import useAuth from '../../auth/hooks/useAuth';
 import useDebounce from '../../../shared/hooks/useDebounce';
 import {
   Plus, Search, Eye, Pencil, Trash2,
-  Download, UserCheck, UserX, TrendingUp, Phone, Mail, Users,
+  FileDown, UserCheck, UserX, TrendingUp, Phone, Mail, Users
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import customerService from '../services/customerService';
@@ -132,7 +132,7 @@ const CustomerListPage = () => {
         </div>
         <div className={styles.headerActions}>
           <button className={styles.btnOutline} onClick={() => setIsExportModalOpen(true)}>
-            <Download size={15} />
+            <FileDown size={15} />
             Xuất Excel
           </button>
           {canCreate && (
