@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -143,14 +143,16 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [] }
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function StockReceiveCreatePage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const fileRef = useRef(null);
+  const prefillAppliedRef = useRef(false);
   const [items, setItems] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting, isDirty } } = useForm({
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting, isDirty } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: { warehouseId: '', supplierId: '', invoiceNumber: '', receivedAt: new Date().toISOString().split('T')[0], notes: '' },
   });
@@ -170,6 +172,31 @@ export default function StockReceiveCreatePage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (prefillAppliedRef.current) return;
+
+    const warehouseId = searchParams.get('warehouseId');
+    const variantId = searchParams.get('variantId');
+    if (!warehouseId && !variantId) return;
+
+    prefillAppliedRef.current = true;
+    if (warehouseId) {
+      setValue('warehouseId', warehouseId, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (variantId) {
+      setItems([{
+        variantId,
+        sku: searchParams.get('sku') || '',
+        productName: searchParams.get('productName') || searchParams.get('sku') || 'Sản phẩm',
+        variantName: '',
+        quantity: 1,
+        unitPrice: searchParams.get('unitCost') || 0,
+      }]);
+    }
+  }, [searchParams, setValue]);
+
+  // ── Item handlers ─────────────────────────────────────────────────────────
   const onQtyChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
   const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));

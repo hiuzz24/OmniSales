@@ -626,7 +626,7 @@ CREATE TABLE notifications (
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
-                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG')),
+                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY')),
                                entity_id   UUID,
                                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -945,7 +945,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO inventory_issues (id, warehouse_id, issue_code, issue_type, status, reference_id, recipient, total_cost, notes, created_by, confirmed_at) VALUES
     ('20b1c2d3-0001-0000-0000-000000000001', 'c0b1c2d3-0000-0000-0000-000000000001', 'ISS-001', 'ORDER', 'CONFIRMED', '90b1c2d3-0000-0000-0000-000000000001', NULL, 160000, NULL, 'b0b1c2d3-0000-0000-0000-000000000001', NOW() - INTERVAL '1 day')
 ON CONFLICT DO NOTHING;
-
+    
 -- Inventory issue items
 INSERT INTO inventory_issue_items (id, issue_id, variant_id, quantity, unit_cost) VALUES
     ('30b1c2d3-0001-0000-0000-000000000001', '20b1c2d3-0001-0000-0000-000000000001', '10b1c2d3-0000-0000-0000-000000000001', 2, 80000)

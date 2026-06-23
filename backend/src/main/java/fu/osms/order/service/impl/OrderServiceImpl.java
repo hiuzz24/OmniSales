@@ -9,8 +9,15 @@ import fu.osms.auth.entity.User;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 import fu.osms.customer.entity.Customer;
 import fu.osms.customer.repository.CustomerRepository;
+import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.inventory.entity.InventoryItem;
+import fu.osms.inventory.repository.InventoryItemRepository;
+import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.order.dto.request.OrderItemRequest;
 import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.OrderItemResponse;
@@ -38,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 import fu.osms.common.utils.SecurityUtils;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,6 +62,9 @@ public class OrderServiceImpl implements OrderService {
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
     private final AuditLogMapper auditLogMapper;
+    private final ProductVariantRepository productVariantRepository;
+    private final InventoryItemRepository inventoryItemRepository;
+    private final InventoryAlertService inventoryAlertService;
 
     @Override
     @Transactional
@@ -76,8 +87,10 @@ public class OrderServiceImpl implements OrderService {
         Order savedOrder = orderRepository.save(order);
 
         for (OrderItemRequest itemReq : request.getItems()) {
+            ProductVariant variant = resolveVariant(itemReq);
             OrderItem item = OrderItem.builder()
                     .order(savedOrder)
+                    .variant(variant)
                     .sku(itemReq.getSku())
                     .name(itemReq.getName())
                     .quantity(itemReq.getQuantity())
@@ -85,6 +98,10 @@ public class OrderServiceImpl implements OrderService {
                     .discountAmount(itemReq.getDiscountAmount() != null ? itemReq.getDiscountAmount() : BigDecimal.ZERO)
                     .build();
             orderItemRepository.save(item);
+
+            if (variant != null) {
+                reserveInventory(variant, itemReq.getQuantity());
+            }
         }
 
         var userOpt = SecurityUtils.getCurrentUser();
@@ -129,8 +146,13 @@ public class OrderServiceImpl implements OrderService {
         OrderStatus oldStatus = order.getStatus();
         String oldPaymentStatus = order.getPaymentStatus();
 
+        if (oldStatus == OrderStatus.CANCELLED && status == OrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
+        }
+
         if (status == OrderStatus.CANCELLED) {
             order.setStatus(OrderStatus.CANCELLED);
+            releaseReservedInventory(order);
         } else {
             order.setStatus(status);
         }
@@ -217,6 +239,11 @@ public class OrderServiceImpl implements OrderService {
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
 
         OrderStatus oldStatus = order.getStatus();
+        if (oldStatus == OrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
+        }
+
+        releaseReservedInventory(order);
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
         order.setStatusChangedAt(OffsetDateTime.now());
@@ -303,4 +330,89 @@ public class OrderServiceImpl implements OrderService {
                 .last(orderPage.isLast())
                 .build();
     }
+
+    private ProductVariant resolveVariant(OrderItemRequest itemReq) {
+        if (itemReq.getVariantId() != null) {
+            return productVariantRepository.findById(itemReq.getVariantId())
+                    .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
+        }
+        if (itemReq.getSku() == null || itemReq.getSku().isBlank()) {
+            return null;
+        }
+        return productVariantRepository.findBySkuAndDeletedAtIsNull(itemReq.getSku()).orElse(null);
+    }
+
+    private void reserveInventory(ProductVariant variant, int quantity) {
+        List<InventoryItem> inventoryItems = inventoryItemRepository.findByVariantIdWithLock(variant.getId());
+        if (inventoryItems.isEmpty()) {
+            throw new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND,
+                    "SKU " + variant.getSku() + " is not available in any warehouse.");
+        }
+
+        int totalAvailable = inventoryItems.stream().mapToInt(this::availableQuantity).sum();
+        if (totalAvailable < quantity) {
+            throw new AppException(ErrorCode.INSUFFICIENT_STOCK,
+                    "SKU " + variant.getSku() + " has only " + totalAvailable + " available units.");
+        }
+
+        int remaining = quantity;
+        List<InventoryItem> changedItems = new ArrayList<>();
+        for (InventoryItem item : inventoryItems) {
+            if (remaining <= 0) break;
+            int reserveFromItem = Math.min(availableQuantity(item), remaining);
+            if (reserveFromItem <= 0) continue;
+
+            item.setReservedQuantity(safeInt(item.getReservedQuantity()) + reserveFromItem);
+            changedItems.add(item);
+            remaining -= reserveFromItem;
+        }
+
+        inventoryItemRepository.saveAll(changedItems);
+        changedItems.forEach(inventoryAlertService::notifyLowStockAfterStockChange);
+    }
+
+    private void releaseReservedInventory(Order order) {
+        List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
+        for (OrderItem orderItem : orderItems) {
+            ProductVariant variant = orderItem.getVariant();
+            if (variant == null) {
+                variant = resolveVariantBySku(orderItem.getSku());
+            }
+            if (variant == null) continue;
+
+            int remaining = safeInt(orderItem.getQuantity());
+            List<InventoryItem> inventoryItems = inventoryItemRepository.findByVariantIdWithLock(variant.getId());
+            List<InventoryItem> changedItems = new ArrayList<>();
+
+            for (InventoryItem item : inventoryItems) {
+                if (remaining <= 0) break;
+                int releaseFromItem = Math.min(safeInt(item.getReservedQuantity()), remaining);
+                if (releaseFromItem <= 0) continue;
+
+                item.setReservedQuantity(safeInt(item.getReservedQuantity()) - releaseFromItem);
+                changedItems.add(item);
+                remaining -= releaseFromItem;
+            }
+
+            if (!changedItems.isEmpty()) {
+                inventoryItemRepository.saveAll(changedItems);
+            }
+        }
+    }
+
+    private ProductVariant resolveVariantBySku(String sku) {
+        if (sku == null || sku.isBlank()) {
+            return null;
+        }
+        return productVariantRepository.findBySkuAndDeletedAtIsNull(sku).orElse(null);
+    }
+
+    private int availableQuantity(InventoryItem item) {
+        return safeInt(item.getQuantityOnHand()) - safeInt(item.getReservedQuantity());
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
 }

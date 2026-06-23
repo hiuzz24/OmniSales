@@ -25,6 +25,7 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryService;
+import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -51,6 +52,7 @@ public class InventoryServiceImpl implements InventoryService {
     private final CategoryRepository categoryRepository;
     private final InventoryDetailMapper inventoryDetailMapper;
     private final InventoryTransactionMapper transactionMapper;
+    private final InventoryAlertService inventoryAlertService;
 
     @Override
     @Transactional(readOnly = true)
@@ -115,7 +117,7 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     @Transactional(readOnly = true)
     public List<InventoryItemResponse> getLowStockItems() {
-        throw new UnsupportedOperationException("Not implemented");
+        return inventoryItemMapper.toResponseList(inventoryItemRepository.findLowStockItems());
     }
 
     @Override
@@ -146,6 +148,7 @@ public class InventoryServiceImpl implements InventoryService {
         item.setQuantityOnHand(quantityAfter);
         item.setUpdatedBy(currentUser);
         inventoryItemRepository.save(item);
+        inventoryAlertService.notifyLowStockAfterStockChange(item);
 
         InventoryTransaction transaction = InventoryTransaction.builder()
                 .warehouse(item.getWarehouse())

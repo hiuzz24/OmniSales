@@ -21,12 +21,16 @@ import {
   FileText,
   PackagePlus,
   ArrowRightLeft,
+  Warehouse,
+  PackageMinus
 } from 'lucide-react';
 import styles from './InventoryPage.module.css';
 import PageHeader from '../../../../shared/components/PageHeader';
 import { ROUTES } from '../../../../app/router/routes';
 import categoryApi from '../../../../api/categoryApi';
 import inventoryService from '../../services/inventoryService';
+import InventoryExportModal from '../components/InventoryExportModal';
+import { getStatusLabel } from '../components/inventoryExcelExport';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;
@@ -37,6 +41,20 @@ const STATUS_OPTIONS = [
   { value: 'low-stock', label: 'Sắp hết' },
   { value: 'out-of-stock', label: 'Hết hàng' },
   { value: 'negative', label: 'Tồn âm' },
+];
+
+const INVENTORY_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'variantSku', label: 'Mã SKU', width: 18, defaultChecked: true, getValue: (item) => item.variantSku ?? '' },
+  { key: 'variantName', label: 'Tên sản phẩm', width: 34, defaultChecked: true, getValue: (item) => item.variantName ?? '' },
+  { key: 'warehouseName', label: 'Kho hàng', width: 24, defaultChecked: true, getValue: (item) => item.warehouseName ?? '' },
+  { key: 'quantityOnHand', label: 'Trong kho', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.quantityOnHand ?? 0 },
+  { key: 'reservedQuantity', label: 'Giữ hàng', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.reservedQuantity ?? 0 },
+  { key: 'availableQuantity', label: 'Có thể bán', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.availableQuantity ?? 0 },
+  { key: 'lowStockThreshold', label: 'Tồn tối thiểu', width: 14, type: 'number', defaultChecked: true, getValue: (item) => item.lowStockThreshold ?? 0 },
+  { key: 'status', label: 'Trạng thái', width: 14, defaultChecked: true, getValue: (item) => getStatusLabel(deriveStatus(item)) },
+  { key: 'categoryName', label: 'Danh mục', width: 20, defaultChecked: false, getValue: (item) => item.categoryName ?? '' },
+  { key: 'updatedAt', label: 'Cập nhật lần cuối', width: 20, defaultChecked: false, getValue: (item) => item.updatedAt ? new Date(item.updatedAt).toLocaleString('vi-VN') : '' },
 ];
 
 // Cycle: none → asc → desc → none
@@ -189,13 +207,26 @@ const InventoryPage = () => {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [categoryTree, setCategoryTree] = useState([]);
+  const [lowStockItems, setLowStockItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     categoryApi.getTree()
       .then(res => setCategoryTree(res || []))
       .catch(err => console.error('Lỗi tải danh mục:', err));
+  }, []);
+
+  const fetchLowStockItems = useCallback(async () => {
+    try {
+      const data = await inventoryService.getLowStockItems();
+      setLowStockItems(Array.isArray(data) ? data : []);
+      window.dispatchEvent(new Event('notifications:refresh'));
+    } catch (err) {
+      console.error('Lỗi tải cảnh báo tồn kho:', err);
+      setLowStockItems([]);
+    }
   }, []);
 
   // ── Fetch from BE whenever page changes
@@ -220,6 +251,10 @@ const InventoryPage = () => {
   useEffect(() => {
     fetchInventory(currentPage, categoryFilter);
   }, [currentPage, categoryFilter, fetchInventory]);
+
+  useEffect(() => {
+    fetchLowStockItems();
+  }, [fetchLowStockItems]);
 
   // ── Dynamic warehouse options from loaded data
   const warehouseOptions = useMemo(() => {
@@ -253,9 +288,8 @@ const InventoryPage = () => {
     });
   };
 
-  // ── Client-side filter + sort on current page items
-  const filtered = useMemo(() => {
-    let result = items.filter(item => {
+  const filterInventoryRows = useCallback((source) => {
+    let result = source.filter(item => {
       const matchSearch = !search ||
         (item.variantSku ?? '').toLowerCase().includes(search.toLowerCase()) ||
         (item.variantName ?? '').toLowerCase().includes(search.toLowerCase());
@@ -280,11 +314,28 @@ const InventoryPage = () => {
     }
 
     return result;
-  }, [items, search, statusFilter, warehouseFilter, nameSort, qtySort]);
+  }, [search, statusFilter, warehouseFilter, nameSort, qtySort]);
+
+  // ── Client-side filter + sort on current page items
+  const filtered = useMemo(() => filterInventoryRows(items), [items, filterInventoryRows]);
+
+  const loadInventoryExportRows = async () => {
+    const size = Math.max(totalElements || items.length || PAGE_SIZE, items.length || PAGE_SIZE);
+    const data = await inventoryService.getInventoryList(
+      0,
+      size,
+      'updatedAt',
+      'desc',
+      categoryFilter === 'all' ? null : categoryFilter,
+    );
+    return filterInventoryRows(data.content ?? []);
+  };
 
   // ── Derived alert counts from current page
   const negativeCount = items.filter(r => r.availableQuantity < 0).length;
   const lowStockCount = items.filter(r => r.isLowStock && r.availableQuantity >= 0).length;
+  const outOfStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) <= 0);
+  const lowStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) > 0);
   const totalQuantityCurrentPage = items.reduce((acc, item) => acc + item.quantityOnHand, 0);
 
   const quantityColor = (v) => {
@@ -305,6 +356,8 @@ const InventoryPage = () => {
       <button
         className={`${styles.actionBtn} ${styles.importBtn}`}
         id="btn-import-stock"
+        type="button"
+        onClick={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS)}
       >
         <PackagePlus className={styles.importIcon} />
         Nhập kho
@@ -312,8 +365,10 @@ const InventoryPage = () => {
       <button
         className={`${styles.actionBtn} ${styles.exportBtn}`}
         id="btn-export-stock"
+        type="button"
+        onClick={() => navigate(ROUTES.STOCK_DELIVERIES)}
       >
-        <Upload className={styles.exportIcon} />
+        <PackageMinus className={styles.exportIcon} />
         Xuất kho
       </button>
       <button
@@ -326,6 +381,8 @@ const InventoryPage = () => {
       <button
         className={`${styles.actionBtn} ${styles.primaryBtn}`}
         id="btn-export-report"
+        type="button"
+        onClick={() => setExportOpen(true)}
       >
         <FileText className={styles.primaryIcon} />
         Xuất báo cáo
@@ -334,11 +391,13 @@ const InventoryPage = () => {
   );
 
   return (
+    <>
     <div className={styles.page}>
       {/* ── Header ── */}
       <PageHeader
         title="Danh sách tồn kho"
         subtitle="Theo dõi và quản lý tồn kho theo SKU, kho hàng và trạng thái"
+        icon={<Warehouse size={20} />}
         actions={actions}
       />
 
@@ -349,7 +408,7 @@ const InventoryPage = () => {
             <Layers size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Total SKUs</span>
+            <span className={styles.summaryLabel}>Tổng sản phẩm SKUs</span>
             <span className={styles.summaryValue}>{totalElements}</span>
           </div>
         </div>
@@ -358,7 +417,7 @@ const InventoryPage = () => {
             <Box size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Total Quantity<br /><small>(Trang hiện tại)</small></span>
+            <span className={styles.summaryLabel}>Tổng số lượng SKUs<br /><small>(Trang hiện tại)</small></span>
             <span className={styles.summaryValue}>{totalQuantityCurrentPage}</span>
           </div>
         </div>
@@ -367,7 +426,7 @@ const InventoryPage = () => {
             <AlertTriangle size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Low Stock Items</span>
+            <span className={styles.summaryLabel}>Sản phẩm sắp hết hàng</span>
             <span className={styles.summaryValue}>{lowStockCount}</span>
           </div>
         </div>
@@ -376,7 +435,7 @@ const InventoryPage = () => {
             <AlertCircle size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={`${styles.summaryLabel} ${styles.textRed}`}>Negative Stock Items</span>
+            <span className={`${styles.summaryLabel} ${styles.textRed}`}>Sản phẩm tồn kho âm</span>
             <span className={`${styles.summaryValue} ${styles.textRed}`}>{negativeCount}</span>
           </div>
         </div>
@@ -402,6 +461,48 @@ const InventoryPage = () => {
         </div>
       )}
 
+      {lowStockItems.length > 0 && (
+        <section className={styles.stockNoticePanel}>
+          <div className={styles.stockNoticeHeader}>
+            <div>
+              <h2 className={styles.stockNoticeTitle}>Thông báo tồn kho</h2>
+              <p className={styles.stockNoticeSubtitle}>
+                {outOfStockAlerts.length} SKU hết hàng, {lowStockAlerts.length} SKU dưới tồn kho tối thiểu.
+              </p>
+            </div>
+            <button
+              className={styles.btnOutline}
+              type="button"
+              onClick={fetchLowStockItems}
+            >
+              Làm mới
+            </button>
+          </div>
+          <div className={styles.stockNoticeList}>
+            {lowStockItems.slice(0, 6).map((item) => {
+              const available = Number(item.availableQuantity ?? 0);
+              const threshold = Number(item.lowStockThreshold ?? 0);
+              const urgent = available <= 0;
+              return (
+                <button
+                  key={item.id}
+                  className={styles.stockNoticeItem}
+                  type="button"
+                  onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', item.id)}?variantId=${item.variantId}`)}
+                >
+                  <span className={`${styles.stockNoticeDot} ${urgent ? styles.stockNoticeDotDanger : styles.stockNoticeDotWarn}`} />
+                  <span className={styles.stockNoticeMain}>
+                    <span className={styles.stockNoticeName}>{item.variantSku} · {item.variantName}</span>
+                    <span className={styles.stockNoticeMeta}>{item.warehouseName} · Còn bán {available} / tối thiểu {threshold}</span>
+                  </span>
+                  <StatusBadge status={urgent ? 'out-of-stock' : 'low-stock'} />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* ── Error ── */}
       {error && (
         <div className={`${styles.alert} ${styles.alertError}`}>
@@ -410,94 +511,96 @@ const InventoryPage = () => {
         </div>
       )}
 
-      {/* ── Filters row 1: Search + Warehouse + Status + Category ── */}
-      <div className={styles.filtersRow}>
-        <div className={styles.searchWrapper}>
-          <Search className={styles.searchIcon} size={16} />
-          <input
-            id="input-inventory-search"
-            className={styles.searchInput}
-            placeholder="Tìm theo SKU hoặc tên sản phẩm..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+      <div className={styles.filtersPanel}>
+        {/* ── Filters row 1: Search + Warehouse + Status + Category ── */}
+        <div className={styles.filtersRow}>
+          <div className={styles.searchWrapper}>
+            <Search className={styles.searchIcon} size={18} />
+            <input
+              id="input-inventory-search"
+              className={styles.searchInput}
+              placeholder="Tìm theo SKU hoặc tên sản phẩm..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div className={styles.selectWrapper}>
+            <select
+              className={styles.select}
+              value={categoryFilter}
+              onChange={e => {
+                setCategoryFilter(e.target.value);
+                setCurrentPage(0);
+              }}
+            >
+              <option value="all">Tất cả danh mục</option>
+              {renderCategoryOptions(categoryTree)}
+            </select>
+            <ChevronDown className={styles.selectIcon} size={14} />
+          </div>
+          <Select value={warehouseFilter} onChange={setWarehouseFilter} options={warehouseOptions} />
+          <Select value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
         </div>
-        <div className={styles.selectWrapper}>
-          <select
-            className={styles.select}
-            value={categoryFilter}
-            onChange={e => {
-              setCategoryFilter(e.target.value);
-              setCurrentPage(0);
-            }}
-          >
-            <option value="all">Tất cả danh mục</option>
-            {renderCategoryOptions(categoryTree)}
-          </select>
-          <ChevronDown className={styles.selectIcon} size={14} />
-        </div>
-        <Select value={warehouseFilter} onChange={setWarehouseFilter} options={warehouseOptions} />
-        <Select value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
-      </div>
 
-      {/* ── Filters row 2: Sort toggles ── */}
-      <div className={styles.filtersRow2}>
-        <span className={styles.sortLabel}>Sắp xếp:</span>
+        {/* ── Filters row 2: Sort toggles ── */}
+        <div className={styles.filtersRow2}>
+          <span className={styles.sortLabel}>Sắp xếp:</span>
 
-        {/* Sort by name */}
-        <button
-          id="btn-sort-name"
-          className={`${styles.sortBtn} ${nameSort !== 'none' ? styles.sortBtnActive : ''}`}
-          onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); }}
-          title="Sắp xếp theo tên sản phẩm"
-        >
-          {nameSort === 'desc'
-            ? <ArrowDownAZ size={14} />
-            : <ArrowUpAZ size={14} />}
-          Tên A–Z
-          {nameSort !== 'none' && (
-            <span className={styles.sortDirChip}>
-              {nameSort === 'asc' ? '↑' : '↓'}
-            </span>
-          )}
-        </button>
-
-        {/* Sort by quantity */}
-        <button
-          id="btn-sort-qty"
-          className={`${styles.sortBtn} ${qtySort !== 'none' ? styles.sortBtnActive : ''}`}
-          onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); }}
-          title="Sắp xếp theo số lượng trong kho"
-        >
-          {qtySort === 'desc'
-            ? <ArrowDown10 size={14} />
-            : <ArrowUp01 size={14} />}
-          Số lượng
-          {qtySort !== 'none' && (
-            <span className={styles.sortDirChip}>
-              {qtySort === 'asc' ? '↑' : '↓'}
-            </span>
-          )}
-        </button>
-
-        {/* Reset filters */}
-        {(categoryFilter !== 'all' || warehouseFilter !== 'all' || statusFilter !== 'all' || nameSort !== 'none' || qtySort !== 'none' || search) && (
+          {/* Sort by name */}
           <button
-            id="btn-reset-filters"
-            className={styles.resetBtn}
-            onClick={() => {
-              setSearch('');
-              setStatusFilter('all');
-              setWarehouseFilter('all');
-              setCategoryFilter('all');
-              setNameSort('none');
-              setQtySort('none');
-              setCurrentPage(0);
-            }}
+            id="btn-sort-name"
+            className={`${styles.sortBtn} ${nameSort !== 'none' ? styles.sortBtnActive : ''}`}
+            onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); }}
+            title="Sắp xếp theo tên sản phẩm"
           >
-            Xoá bộ lọc
+            {nameSort === 'desc'
+              ? <ArrowDownAZ size={14} />
+              : <ArrowUpAZ size={14} />}
+            Tên A-Z
+            {nameSort !== 'none' && (
+              <span className={styles.sortDirChip}>
+                {nameSort === 'asc' ? '↑' : '↓'}
+              </span>
+            )}
           </button>
-        )}
+
+          {/* Sort by quantity */}
+          <button
+            id="btn-sort-qty"
+            className={`${styles.sortBtn} ${qtySort !== 'none' ? styles.sortBtnActive : ''}`}
+            onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); }}
+            title="Sắp xếp theo số lượng trong kho"
+          >
+            {qtySort === 'desc'
+              ? <ArrowDown10 size={14} />
+              : <ArrowUp01 size={14} />}
+            Số lượng
+            {qtySort !== 'none' && (
+              <span className={styles.sortDirChip}>
+                {qtySort === 'asc' ? '↑' : '↓'}
+              </span>
+            )}
+          </button>
+
+          {/* Reset filters */}
+          {(categoryFilter !== 'all' || warehouseFilter !== 'all' || statusFilter !== 'all' || nameSort !== 'none' || qtySort !== 'none' || search) && (
+            <button
+              id="btn-reset-filters"
+              className={styles.resetBtn}
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('all');
+                setWarehouseFilter('all');
+                setCategoryFilter('all');
+                setNameSort('none');
+                setQtySort('none');
+                setCurrentPage(0);
+              }}
+            >
+              Xoá bộ lọc
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Table Card ── */}
@@ -618,6 +721,15 @@ const InventoryPage = () => {
           )}
         </div>
 
+        <div className={styles.tableFooter}>
+          <span>
+            Đang hiển thị {filtered.length} / {totalElements} SKU
+          </span>
+          <span>
+            Tồn trang hiện tại: {totalQuantityCurrentPage.toLocaleString('vi-VN')} đơn vị
+          </span>
+        </div>
+
         {/* ── BE Pagination ── */}
         {!loading && (
           <Pagination
@@ -630,6 +742,18 @@ const InventoryPage = () => {
         )}
       </div>
     </div>
+    <InventoryExportModal
+      open={exportOpen}
+      onClose={() => setExportOpen(false)}
+      rows={filtered}
+      columns={INVENTORY_EXPORT_COLUMNS}
+      getDateValue={(item) => item.updatedAt ?? item.createdAt}
+      loadRows={loadInventoryExportRows}
+      title="BẢNG KÊ TỒN KHO"
+      fileName="bang-ke-ton-kho"
+      sheetName="tồn kho"
+    />
+    </>
   );
 };
 
