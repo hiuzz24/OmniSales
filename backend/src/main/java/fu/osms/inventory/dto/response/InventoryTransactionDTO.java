@@ -15,6 +15,11 @@ import java.util.UUID;
 public class InventoryTransactionDTO {
 
     private UUID id;
+    private UUID warehouseId;
+    private String warehouseName;
+    private UUID variantId;
+    private String variantSku;
+    private String variantName;
     private InvTxnType type;
     private String typeLabel;
     private String referenceType;

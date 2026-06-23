@@ -57,6 +57,21 @@ const INVENTORY_EXPORT_COLUMNS = [
   { key: 'updatedAt', label: 'Cập nhật lần cuối', width: 20, defaultChecked: false, getValue: (item) => item.updatedAt ? new Date(item.updatedAt).toLocaleString('vi-VN') : '' },
 ];
 
+const INVENTORY_HISTORY_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'performedAt', label: 'Ngày biến động', width: 20, defaultChecked: true, getValue: (item) => item.performedAt ? new Date(item.performedAt).toLocaleString('vi-VN') : '' },
+  { key: 'variantSku', label: 'Mã SKU', width: 18, defaultChecked: true, getValue: (item) => item.variantSku ?? '' },
+  { key: 'variantName', label: 'Tên sản phẩm', width: 34, defaultChecked: true, getValue: (item) => item.variantName ?? '' },
+  { key: 'warehouseName', label: 'Kho hàng', width: 24, defaultChecked: true, getValue: (item) => item.warehouseName ?? '' },
+  { key: 'typeLabel', label: 'Loại biến động', width: 22, defaultChecked: true, getValue: (item) => item.typeLabel ?? item.type ?? '' },
+  { key: 'quantityBefore', label: 'Trước biến động', width: 16, type: 'number', defaultChecked: true, getValue: (item) => item.quantityBefore ?? 0 },
+  { key: 'quantityChange', label: 'Thay đổi', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.quantityChange ?? 0 },
+  { key: 'quantityAfter', label: 'Sau biến động', width: 16, type: 'number', defaultChecked: true, getValue: (item) => item.quantityAfter ?? 0 },
+  { key: 'referenceType', label: 'Nguồn', width: 12, defaultChecked: false, getValue: (item) => item.referenceType ?? '' },
+  { key: 'note', label: 'Ghi chú', width: 36, defaultChecked: false, getValue: (item) => item.note ?? '' },
+  { key: 'performedByName', label: 'Người thực hiện', width: 22, defaultChecked: false, getValue: (item) => item.performedByName ?? '' },
+];
+
 // Cycle: none → asc → desc → none
 const nextSort = (current) =>
   current === 'none' ? 'asc' : current === 'asc' ? 'desc' : 'none';
@@ -329,6 +344,32 @@ const InventoryPage = () => {
       categoryFilter === 'all' ? null : categoryFilter,
     );
     return filterInventoryRows(data.content ?? []);
+  };
+
+  const loadInventoryExportExtraSheets = async ({ fromDate, toDate } = {}) => {
+    const parseDate = (value, endOfDay = false) => {
+      if (!value) return null;
+      const parsed = new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+    const from = parseDate(fromDate);
+    const to = parseDate(toDate, true);
+    const data = await inventoryService.getInventoryTransactions(0, 10000, 'performedAt', 'desc');
+    const historyRows = (data.content ?? []).filter((row) => {
+      if (!from && !to) return true;
+      const rowDate = row.performedAt ? new Date(row.performedAt) : null;
+      if (!rowDate || Number.isNaN(rowDate.getTime())) return false;
+      if (from && rowDate < from) return false;
+      if (to && rowDate > to) return false;
+      return true;
+    });
+
+    return [{
+      rows: historyRows,
+      columns: INVENTORY_HISTORY_EXPORT_COLUMNS,
+      title: 'LỊCH SỬ BIẾN ĐỘNG TỒN KHO',
+      sheetName: 'Lich su bien dong',
+    }];
   };
 
   // ── Derived alert counts from current page
@@ -749,6 +790,7 @@ const InventoryPage = () => {
       columns={INVENTORY_EXPORT_COLUMNS}
       getDateValue={(item) => item.updatedAt ?? item.createdAt}
       loadRows={loadInventoryExportRows}
+      loadExtraSheets={loadInventoryExportExtraSheets}
       title="BẢNG KÊ TỒN KHO"
       fileName="bang-ke-ton-kho"
       sheetName="tồn kho"

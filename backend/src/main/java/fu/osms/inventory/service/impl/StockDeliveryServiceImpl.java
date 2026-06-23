@@ -1,7 +1,5 @@
 package fu.osms.inventory.service.impl;
 
-import fu.osms.audit.entity.AuditLog;
-import fu.osms.audit.repository.AuditLogRepository;
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
@@ -33,7 +31,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -53,7 +51,6 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final UserRepository userRepository;
     private final StockDeliveryMapper stockDeliveryMapper;
-    private final AuditLogRepository auditLogRepository;
     private final InventoryAlertService inventoryAlertService;
 
     @Override
@@ -65,9 +62,6 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         User currentUser = getCurrentUser();
         String issueType = normalizeIssueType(request.getDeliveryType());
         String notes = request.getNote() != null ? request.getNote() : request.getNotes();
-        OffsetDateTime issuedAt = request.getIssuedDate()
-                .atStartOfDay(ZoneOffset.UTC)
-                .toOffsetDateTime();
 
         // Generate issue code
         String issueCode = generateIssueCode();
@@ -82,7 +76,6 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                 .notes(notes)
                 .status("DRAFT")
                 .createdBy(currentUser)
-                .createdAt(issuedAt)
                 .totalCost(BigDecimal.ZERO)
                 .build();
         inventoryIssue = inventoryIssueRepository.save(inventoryIssue);
@@ -93,12 +86,9 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         inventoryIssue.calculateTotals();
         InventoryIssue savedIssue = inventoryIssueRepository.save(inventoryIssue);
-        recordAudit(currentUser, "CREATE", savedIssue, Map.of(
-                "status", savedIssue.getStatus(),
-                "warehouseId", warehouse.getId().toString(),
-                "totalQuantity", savedIssue.getItems().stream().mapToInt(InventoryIssueItem::getQuantity).sum()
-        ));
-
+        for (InventoryIssueItem item : savedIssue.getItems()) {
+            reserveDraftInventory(savedIssue, item, currentUser);
+        }
         log.info("Stock delivery created successfully with ID: {}", savedIssue.getId());
         return stockDeliveryMapper.toResponse(savedIssue);
     }
@@ -117,17 +107,14 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         Warehouse warehouse = getActiveWarehouse(request.getWarehouseId());
         User currentUser = getCurrentUser();
+        releaseDraftReservations(inventoryIssue, currentUser, "Stock delivery draft updated - reservation released");
         String notes = request.getNote() != null ? request.getNote() : request.getNotes();
         String issueType = normalizeIssueType(request.getDeliveryType());
-        OffsetDateTime issuedAt = request.getIssuedDate()
-                .atStartOfDay(ZoneOffset.UTC)
-                .toOffsetDateTime();
 
         inventoryIssue.setWarehouse(warehouse);
         inventoryIssue.setIssueType(issueType);
         inventoryIssue.setRecipient(request.getRecipient());
         inventoryIssue.setNotes(notes);
-        inventoryIssue.setCreatedAt(issuedAt);
         inventoryIssue.getItems().clear();
 
         for (StockDeliveryItemRequest itemRequest : request.getItems()) {
@@ -136,12 +123,9 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         inventoryIssue.calculateTotals();
         InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
-        recordAudit(currentUser, "UPDATE", updatedIssue, Map.of(
-                "status", updatedIssue.getStatus(),
-                "warehouseId", warehouse.getId().toString(),
-                "totalQuantity", updatedIssue.getItems().stream().mapToInt(InventoryIssueItem::getQuantity).sum()
-        ));
-
+        for (InventoryIssueItem item : updatedIssue.getItems()) {
+            reserveDraftInventory(updatedIssue, item, currentUser);
+        }
         log.info("Stock delivery updated successfully: {}", id);
         return stockDeliveryMapper.toResponse(updatedIssue);
     }
@@ -172,10 +156,10 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         OffsetDateTime startDateTime = startDate == null
                 ? null
-                : startDate.atStartOfDay(ZoneOffset.UTC).toOffsetDateTime();
+                : startDate.atStartOfDay(ZoneId.systemDefault()).toOffsetDateTime();
         OffsetDateTime endDateTime = endDate == null
                 ? null
-                : endDate.atTime(LocalTime.MAX).atOffset(ZoneOffset.UTC);
+                : endDate.atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toOffsetDateTime();
 
         Specification<InventoryIssue> spec = (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -231,15 +215,13 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         User currentUser = getCurrentUser();
         for (InventoryIssueItem item : inventoryIssue.getItems()) {
-            applyOutboundInventory(inventoryIssue, item, currentUser);
+            commitDraftReservation(inventoryIssue, item, currentUser);
         }
         inventoryIssue.setStatus("CONFIRMED");
         inventoryIssue.setApprovedBy(currentUser);
         inventoryIssue.setConfirmedAt(java.time.OffsetDateTime.now());
 
         InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
-        recordAudit(currentUser, "CONFIRM", updatedIssue, Map.of("status", "CONFIRMED"));
-
         log.info("Stock delivery confirmed successfully: {}", id);
         return stockDeliveryMapper.toResponse(updatedIssue);
     }
@@ -258,7 +240,9 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         User currentUser = getCurrentUser();
 
-        if ("CONFIRMED".equals(inventoryIssue.getStatus())) {
+        if ("DRAFT".equals(inventoryIssue.getStatus())) {
+            releaseDraftReservations(inventoryIssue, currentUser, "Stock delivery draft cancelled - reservation released");
+        } else if ("CONFIRMED".equals(inventoryIssue.getStatus())) {
             for (InventoryIssueItem item : inventoryIssue.getItems()) {
                 InventoryItem inventoryItem = inventoryItemRepository
                         .findByWarehouseIdAndVariantIdWithLock(
@@ -274,7 +258,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                 InventoryTransaction reversalTransaction = InventoryTransaction.builder()
                         .warehouse(inventoryIssue.getWarehouse())
                         .variant(item.getProductVariant())
-                        .type(InvTxnType.INBOUND)
+                        .type(InvTxnType.ORDER_CANCEL)
                         .quantityChange(item.getQuantity())
                         .quantityBefore(quantityBefore)
                         .quantityAfter(quantityBefore + item.getQuantity())
@@ -292,8 +276,6 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         inventoryIssue.setStatus("CANCELLED");
         inventoryIssue.setApprovedBy(currentUser);
         InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
-        recordAudit(currentUser, "CANCEL", updatedIssue, Map.of("status", "CANCELLED"));
-
         log.info("Stock delivery cancelled successfully: {}", id);
         return stockDeliveryMapper.toResponse(updatedIssue);
     }
@@ -360,7 +342,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                 .build();
     }
 
-    private void applyOutboundInventory(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
+    private void reserveDraftInventory(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
         InventoryItem inventoryItem = inventoryItemRepository
                 .findByWarehouseIdAndVariantIdWithLock(
                         inventoryIssue.getWarehouse().getId(),
@@ -369,34 +351,120 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         validateAvailableQuantity(inventoryItem, item.getQuantity());
 
+        int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
+        int reservedBefore = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
+        int availableBefore = quantityOnHand - reservedBefore;
+        int reservedAfter = reservedBefore + item.getQuantity();
+        int availableAfter = quantityOnHand - reservedAfter;
+
+        inventoryItem.setReservedQuantity(reservedAfter);
+        inventoryItem.setUpdatedBy(currentUser);
+        inventoryItemRepository.save(inventoryItem);
+        inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
+
+        inventoryTransactionRepository.save(InventoryTransaction.builder()
+                .warehouse(inventoryIssue.getWarehouse())
+                .variant(item.getProductVariant())
+                .type(InvTxnType.ORDER_DEDUCT)
+                .quantityChange(-item.getQuantity())
+                .quantityBefore(availableBefore)
+                .quantityAfter(availableAfter)
+                .unitCost(item.getUnitCost())
+                .referenceId(inventoryIssue.getId())
+                .referenceType("ISSUE")
+                .performedBy(currentUser)
+                .note("Stock delivery draft reserved: " + inventoryIssue.getIssueType())
+                .build());
+    }
+
+    private void releaseDraftReservations(InventoryIssue inventoryIssue, User currentUser, String note) {
+        for (InventoryIssueItem item : inventoryIssue.getItems()) {
+            InventoryItem inventoryItem = inventoryItemRepository
+                    .findByWarehouseIdAndVariantIdWithLock(
+                            inventoryIssue.getWarehouse().getId(),
+                            item.getProductVariant().getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+
+            int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
+            int reservedBefore = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
+            int availableBefore = quantityOnHand - reservedBefore;
+            int requestedReleaseQuantity = item.getQuantity() != null ? item.getQuantity() : 0;
+            int releaseQuantity = Math.min(requestedReleaseQuantity, reservedBefore);
+            if (releaseQuantity <= 0) {
+                log.warn(
+                        "Skipping reservation release for issue {} variant {} because reserved quantity is {}",
+                        inventoryIssue.getId(),
+                        item.getProductVariant().getId(),
+                        reservedBefore);
+                continue;
+            }
+            int reservedAfter = reservedBefore - releaseQuantity;
+            int availableAfter = quantityOnHand - reservedAfter;
+
+            inventoryItem.setReservedQuantity(reservedAfter);
+            inventoryItem.setUpdatedBy(currentUser);
+            inventoryItemRepository.save(inventoryItem);
+            inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
+
+            inventoryTransactionRepository.save(InventoryTransaction.builder()
+                    .warehouse(inventoryIssue.getWarehouse())
+                    .variant(item.getProductVariant())
+                    .type(InvTxnType.ORDER_CANCEL)
+                    .quantityChange(releaseQuantity)
+                    .quantityBefore(availableBefore)
+                    .quantityAfter(availableAfter)
+                    .unitCost(item.getUnitCost())
+                    .referenceId(inventoryIssue.getId())
+                    .referenceType("ISSUE")
+                    .performedBy(currentUser)
+                    .note(note)
+                    .build());
+        }
+    }
+
+    private void commitDraftReservation(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
+        InventoryItem inventoryItem = inventoryItemRepository
+                .findByWarehouseIdAndVariantIdWithLock(
+                        inventoryIssue.getWarehouse().getId(),
+                        item.getProductVariant().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+
+        int quantity = item.getQuantity() != null ? item.getQuantity() : 0;
         int quantityBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        int quantityAfter = quantityBefore - item.getQuantity();
+        int reservedBefore = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
+        int quantityAfter = quantityBefore - quantity;
+        int reservedAfter = reservedBefore - quantity;
+
         if (quantityAfter < 0) {
             throw new AppException(
                     ErrorCode.NEGATIVE_STOCK_NOT_ALLOWED,
                     "Delivery quantity exceeds available inventory. Please review the document before saving.");
         }
+        if (reservedAfter < 0) {
+            throw new AppException(
+                    ErrorCode.INSUFFICIENT_STOCK,
+                    "Reserved inventory is not enough to confirm this delivery.");
+        }
 
         inventoryItem.setQuantityOnHand(quantityAfter);
+        inventoryItem.setReservedQuantity(reservedAfter);
         inventoryItem.setUpdatedBy(currentUser);
         inventoryItemRepository.save(inventoryItem);
         inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
 
-        InventoryTransaction transaction = InventoryTransaction.builder()
+        inventoryTransactionRepository.save(InventoryTransaction.builder()
                 .warehouse(inventoryIssue.getWarehouse())
                 .variant(item.getProductVariant())
                 .type(InvTxnType.OUTBOUND)
-                .quantityChange(-item.getQuantity())
+                .quantityChange(-quantity)
                 .quantityBefore(quantityBefore)
                 .quantityAfter(quantityAfter)
                 .unitCost(item.getUnitCost())
                 .referenceId(inventoryIssue.getId())
                 .referenceType("ISSUE")
                 .performedBy(currentUser)
-                .note("Stock delivery: " + inventoryIssue.getIssueType())
-                .build();
-
-        inventoryTransactionRepository.save(transaction);
+                .note("Stock delivery confirmed: " + inventoryIssue.getIssueType())
+                .build());
     }
 
     private void validateAvailableQuantity(InventoryItem inventoryItem, Integer requestedQuantity) {
@@ -407,9 +475,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
         int reservedQuantity = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-        int availableQuantity = inventoryItem.getAvailableQuantity() != null
-                ? inventoryItem.getAvailableQuantity()
-                : quantityOnHand - reservedQuantity;
+        int availableQuantity = quantityOnHand - reservedQuantity;
 
         if (availableQuantity < quantity) {
             throw new AppException(
@@ -422,35 +488,6 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                     ErrorCode.NEGATIVE_STOCK_NOT_ALLOWED,
                     "Delivery quantity exceeds available inventory. Please review the document before saving.");
         }
-    }
-
-    private void recordAudit(User actor, String action, InventoryIssue issue, Object changes) {
-        Map<String, Object> changeMap = new HashMap<>();
-        if (changes instanceof Map<?, ?> map) {
-            map.forEach((key, value) -> changeMap.put(String.valueOf(key), value));
-        } else if (changes != null) {
-            changeMap.put("changes", changes);
-        }
-
-        auditLogRepository.save(AuditLog.builder()
-                .actor(actor)
-                .actorEmail(actor.getEmail())
-                .action(normalizeAuditAction(action))
-                .entityType("INVENTORY")
-                .entityId(issue.getId())
-                .entityName(issue.getIssueCode())
-                .changes(changeMap)
-                .performedAt(OffsetDateTime.now())
-                .build());
-    }
-
-    private String normalizeAuditAction(String action) {
-        return switch (action) {
-            case "CREATE", "UPDATE", "DELETE", "LOGIN", "LOGOUT", "EXPORT", "CONNECT", "DISCONNECT",
-                    "STATUS_CHANGE", "ORDER_CANCEL", "PAYMENT_STATUS_CHANGE" -> action;
-            case "CONFIRM", "CANCEL" -> "STATUS_CHANGE";
-            default -> "UPDATE";
-        };
     }
 
     private String normalizeIssueType(String issueType) {

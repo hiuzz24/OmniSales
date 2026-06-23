@@ -140,6 +140,7 @@ export const exportInventoryWorkbook = ({
   fileName,
   sheetName = 'Inventory',
   brandName = 'OmniSales',
+  extraSheets = [],
 }) => {
   const selectedColumns = selectedColumnKeys?.length
     ? columns.filter((column) => selectedColumnKeys.includes(column.key))
@@ -202,6 +203,60 @@ export const exportInventoryWorkbook = ({
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+
+  extraSheets.forEach((sheet) => {
+    const sheetRows = sheet.rows ?? [];
+    const sheetColumns = sheet.selectedColumnKeys?.length
+      ? sheet.columns.filter((column) => sheet.selectedColumnKeys.includes(column.key))
+      : sheet.columns.filter((column) => column.defaultChecked !== false);
+
+    if (!sheetColumns.length) return;
+
+    const sheetAoa = [
+      [brandName],
+      [sheet.title],
+      [`Xuáº¥t lÃºc: ${formatExportDateTime(new Date())}`],
+      [],
+      sheetColumns.map((column) => column.label),
+      ...sheetRows.map((row, index) => sheetColumns.map((column) => {
+        if (column.key === 'stt') return index + 1;
+        return toCell(column.getValue?.(row, index) ?? row[column.key], column);
+      })),
+    ];
+    const extraWorksheet = XLSX.utils.aoa_to_sheet(sheetAoa);
+    const extraLastColumn = Math.max(sheetColumns.length - 1, 0);
+    extraWorksheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: extraLastColumn } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: extraLastColumn } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: extraLastColumn } },
+    ];
+    extraWorksheet['!cols'] = sheetColumns.map((column) => ({ wch: column.width ?? 18 }));
+    extraWorksheet['!rows'] = [
+      { hpt: 22 },
+      { hpt: 26 },
+      { hpt: 18 },
+      { hpt: 12 },
+      { hpt: 28 },
+      ...sheetRows.map(() => ({ hpt: 24 })),
+    ];
+    extraWorksheet['!autofilter'] = {
+      ref: `A${tableStartRow + 1}:${colLetter(extraLastColumn)}${tableStartRow + sheetRows.length + 1}`,
+    };
+
+    setCellStyle(extraWorksheet, 0, 0, TITLE_STYLE);
+    setCellStyle(extraWorksheet, 1, 0, SUBTITLE_STYLE);
+    setCellStyle(extraWorksheet, 2, 0, META_STYLE);
+    sheetColumns.forEach((_, colIndex) => {
+      setCellStyle(extraWorksheet, tableStartRow, colIndex, HEADER_STYLE);
+    });
+    sheetRows.forEach((_, rowIndex) => {
+      sheetColumns.forEach((column, colIndex) => {
+        setCellStyle(extraWorksheet, tableStartRow + rowIndex + 1, colIndex, getCellStyle(column, rowIndex));
+      });
+    });
+
+    XLSX.utils.book_append_sheet(workbook, extraWorksheet, (sheet.sheetName ?? 'Sheet').slice(0, 31));
+  });
 
   const finalFilename = `${fileName}_${stamp()}.xlsx`;
   XLSX.writeFile(workbook, finalFilename);

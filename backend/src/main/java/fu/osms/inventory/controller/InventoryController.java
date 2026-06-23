@@ -94,22 +94,15 @@ public class InventoryController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "performedAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir) {
-        if (variantId == null) {
-            ApiResponse<PageResponse<InventoryTransactionDTO>> errorResponse = ApiResponse.<PageResponse<InventoryTransactionDTO>>builder()
-                    .success(false)
-                    .message("ID của biến thể sản phẩm không được để trống")
-                    .data(null)
-                    .build();
-            return ResponseEntity.badRequest().body(errorResponse);
-        }
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        PageResponse<InventoryTransactionDTO> transactionPage =
-                transactionService.getTransactionsDTOByVariant(variantId, pageRequest, page, size);
+        PageResponse<InventoryTransactionDTO> transactionPage = variantId == null
+                ? transactionService.getTransactionsDTO(pageRequest, page, size)
+                : transactionService.getTransactionsDTOByVariant(variantId, pageRequest, page, size);
 
         ApiResponse<PageResponse<InventoryTransactionDTO>> response = ApiResponse.<PageResponse<InventoryTransactionDTO>>builder()
                 .success(true)
