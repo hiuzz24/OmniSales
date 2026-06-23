@@ -12,6 +12,7 @@ export default function InventoryExportModal({
   buildDetailRows,
   getDateValue,
   loadRows,
+  loadExtraSheets,
   title,
   fileName,
   sheetName,
@@ -96,6 +97,9 @@ export default function InventoryExportModal({
       const exportRows = includeDetails && canExportDetails
         ? await buildDetailRows(filteredRows.rows)
         : filteredRows.rows;
+      const extraSheets = typeof loadExtraSheets === 'function'
+        ? await loadExtraSheets({ fromDate, toDate })
+        : [];
 
       result = exportInventoryWorkbook({
         rows: exportRows,
@@ -104,6 +108,7 @@ export default function InventoryExportModal({
         title: includeDetails && canExportDetails ? `${title} - CHI TIẾT SKU` : title,
         fileName,
         sheetName,
+        extraSheets,
       });
     } catch (error) {
       toast.error(error?.message || 'Không thể lấy dữ liệu chi tiết để xuất Excel.');

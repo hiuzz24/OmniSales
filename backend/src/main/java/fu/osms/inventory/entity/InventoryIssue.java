@@ -3,6 +3,7 @@ package fu.osms.inventory.entity;
 import fu.osms.auth.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
@@ -62,7 +63,8 @@ public class InventoryIssue {
     @Column(name = "confirmed_at")
     private OffsetDateTime confirmedAt;
 
-    @Column(name = "created_at", nullable = false)
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
     @UpdateTimestamp
