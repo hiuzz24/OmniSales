@@ -25,7 +25,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -154,9 +153,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         var createdByUser = userRepository.findById(createdByUserId).orElse(null);
 
         // 10. Build and save InventoryReceipt with totalCost already calculated
-        OffsetDateTime receivedAt = request.getReceivedAt()
-                .atStartOfDay(ZoneOffset.UTC)
-                .toOffsetDateTime();
+        OffsetDateTime receivedAt = resolveDocumentTime(request.getReceivedAt());
 
         // Determine status based on isDraft flag
         String status = Boolean.TRUE.equals(request.getIsDraft()) ? "DRAFT" : "CONFIRMED";
@@ -447,9 +444,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         var updatedByUser = userRepository.findById(updatedByUserId).orElse(null);
 
         // 12. Update receipt basic info
-        OffsetDateTime receivedAt = request.getReceivedAt()
-                .atStartOfDay(ZoneOffset.UTC)
-                .toOffsetDateTime();
+        OffsetDateTime receivedAt = resolveDocumentTime(request.getReceivedAt());
 
         receipt.setWarehouse(warehouse);
         receipt.setSupplier(supplier);
@@ -664,5 +659,9 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         statistics.put("draftCount", stockReceiveRepository.countByStatus("DRAFT"));
         statistics.put("cancelledCount", stockReceiveRepository.countByStatus("CANCELLED"));
         return statistics;
+    }
+
+    private OffsetDateTime resolveDocumentTime(LocalDate documentDate) {
+        return OffsetDateTime.now();
     }
 }
