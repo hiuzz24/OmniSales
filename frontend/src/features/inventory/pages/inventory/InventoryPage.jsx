@@ -18,8 +18,12 @@ import {
   ArrowDown10,
   Layers,
   Box,
+  FileText,
+  PackagePlus,
+  ArrowRightLeft,
 } from 'lucide-react';
 import styles from './InventoryPage.module.css';
+import PageHeader from '../../../../shared/components/PageHeader';
 import { ROUTES } from '../../../../app/router/routes';
 import categoryApi from '../../../../api/categoryApi';
 import inventoryService from '../../services/inventoryService';
@@ -52,15 +56,33 @@ const deriveStatus = (item) => {
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-const StatusBadge = ({ status }) => {
+const StatusBadge = ({ status, item }) => {
   const map = {
-    'in-stock': { label: 'Đủ hàng', cls: styles.badgeGreen },
-    'low-stock': { label: 'Sắp hết', cls: styles.badgeOrange },
-    'out-of-stock': { label: 'Hết hàng', cls: styles.badgeGray },
-    'negative': { label: 'Tồn âm', cls: styles.badgeRed },
+    'in-stock':    { label: 'Đủ hàng', cls: styles.badgeGreen },
+    'low-stock':   { label: 'Sắp hết', cls: styles.badgeOrange },
+    'out-of-stock':{ label: 'Hết hàng', cls: styles.badgeGray },
+    'negative':    { label: 'Tồn âm', cls: styles.badgeRed },
   };
   const { label, cls } = map[status] ?? { label: status, cls: '' };
-  return <span className={`${styles.badge} ${cls}`}>{label}</span>;
+
+  const subLabel = useMemo(() => {
+    if (status === 'low-stock') return 'Dưới mức tồn';
+    if (status === 'negative') {
+      const absVal = Math.abs(item?.availableQuantity ?? 0);
+      return `Âm ${absVal}`;
+    }
+    if (status === 'out-of-stock') return 'Hết hàng';
+    return null;
+  }, [status, item]);
+
+  return (
+    <div className={styles.statusCell}>
+      <span className={`${styles.badge} ${cls}`}>{label}</span>
+      {subLabel && (
+        <span className={styles.statusSub}>{subLabel}</span>
+      )}
+    </div>
+  );
 };
 
 const Select = ({ value, onChange, options }) => (
@@ -271,35 +293,54 @@ const InventoryPage = () => {
     return styles.cellDefault;
   };
 
+  const actions = (
+    <>
+      <button
+        className={`${styles.actionBtn} ${styles.secondaryBtn}`}
+        id="btn-inventory-logs"
+      >
+        <ClipboardList className={styles.secondaryIcon} />
+        Nhật ký kho
+      </button>
+      <button
+        className={`${styles.actionBtn} ${styles.importBtn}`}
+        id="btn-import-stock"
+      >
+        <PackagePlus className={styles.importIcon} />
+        Nhập kho
+      </button>
+      <button
+        className={`${styles.actionBtn} ${styles.exportBtn}`}
+        id="btn-export-stock"
+      >
+        <Upload className={styles.exportIcon} />
+        Xuất kho
+      </button>
+      <button
+        className={`${styles.actionBtn} ${styles.transferBtn}`}
+        id="btn-stock-transfer"
+      >
+        <ArrowRightLeft className={styles.transferIcon} />
+        Chuyển kho
+      </button>
+      <button
+        className={`${styles.actionBtn} ${styles.primaryBtn}`}
+        id="btn-export-report"
+      >
+        <FileText className={styles.primaryIcon} />
+        Xuất báo cáo
+      </button>
+    </>
+  );
+
   return (
     <div className={styles.page}>
       {/* ── Header ── */}
-      <div className={styles.pageHeader}>
-        <div className={styles.pageTitleBlock}>
-          <h1 className={styles.pageTitle}>Inventory List</h1>
-          <p className={styles.pageSubtitle}>
-            Xem và quản lý tồn kho theo SKU, kho hàng và trạng thái
-          </p>
-        </div>
-        <div className={styles.headerActions}>
-          <button className={styles.btnOutline} id="btn-inventory-logs">
-            <ClipboardList size={15} />
-            Inventory Logs
-          </button>
-          <button className={styles.btnOutline} id="btn-export-report">
-            <Download size={15} />
-            Xuất báo cáo
-          </button>
-          <button className={styles.btnOutline} id="btn-export-stock">
-            <Upload size={15} />
-            Xuất kho
-          </button>
-          <button className={styles.btnPrimary} id="btn-import-stock">
-            <Download size={15} />
-            Nhập kho
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Danh sách tồn kho"
+        subtitle="Theo dõi và quản lý tồn kho theo SKU, kho hàng và trạng thái"
+        actions={actions}
+      />
 
       {/* ── Summary Cards ── */}
       <div className={styles.summaryGrid}>
@@ -546,7 +587,7 @@ const InventoryPage = () => {
                       </td>
                       <td className={styles.td}>
                         <div className={styles.statusCell}>
-                          <StatusBadge status={status} />
+                          <StatusBadge status={status} item={row} />
                         </div>
                       </td>
                       <td className={styles.td}>

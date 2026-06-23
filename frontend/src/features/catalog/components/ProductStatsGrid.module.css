@@ -1,17 +1,25 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 16px;
 }
 
 .card {
-  background: white;
+  background: #ffffff;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
   padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s, transform 0.2s;
+  cursor: default;
+}
+
+.card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+  transform: translateY(-2px);
 }
 
 .cardHeader {
@@ -21,8 +29,8 @@
 }
 
 .title {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: 13.5px;
+  color: var(--color-on-surface-variant);
   font-weight: 500;
 }
 
@@ -35,9 +43,11 @@
 }
 
 .value {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
-  color: #111827;
+  color: var(--color-on-surface);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .trend {
@@ -49,16 +59,17 @@
 }
 
 .trendIcon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
-.iconBlue { color: #3b82f6; width: 20px; height: 20px; }
-.iconIndigo { color: #6366f1; width: 20px; height: 20px; }
-.iconGreen { color: #10b981; width: 20px; height: 20px; }
-.iconPurple { color: #8b5cf6; width: 20px; height: 20px; }
+.iconBlue    { color: #3b82f6; width: 20px; height: 20px; }
+.iconIndigo  { color: #6366f1; width: 20px; height: 20px; }
+.iconGreen   { color: #10b981; width: 20px; height: 20px; }
+.iconPurple  { color: #8b5cf6; width: 20px; height: 20px; }
 
-.textGreen { color: #10b981; }
-.textAmber { color: #f59e0b; }
+.textGreen  { color: #10b981; }
+.textAmber  { color: #f59e0b; }
 .textIndigo { color: #6366f1; }
-.textGray { color: #6b7280; }
+.textGray   { color: var(--color-on-surface-variant); }

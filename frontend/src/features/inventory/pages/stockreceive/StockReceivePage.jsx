@@ -213,6 +213,7 @@ export default function StockReceivePage() {
         description="Quản lý tất cả phiếu nhập hàng từ nhà cung cấp"
         createLabel="Tạo phiếu nhập"
         onCreate={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
+        onExport={() => toast.info('Xuất Excel phiếu nhập kho đang được phát triển.')}
         stats={stats}
         filters={(
           <>
@@ -229,7 +230,6 @@ export default function StockReceivePage() {
         rows={rows}
         loading={loading}
         emptyText={receipts.length === 0 ? 'Chưa có phiếu nhập kho' : 'Không tìm thấy phiếu nhập kho phù hợp'}
-        footerLeft={`Hiển thị ${formatNumber(filteredReceipts.length)} / ${formatNumber(receipts.length)} phiếu trong trang`}
         footerRight={Object.values(STATUS_CONFIG).map((status) => (
           <span key={status.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: status.color }} />
