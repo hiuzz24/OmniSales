@@ -61,8 +61,15 @@ const ProductDetailPage = () => {
   const handleSync = async () => {
     try {
       setIsSyncing(true);
-      await productApi.sync(id);
-      toast.success('Đồng bộ thành công!');
+      const res = await productApi.sync(id);
+      const data = res.data?.data || res.data || res;
+      
+      if (data && data.failedCount > 0) {
+        toast.warning(`Đồng bộ xong nhưng có ${data.failedCount} kênh thất bại! Vui lòng kiểm tra Lịch sử đồng bộ.`);
+      } else {
+        toast.success('Đồng bộ thành công lên tất cả các kênh!');
+      }
+      
       await fetchProduct();
     } catch (error) {
       toast.error('Đồng bộ thất bại. Vui lòng thử lại.');

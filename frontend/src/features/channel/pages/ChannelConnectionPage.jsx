@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, Link2Off, Edit2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Plus, Link2Off, Edit2, Wifi, WifiOff, RefreshCw, History } from 'lucide-react';
 import { toast } from 'react-toastify';
 import channelApi from '../../../api/channelApi';
 import ChannelFormModal from '../components/ChannelFormModal';
