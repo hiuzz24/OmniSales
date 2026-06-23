@@ -43,7 +43,6 @@ public class ChannelServiceImpl implements ChannelService {
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelMapper channelMapper;
-    private final ChannelCredentialMapper credentialMapper;
     private final ChannelProductMapper channelProductMapper;
 
     @Override
@@ -61,28 +60,6 @@ public class ChannelServiceImpl implements ChannelService {
                 .channel(channel)
                 .accessToken(null)
                 .refreshToken(null)
-                .connectionState("CONNECTED")
-                .build();
-        credentialRepository.save(credential);
-
-        return channelMapper.toResponse(channel);
-    }
-
-    @Override
-    @Transactional
-    public ChannelResponse createManual(CreateManualChannelRequest request) {
-        if (channelRepository.existsByPlatformAndDisplayName(request.getPlatform(), request.getDisplayName())) {
-            throw new AppException(ErrorCode.CHANNEL_ALREADY_EXISTS);
-        }
-
-        Channel channel = channelMapper.toEntity(request);
-        channel.setStatus("CONNECTED");
-        channelRepository.save(channel);
-
-        ChannelCredential credential = ChannelCredential.builder()
-                .channel(channel)
-                .accessToken(request.getAccessToken())
-                .refreshToken(request.getRefreshToken())
                 .connectionState("CONNECTED")
                 .build();
         credentialRepository.save(credential);
@@ -144,12 +121,12 @@ public class ChannelServiceImpl implements ChannelService {
             cred.setConnectionState("DISCONNECTED");
             credentialRepository.save(cred);
         });
-    }
 
-    @Override
-    @Transactional(readOnly = true)
-    public ChannelCredentialResponse getCredential(UUID channelId) {
-        throw new UnsupportedOperationException("Chưa code");
+        List<ChannelProduct> mappedProducts = channelProductRepository.findByChannelId(id);
+        for (ChannelProduct cp : mappedProducts) {
+            cp.setMappingState("ARCHIVED");
+        }
+        channelProductRepository.saveAll(mappedProducts);
     }
 
     @Override
@@ -234,6 +211,51 @@ public class ChannelServiceImpl implements ChannelService {
         credentialRepository.save(credential);
 
         log.info("[ChannelService] connectShopify success — channelId={}", channel.getId());
+        return channelMapper.toResponse(channel);
+    }
+
+    @Override
+    @Transactional
+    public ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName) {
+        log.info("[ChannelService] connectLazada — accountId={}, accountName={}", accountId, accountName);
+
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("accountId", accountId);
+        metadata.put("accountName", accountName);
+
+        String displayName = (accountName != null && !accountName.isBlank()) ? accountName : ("Lazada-" + accountId);
+
+        // We check if a Lazada channel with this accountId already exists
+        Channel channel = channelRepository
+                .findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
+                .filter(c -> c.getMetadata() != null && accountId.equals(c.getMetadata().get("accountId")))
+                .findFirst()
+                .orElseGet(() -> Channel.builder()
+                        .platform(PlatformType.LAZADA)
+                        .displayName(displayName)
+                        .build());
+
+        channel.setStatus("CONNECTED");
+        channel.setMetadata(metadata);
+        if (channel.getDisplayName() == null || channel.getDisplayName().startsWith("Lazada-")) {
+            channel.setDisplayName(displayName);
+        }
+        channelRepository.save(channel);
+
+        ChannelCredential credential = credentialRepository
+                .findByChannelId(channel.getId())
+                .orElseGet(() -> ChannelCredential.builder().channel(channel).build());
+
+        credential.setAccessToken(accessToken);
+        credential.setRefreshToken(refreshToken);
+        credential.setConnectionState("CONNECTED");
+        
+        OffsetDateTime tokenExpiresAt = OffsetDateTime.now().plusSeconds(expiresIn);
+        credential.setTokenExpiresAt(tokenExpiresAt);
+        
+        credentialRepository.save(credential);
+
+        log.info("[ChannelService] connectLazada success — channelId={}, expiresAt={}", channel.getId(), tokenExpiresAt);
         return channelMapper.toResponse(channel);
     }
 }

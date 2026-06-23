@@ -17,7 +17,6 @@ import java.util.UUID;
 public interface ChannelService {
 
     ChannelResponse create(ChannelRequest request);
-    ChannelResponse createManual(CreateManualChannelRequest request);
 
     ChannelResponse getById(UUID id);
 
@@ -27,8 +26,6 @@ public interface ChannelService {
 
     void delete(UUID id);
 
-    ChannelCredentialResponse getCredential(UUID channelId);
-
     PageResponse<ChannelProductResponse> getChannelProducts(UUID channelId, int page, int size);
 
     Map<UUID, List<String>> getProductChannels(Collection<UUID> productIds);
@@ -36,4 +33,6 @@ public interface ChannelService {
     Map<UUID, List<ChannelSyncResponse>> getProductChannelSyncs(Collection<UUID> productIds);
 
     ChannelResponse connectShopify(String shop, String accessToken);
+
+    ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName);
 }

@@ -18,5 +18,6 @@ public class ShopifyProductPayload {
     private String status;
     private String tags;
     private List<ShopifyVariantPayload> variants;
+    private List<ShopifyOptionPayload> options;
     private List<ShopifyImagePayload> images;
 }

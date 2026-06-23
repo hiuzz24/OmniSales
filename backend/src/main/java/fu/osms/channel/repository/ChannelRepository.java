@@ -16,7 +16,7 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
 
     List<Channel> findByDeletedAtIsNull();
 
-    List<Channel> findByPlatform(PlatformType platform);
+    List<Channel> findByPlatformAndDeletedAtIsNull(PlatformType platform);
 
     boolean existsByPlatformAndDisplayName(PlatformType platform, String displayName);
 

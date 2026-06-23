@@ -11,4 +11,5 @@ public class ShopifyVariantResponse {
     private Long inventoryItemId;
     
     private String sku;
+    private String price;
 }

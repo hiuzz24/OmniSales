@@ -1,4 +1,4 @@
-package fu.osms.sync.service;
+package fu.osms.sync.service.impl;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
@@ -11,6 +11,9 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.sync.service.PlatformSyncService;
+import fu.osms.sync.service.ShopifyApiClient;
+import fu.osms.sync.service.ShopifyPayloadBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,13 +31,14 @@ import java.util.Optional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ShopifySyncService implements PlatformSyncService {
+public class ShopifySyncServiceImpl implements PlatformSyncService {
 
     private final ShopifyApiClient shopifyApiClient;
     private final ShopifyPayloadBuilder shopifyPayloadBuilder;
     private final ChannelCredentialRepository channelCredentialRepository;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     @Override
     public boolean syncProduct(Product product,
@@ -44,9 +48,10 @@ public class ShopifySyncService implements PlatformSyncService {
                                ChannelProduct channelProduct) {
         try {
             String shopDomain = extractShopDomain(channel);
-            ChannelCredential credential = channelCredentialRepository.findByChannelId(channel.getId())
-                    .orElseThrow(() -> new IllegalArgumentException("Credential is missing for channel: " + channel.getDisplayName()));
-            String accessToken = credential.getAccessToken();
+            String accessToken = channelCredentialRepository
+                    .findByChannelIdAndConnectionState(channel.getId(), "CONNECTED")
+                    .map(ChannelCredential::getAccessToken)
+                    .orElse(null);
 
             if (shopDomain == null || shopDomain.isBlank()) {
                 throw new IllegalArgumentException("Shop domain is missing in channel metadata");
@@ -74,18 +79,40 @@ public class ShopifySyncService implements PlatformSyncService {
                 throw new IllegalStateException("Shopify returned an empty product response");
             }
 
+            try {
+                log.info("[ShopifySync] Raw Shopify Response: {}", objectMapper.writeValueAsString(shopifyResponse));
+            } catch (Exception ex) {
+                log.warn("[ShopifySync] Could not serialize Shopify response to JSON", ex);
+            }
+
             if (isNew) {
                 channelProduct.setExternalProductId(String.valueOf(shopifyResponse.getId()));
             }
 
             if (shopifyResponse.getVariants() != null) {
+                log.info("[ShopifySync] Response has {} variants", shopifyResponse.getVariants().size());
+                int variantIndex = 0;
                 for (ShopifyVariantResponse shopifyVar : shopifyResponse.getVariants()) {
                         String sku = shopifyVar.getSku();
-                        if (sku == null || sku.isBlank()) continue;
+                        log.info("[ShopifySync] Variant from Shopify: id={}, sku='{}', inventoryItemId={}",
+                                shopifyVar.getId(), sku, shopifyVar.getInventoryItemId());
+                                
+                        if (sku == null || sku.isBlank()) {
+                            log.warn("[ShopifySync] SKU is empty, SKIPPING normal match");
+                        }
 
-                        Optional<ProductVariant> matchedVariantOpt = variants.stream()
-                                .filter(v -> sku.equals(v.getSku()))
-                                .findFirst();
+                        Optional<ProductVariant> matchedVariantOpt = Optional.empty();
+                        
+                        if (sku != null && !sku.isBlank()) {
+                            matchedVariantOpt = variants.stream()
+                                    .filter(v -> sku.equals(v.getSku()))
+                                    .findFirst();
+                        }
+                        
+                        if (matchedVariantOpt.isEmpty() && variantIndex < variants.size()) {
+                            log.warn("[ShopifySync] SKU match failed or empty, using index fallback: index={}", variantIndex);
+                            matchedVariantOpt = Optional.of(variants.get(variantIndex));
+                        }
 
                         if (matchedVariantOpt.isPresent()) {
                             ProductVariant localVariant = matchedVariantOpt.get();
@@ -100,6 +127,10 @@ public class ShopifySyncService implements PlatformSyncService {
                                             .build());
 
                             cpv.setExternalVariantId(externalVariantId);
+                            cpv.setExternalSku(shopifyVar.getSku());
+                            if (shopifyVar.getPrice() != null && !shopifyVar.getPrice().isBlank()) {
+                                cpv.setExternalPrice(new java.math.BigDecimal(shopifyVar.getPrice()));
+                            }
                             cpv.setSyncStatus(SyncStatus.SYNCED);
                             cpv.setLastSyncedAt(OffsetDateTime.now());
 
@@ -113,8 +144,14 @@ public class ShopifySyncService implements PlatformSyncService {
                             }
 
                             channelProductVariantRepository.save(cpv);
+                            log.info("[ShopifySync] Saved ChannelProductVariant for local variant {} with externalId {}", localVariant.getId(), externalVariantId);
+                        } else {
+                            log.warn("[ShopifySync] Could not match Shopify variant to any local variant.");
                         }
+                        variantIndex++;
                 }
+            } else {
+                log.warn("[ShopifySync] Response variants is NULL — no variants to map!");
             }
 
             channelProduct.setSyncStatus(SyncStatus.SYNCED);

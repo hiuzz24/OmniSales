@@ -30,12 +30,6 @@ public class ChannelController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
-    @PostMapping("/manual")
-    public ResponseEntity<ApiResponse<ChannelResponse>> createManual(@Valid @RequestBody CreateManualChannelRequest request) {
-        ChannelResponse response = channelService.createManual(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
-    }
-
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ChannelResponse>> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(channelService.getById(id)));
