@@ -8,9 +8,9 @@
 
 .card {
   background-color: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-outline-variant);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   padding: 20px;
 }
 
@@ -201,20 +201,31 @@
 
 .cancelBtn {
   width: 100%;
-  padding: 10px 20px;
+  padding: 12px 20px;
   border-radius: 10px;
   font-size: 14px;
-  font-weight: 500;
-  color: #6b7280;
-  background: transparent;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
   border: none;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   transition: all 0.2s ease;
+  box-shadow: 0 4px 14px 0 rgba(100, 116, 139, 0.3);
+  font-family: inherit;
 }
 
 .cancelBtn:hover {
-  color: #374151;
-  background: #f3f4f6;
+  background: linear-gradient(135deg, #475569 0%, #334155 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(100, 116, 139, 0.4);
+}
+
+.cancelBtn:active {
+  transform: translateY(0);
 }
 
 /* Spinner */

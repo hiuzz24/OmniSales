@@ -113,6 +113,7 @@ export default function MainLayout() {
 
   const isActive = (href) => {
     if (href === ROUTES.DASHBOARD) return location.pathname === ROUTES.DASHBOARD;
+    if (href === '/inventory') return location.pathname === href;
     return location.pathname === href || (href !== '/warehouse' && location.pathname.startsWith(href));
   };
 

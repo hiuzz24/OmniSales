@@ -1,4 +1,9 @@
 .page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: #f5f7fa;
   animation: fadeIn 0.4s ease-out;
 }
 
@@ -7,7 +12,13 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  padding: 20px 24px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8faff 0%, #ffffff 100%);
+  border: 1px solid var(--color-outline-variant);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   margin-bottom: 24px;
+  flex-wrap: wrap;
 }
 
 .backBtn {
@@ -15,19 +26,21 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: var(--radius-lg);
+  font-size: 13.5px;
   font-weight: 500;
-  color: #6b7280;
-  background: transparent;
-  border: none;
+  color: var(--color-on-surface);
+  background: #ffffff;
+  border: 1px solid var(--color-outline-variant);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  font-family: inherit;
 }
 
 .backBtn:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-container-high);
+  border-color: var(--color-outline);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
 .backIcon {
@@ -40,15 +53,15 @@
 }
 
 .headerTitle {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  color: #111827;
+  color: var(--color-on-surface);
   letter-spacing: -0.01em;
 }
 
 .headerSubtitle {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: 13.5px;
+  color: var(--color-on-surface-variant);
   margin-top: 2px;
 }
 
@@ -69,9 +82,9 @@
 /* Variant toggle */
 .variantToggleCard {
   background-color: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 14px;
+  border: 1px solid var(--color-outline-variant);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   padding: 20px 24px;
   display: flex;
   align-items: center;
@@ -87,33 +100,34 @@
 .variantToggleTitle {
   font-size: 15px;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-on-surface);
 }
 
 .variantToggleSubtitle {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--color-on-surface-variant);
 }
 
 .variantToggleBtn {
   padding: 8px 20px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
+  font-family: inherit;
 }
 
 .variantToggleBtnInactive {
-  color: #374151;
+  color: var(--color-on-surface);
   background: #ffffff;
-  border-color: #d1d5db;
+  border-color: var(--color-outline-variant);
 }
 
 .variantToggleBtnInactive:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--color-surface-container-high);
+  border-color: var(--color-outline);
 }
 
 .variantToggleBtnActive {
@@ -125,6 +139,7 @@
 
 .variantToggleBtnActive:hover {
   background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  transform: translateY(-1px);
 }
 
 @keyframes fadeIn {
