@@ -42,14 +42,14 @@ const ProductManagementPage = () => {
         onClick={() => setIsImportModalOpen(true)}
       >
         <FileUp className={styles.importIcon} />
-        Import Excel
+        Nhập Excel
       </button>
       <button
         className={`${styles.actionBtn} ${styles.exportBtn}`}
         onClick={() => setIsExportModalOpen(true)}
       >
-        <FileSpreadsheet className={styles.exportIcon} />
-        Export Excel
+        <FileDown className={styles.exportIcon} />
+        Xuất Excel
       </button>
       <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={() => navigate(ROUTES.PRODUCT_CREATE)}>
         <Plus className={styles.primaryIcon} />
@@ -63,6 +63,7 @@ const ProductManagementPage = () => {
       <PageHeader
         title="Sản phẩm"
         subtitle="Quản lý kho hàng và các sản phẩm trên hệ thống"
+        icon={() => <Package size={20}/>}
         actions={actions}
       />
       <ProductFilterBar

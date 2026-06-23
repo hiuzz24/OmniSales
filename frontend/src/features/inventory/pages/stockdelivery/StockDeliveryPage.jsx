@@ -33,6 +33,8 @@ import {
   getResponseData,
   tableCellStyle,
 } from '../components/inventoryDocumentListUtils';
+import InventoryExportModal from '../components/InventoryExportModal';
+import { formatExportDateTime, getStatusLabel } from '../components/inventoryExcelExport';
 
 const ISSUE_TYPES = {
   ORDER: {
@@ -89,6 +91,68 @@ const columns = [
   { label: 'Ngày tạo' },
   { label: '', align: 'right' },
 ];
+
+const DELIVERY_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'issueCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (delivery) => delivery.issueCode ?? '' },
+  { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: true, getValue: (delivery) => delivery.warehouseName ?? '' },
+  { key: 'issueType', label: 'Loại xuất', width: 18, defaultChecked: true, getValue: (delivery) => getStatusLabel(delivery.issueType ?? delivery.deliveryType) },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (delivery) => getStatusLabel(delivery.status) },
+  { key: 'recipient', label: 'Người / Đơn nhận', width: 24, defaultChecked: true, getValue: (delivery) => delivery.recipient ?? '' },
+  { key: 'totalSkuCount', label: 'SL SKU', width: 10, type: 'number', defaultChecked: true, getValue: (delivery) => delivery.totalSkuCount ?? delivery.items?.length ?? 0 },
+  { key: 'totalQuantity', label: 'Tổng SL', width: 12, type: 'number', defaultChecked: true, getValue: (delivery) => delivery.totalQuantity ?? 0 },
+  { key: 'totalCost', label: 'Giá trị', width: 16, type: 'currency', defaultChecked: true, getValue: (delivery) => delivery.totalCost ?? 0 },
+  { key: 'note', label: 'Ghi chú', width: 30, defaultChecked: true, getValue: (delivery) => delivery.note ?? '' },
+  { key: 'createdByName', label: 'Người tạo', width: 20, defaultChecked: false, getValue: (delivery) => delivery.createdByName ?? '' },
+  { key: 'createdAt', label: 'Ngày tạo', width: 20, defaultChecked: false, getValue: (delivery) => formatExportDateTime(delivery.createdAt) },
+];
+
+const getDeliveryExportDate = (delivery) => delivery.issuedAt ?? delivery.confirmedAt ?? delivery.createdAt;
+
+const DELIVERY_DETAIL_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'issueCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (row) => row.issueCode },
+  { key: 'issuedAt', label: 'Ngày xuất', width: 20, defaultChecked: true, getValue: (row) => formatExportDateTime(row.issuedAt) },
+  { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: true, getValue: (row) => row.warehouseName },
+  { key: 'issueType', label: 'Loại xuất', width: 18, defaultChecked: true, getValue: (row) => getStatusLabel(row.issueType) },
+  { key: 'recipient', label: 'Người / Đơn nhận', width: 24, defaultChecked: true, getValue: (row) => row.recipient },
+  { key: 'sku', label: 'SKU', width: 18, defaultChecked: true, getValue: (row) => row.sku },
+  { key: 'productName', label: 'Tên sản phẩm', width: 32, defaultChecked: true, getValue: (row) => row.productName },
+  { key: 'variantName', label: 'Biến thể', width: 22, defaultChecked: true, getValue: (row) => row.variantName },
+  { key: 'quantity', label: 'Số lượng', width: 12, type: 'number', defaultChecked: true, getValue: (row) => row.quantity },
+  { key: 'unitCost', label: 'Đơn giá', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.unitCost },
+  { key: 'lineTotal', label: 'Thành tiền', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.lineTotal },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => getStatusLabel(row.status) },
+  { key: 'note', label: 'Ghi chú', width: 30, defaultChecked: false, getValue: (row) => row.note },
+];
+
+const buildDeliveryDetailRows = async (deliveries) => {
+  const details = await Promise.all(deliveries.map(async (delivery) => {
+    if (!delivery.id) return delivery;
+    const response = await stockDeliveryService.getStockDeliveryById(delivery.id);
+    return getResponseData(response);
+  }));
+
+  return details.flatMap((delivery) => (delivery.items ?? []).map((item) => {
+    const quantity = Number(item.quantity ?? 0);
+    const unitCost = Number(item.unitCost ?? item.unitPrice ?? 0);
+    return {
+      issueCode: delivery.issueCode ?? '',
+      issuedAt: getDeliveryExportDate(delivery),
+      warehouseName: delivery.warehouseName ?? '',
+      issueType: delivery.issueType ?? delivery.deliveryType,
+      recipient: delivery.recipient ?? '',
+      status: delivery.status,
+      note: delivery.note ?? '',
+      sku: item.sku ?? item.variantSku ?? '',
+      productName: item.productName ?? '',
+      variantName: item.productVariantName ?? item.variantName ?? '',
+      quantity,
+      unitCost,
+      lineTotal: Number(item.totalCost ?? quantity * unitCost),
+    };
+  }));
+};
 
 const TypeBadge = ({ type }) => {
   const config = ISSUE_TYPES[type] ?? ISSUE_TYPES.ORDER;
@@ -168,6 +232,7 @@ export default function StockDeliveryPage() {
   const [totalElements, setTotalElements] = useState(0);
   const [completingId, setCompletingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const isOwner = user?.role === ROLES.OWNER;
   const canComplete = user?.role === ROLES.OWNER || user?.role === ROLES.OPERATIONS;
 
@@ -242,6 +307,21 @@ export default function StockDeliveryPage() {
   const handleTypeFilter = (type) => {
     setDeliveryType((currentType) => (currentType === type ? '' : type));
     setPage(0);
+  };
+
+  const loadDeliveryExportRows = async () => {
+    const params = {
+      page: 0,
+      size: Math.max(totalElements || deliveries.length || 1, deliveries.length || 1),
+      sortBy: 'createdAt',
+      sortDirection: 'DESC',
+    };
+    if (keyword.trim()) params.keyword = keyword.trim();
+    if (deliveryType) params.deliveryType = deliveryType;
+    if (warehouseId) params.warehouseId = warehouseId;
+    const response = await stockDeliveryService.getAllStockDeliveries(params);
+    const data = getResponseData(response);
+    return Array.isArray(data.content) ? data.content : [];
   };
 
   const goToDetail = (deliveryId) => {
@@ -358,6 +438,7 @@ export default function StockDeliveryPage() {
       description="Quản lý tất cả phiếu xuất hàng theo loại"
       createLabel="Tạo phiếu xuất"
       onCreate={() => navigate(ROUTES.STOCK_DELIVERY_CREATE)}
+      onExport={() => setExportOpen(true)}
       stats={stats}
       filters={(
         <>
@@ -399,6 +480,19 @@ export default function StockDeliveryPage() {
         onPrevious: () => setPage((currentPage) => Math.max(0, currentPage - 1)),
         onNext: () => setPage((currentPage) => Math.min(totalPages - 1, currentPage + 1)),
       }}
+    />
+    <InventoryExportModal
+      open={exportOpen}
+      onClose={() => setExportOpen(false)}
+      rows={deliveries}
+      columns={DELIVERY_EXPORT_COLUMNS}
+      detailColumns={DELIVERY_DETAIL_EXPORT_COLUMNS}
+      buildDetailRows={buildDeliveryDetailRows}
+      getDateValue={getDeliveryExportDate}
+      loadRows={loadDeliveryExportRows}
+      title="BẢNG KÊ PHIẾU XUẤT KHO"
+      fileName="danh-sach-phieu-xuat-kho"
+      sheetName="phiếu xuất kho"
     />
     {ConfirmDialog}
     </>

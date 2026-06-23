@@ -8,6 +8,8 @@ import java.math.RoundingMode;
 
 @Mapper(componentModel = "spring")
 public interface InventoryDetailMapper {
+    @Mapping(target = "warehouseId", source = "warehouse.id")
+    @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "quantityOnHand", source = "quantityOnHand")
     @Mapping(target = "averageCost", source = "averageCost")
     @Mapping(target = "variantSku", source = "variant.sku")

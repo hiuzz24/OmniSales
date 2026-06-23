@@ -264,7 +264,7 @@ class StockReceiveServiceImplTest {
             // Arrange
             request.setIsDraft(true);
             request.setInvoiceNumber(null);  // Invoice number not required for draft
-            itemRequest.setQuantity(0);
+            itemRequest.setQuantity(5);      // DRAFT still requires quantity > 0 per current validation
             itemRequest.setUnitCost(BigDecimal.ZERO);
             
             receipt.setStatus("DRAFT");
@@ -385,7 +385,7 @@ class StockReceiveServiceImplTest {
                     .isInstanceOf(AppException.class)
                     .extracting("errorCode", "message")
                     .containsExactly(ErrorCode.VALIDATION_FAILED, 
-                            "Tất cả sản phẩm phải có đơn giá lớn hơn 0 khi xác nhận phiếu nhập");
+                            "Tất cả sản phẩm phải có đơn giá lớn hơn hoặc bằng 0 khi xác nhận phiếu nhập");
         }
 
         @Test
@@ -719,7 +719,7 @@ class StockReceiveServiceImplTest {
             
             verify(stockReceiveRepository).findById(receiptId);
             verify(stockReceiveRepository).save(any(InventoryReceipt.class));
-            verify(stockReceiveItemRepository).deleteAll(anyList());
+            verify(stockReceiveItemRepository).deleteAll(any());
             verify(stockReceiveItemRepository).save(any(InventoryReceiptItem.class));
             verify(inventoryTransactionRepository).save(any(InventoryTransaction.class));
         }

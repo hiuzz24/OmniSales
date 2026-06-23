@@ -27,8 +27,11 @@ import {
   formatDate,
   formatNumber,
   formatVND,
+  getResponseData,
   tableCellStyle,
 } from '../components/inventoryDocumentListUtils';
+import InventoryExportModal from '../components/InventoryExportModal';
+import { formatExportDateTime, getStatusLabel } from '../components/inventoryExcelExport';
 
 const STATUS_CONFIG = {
   CONFIRMED: { label: 'Hoàn thành', icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
@@ -49,6 +52,70 @@ const columns = [
   { label: 'Ngày tạo' },
   { label: '', align: 'right' },
 ];
+
+const RECEIPT_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'receiptCode', label: 'Mã', width: 16, defaultChecked: true, getValue: (receipt) => receipt.receiptCode ?? '' },
+  { key: 'receiptDate', label: 'Ngày nhập', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.receiptDate ?? receipt.confirmedAt ?? receipt.createdAt) },
+  { key: 'createdAt', label: 'Ngày tạo', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.createdAt) },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (receipt) => getStatusLabel(receipt.status) },
+  { key: 'totalCost', label: 'Tổng giá trị', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.totalCost ?? 0 },
+  { key: 'paidAmount', label: 'Đã trả', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.paidAmount ?? receipt.totalCost ?? 0 },
+  { key: 'debtAmount', label: 'Công nợ', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.debtAmount ?? Math.max(Number(receipt.totalCost ?? 0) - Number(receipt.paidAmount ?? receipt.totalCost ?? 0), 0) },
+  { key: 'supplierName', label: 'Nhà cung cấp', width: 28, defaultChecked: true, getValue: (receipt) => receipt.supplierName ?? '' },
+  { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: false, getValue: (receipt) => receipt.warehouseName ?? '' },
+  { key: 'invoiceNumber', label: 'Số hóa đơn', width: 18, defaultChecked: false, getValue: (receipt) => receipt.invoiceNumber ?? '' },
+  { key: 'totalSkuCount', label: 'SL SKU', width: 10, type: 'number', defaultChecked: false, getValue: (receipt) => receipt.totalSkuCount ?? 0 },
+  { key: 'totalQuantity', label: 'Tổng SL', width: 12, type: 'number', defaultChecked: false, getValue: (receipt) => receipt.totalQuantity ?? 0 },
+  { key: 'createdByName', label: 'Người tạo', width: 20, defaultChecked: false, getValue: (receipt) => receipt.createdByName ?? '' },
+];
+
+const getReceiptExportDate = (receipt) => receipt.receiptDate ?? receipt.confirmedAt ?? receipt.createdAt;
+
+const RECEIPT_DETAIL_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'receiptCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (row) => row.receiptCode },
+  { key: 'receiptDate', label: 'Ngày nhập', width: 20, defaultChecked: true, getValue: (row) => formatExportDateTime(row.receiptDate) },
+  { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: true, getValue: (row) => row.warehouseName },
+  { key: 'supplierName', label: 'Nhà cung cấp', width: 28, defaultChecked: true, getValue: (row) => row.supplierName },
+  { key: 'sku', label: 'SKU', width: 18, defaultChecked: true, getValue: (row) => row.sku },
+  { key: 'productName', label: 'Tên sản phẩm', width: 32, defaultChecked: true, getValue: (row) => row.productName },
+  { key: 'variantName', label: 'Biến thể', width: 22, defaultChecked: true, getValue: (row) => row.variantName },
+  { key: 'quantity', label: 'Số lượng', width: 12, type: 'number', defaultChecked: true, getValue: (row) => row.quantity },
+  { key: 'unitCost', label: 'Đơn giá', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.unitCost },
+  { key: 'lineTotal', label: 'Thành tiền', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.lineTotal },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => getStatusLabel(row.status) },
+  { key: 'invoiceNumber', label: 'Số hóa đơn', width: 18, defaultChecked: false, getValue: (row) => row.invoiceNumber },
+  { key: 'createdByName', label: 'Người tạo', width: 20, defaultChecked: false, getValue: (row) => row.createdByName },
+];
+
+const buildReceiptDetailRows = async (receipts) => {
+  const details = await Promise.all(receipts.map(async (receipt) => {
+    if (!receipt.id) return receipt;
+    const response = await stockReceiveService.getReceiptById(receipt.id);
+    return getResponseData(response);
+  }));
+
+  return details.flatMap((receipt) => (receipt.items ?? []).map((item) => {
+    const quantity = Number(item.quantity ?? 0);
+    const unitCost = Number(item.unitCost ?? item.unitPrice ?? 0);
+    return {
+      receiptCode: receipt.receiptCode ?? '',
+      receiptDate: getReceiptExportDate(receipt),
+      warehouseName: receipt.warehouseName ?? '',
+      supplierName: receipt.supplierName ?? '',
+      invoiceNumber: receipt.invoiceNumber ?? '',
+      status: receipt.status,
+      createdByName: receipt.createdByName ?? '',
+      sku: item.sku ?? item.variantSku ?? '',
+      productName: item.productName ?? '',
+      variantName: item.variantName ?? item.productVariantName ?? '',
+      quantity,
+      unitCost,
+      lineTotal: quantity * unitCost,
+    };
+  }));
+};
 
 const StatusBadge = ({ status }) => {
   const config = STATUS_CONFIG[status] ?? { label: status ?? '-', icon: FileText, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
@@ -119,6 +186,7 @@ export default function StockReceivePage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [statistics, setStatistics] = useState({ totalCount: 0, confirmedCount: 0, draftCount: 0, cancelledCount: 0 });
   const [pagination, setPagination] = useState({ page: 0, size: 10, totalPages: 1, totalElements: 0 });
+  const [exportOpen, setExportOpen] = useState(false);
 
   const fetchStatistics = async () => {
     try {
@@ -164,7 +232,7 @@ export default function StockReceivePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page]);
 
-  const filteredReceipts = receipts.filter((receipt) => {
+  const filterReceiptRows = (source) => source.filter((receipt) => {
     const keyword = search.trim().toLowerCase();
     const matchesKeyword = !keyword
       || (receipt.receiptCode ?? '').toLowerCase().includes(keyword)
@@ -173,6 +241,14 @@ export default function StockReceivePage() {
     const matchesStatus = statusFilter === 'ALL' || receipt.status === statusFilter;
     return matchesKeyword && matchesStatus;
   });
+  const filteredReceipts = filterReceiptRows(receipts);
+
+  const loadReceiptExportRows = async () => {
+    const size = Math.max(pagination.totalElements || receipts.length || 1, receipts.length || 1);
+    const response = await stockReceiveService.getReceipts({ page: 0, size });
+    const data = response.data?.data ?? response.data ?? {};
+    return filterReceiptRows(Array.isArray(data.content) ? data.content : []);
+  };
 
   const stats = [
     { key: 'total', label: 'Tổng phiếu', value: statistics.totalCount, icon: FileText, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
@@ -213,6 +289,7 @@ export default function StockReceivePage() {
         description="Quản lý tất cả phiếu nhập hàng từ nhà cung cấp"
         createLabel="Tạo phiếu nhập"
         onCreate={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
+        onExport={() => setExportOpen(true)}
         stats={stats}
         filters={(
           <>
@@ -229,7 +306,6 @@ export default function StockReceivePage() {
         rows={rows}
         loading={loading}
         emptyText={receipts.length === 0 ? 'Chưa có phiếu nhập kho' : 'Không tìm thấy phiếu nhập kho phù hợp'}
-        footerLeft={`Hiển thị ${formatNumber(filteredReceipts.length)} / ${formatNumber(receipts.length)} phiếu trong trang`}
         footerRight={Object.values(STATUS_CONFIG).map((status) => (
           <span key={status.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: status.color }} />
@@ -244,6 +320,19 @@ export default function StockReceivePage() {
           onPrevious: () => setPagination((current) => ({ ...current, page: Math.max(0, current.page - 1) })),
           onNext: () => setPagination((current) => ({ ...current, page: Math.min(totalPages - 1, current.page + 1) })),
         }}
+      />
+      <InventoryExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        rows={filteredReceipts}
+        columns={RECEIPT_EXPORT_COLUMNS}
+        detailColumns={RECEIPT_DETAIL_EXPORT_COLUMNS}
+        buildDetailRows={buildReceiptDetailRows}
+        getDateValue={getReceiptExportDate}
+        loadRows={loadReceiptExportRows}
+        title="BẢNG KÊ PHIẾU NHẬP KHO"
+        fileName="danh-sach-phieu-nhap-kho"
+        sheetName="phiếu nhập kho"
       />
       {ConfirmDialog}
     </>

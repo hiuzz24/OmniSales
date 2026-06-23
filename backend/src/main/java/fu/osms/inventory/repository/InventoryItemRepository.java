@@ -34,6 +34,15 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
 
     List<InventoryItem> findByVariantIdIn(Collection<UUID> variantIds);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM InventoryItem i " +
+            "JOIN FETCH i.warehouse " +
+            "JOIN FETCH i.variant v " +
+            "LEFT JOIN FETCH v.product " +
+            "WHERE v.id = :variantId " +
+            "ORDER BY i.updatedAt ASC")
+    List<InventoryItem> findByVariantIdWithLock(@Param("variantId") UUID variantId);
+
     @Query(value = "SELECT i FROM InventoryItem i " +
             "LEFT JOIN FETCH i.warehouse " +
             "LEFT JOIN FETCH i.variant",
@@ -54,5 +63,4 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
             "WHERE i.id = :id")
     Optional<InventoryItem> findDetailById(@Param("id") UUID id);
 }
-
 

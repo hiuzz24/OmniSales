@@ -22,6 +22,7 @@ import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.StocktakeItemRepository;
 import fu.osms.inventory.repository.StocktakeSessionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
+import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.inventory.service.StocktakeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -53,6 +54,7 @@ public class StocktakeServiceImpl implements StocktakeService {
     private final InventoryTransactionRepository transactionRepository;
     private final UserRepository userRepository;
     private final StocktakeMapper mapper;
+    private final InventoryAlertService inventoryAlertService;
 
     @Override
     @Transactional
@@ -202,6 +204,7 @@ public class StocktakeServiceImpl implements StocktakeService {
             inventoryItem.setQuantityOnHand(quantityAfter);
             inventoryItem.setUpdatedBy(user);
             inventoryItemRepository.save(inventoryItem);
+            inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
 
             InventoryTransaction transaction = InventoryTransaction.builder()
                     .warehouse(session.getWarehouse())

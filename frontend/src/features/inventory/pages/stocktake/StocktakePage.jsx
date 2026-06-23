@@ -30,6 +30,8 @@ import {
   getResponseData,
   tableCellStyle,
 } from '../components/inventoryDocumentListUtils';
+import InventoryExportModal from '../components/InventoryExportModal';
+import { formatExportDateTime, getStatusLabel } from '../components/inventoryExcelExport';
 
 const STATUS_CONFIG = {
   DRAFT: { label: 'Nháp', icon: ClipboardList, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
@@ -51,6 +53,81 @@ const columns = [
   { label: 'Ngày tạo' },
   { label: '', align: 'right' },
 ];
+
+const getStocktakeSummary = (stocktake) => {
+  const items = stocktake.items ?? [];
+  const checkedCount = items.filter((item) => item.actualQuantity !== null && item.actualQuantity !== undefined).length;
+  const surplus = items.reduce((sum, item) => sum + Math.max(Number(item.difference ?? item.actualQuantity - item.systemQuantity) || 0, 0), 0);
+  const shortage = items.reduce((sum, item) => sum + Math.abs(Math.min(Number(item.difference ?? item.actualQuantity - item.systemQuantity) || 0, 0)), 0);
+  let result = 'Khớp';
+  if (surplus && shortage) result = 'Thừa & Thiếu';
+  else if (surplus) result = 'Thừa hàng';
+  else if (shortage) result = 'Thiếu hàng';
+  return { items, checkedCount, surplus, shortage, result };
+};
+
+const STOCKTAKE_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'sessionCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (stocktake) => stocktake.sessionCode ?? '' },
+  { key: 'warehouseName', label: 'Kho kiểm', width: 24, defaultChecked: true, getValue: (stocktake) => stocktake.warehouseName ?? '' },
+  { key: 'totalSku', label: 'Tổng SKU', width: 12, type: 'number', defaultChecked: true, getValue: (stocktake) => getStocktakeSummary(stocktake).items.length },
+  { key: 'checkedCount', label: 'Đã kiểm', width: 12, type: 'number', defaultChecked: true, getValue: (stocktake) => getStocktakeSummary(stocktake).checkedCount },
+  { key: 'surplus', label: 'Thừa (SP)', width: 12, type: 'number', defaultChecked: true, getValue: (stocktake) => getStocktakeSummary(stocktake).surplus },
+  { key: 'shortage', label: 'Thiếu (SP)', width: 12, type: 'number', defaultChecked: true, getValue: (stocktake) => getStocktakeSummary(stocktake).shortage },
+  { key: 'result', label: 'Kết quả', width: 16, defaultChecked: true, getValue: (stocktake) => getStocktakeSummary(stocktake).result },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (stocktake) => getStatusLabel(stocktake.status) },
+  { key: 'createdByName', label: 'Người tạo', width: 20, defaultChecked: false, getValue: (stocktake) => stocktake.createdByName ?? '' },
+  { key: 'createdAt', label: 'Ngày tạo', width: 20, defaultChecked: false, getValue: (stocktake) => formatExportDateTime(stocktake.createdAt ?? stocktake.scheduledDate) },
+];
+
+const getStocktakeExportDate = (stocktake) => stocktake.completedAt ?? stocktake.createdAt ?? stocktake.scheduledDate;
+
+const STOCKTAKE_DETAIL_EXPORT_COLUMNS = [
+  { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
+  { key: 'sessionCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (row) => row.sessionCode },
+  { key: 'stocktakeDate', label: 'Ngày kiểm', width: 20, defaultChecked: true, getValue: (row) => formatExportDateTime(row.stocktakeDate) },
+  { key: 'warehouseName', label: 'Kho kiểm', width: 24, defaultChecked: true, getValue: (row) => row.warehouseName },
+  { key: 'sku', label: 'SKU', width: 18, defaultChecked: true, getValue: (row) => row.sku },
+  { key: 'productName', label: 'Tên sản phẩm', width: 32, defaultChecked: true, getValue: (row) => row.productName },
+  { key: 'variantName', label: 'Biến thể', width: 22, defaultChecked: true, getValue: (row) => row.variantName },
+  { key: 'systemQuantity', label: 'Tồn hệ thống', width: 14, type: 'number', defaultChecked: true, getValue: (row) => row.systemQuantity },
+  { key: 'actualQuantity', label: 'Tồn thực tế', width: 14, type: 'number', defaultChecked: true, getValue: (row) => row.actualQuantity },
+  { key: 'difference', label: 'Chênh lệch', width: 14, type: 'number', defaultChecked: true, getValue: (row) => row.difference },
+  { key: 'unitCost', label: 'Giá vốn', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.unitCost },
+  { key: 'differenceValue', label: 'Giá trị chênh lệch', width: 18, type: 'currency', defaultChecked: true, getValue: (row) => row.differenceValue },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => getStatusLabel(row.status) },
+  { key: 'createdByName', label: 'Người tạo', width: 20, defaultChecked: false, getValue: (row) => row.createdByName },
+];
+
+const buildStocktakeDetailRows = async (stocktakes) => {
+  const details = await Promise.all(stocktakes.map(async (stocktake) => {
+    if (!stocktake.id) return stocktake;
+    const response = await stocktakeService.getById(stocktake.id);
+    return getResponseData(response);
+  }));
+
+  return details.flatMap((stocktake) => (stocktake.items ?? []).map((item) => {
+    const systemQuantity = Number(item.systemQuantity ?? 0);
+    const actualQuantity = item.actualQuantity === null || item.actualQuantity === undefined ? '' : Number(item.actualQuantity);
+    const difference = item.difference ?? (actualQuantity === '' ? 0 : actualQuantity - systemQuantity);
+    const unitCost = Number(item.unitCost ?? item.costPrice ?? item.unitPrice ?? 0);
+    return {
+      sessionCode: stocktake.sessionCode ?? '',
+      stocktakeDate: getStocktakeExportDate(stocktake),
+      warehouseName: stocktake.warehouseName ?? '',
+      status: stocktake.status,
+      createdByName: stocktake.createdByName ?? '',
+      sku: item.variantSku ?? item.sku ?? '',
+      productName: item.productName ?? '',
+      variantName: item.variantName ?? item.productVariantName ?? '',
+      systemQuantity,
+      actualQuantity,
+      difference,
+      unitCost,
+      differenceValue: Number(difference || 0) * unitCost,
+    };
+  }));
+};
 
 const StatusBadge = ({ status }) => {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.DRAFT;
@@ -150,6 +227,7 @@ export default function StocktakePage() {
   const [page, setPage] = useState(0);
   const [rowsPerPage] = useState(10);
   const [totalElements, setTotalElements] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const fetchStocktakes = async () => {
     setLoading(true);
@@ -197,6 +275,21 @@ export default function StocktakePage() {
         .then((response) => setStatistics(getResponseData(response)))
         .catch(() => setStatistics({})),
     ]);
+  };
+
+  const loadStocktakeExportRows = async () => {
+    const params = {
+      page: 0,
+      size: Math.max(totalElements || stocktakes.length || 1, stocktakes.length || 1),
+      sortBy: 'createdAt',
+      sortDirection: 'DESC',
+    };
+    if (keyword.trim()) params.keyword = keyword.trim();
+    if (status) params.status = status;
+    if (warehouseId) params.warehouseId = warehouseId;
+    const response = await stocktakeService.getStocktakes(params);
+    const data = getResponseData(response);
+    return Array.isArray(data.content) ? data.content : [];
   };
 
   const handleStatus = async (stocktake, nextStatus) => {
@@ -252,6 +345,7 @@ export default function StocktakePage() {
   const lastVisible = Math.min(totalElements, (page + 1) * rowsPerPage);
 
   return (
+    <>
     <InventoryDocumentListPage
       icon={ClipboardList}
       iconBg="#ecfeff"
@@ -260,7 +354,7 @@ export default function StocktakePage() {
       description="Quản lý các phiếu kiểm kê hàng hóa định kỳ và đột xuất"
       createLabel="Tạo phiếu kiểm"
       onCreate={() => navigate(ROUTES.STOCKTAKE_CREATE)}
-      onExport={() => toast.info('Xuất Excel phiếu kiểm kho đang được phát triển.')}
+      onExport={() => setExportOpen(true)}
       stats={stats}
       filters={(
         <>
@@ -282,7 +376,6 @@ export default function StocktakePage() {
       rows={rows}
       loading={loading}
       emptyText="Không có phiếu kiểm kho phù hợp"
-      footerLeft={`Hiển thị ${formatNumber(stocktakes.length)} / ${formatNumber(totalElements)} phiếu`}
       pagination={{
         page,
         totalPages,
@@ -292,5 +385,19 @@ export default function StocktakePage() {
         onNext: () => setPage((current) => Math.min(totalPages - 1, current + 1)),
       }}
     />
+    <InventoryExportModal
+      open={exportOpen}
+      onClose={() => setExportOpen(false)}
+      rows={stocktakes}
+      columns={STOCKTAKE_EXPORT_COLUMNS}
+      detailColumns={STOCKTAKE_DETAIL_EXPORT_COLUMNS}
+      buildDetailRows={buildStocktakeDetailRows}
+      getDateValue={getStocktakeExportDate}
+      loadRows={loadStocktakeExportRows}
+      title="BẢNG KÊ PHIẾU KIỂM KHO"
+      fileName="danh-sach-phieu-kiem-kho"
+      sheetName="phiếu kiểm kho"
+    />
+    </>
   );
 }

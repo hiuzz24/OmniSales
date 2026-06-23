@@ -10,6 +10,7 @@ import {
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
 import useAuth from '../../features/auth/hooks/useAuth';
+import notificationApi from '../../api/notificationApi';
 
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -21,7 +22,7 @@ const NAV_ITEMS = [
     icon: Warehouse,
     roles: [],
     children: [
-      { name: 'Tổng quan kho', href: '/inventory', icon: Warehouse },
+      { name: 'Tổng quan kho', href: '/inventory', icon: Warehouse, exact: true },
       { name: 'Phiếu nhập kho', href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS, icon: PackagePlus },
       { name: 'Phiếu xuất kho', href: ROUTES.STOCK_DELIVERIES, icon: PackageMinus },
       { name: 'Phiếu chuyển kho', href: '/warehouse/transfers', icon: ArrowRightLeft },
@@ -50,17 +51,14 @@ const isVisible = (item, role) => {
   return !(ROLE_HIDDEN[role] ?? []).includes(item.name);
 };
 
-const NOTIFS = [
-  { id: 'n1', type: 'ALERT', title: 'Cảnh báo hết hàng', body: 'Giày sneaker chỉ còn 3 đơn vị', time: '8 phút trước' },
-  { id: 'n2', type: 'ORDER', title: '15 đơn hàng chờ xử lý', body: 'Từ Shopee · cần xử lý trong 24h', time: '23 phút trước' },
-  { id: 'n3', type: 'SYNC', title: 'Đồng bộ TikTok Shop xong', body: '247 sản phẩm · 38 đơn hàng', time: '1 giờ trước' },
-  { id: 'n4', type: 'INVENTORY', title: 'Phiếu nhập kho PN-2026-018', body: 'Hoàn thành · 5 SP · 320 đơn vị', time: 'Hôm qua' },
-];
-
 const NOTIF_META = {
   ALERT: { icon: AlertTriangle, color: '#dc2626', bg: '#fef2f2' },
+  LOW_STOCK: { icon: AlertTriangle, color: '#dc2626', bg: '#fef2f2' },
   ORDER: { icon: ShoppingCart, color: '#2563eb', bg: '#eff6ff' },
+  ORDER_NEW: { icon: ShoppingCart, color: '#2563eb', bg: '#eff6ff' },
+  ORDER_CANCELLED: { icon: ShoppingCart, color: '#dc2626', bg: '#fef2f2' },
   SYNC: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
+  SYNC_FAILED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
   INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
   SYSTEM: { icon: Info, color: '#475569', bg: '#f8fafc' },
 };
@@ -76,6 +74,22 @@ const getInitials = (name) => {
   return p.length === 1 ? p[0][0].toUpperCase() : (p[0][0] + p[p.length - 1][0]).toUpperCase();
 };
 
+const formatNotificationTime = (value) => {
+  if (!value) return '';
+  const created = new Date(value);
+  const diffMs = Date.now() - created.getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (diffMs < minute) return 'Vừa xong';
+  if (diffMs < hour) return `${Math.floor(diffMs / minute)} phút trước`;
+  if (diffMs < day) return `${Math.floor(diffMs / hour)} giờ trước`;
+  return created.toLocaleDateString('vi-VN');
+};
+
+const pathMatches = (pathname, href, exact = false) =>
+  exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+
 // ── Sidebar widths ────────────────────────────────────────────────────────────
 const SIDEBAR_OPEN = 256; // px — 16rem / w-64
 const SIDEBAR_CLOSE = 80;  // px — 5rem  / w-20
@@ -84,7 +98,8 @@ export default function MainLayout() {
   const [open, setOpen] = useState(true);
   const [expanded, setExpanded] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifRead, setNotifRead] = useState(new Set());
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const notifRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -92,7 +107,6 @@ export default function MainLayout() {
 
   const role = user?.role;
   const displayName = user?.fullName || user?.full_name || user?.name || user?.email || 'User';
-  const unreadCount = NOTIFS.filter((n) => !notifRead.has(n.id)).length;
   const sidebarW = open ? SIDEBAR_OPEN : SIDEBAR_CLOSE;
 
   // Close notif on outside click
@@ -105,16 +119,46 @@ export default function MainLayout() {
   // Auto-expand active parent
   useEffect(() => {
     NAV_ITEMS.forEach((item) => {
-      if (item.children?.some((c) => location.pathname.startsWith(c.href))) {
+      if (item.children?.some((c) => pathMatches(location.pathname, c.href, c.exact))) {
         setExpanded((prev) => prev.includes(item.name) ? prev : [...prev, item.name]);
       }
     });
   }, [location.pathname]);
 
-  const isActive = (href) => {
+  const isActive = (href, exact = false) => {
     if (href === ROUTES.DASHBOARD) return location.pathname === ROUTES.DASHBOARD;
-    return location.pathname === href || (href !== '/warehouse' && location.pathname.startsWith(href));
+    if (href === '/inventory') return location.pathname === href;
+    return pathMatches(location.pathname, href, exact);
   };
+
+  const loadNotifications = async () => {
+    if (!user?.id) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+    try {
+      const [list, count] = await Promise.all([
+        notificationApi.getNotifications({ userId: user.id, page: 0, size: 10 }),
+        notificationApi.countUnread(user.id),
+      ]);
+      setNotifications(list?.content ?? []);
+      setUnreadCount(Number(count ?? 0));
+    } catch (err) {
+      console.error('Lỗi tải thông báo:', err);
+      setNotifications([]);
+      setUnreadCount(0);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+  }, [user?.id]);
+
+  useEffect(() => {
+    window.addEventListener('notifications:refresh', loadNotifications);
+    return () => window.removeEventListener('notifications:refresh', loadNotifications);
+  }, [user?.id]);
 
   const toggleMenu = (name) =>
     setExpanded((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
@@ -162,7 +206,7 @@ export default function MainLayout() {
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const hasChildren = !!item.children?.length;
-            const parentActive = item.children?.some((c) => isActive(c.href));
+            const parentActive = item.children?.some((c) => isActive(c.href, c.exact));
             const isExp = expanded.includes(item.name);
 
             return (
@@ -214,12 +258,12 @@ export default function MainLayout() {
                   <div style={{ marginLeft: 16, paddingLeft: 16, borderLeft: '1px solid #e2e8f0', marginTop: 4 }}>
                     {item.children.map((child) => {
                       const CIcon = child.icon;
-                      const active = isActive(child.href);
+                      const active = isActive(child.href, child.exact);
                       return (
                         <NavLink
                           key={child.href}
                           to={child.href}
-                          end={child.href === '/warehouse'}
+                          end={child.exact}
                           style={() => ({
                             display: 'flex', alignItems: 'center', gap: 10,
                             padding: '8px 12px', borderRadius: 8,
@@ -263,7 +307,10 @@ export default function MainLayout() {
             {/* Bell */}
             <div ref={notifRef} style={{ position: 'relative' }}>
               <button
-                onClick={() => setNotifOpen((v) => !v)}
+                onClick={() => {
+                  setNotifOpen((v) => !v);
+                  loadNotifications();
+                }}
                 style={{
                   position: 'relative', width: 36, height: 36,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -300,7 +347,10 @@ export default function MainLayout() {
                       )}
                     </div>
                     {unreadCount > 0 && (
-                      <button onClick={() => setNotifRead(new Set(NOTIFS.map((n) => n.id)))}
+                      <button onClick={async () => {
+                        await notificationApi.markAllAsRead(user.id);
+                        await loadNotifications();
+                      }}
                         style={{ fontSize: 12, color: '#2563eb', fontWeight: 500, border: 'none', background: 'none', cursor: 'pointer' }}>
                         Đánh dấu đã đọc
                       </button>
@@ -308,13 +358,31 @@ export default function MainLayout() {
                   </div>
 
                   <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-                    {NOTIFS.map((n) => {
-                      const meta = NOTIF_META[n.type];
+                    {notifications.length === 0 && (
+                      <div style={{ padding: '28px 20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                        Chưa có thông báo mới
+                      </div>
+                    )}
+                    {notifications.map((n) => {
+                      const meta = NOTIF_META[n.type] ?? NOTIF_META.SYSTEM;
                       const NIcon = meta.icon;
-                      const isUnread = !notifRead.has(n.id);
+                      const isUnread = !n.readAt;
                       return (
                         <div key={n.id}
-                          onClick={() => setNotifRead((prev) => new Set([...prev, n.id]))}
+                          onClick={async () => {
+                            if (isUnread) {
+                              await notificationApi.markAsRead(n.id);
+                              await loadNotifications();
+                            }
+                            if (n.entityType === 'ORDER' && n.entityId) {
+                              navigate(ROUTES.ORDER_DETAIL.replace(':id', n.entityId));
+                              setNotifOpen(false);
+                            }
+                            if (n.entityType === 'INVENTORY' && n.entityId) {
+                              navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
+                              setNotifOpen(false);
+                            }
+                          }}
                           style={{
                             display: 'flex', gap: 12, padding: '14px 20px', cursor: 'pointer',
                             backgroundColor: isUnread ? 'rgba(239,246,255,0.5)' : 'transparent',
@@ -332,7 +400,7 @@ export default function MainLayout() {
                               <span style={{ fontSize: 13, fontWeight: isUnread ? 600 : 400, color: isUnread ? '#0f172a' : '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
                             </div>
                             <p style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>{n.body}</p>
-                            <p style={{ fontSize: 10, color: '#cbd5e1', marginTop: 4, margin: '4px 0 0' }}>{n.time}</p>
+                            <p style={{ fontSize: 10, color: '#cbd5e1', marginTop: 4, margin: '4px 0 0' }}>{formatNotificationTime(n.createdAt)}</p>
                           </div>
                         </div>
                       );
@@ -340,7 +408,7 @@ export default function MainLayout() {
                   </div>
 
                   <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', backgroundColor: 'rgba(248,250,252,0.5)' }}>
-                    <button onClick={() => setNotifOpen(false)}
+                    <button onClick={() => { setNotifOpen(false); loadNotifications(); }}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontSize: 13, color: '#2563eb', fontWeight: 500, border: 'none', background: 'none', cursor: 'pointer' }}>
                       Xem tất cả thông báo <ChevronRight size={14} />
                     </button>

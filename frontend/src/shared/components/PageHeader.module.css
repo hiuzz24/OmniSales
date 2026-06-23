@@ -16,10 +16,29 @@
 
 .titleWrapper {
   display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.iconWrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.titleText {
+  display: flex;
   flex-direction: column;
 }
 
 .title {
+  margin: 0;
   font-size: 32px;
   font-weight: 700;
   color: #111827;

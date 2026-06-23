@@ -119,7 +119,8 @@ CREATE TABLE users (
                        email_verified_at     TIMESTAMPTZ,
                        verification_token    VARCHAR(255),
                        failed_login_attempts INT          DEFAULT 0,
-                       locked_until          TIMESTAMPTZ
+                       locked_until          TIMESTAMPTZ,
+                       password_expired      BOOLEAN
 );
 CREATE UNIQUE INDEX uq_users_email_active ON users(email) WHERE deleted_at IS NULL;
 
@@ -587,6 +588,9 @@ CREATE TABLE sync_logs (
 );
 CREATE UNIQUE INDEX uq_sync_logs_running ON sync_logs(channel_id, job_type) WHERE status = 'PENDING';
 
+-- Migration: add product_id to sync_logs (for per-product sync tracking)
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
+
 CREATE TABLE sync_tasks (
                             id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                             sync_log_id     UUID        NOT NULL REFERENCES sync_logs(id) ON DELETE CASCADE,
@@ -622,7 +626,7 @@ CREATE TABLE notifications (
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
-                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG')),
+                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY')),
                                entity_id   UUID,
                                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -941,7 +945,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO inventory_issues (id, warehouse_id, issue_code, issue_type, status, reference_id, recipient, total_cost, notes, created_by, confirmed_at) VALUES
     ('20b1c2d3-0001-0000-0000-000000000001', 'c0b1c2d3-0000-0000-0000-000000000001', 'ISS-001', 'ORDER', 'CONFIRMED', '90b1c2d3-0000-0000-0000-000000000001', NULL, 160000, NULL, 'b0b1c2d3-0000-0000-0000-000000000001', NOW() - INTERVAL '1 day')
 ON CONFLICT DO NOTHING;
-
+    
 -- Inventory issue items
 INSERT INTO inventory_issue_items (id, issue_id, variant_id, quantity, unit_cost) VALUES
     ('30b1c2d3-0001-0000-0000-000000000001', '20b1c2d3-0001-0000-0000-000000000001', '10b1c2d3-0000-0000-0000-000000000001', 2, 80000)
