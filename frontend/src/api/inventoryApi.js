@@ -8,11 +8,16 @@ const inventoryApi = {
         return response;
     },
 
-    getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null) => {
+  getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null) => {
     const params = { page, size, sortBy, sortDir };
     const res = categoryId
       ? await axiosClient.get(`/inventory/category/${categoryId}`, { params })
       : await axiosClient.get('/inventory', { params });
+    return res.data?.data ?? res.data;
+  },
+
+  getLowStockItems: async () => {
+    const res = await axiosClient.get('/inventory/items/low-stock');
     return res.data?.data ?? res.data;
   },
 

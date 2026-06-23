@@ -13,6 +13,10 @@ const inventoryService = {
   getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null) => {
     return await inventoryApi.getInventoryList(page, size, sortBy, sortDir, categoryId);
   },
+
+  getLowStockItems: async () => {
+    return await inventoryApi.getLowStockItems();
+  },
 };
 
 export default inventoryService;

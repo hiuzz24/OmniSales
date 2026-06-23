@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import {
-  ShoppingCart, Download, Eye, Search,
+  ShoppingCart, FileDown, Eye, Search,
   TrendingUp, Clock, CheckCircle, Package, Truck, XCircle,
   Store, ShoppingBag, PenTool, History,
 } from 'lucide-react';
@@ -159,30 +159,30 @@ const OrderListPage = () => {
     { label: 'Doanh thu',       value: formatCurrency(stats.totalRevenue), icon: TrendingUp, color: 'blue', isVND: true },
   ] : [];
 
+  const actions = (
+    <>
+      <button
+        className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
+        onClick={() => navigate(ROUTES.ORDER_LOGS)}
+      >
+        <History size={15} />
+        Nhật ký đơn hàng
+      </button>
+      <button className={styles.btnOutline} onClick={() => setIsExportModalOpen(true)}>
+        <FileDown size={15} />
+        Xuất Excel
+      </button>
+    </>
+  );
+
   return (
     <div className={styles.page}>
-      {/* Header */}
-      <div className={styles.pageHeader}>
-        <div className={styles.headerLeft}>
-          <div className={styles.headerIcon}>
-            <ShoppingCart size={20} />
-          </div>
-          <div>
-            <h1 className={styles.pageTitle}>Đơn hàng</h1>
-            <p className={styles.pageSubtitle}>Quản lý và theo dõi đơn hàng theo kênh bán hàng</p>
-          </div>
-        </div>
-        <div className={styles.headerActions}>
-          <button className={styles.btnOutline} onClick={() => navigate(ROUTES.ORDER_LOGS)}>
-            <History size={15} />
-            Order Logs
-          </button>
-          <button className={styles.btnOutline} onClick={() => setIsExportModalOpen(true)}>
-            <Download size={15} />
-            Xuất Excel
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Đơn hàng"
+        subtitle="Quản lý và theo dõi đơn hàng theo kênh bán hàng"
+        icon={<ShoppingCart size={20} />}
+        actions={actions}
+      />
 
       {/* Stats */}
       {stats && (

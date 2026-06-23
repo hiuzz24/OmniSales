@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Repository
@@ -19,6 +20,11 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     Page<Notification> findByUserIdAndReadAtIsNullOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
     long countByUserIdAndReadAtIsNull(UUID userId);
+
+    boolean existsByUserIdAndEntityTypeAndEntityIdAndReadAtIsNull(UUID userId, String entityType, UUID entityId);
+
+    boolean existsByUserIdAndTypeAndEntityTypeAndEntityIdAndCreatedAtAfter(
+            UUID userId, String type, String entityType, UUID entityId, OffsetDateTime createdAt);
 
     @Modifying
     @Query("UPDATE Notification n SET n.readAt = CURRENT_TIMESTAMP " +

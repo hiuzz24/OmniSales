@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, Plus, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, Plus, Search } from 'lucide-react';
 import { formatNumber } from './inventoryDocumentListUtils';
 
 export const Badge = ({ label, icon: Icon, color = '#475569', bg = '#f8fafc', border = '#e2e8f0' }) => (
@@ -117,7 +117,7 @@ export default function InventoryDocumentListPage({
             <button type="button" onClick={onExport} style={secondaryButtonStyle}
               onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px 0 rgba(16, 185, 129, 0.35)'; }}>
-              <Download size={15} />
+              <FileDown size={15} />
               Xuất Excel
             </button>
           )}
