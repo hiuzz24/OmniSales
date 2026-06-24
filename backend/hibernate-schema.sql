@@ -96,7 +96,7 @@ CREATE TYPE user_status        AS ENUM ('ACTIVE', 'INACTIVE', 'LOCKED');
 CREATE TYPE platform_type      AS ENUM ('SHOPEE', 'TIKTOK', 'LAZADA', 'SHOPIFY', 'MANUAL');
 CREATE TYPE product_status     AS ENUM ('ACTIVE', 'INACTIVE', 'DRAFT');
 CREATE TYPE order_status       AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
-CREATE TYPE inv_txn_type       AS ENUM ('IMPORT', 'EXPORT', 'ADJUSTMENT', 'ORDER_DEDUCT', 'ORDER_CANCEL', 'OUTBOUND');
+CREATE TYPE inv_txn_type       AS ENUM ('IMPORT', 'EXPORT', 'TRANSFER_OUT', 'TRANSFER_IN','ADJUSTMENT', 'ORDER_DEDUCT', 'ORDER_CANCEL', 'OUTBOUND');
 CREATE TYPE sync_status        AS ENUM ('PENDING', 'SYNCED', 'FAILED', 'OUT_OF_SYNC');
 CREATE TYPE product_log_action AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'SYNC', 'MAPPING');
 
@@ -440,7 +440,7 @@ CREATE TABLE inventory_transactions (
                                         warehouse_id    UUID         NOT NULL REFERENCES warehouses(id),
                                         variant_id      UUID         NOT NULL REFERENCES product_variants(id),
                                         type            inv_txn_type NOT NULL,
-                                        reference_type  VARCHAR(15)  CHECK (reference_type IS NULL OR reference_type IN ('ORDER','RECEIPT','ISSUE','ADJUSTMENT')),
+                                        reference_type  VARCHAR(15)  CHECK (reference_type IS NULL OR reference_type IN ('ORDER','RECEIPT','ISSUE','ADJUSTMENT', 'TRANSFER')),
                                         reference_id    UUID,
                                         quantity_change INT          NOT NULL CHECK (quantity_change <> 0),
                                         quantity_before INT          NOT NULL,
@@ -945,7 +945,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO inventory_issues (id, warehouse_id, issue_code, issue_type, status, reference_id, recipient, total_cost, notes, created_by, confirmed_at) VALUES
     ('20b1c2d3-0001-0000-0000-000000000001', 'c0b1c2d3-0000-0000-0000-000000000001', 'ISS-001', 'ORDER', 'CONFIRMED', '90b1c2d3-0000-0000-0000-000000000001', NULL, 160000, NULL, 'b0b1c2d3-0000-0000-0000-000000000001', NOW() - INTERVAL '1 day')
 ON CONFLICT DO NOTHING;
-    
+
 -- Inventory issue items
 INSERT INTO inventory_issue_items (id, issue_id, variant_id, quantity, unit_cost) VALUES
     ('30b1c2d3-0001-0000-0000-000000000001', '20b1c2d3-0001-0000-0000-000000000001', '10b1c2d3-0000-0000-0000-000000000001', 2, 80000)
@@ -1023,7 +1023,19 @@ ON CONFLICT DO NOTHING;
 INSERT INTO product_logs (id, product_id, sku, action, field_changes, performed_by, performed_by_email, performed_at) VALUES
     ('20b1c2d3-0002-0000-0000-000000000001', 'f0b1c2d3-0000-0000-0000-000000000001', 'AO-001', 'CREATE', '{"name":"Áo thun nam"}', 'b0b1c2d3-0000-0000-0000-000000000001', 'admin@osms.vn', NOW())
 ON CONFLICT DO NOTHING;
-
+ALTER TABLE users ADD COLUMN password_expired BOOLEAN NOT NULL DEFAULT FALSE;
 -- ============================================================
 --  END OF SCRIPT
 -- ============================================================
+
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_entity_type_check;
+
+ALTER TABLE notifications
+    ADD CONSTRAINT notifications_entity_type_check
+        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY'));
+
+ALTER TABLE sync_logs ADD COLUMN product_id UUID REFERENCES products(id);
+
+ALTER TABLE stock_transfers ADD COLUMN note TEXT;
+
+ALTER TABLE stock_transfers ADD COLUMN transfer_time TIMESTAMPTZ;
