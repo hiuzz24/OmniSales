@@ -79,13 +79,21 @@ const CustomerEditPage = () => {
     fetchCustomer();
   }, [id, reset, navigate]);
 
-  // Sync address.country when countryCode actually changes (not on mount)
-  const countryCodeRef = useRef(countryCode);
+  // Track when initial data load is complete
+  const initialDataLoaded = useRef(false);
+
   useEffect(() => {
-    if (countryCodeRef.current === countryCode) return;
-    countryCodeRef.current = countryCode;
+    if (initialDataLoaded.current) return;
+    if (!loading) {
+      initialDataLoaded.current = true;
+    }
+  }, [loading]);
+
+  // Sync address.country when user manually changes country (after initial load)
+  useEffect(() => {
+    if (!countryCode || !initialDataLoaded.current) return;
     setValue('address', { country: countryCode, detail: '', ward: '', district: '', province: '' });
-  }, [countryCode, setValue]);
+  }, [countryCode, setValue, initialDataLoaded]);
 
   const onSubmit = async (data) => {
     setIsSubmitting(true);
@@ -241,6 +249,7 @@ const CustomerEditPage = () => {
             control={control}
             render={({ field }) => (
               <CascadingAddress
+                key={`address-${id}`}
                 value={field.value || {}}
                 onChange={field.onChange}
                 countryCode={countryCode}
