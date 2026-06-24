@@ -29,7 +29,6 @@ public interface InventoryTransactionDTOMapper {
             case ADJUSTMENT -> "Điều chỉnh kho";
             case ORDER_DEDUCT -> "Trừ kho (Giữ chỗ đơn hàng)";
             case ORDER_CANCEL -> "Hoàn kho (Hủy đơn hàng)";
-
             default -> type.name();
         };
     }

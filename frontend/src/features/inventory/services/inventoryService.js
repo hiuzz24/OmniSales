@@ -21,10 +21,6 @@ const inventoryService = {
   getInventoryTransactions: async (page = 0, size = 1000, sortBy = 'performedAt', sortDir = 'desc') => {
     return await inventoryApi.getTransactions(null, page, size, sortBy, sortDir);
   },
-
-  getInventoryLogs: async (params) => {
-    return await inventoryApi.getInventoryLogs(params);
-  },
 };
 
 export default inventoryService;

@@ -47,11 +47,6 @@ const inventoryApi = {
     });
     return res.data?.data ?? res.data;
   },
-
-  getInventoryLogs: async (params) => {
-    const res = await axiosClient.get('/inventory/log', { params });
-    return res.data;
-  },
 };
 
 export default inventoryApi;
