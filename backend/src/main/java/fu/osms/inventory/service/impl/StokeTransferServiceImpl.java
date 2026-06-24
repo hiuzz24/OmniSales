@@ -112,7 +112,6 @@ public class StokeTransferServiceImpl implements StokeTransferService {
             throw new IllegalArgumentException("Source and destination warehouses cannot be the same.");
         }
         StockTransfer transfer = transferMapper.toEntity(request);
-        System.out.println(transfer);
         transfer.setTransferCode(request.getTransferCode());
         transfer.setStatus("RECEIVED");
         transfer.setFromWarehouse(warehouseRepository.getReferenceById(request.getFromWarehouseId()));
@@ -123,9 +122,7 @@ public class StokeTransferServiceImpl implements StokeTransferService {
         transferRepository.save(transfer);
 
         for (StockTransferItemRequest itemReq : request.getItems()) {
-            System.out.println("itemReq" + itemReq);
             StockTransferItem itemEntity = transferMapper.toItemEntity(itemReq);
-            System.out.println("itemEntity" + itemEntity);
             itemEntity.setTransfer(transfer);
             itemEntity.setVariant(variantRepository.getReferenceById(itemReq.getVariantId()));
             stokeTransferItemRepository.save(itemEntity);
@@ -168,6 +165,9 @@ public class StokeTransferServiceImpl implements StokeTransferService {
             sourceLog.setQuantityAfter(sourceInventory.getQuantityOnHand());
             sourceLog.setReferenceType("TRANSFER");
             sourceLog.setReferenceId(transfer.getId());
+            sourceLog.setPerformedBy(transfer.getCreatedBy());
+            sourceLog.setPerformedAt(transfer.getCreatedAt());
+            sourceLog.setNote(transfer.getNote());
             transactionRepository.save(sourceLog);
 
             InventoryTransaction destLog = new InventoryTransaction();
