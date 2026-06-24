@@ -12,14 +12,17 @@ import org.mapstruct.*;
 public interface StockTransferMapper {
 
     @Mapping(target = "id", ignore = true)
-
     @Mapping(target = "fromWarehouse", ignore = true)
     @Mapping(target = "toWarehouse", ignore = true)
+    @Mapping(target = "transferCode", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "createdBy", ignore = true)
     @Mapping(target = "approvedBy", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "transferTime", ignore = true)
+    @Mapping(target = "note", ignore = true)
+    @Mapping(target = "items", ignore = true)
     StockTransfer toEntity(StockTransferRequest request);
 
     @Mapping(target = "fromWarehouseId", source = "fromWarehouse.id")
@@ -32,6 +35,7 @@ public interface StockTransferMapper {
     @Mapping(target = "approvedByName", source = "approvedBy.fullName")
     @Mapping(target = "items", ignore = true)
     StockTransferResponse toResponse(StockTransfer transfer);
+
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "transfer", ignore = true)

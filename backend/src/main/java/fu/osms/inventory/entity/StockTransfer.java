@@ -7,6 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -17,6 +18,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString
 public class StockTransfer {
 
     @Id
@@ -33,6 +35,9 @@ public class StockTransfer {
 
     @Column(name = "transfer_code", nullable = false, unique = true, length = 100)
     private String transferCode;
+
+    @Column(name = "note")
+    private String note;
 
     @Column(nullable = false, length = 10)
     @Builder.Default
@@ -53,4 +58,10 @@ public class StockTransfer {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
+
+    @Column(name = "transfer_time")
+    private OffsetDateTime transferTime;
+    @OneToMany(mappedBy = "transfer", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<StockTransferItem> items;
+
 }
