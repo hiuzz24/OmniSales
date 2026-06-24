@@ -9,6 +9,11 @@ import java.math.BigDecimal;
 public interface InventoryTransactionDTOMapper {
 
     @Mapping(target = "typeLabel", source = "type", qualifiedByName = "mapTypeLabel")
+    @Mapping(target = "warehouseId", source = "warehouse.id")
+    @Mapping(target = "warehouseName", source = "warehouse.name")
+    @Mapping(target = "variantId", source = "variant.id")
+    @Mapping(target = "variantSku", source = "variant.sku")
+    @Mapping(target = "variantName", source = "variant.name")
     @Mapping(target = "performedById", source = "performedBy.id")
     @Mapping(target = "performedByName", source = "performedBy.fullName") // Giả định thực tế Entity User có trường fullName
 

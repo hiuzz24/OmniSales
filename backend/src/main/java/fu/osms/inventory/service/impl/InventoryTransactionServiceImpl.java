@@ -26,8 +26,28 @@ public class InventoryTransactionServiceImpl implements InventoryTransactionServ
 
     @Override
     @Transactional(readOnly = true)
+    public PageResponse<InventoryTransactionDTO> getTransactionsDTO(PageRequest pageRequest, int page, int size) {
+        Page<InventoryTransaction> transactionPage = inventoryTransactionRepository.findAllWithDetails(pageRequest);
+
+        List<InventoryTransactionDTO> content = transactionPage.getContent().stream()
+                .map(inventoryTransactionDTOMapper::toDto)
+                .collect(Collectors.toList());
+
+        return PageResponse.<InventoryTransactionDTO>builder()
+                .content(content)
+                .page(transactionPage.getNumber())
+                .size(transactionPage.getSize())
+                .totalElements(transactionPage.getTotalElements())
+                .totalPages(transactionPage.getTotalPages())
+                .first(transactionPage.isFirst())
+                .last(transactionPage.isLast())
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageResponse<InventoryTransactionDTO> getTransactionsDTOByVariant(UUID variantId, PageRequest pageRequest, int page, int size) {
-        Page<InventoryTransaction> transactionPage = inventoryTransactionRepository.findByVariantId(variantId, pageRequest);
+        Page<InventoryTransaction> transactionPage = inventoryTransactionRepository.findByVariantIdWithDetails(variantId, pageRequest);
 
         List<InventoryTransactionDTO> content = transactionPage.getContent().stream()
                 .map(inventoryTransactionDTOMapper::toDto)
