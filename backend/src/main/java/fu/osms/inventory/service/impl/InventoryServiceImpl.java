@@ -18,6 +18,7 @@ import fu.osms.inventory.dto.response.StockSummaryDTO;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.InventoryTransaction;
 import fu.osms.inventory.enums.InvTxnType;
+import fu.osms.inventory.mapper.AvailableVariantDTOMapper;
 import fu.osms.inventory.mapper.InventoryDetailMapper;
 import fu.osms.inventory.mapper.InventoryItemMapper;
 import fu.osms.inventory.mapper.InventoryTransactionMapper;
@@ -26,7 +27,7 @@ import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.InventoryAlertService;
-import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.inventory.dto.response.AvailableVariantDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -52,6 +53,7 @@ public class InventoryServiceImpl implements InventoryService {
     private final CategoryRepository categoryRepository;
     private final InventoryDetailMapper inventoryDetailMapper;
     private final InventoryTransactionMapper transactionMapper;
+    private final AvailableVariantDTOMapper availableVariantDTOMapper;
     private final InventoryAlertService inventoryAlertService;
 
     @Override
@@ -261,10 +263,25 @@ public class InventoryServiceImpl implements InventoryService {
         return dto;
     }
 
+    @Override
+    public List<AvailableVariantDTO> getAvailableVariantsByWarehouse(UUID warehouseId) {
+        if (!warehouseRepository.existsById(warehouseId)) {
+            throw new AppException(ErrorCode.WAREHOUSE_NOT_FOUND);
+        }
+
+        List<InventoryItem> inventoryItems = inventoryItemRepository.findByWarehouseId(warehouseId);
+
+        return inventoryItems.stream()
+                .map(item -> availableVariantDTOMapper.toAvailableDto(item.getVariant(), item))
+                .collect(Collectors.toList());
+    }
+
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         return userRepository.findByEmail(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
+
+
 }

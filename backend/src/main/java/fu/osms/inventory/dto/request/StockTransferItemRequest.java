@@ -13,6 +13,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString
 public class StockTransferItemRequest {
 
     @NotNull(message = "Variant ID must not be null")
@@ -25,5 +26,5 @@ public class StockTransferItemRequest {
     @DecimalMin(value = "0", message = "Unit cost must not be negative")
     private BigDecimal unitCost;
 
-    private String notes;
+
 }
