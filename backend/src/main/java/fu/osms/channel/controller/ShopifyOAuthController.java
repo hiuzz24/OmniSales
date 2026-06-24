@@ -2,7 +2,7 @@ package fu.osms.channel.controller;
 
 import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.ApiResponse;
-import fu.osms.sync.service.ShopifyOAuthService;
+import fu.osms.sync.shopify.ShopifyOAuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

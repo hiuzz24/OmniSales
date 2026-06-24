@@ -49,8 +49,13 @@ const ChannelConnectionPage = () => {
       toast.success('🎉 Kết nối Shopify thành công! Kênh đã được thêm vào hệ thống.');
       navigate('/channels', { replace: true });
       loadChannels();
-    } else if (error === 'oauth_failed') {
-      toast.error('Kết nối Shopify thất bại. Vui lòng thử lại hoặc kiểm tra cấu hình API.');
+    } else if (success === 'lazada_connected') {
+      toast.success('🎉 Kết nối Lazada thành công! Kênh đã được thêm vào hệ thống.');
+      navigate('/channels', { replace: true });
+      loadChannels();
+    } else if (error) {
+      const msg = error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : 'Kết nối kênh thất bại. Vui lòng thử lại.';
+      toast.error(msg);
       navigate('/channels', { replace: true });
     }
   }, []);

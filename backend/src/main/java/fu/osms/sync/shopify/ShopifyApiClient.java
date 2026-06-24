@@ -1,4 +1,4 @@
-package fu.osms.sync.service;
+package fu.osms.sync.shopify;
 
 import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
 import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;

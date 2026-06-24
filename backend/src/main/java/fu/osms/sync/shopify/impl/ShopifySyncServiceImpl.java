@@ -1,4 +1,4 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.shopify.impl;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
@@ -12,8 +12,8 @@ import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.sync.service.PlatformSyncService;
-import fu.osms.sync.service.ShopifyApiClient;
-import fu.osms.sync.service.ShopifyPayloadBuilder;
+import fu.osms.sync.shopify.ShopifyApiClient;
+import fu.osms.sync.shopify.ShopifyPayloadBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

@@ -1,4 +1,4 @@
-package fu.osms.sync.util;
+package fu.osms.sync.lazada.util;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;

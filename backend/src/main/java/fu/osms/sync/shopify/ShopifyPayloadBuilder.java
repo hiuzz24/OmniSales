@@ -1,4 +1,4 @@
-package fu.osms.sync.service;
+package fu.osms.sync.shopify;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;

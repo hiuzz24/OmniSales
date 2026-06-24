@@ -21,5 +21,9 @@ const channelApi = {
         const data = await axiosClient.get(`/channels/shopify/authorize?shop=${encodeURIComponent(shop)}`);
         return data;
     },
+    authorizeLazada: async () => {
+        const data = await axiosClient.get(`/channels/lazada/authorize`);
+        return data;
+    },
 }
 export default channelApi;

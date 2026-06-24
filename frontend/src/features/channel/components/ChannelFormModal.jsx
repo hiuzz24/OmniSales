@@ -34,6 +34,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   const isShopify = form.platform === 'SHOPIFY';
+  const isLazada = form.platform === 'LAZADA';
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -51,7 +52,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isShopify && !isEdit) return;
+    if ((isShopify || isLazada) && !isEdit) return;
 
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
@@ -97,6 +98,20 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     } catch (err) {
       setIsRedirecting(false);
       const msg = err.response?.data?.message || err.message || 'Không thể kết nối với Shopify.';
+      toast.error(msg);
+    }
+  };
+
+  const handleLazadaConnect = async () => {
+    setIsRedirecting(true);
+    try {
+      const res = await channelApi.authorizeLazada();
+      const url = res?.data?.data?.url || res?.data?.url;
+      if (!url) throw new Error('Không nhận được URL xác thực từ server');
+      window.location.href = url;
+    } catch (err) {
+      setIsRedirecting(false);
+      const msg = err.response?.data?.message || err.message || 'Không thể kết nối với Lazada.';
       toast.error(msg);
     }
   };
@@ -189,6 +204,30 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
                 </div>
               </div>
             </>
+          ) : isLazada && !isEdit ? (
+            <div className={styles.shopifyOAuthBox}>
+              <div className={styles.shopifyOAuthInfo}>
+                <span className={styles.shopifyBadge} style={{background: '#0f146d', color: '#fff'}}>OAuth 2.0</span>
+                <p>Bạn sẽ được chuyển đến Lazada Seller Center để cấp quyền. Sau khi đồng ý, hệ thống sẽ tự động kết nối.</p>
+              </div>
+              <div className={styles.actions}>
+                <button type="button" className={styles.cancelBtn} onClick={onClose} disabled={isRedirecting}>
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  className={styles.shopifyConnectBtn}
+                  style={{background: '#0f146d', color: '#fff', borderColor: '#0f146d'}}
+                  onClick={handleLazadaConnect}
+                  disabled={isRedirecting}
+                >
+                  {isRedirecting
+                    ? <><Loader2 size={16} className={styles.spinIcon} /> Đang chuyển hướng...</>
+                    : <><ExternalLink size={16} /> Kết nối với Lazada</>
+                  }
+                </button>
+              </div>
+            </div>
           ) : (
             <>
               <div className={styles.field}>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import useDebounce from '../../../shared/hooks/useDebounce';
-import { Plus, History, FileSpreadsheet, FileUp, RefreshCcw } from 'lucide-react';
+import { Plus, History, FileUp, FileDown, RefreshCcw, Package } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';

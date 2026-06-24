@@ -64,7 +64,7 @@ rest-countries:
 lazada:
   app-key: ${LAZADA_APP_KEY:}
   app-secret: ${LAZADA_APP_SECRET:}
-  redirect-uri: ${LAZADA_REDIRECT_URI:http://localhost:8080/api/channels/lazada/callback}
+  redirect-uri: ${LAZADA_REDIRECT_URI:}
   api-url: https://api.lazada.vn/rest
   auth-url: https://auth.lazada.com/oauth/authorize
   default-category-id: ${LAZADA_DEFAULT_CATEGORY_ID:10001001}

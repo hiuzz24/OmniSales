@@ -1,8 +1,8 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.lazada.service.impl;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
-import fu.osms.sync.service.LazadaPayloadBuilder;
+import fu.osms.sync.lazada.service.LazadaPayloadBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -83,7 +83,7 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
             xml.append("      <Sku>\n");
             xml.append("        <SellerSku>").append(escapeXml(variant.getSku())).append("</SellerSku>\n");
             xml.append("        <price>").append(variant.getPrice() != null ? variant.getPrice() : "0").append("</price>\n");
-            xml.append("        <quantity>").append(variant.getInventoryQuantity() != null ? variant.getInventoryQuantity() : "0").append("</quantity>\n");
+            xml.append("        <quantity>").append("0").append("</quantity>\n");
             xml.append("        <package_weight>").append(finalWeight).append("</package_weight>\n");
             xml.append("        <package_length>").append(finalLength).append("</package_length>\n");
             xml.append("        <package_width>").append(finalWidth).append("</package_width>\n");

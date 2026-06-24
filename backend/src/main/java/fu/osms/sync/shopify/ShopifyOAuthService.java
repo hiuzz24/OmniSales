@@ -1,4 +1,4 @@
-package fu.osms.sync.service;
+package fu.osms.sync.shopify;
 
 public interface ShopifyOAuthService {
     String buildAuthorizationUrl(String shop);

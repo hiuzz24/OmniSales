@@ -1,4 +1,4 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.shopify.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
@@ -17,7 +17,7 @@ import org.springframework.web.client.RestTemplate;
 import java.util.HashMap;
 import java.util.Map;
 
-import fu.osms.sync.service.ShopifyApiClient;
+import fu.osms.sync.shopify.ShopifyApiClient;
 
 @Slf4j
 @Component

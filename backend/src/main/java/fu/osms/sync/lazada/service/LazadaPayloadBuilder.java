@@ -1,4 +1,4 @@
-package fu.osms.sync.service;
+package fu.osms.sync.lazada.service;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;

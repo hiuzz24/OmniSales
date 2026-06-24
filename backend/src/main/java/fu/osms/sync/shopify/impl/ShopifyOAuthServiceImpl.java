@@ -1,6 +1,6 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.shopify.impl;
 
-import fu.osms.sync.service.ShopifyOAuthService;
+import fu.osms.sync.shopify.ShopifyOAuthService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;

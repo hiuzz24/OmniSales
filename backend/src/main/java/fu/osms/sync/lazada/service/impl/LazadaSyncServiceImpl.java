@@ -1,4 +1,4 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,9 +14,9 @@ import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.TokenExpiredException;
-import fu.osms.sync.service.LazadaApiClient;
-import fu.osms.sync.service.LazadaImageService;
-import fu.osms.sync.service.LazadaPayloadBuilder;
+import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaImageService;
+import fu.osms.sync.lazada.service.LazadaPayloadBuilder;
 import fu.osms.sync.service.PlatformSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,13 +57,10 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
                 tokenExpiresAt = credential.getTokenExpiresAt().toEpochSecond();
             }
 
-            // 1. Migrate images
             List<String> migratedImageUrls = lazadaImageService.migrateImages(images, credential.getAccessToken(), tokenExpiresAt);
 
-            // 2. Build XML Payload
             String xmlPayload = lazadaPayloadBuilder.buildPayload(product, variants, migratedImageUrls);
 
-            // 3. Create or Update Product
             Map<String, String> params = new HashMap<>();
             params.put("payload", xmlPayload);
 
@@ -81,7 +78,6 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
                         channelProduct.setExternalProductId(itemId);
                     }
 
-                    // 4. Variant Mapping
                     JsonNode skuList = data.path("sku_list");
                     if (skuList != null && skuList.isArray()) {
                         int variantIndex = 0;
@@ -141,7 +137,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
 
         } catch (TokenExpiredException e) {
             log.error("[LazadaSync] Token expired for channel {}", channel.getId(), e);
-            throw e; // Rethrow to let Orchestrator log it
+            throw e;
         } catch (Exception e) {
             log.error("[LazadaSync] Failed to sync product '{}' to Lazada: {}", product.getName(), e.getMessage(), e);
             channelProduct.setSyncStatus(SyncStatus.FAILED);

@@ -2,6 +2,8 @@ package fu.osms.sync.service.impl;
 
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.service.PlatformSyncService;
+import fu.osms.sync.lazada.service.impl.LazadaSyncServiceImpl;
+import fu.osms.sync.shopify.impl.ShopifySyncServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

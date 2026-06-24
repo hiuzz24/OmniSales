@@ -1,10 +1,10 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.catalog.entity.ProductImage;
-import fu.osms.sync.service.LazadaApiClient;
-import fu.osms.sync.service.LazadaImageService;
+import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

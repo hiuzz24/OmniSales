@@ -1,4 +1,4 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.shopify.impl;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import fu.osms.sync.service.ShopifyPayloadBuilder;
+import fu.osms.sync.shopify.ShopifyPayloadBuilder;
 
 @Service
 public class ShopifyPayloadBuilderImpl implements ShopifyPayloadBuilder {

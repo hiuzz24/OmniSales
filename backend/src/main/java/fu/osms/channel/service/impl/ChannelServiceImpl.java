@@ -223,12 +223,11 @@ public class ChannelServiceImpl implements ChannelService {
         metadata.put("accountId", accountId);
         metadata.put("accountName", accountName);
 
-        String displayName = (accountName != null && !accountName.isBlank()) ? accountName : ("Lazada-" + accountId);
+        String displayName = "Lazada-" + accountName;
 
-        // We check if a Lazada channel with this accountId already exists
         Channel channel = channelRepository
                 .findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
-                .filter(c -> c.getMetadata() != null && accountId.equals(c.getMetadata().get("accountId")))
+                .filter(c -> c.getMetadata() != null && java.util.Objects.equals(accountId, c.getMetadata().get("accountId")))
                 .findFirst()
                 .orElseGet(() -> Channel.builder()
                         .platform(PlatformType.LAZADA)

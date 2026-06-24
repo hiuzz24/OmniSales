@@ -1,8 +1,8 @@
-package fu.osms.sync.service.impl;
+package fu.osms.sync.lazada.service.impl;
 
 import fu.osms.common.exception.TokenExpiredException;
-import fu.osms.sync.service.LazadaApiClient;
-import fu.osms.sync.util.LazadaSignatureUtil;
+import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.util.LazadaSignatureUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
@@ -72,7 +74,7 @@ public class LazadaApiClientImpl implements LazadaApiClient {
             log.info("[LazadaApiClient] Calling {}, params: {}", fullUrl, allParams.keySet());
             ResponseEntity<String> response = restTemplate.postForEntity(fullUrl, request, String.class);
             return response.getBody();
-        } catch (org.springframework.web.client.RestClientResponseException e) {
+        } catch (RestClientResponseException e) {
             String errorBody = e.getResponseBodyAsString();
             log.error("[LazadaApiClient] API Error: {} - {}", e.getStatusCode(), errorBody);
             throw new RuntimeException("Lazada API Error: " + errorBody, e);

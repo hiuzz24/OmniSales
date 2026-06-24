@@ -41,6 +41,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/categories").permitAll()
                         .requestMatchers("/api/channels/shopify/callback").permitAll()
+                        .requestMatchers("/api/channels/lazada/callback").permitAll()
                         .requestMatchers("/api/products/**").authenticated()
                         .requestMatchers("/api/address/**").permitAll()
                         .anyRequest().authenticated()

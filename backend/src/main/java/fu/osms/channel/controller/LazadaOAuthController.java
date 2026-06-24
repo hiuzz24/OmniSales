@@ -1,7 +1,8 @@
 package fu.osms.channel.controller;
 
 import fu.osms.channel.service.ChannelService;
-import fu.osms.sync.service.LazadaOAuthService;
+import fu.osms.common.dto.ApiResponse;
+import fu.osms.sync.lazada.service.LazadaOAuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,7 +14,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletResponse;
-import java.net.URI;
+
+import java.io.IOException;
 import java.util.Map;
 
 @Slf4j
@@ -29,22 +31,24 @@ public class LazadaOAuthController {
     private String frontendUrl;
 
     @GetMapping("/authorize")
-    public ResponseEntity<Void> authorize() {
-        String authUrl = lazadaOAuthService.buildAuthorizationUrl();
-        log.info("[LazadaOAuthController] Redirecting to {}", authUrl);
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .location(URI.create(authUrl))
-                .build();
+    public ResponseEntity<ApiResponse<Map<String, String>>> authorize() {
+        try {
+            String authUrl = lazadaOAuthService.buildAuthorizationUrl();
+            log.info("[LazadaOAuthController] Returning authorization URL");
+            return ResponseEntity.ok(ApiResponse.success(Map.of("url", authUrl)));
+        } catch (IllegalStateException e) {
+            log.error("[LazadaOAuthController] Invalid Lazada OAuth configuration: {}", e.getMessage());
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), e.getMessage()));
+        }
     }
 
     @GetMapping("/callback")
     public void callback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String error,
-            HttpServletResponse response
-    ) throws Exception {
-        log.info("[LazadaOAuthController] Callback code={}, error={}", code, error);
-
+            HttpServletResponse response) throws IOException {
         if (error != null) {
             log.error("[LazadaOAuthController] Lazada returned error: {}", error);
             response.sendRedirect(frontendUrl + "/channels?error=" + error);
@@ -61,11 +65,11 @@ public class LazadaOAuthController {
             Map<String, Object> tokenData = lazadaOAuthService.exchangeToken(code);
             String accessToken = (String) tokenData.get("access_token");
             String refreshToken = (String) tokenData.get("refresh_token");
-            Integer expiresIn = (Integer) tokenData.get("expires_in");
+            int expiresIn = tokenData.get(("expires_in")) != null ? (Integer) tokenData.get("expires_in") : 604800;
             String accountId = (String) tokenData.get("account_id");
-            String accountPlatform = (String) tokenData.get("account");
+            String accountName = (String) tokenData.get("account_name");
 
-            channelService.connectLazada(accessToken, refreshToken, expiresIn != null ? expiresIn : 604800, accountId, accountPlatform);
+            channelService.connectLazada(accessToken, refreshToken, expiresIn, accountId, accountName);
 
             response.sendRedirect(frontendUrl + "/channels?success=lazada_connected");
         } catch (Exception e) {
@@ -73,4 +77,5 @@ public class LazadaOAuthController {
             response.sendRedirect(frontendUrl + "/channels?error=connection_failed");
         }
     }
+
 }
