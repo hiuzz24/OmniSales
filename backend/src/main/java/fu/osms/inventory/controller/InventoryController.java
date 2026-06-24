@@ -8,6 +8,7 @@ import fu.osms.inventory.dto.response.InventoryDetailDTO;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionDTO;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
+import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.InventoryTransactionService;
 import jakarta.validation.Valid;
@@ -15,10 +16,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -172,5 +175,28 @@ public class InventoryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         throw new UnsupportedOperationException("Not implemented");
+    }
+
+    @GetMapping("/log")
+    public ResponseEntity<Page<InventoryTransactionResponse>> getInventoryLogs(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String productSearch,
+            @RequestParam(required = false) InvTxnType type,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endDate,
+            @RequestParam(required = false) UUID performedById,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        // Thêm kiểm tra validation khoảng thời gian max 90 ngày nếu cần thiết tại đây
+        if (startDate != null && endDate != null && startDate.plusDays(90).isBefore(endDate)) {
+            return ResponseEntity.badRequest().body(null); // Hoặc ném ra Custom Exception
+        }
+
+        Page<InventoryTransactionResponse> logs = transactionService.getInventoryLogs(
+                warehouseId, productSearch, type, startDate, endDate, performedById, page, size
+        );
+
+        return ResponseEntity.ok(logs);
     }
 }
