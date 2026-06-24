@@ -33,10 +33,12 @@ export const ROUTES = {
   INVENTORY_DETAIL: '/inventory/detail/:id',
   INVENTORY_RECEIPT: '/inventory/receipt',
   INVENTORY_ISSUE: '/inventory/issue',
-  STOCK_TRANSFER: '/inventory/transfer',
+  STOCK_TRANSFER: '/warehouse/transfers',
+  STOCK_TRANSFER_CREATE: '/warehouse/transfers/create',
   STOCKTAKE: '/inventory/stocktake',
   FORCE_CHANGE_PASSWORD: '/force-change-password',
   ORDER_LIST: '/orders',
   ORDER_DETAIL: '/orders/:id',
   ORDER_LOGS: '/orders/logs',
+  INVENTORY_LOGS: '/inventory/logs',
 };

@@ -23,8 +23,10 @@ import CustomerCreatePage from '../../features/customer/pages/CustomerCreatePage
 import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
 import InventoryPage from '../../features/inventory/pages/inventory/InventoryPage';
 import InventoryDetailPage from '../../features/inventory/pages/inventory/InventoryDetailPage';
+import InventoryLogPage from '../../features/inventory/pages/inventory/InventoryLogPage';
 import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
 import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
+import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
 import OrderListPage from '../../features/order/pages/OrderListPage';
 import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
 import OrderLogPage from '../../features/order/pages/OrderLogPage';
@@ -98,8 +100,10 @@ const AppRouter = () => {
               {/* Inventory */}
               <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />
               <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
+              <Route path={ROUTES.INVENTORY_LOGS} element={<InventoryLogPage />} />
               {/* <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} /> */}
               <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
+              <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
               <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
               <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
               <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />

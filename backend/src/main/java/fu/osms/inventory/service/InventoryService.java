@@ -3,15 +3,13 @@ package fu.osms.inventory.service;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
-import fu.osms.inventory.dto.response.InventoryDetailDTO;
-import fu.osms.inventory.dto.response.InventoryItemResponse;
-import fu.osms.inventory.dto.response.InventoryTransactionResponse;
+import fu.osms.inventory.dto.response.*;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import fu.osms.inventory.dto.response.StockSummaryDTO;
+
 import org.springframework.data.domain.PageRequest;
 
 public interface InventoryService {
@@ -39,4 +37,5 @@ public interface InventoryService {
     void findAllChildIds(UUID parentId, List<UUID> resultList);
 
     public InventoryDetailDTO getInventoryItemDetail(UUID inventoryItemId);
+    public List<AvailableVariantDTO> getAvailableVariantsByWarehouse(UUID warehouseId);
 }
