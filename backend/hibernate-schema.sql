@@ -1023,7 +1023,6 @@ ON CONFLICT DO NOTHING;
 INSERT INTO product_logs (id, product_id, sku, action, field_changes, performed_by, performed_by_email, performed_at) VALUES
     ('20b1c2d3-0002-0000-0000-000000000001', 'f0b1c2d3-0000-0000-0000-000000000001', 'AO-001', 'CREATE', '{"name":"Áo thun nam"}', 'b0b1c2d3-0000-0000-0000-000000000001', 'admin@osms.vn', NOW())
 ON CONFLICT DO NOTHING;
-ALTER TABLE users ADD COLUMN password_expired BOOLEAN NOT NULL DEFAULT FALSE;
 -- ============================================================
 --  END OF SCRIPT
 -- ============================================================
@@ -1034,7 +1033,6 @@ ALTER TABLE notifications
     ADD CONSTRAINT notifications_entity_type_check
         CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY'));
 
-ALTER TABLE sync_logs ADD COLUMN product_id UUID REFERENCES products(id);
 
 ALTER TABLE stock_transfers ADD COLUMN note TEXT;
 

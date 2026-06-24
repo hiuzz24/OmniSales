@@ -1,4 +1,4 @@
-﻿import axiosClient from './axiosClient';
+import axiosClient from './axiosClient';
 import './interceptors';
 
 const userApi = {
@@ -32,6 +32,11 @@ const userApi = {
   changeMyPassword: async (data) => {
     const res = await axiosClient.post('/users/me/change-password', data);
     return res.data;
+  },
+
+  getAllUsers: async (page = 0, size = 100) => {
+    const res = await axiosClient.get('/users', { params: { page, size } });
+    return res.data?.data ?? res.data;
   },
 };
 
