@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Warehouse, ShoppingCart, Share2,
@@ -27,6 +27,7 @@ const NAV_ITEMS = [
       { name: 'Phiếu xuất kho', href: ROUTES.STOCK_DELIVERIES, icon: PackageMinus },
       { name: 'Phiếu chuyển kho', href: '/warehouse/transfers', icon: ArrowRightLeft },
       { name: 'Phiếu kiểm kho', href: '/warehouse/stocktakes', icon: ClipboardList },
+      { name: 'Lịch sử thay đổi', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw },
     ],
   },
   { name: 'Khách hàng', href: ROUTES.CUSTOMER_LIST, icon: Users, roles: [] },
