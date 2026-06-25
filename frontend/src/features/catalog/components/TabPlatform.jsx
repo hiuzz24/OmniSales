@@ -5,7 +5,12 @@ import styles from './TabPlatform.module.css';
 const TabPlatform = ({ product, channels = [] }) => {
   const [expandedPlatform, setExpandedPlatform] = useState(null);
 
-  const productChannels = channels.filter(c => (product?.channels || []).includes(c.platform));
+  const productChannels = channels.filter(c => {
+    if (product?.channelIds && product.channelIds.length > 0) {
+      return product.channelIds.includes(c.id || c._id);
+    }
+    return (product?.channels || []).includes(c.platform);
+  });
 
   const toggleExpand = (platformName) => {
     setExpandedPlatform(prev => prev === platformName ? null : platformName);

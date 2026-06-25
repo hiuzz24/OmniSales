@@ -1,6 +1,7 @@
 package fu.osms.channel.controller;
 
 import fu.osms.channel.dto.request.ChannelRequest;
+import fu.osms.channel.dto.request.CreateManualChannelRequest;
 import fu.osms.channel.dto.response.ChannelCredentialResponse;
 import fu.osms.channel.dto.response.ChannelProductResponse;
 import fu.osms.channel.dto.response.ChannelResponse;
@@ -25,12 +26,13 @@ public class ChannelController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<ChannelResponse>> create(@Valid @RequestBody ChannelRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        ChannelResponse response = channelService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<ChannelResponse>> getById(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.ok(ApiResponse.success(channelService.getById(id)));
     }
 
     @GetMapping
@@ -42,12 +44,13 @@ public class ChannelController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<ChannelResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ChannelRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.ok(ApiResponse.success(channelService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        channelService.delete(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/{id}/credentials")

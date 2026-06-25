@@ -10,6 +10,7 @@ const getChannelBadge = (channel) => {
     case 'SHOPEE': return <Badge variant="shopee">Shopee</Badge>;
     case 'LAZADA': return <Badge variant="lazada">Lazada</Badge>;
     case 'TIKTOK': return <Badge variant="tiktok">TikTok</Badge>;
+    case 'SHOPIFY': return <Badge variant="shopify">Shopify</Badge>;
     default: return <Badge variant="default">{channel}</Badge>;
   }
 };

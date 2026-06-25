@@ -1,6 +1,7 @@
 package fu.osms.channel.service;
 
 import fu.osms.channel.dto.request.ChannelRequest;
+import fu.osms.channel.dto.request.CreateManualChannelRequest;
 import fu.osms.channel.dto.response.ChannelCredentialResponse;
 import fu.osms.channel.dto.response.ChannelProductResponse;
 import fu.osms.channel.dto.response.ChannelResponse;
@@ -25,11 +26,15 @@ public interface ChannelService {
 
     void delete(UUID id);
 
-    ChannelCredentialResponse getCredential(UUID channelId);
-
     PageResponse<ChannelProductResponse> getChannelProducts(UUID channelId, int page, int size);
 
     Map<UUID, List<String>> getProductChannels(Collection<UUID> productIds);
 
+    Map<UUID, List<UUID>> getProductChannelIds(Collection<UUID> productIds);
+
     Map<UUID, List<ChannelSyncResponse>> getProductChannelSyncs(Collection<UUID> productIds);
+
+    ChannelResponse connectShopify(String shop, String accessToken);
+
+    ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName);
 }

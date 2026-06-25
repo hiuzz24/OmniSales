@@ -11,4 +11,6 @@ import java.util.UUID;
 public interface ChannelCredentialRepository extends JpaRepository<ChannelCredential, UUID> {
 
     Optional<ChannelCredential> findByChannelId(UUID channelId);
+
+    Optional<ChannelCredential> findByChannelIdAndConnectionState(UUID channelId, String connectionState);
 }

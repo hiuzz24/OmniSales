@@ -41,5 +41,6 @@ public class ProductResponse {
     private List<ProductVariantResponse> variants;
     private List<ProductImageResponse> images;
     private List<String> channels;
+    private List<UUID> channelIds;
     private List<ChannelSyncResponse> channelSyncs;
 }

@@ -1,5 +1,6 @@
 package fu.osms.channel.repository;
 
+import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.common.enums.SyncStatus;
 import org.springframework.data.domain.Page;
@@ -16,6 +17,8 @@ import java.util.UUID;
 public interface ChannelProductRepository extends JpaRepository<ChannelProduct, UUID> {
 
     Page<ChannelProduct> findByChannelId(UUID channelId, Pageable pageable);
+
+    List<ChannelProduct> findByChannelId(UUID channelId);
 
     Optional<ChannelProduct> findByChannelIdAndExternalProductId(UUID channelId, String externalProductId);
 

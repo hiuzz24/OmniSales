@@ -30,13 +30,13 @@ const NAV_ITEMS = [
       { name: 'Lịch sử thay đổi', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw },
     ],
   },
-  { name: 'Khách hàng', href: ROUTES.CUSTOMER_LIST, icon: Users, roles: [] },
-  { name: 'Bán hàng (POS)', href: '/pos', icon: Store, roles: [] },
-  { name: 'Đơn hàng', href: '/orders', icon: ShoppingCart, roles: [] },
-  { name: 'Kênh bán hàng', href: '/channels', icon: Share2, roles: [] },
-  { name: 'Phân tích', href: '/analytics', icon: BarChart3, roles: [] },
-  { name: 'Nhân sự', href: '/users', icon: Users, roles: [ROLES.OWNER] },
-  { name: 'Cài đặt', href: '/settings', icon: Settings, roles: [] },
+  { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
+  { name: 'Bán hàng (POS)', href: '/pos',      icon: Store,    roles: [] },
+  { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
+  { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
+  { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
+  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER] },
+  { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
 ];
 
 const ROLE_HIDDEN = {
@@ -488,7 +488,7 @@ function UserDropdown({ user, role, onLogout }) {
           </div>
 
           {[
-            { label: 'Hồ sơ', icon: User, href: ROUTES.PROFILE },
+            { label: 'Hồ sơ', icon: User,     href: ROUTES.PROFILE },
             { label: 'Cài đặt', icon: Settings, href: '/settings' },
           ].map((m) => (
             <Link key={m.label} to={m.href} onClick={() => setShow(false)}

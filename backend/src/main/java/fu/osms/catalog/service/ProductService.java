@@ -5,6 +5,7 @@ import fu.osms.catalog.dto.response.ProductResponse;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.sync.dto.SyncResult;
 
 import java.util.UUID;
 
@@ -21,4 +22,6 @@ public interface ProductService {
     ProductResponse updateStatus(UUID id, ProductStatus status);
 
     void delete(UUID id);
+
+    SyncResult syncProductToAllChannels(UUID productId);
 }
