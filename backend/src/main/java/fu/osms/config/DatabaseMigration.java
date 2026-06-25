@@ -94,5 +94,14 @@ public class DatabaseMigration {
         } catch (Exception e) {
             log.warn("Migration skipped or already applied for users password_expired: {}", e.getMessage());
         }
+
+        try {
+            jdbcTemplate.execute("""
+                ALTER TABLE stock_transfers ADD COLUMN IF NOT EXISTS note TEXT
+            """);
+            log.info("Migration: added note column to stock_transfers table");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for stock_transfers note: {}", e.getMessage());
+        }
     }
 }

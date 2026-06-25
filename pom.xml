@@ -15,13 +15,13 @@
 	<name>OSMS</name>
 	<description>OSMS Monorepo</description>
 
-	<modules>
-		<module>backend</module>
-		<module>frontend</module>
-	</modules>
+    <modules>
+        <module>backend</module>
+        <module>frontend</module>
+    </modules>
 
-	<properties>
-		<java.version>17</java.version>
-	</properties>
+    <properties>
+        <java.version>17</java.version>
+    </properties>
 
 </project>
