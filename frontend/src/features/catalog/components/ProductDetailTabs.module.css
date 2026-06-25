@@ -1,31 +1,39 @@
 .tabsContainer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: #f3f4f6;
-  padding: 4px;
-  border-radius: 12px;
-  width: max-content;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 8px;
+  border-bottom: 1px solid var(--catalog-line-soft, #edf1f7);
+  width: 100%;
+  overflow-x: auto;
 }
 
 .tab {
-  padding: 8px 16px;
-  border: none;
+  padding: 9px 14px;
+  border: 1px solid transparent;
   background: transparent;
-  color: #4b5563;
+  color: #475467;
   font-size: 14px;
-  font-weight: 500;
-  border-radius: 8px;
+  font-weight: 650;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s;
+  white-space: nowrap;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .tab:hover {
-  color: #111827;
+  color: var(--catalog-accent, #0756c7);
+  background: #ffffff;
 }
 
 .activeTab {
   background: white;
-  color: #111827;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  color: var(--catalog-accent, #0756c7);
+  border-color: rgba(7, 86, 199, 0.16);
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.08);
 }

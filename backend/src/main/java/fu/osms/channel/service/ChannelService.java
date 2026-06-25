@@ -30,6 +30,8 @@ public interface ChannelService {
 
     Map<UUID, List<String>> getProductChannels(Collection<UUID> productIds);
 
+    Map<UUID, List<UUID>> getProductChannelIds(Collection<UUID> productIds);
+
     Map<UUID, List<ChannelSyncResponse>> getProductChannelSyncs(Collection<UUID> productIds);
 
     ChannelResponse connectShopify(String shop, String accessToken);

@@ -46,7 +46,7 @@ public class ProductSyncOrchestratorServiceImpl implements ProductSyncOrchestrat
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
 
         List<ProductVariant> variants = productVariantRepository.findByProductIdAndDeletedAtIsNull(productId);
-        List<ProductImage> images = productImageRepository.findByProductIdOrderBySortOrderAsc(productId);
+        List<ProductImage> images = productImageRepository.findByProductIdOrderByIsPrimaryDescSortOrderAsc(productId);
         List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdAndMappingState(productId, "ACTIVE");
 
         SyncResult result = new SyncResult();

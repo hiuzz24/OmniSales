@@ -5,14 +5,23 @@ import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.sync.lazada.service.LazadaPayloadBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import java.io.StringWriter;
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
 
-    @Value("${lazada.default-category-id:10001001}")
+    @Value("${lazada.default-category-id:7932}")
     private String defaultCategoryId;
 
     @Value("${lazada.default-package-weight:0.5}")
@@ -29,102 +38,123 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
 
     @Override
     public String buildPayload(Product product, List<ProductVariant> variants, List<String> lazadaImageUrls) {
-        StringBuilder xml = new StringBuilder();
-        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\" ?>\n");
-        xml.append("<Request>\n");
-        xml.append("  <Product>\n");
-        xml.append("    <PrimaryCategory>").append(defaultCategoryId).append("</PrimaryCategory>\n");
-        
-        xml.append("    <Attributes>\n");
-        xml.append("      <name><![CDATA[").append(escapeXml(product.getName())).append("]]></name>\n");
-        xml.append("      <brand><![CDATA[").append(escapeXml(product.getBrand() != null ? product.getBrand() : "No Brand")).append("]]></brand>\n");
-        if (product.getDescription() != null && !product.getDescription().isBlank()) {
-            xml.append("      <description><![CDATA[").append(escapeXml(product.getDescription())).append("]]></description>\n");
-        }
-        
-        // Append apparel specific attributes
-        xml.append("      <material>Cotton</material>\n");
-        xml.append("      <gender>Unisex</gender>\n");
-        xml.append("    </Attributes>\n");
+        try {
+            Document document = DocumentBuilderFactory.newInstance()
+                    .newDocumentBuilder()
+                    .newDocument();
 
-        if (lazadaImageUrls != null && !lazadaImageUrls.isEmpty()) {
-            xml.append("    <Images>\n");
-            xml.append("      <Image>").append(lazadaImageUrls.get(0)).append("</Image>\n");
-            xml.append("    </Images>\n");
-        }
+            Element request = document.createElement("Request");
+            document.appendChild(request);
 
-        xml.append("    <Skus>\n");
-        for (ProductVariant variant : variants) {
-            // Lấy cân nặng từ Variant -> Product -> Default
-            String finalWeight = defaultPackageWeight;
-            if (variant.getWeightGrams() != null && variant.getWeightGrams() > 0) {
-                finalWeight = String.valueOf(variant.getWeightGrams() / 1000.0); // Chuyển sang KG
-            } else if (product.getWeightGrams() != null && product.getWeightGrams() > 0) {
-                finalWeight = String.valueOf(product.getWeightGrams() / 1000.0);
+            Element productElement = appendElement(document, request, "Product");
+            appendTextElement(document, productElement, "PrimaryCategory", defaultCategoryId);
+
+            Element attributes = appendElement(document, productElement, "Attributes");
+            appendCdataElement(document, attributes, "name", product.getName());
+            appendCdataElement(document, attributes, "brand", product.getBrand() != null ? product.getBrand() : "No Brand");
+            if (product.getDescription() != null && !product.getDescription().isBlank()) {
+                appendCdataElement(document, attributes, "description", product.getDescription());
             }
-
-            // Lấy kích thước từ Product Attributes -> Default
-            String finalLength = defaultPackageLength;
-            String finalWidth = defaultPackageWidth;
-            String finalHeight = defaultPackageHeight;
-
-            if (product.getAttributes() != null) {
-                if (product.getAttributes().containsKey("length")) {
-                    finalLength = product.getAttributes().get("length").toString();
-                }
-                if (product.getAttributes().containsKey("width")) {
-                    finalWidth = product.getAttributes().get("width").toString();
-                }
-                if (product.getAttributes().containsKey("height")) {
-                    finalHeight = product.getAttributes().get("height").toString();
-                }
-            }
-
-            xml.append("      <Sku>\n");
-            xml.append("        <SellerSku>").append(escapeXml(variant.getSku())).append("</SellerSku>\n");
-            xml.append("        <price>").append(variant.getPrice() != null ? variant.getPrice() : "0").append("</price>\n");
-            xml.append("        <quantity>").append("0").append("</quantity>\n");
-            xml.append("        <package_weight>").append(finalWeight).append("</package_weight>\n");
-            xml.append("        <package_length>").append(finalLength).append("</package_length>\n");
-            xml.append("        <package_width>").append(finalWidth).append("</package_width>\n");
-            xml.append("        <package_height>").append(finalHeight).append("</package_height>\n");
-            
-            if (variant.getOptionValues() != null && !variant.getOptionValues().isEmpty()) {
-                // Map options dynamically
-                int index = 1;
-                for (Map.Entry<String, Object> entry : variant.getOptionValues().entrySet()) {
-                    // Lazada might require specific names for options like size or color.
-                    // Here we just use a generic format, but usually for apparel it's color_family and size.
-                    // We map the first option to color_family and the second to size.
-                    String val = escapeXml(entry.getValue().toString());
-                    if (index == 1) {
-                        xml.append("        <color_family>").append(val).append("</color_family>\n");
-                    } else if (index == 2) {
-                        xml.append("        <size>").append(val).append("</size>\n");
-                    }
-                    index++;
-                }
-            }
+            appendTextElement(document, attributes, "clothing_material", "100% Cotton");
+            appendTextElement(document,attributes, "fa_pattern","Plain");
+            appendTextElement(document, attributes, "size_chart", "https://sg-test-11.slatic.net/p/53cfc24074576554c748b6fa43eb833e.png");
+            appendTextElement(document, attributes, "gender", "Unisex");
 
             if (lazadaImageUrls != null && !lazadaImageUrls.isEmpty()) {
-                xml.append("        <Images>\n");
-                for (String url : lazadaImageUrls) {
-                    xml.append("          <Image>").append(url).append("</Image>\n");
-                }
-                xml.append("        </Images>\n");
+                Element productImages = appendElement(document, productElement, "Images");
+                appendTextElement(document, productImages, "Image", lazadaImageUrls.get(0));
             }
 
-            xml.append("      </Sku>\n");
-        }
-        xml.append("    </Skus>\n");
-        xml.append("  </Product>\n");
-        xml.append("</Request>\n");
+            Element skus = appendElement(document, productElement, "Skus");
+            for (ProductVariant variant : variants) {
+                Element sku = appendElement(document, skus, "Sku");
+                appendTextElement(document, sku, "SellerSku", variant.getSku());
+                appendTextElement(document, sku, "price", variant.getPrice() != null ? variant.getPrice().toPlainString() : "0");
+                appendTextElement(document, sku, "quantity", "0");
+                appendTextElement(document, sku, "package_weight", resolveWeight(product, variant));
+                appendTextElement(document, sku, "package_length", resolveAttribute(product, "length", defaultPackageLength));
+                appendTextElement(document, sku, "package_width", resolveAttribute(product, "width", defaultPackageWidth));
+                appendTextElement(document, sku, "package_height", resolveAttribute(product, "height", defaultPackageHeight));
 
-        return xml.toString();
+                appendVariantOptions(document, sku, variant);
+                appendSkuImages(document, sku, lazadaImageUrls);
+            }
+
+            return toXml(document);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build Lazada product payload", e);
+        }
     }
 
-    private String escapeXml(String input) {
-        if (input == null) return "";
-        return input; // Inside CDATA, escaping is not strictly necessary unless it contains ]]>
+    private Element appendElement(Document document, Element parent, String name) {
+        Element element = document.createElement(name);
+        parent.appendChild(element);
+        return element;
+    }
+
+    private void appendTextElement(Document document, Element parent, String name, String value) {
+        Element element = appendElement(document, parent, name);
+        element.setTextContent(value != null ? value : "");
+    }
+
+    private void appendCdataElement(Document document, Element parent, String name, String value) {
+        Element element = appendElement(document, parent, name);
+        element.appendChild(document.createCDATASection(value != null ? value : ""));
+    }
+
+    private String resolveWeight(Product product, ProductVariant variant) {
+        if (variant.getWeightGrams() != null && variant.getWeightGrams() > 0) {
+            return String.valueOf(variant.getWeightGrams() / 1000.0);
+        }
+        if (product.getWeightGrams() != null && product.getWeightGrams() > 0) {
+            return String.valueOf(product.getWeightGrams() / 1000.0);
+        }
+        return defaultPackageWeight;
+    }
+
+    private String resolveAttribute(Product product, String key, String defaultValue) {
+        if (product.getAttributes() != null && product.getAttributes().containsKey(key)) {
+            Object value = product.getAttributes().get(key);
+            return value != null ? value.toString() : defaultValue;
+        }
+        return defaultValue;
+    }
+
+    private void appendVariantOptions(Document document, Element sku, ProductVariant variant) {
+        if (variant.getOptionValues() == null || variant.getOptionValues().isEmpty()) {
+            return;
+        }
+
+        int index = 1;
+        for (Map.Entry<String, Object> entry : variant.getOptionValues().entrySet()) {
+            String value = entry.getValue() != null ? entry.getValue().toString() : "";
+            if (index == 1) {
+                appendTextElement(document, sku, "color_family", value);
+            } else if (index == 2) {
+                appendTextElement(document, sku, "size", value);
+            }
+            index++;
+        }
+    }
+
+    private void appendSkuImages(Document document, Element sku, List<String> lazadaImageUrls) {
+        if (lazadaImageUrls == null || lazadaImageUrls.isEmpty()) {
+            return;
+        }
+
+        Element images = appendElement(document, sku, "Images");
+        for (String url : lazadaImageUrls) {
+            appendTextElement(document, images, "Image", url);
+        }
+    }
+
+    private String toXml(Document document) throws Exception {
+        Transformer transformer = TransformerFactory.newInstance().newTransformer();
+        transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+        transformer.setOutputProperty(OutputKeys.INDENT, "no");
+
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(document), new StreamResult(writer));
+        return writer.toString();
     }
 }

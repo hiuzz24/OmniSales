@@ -8,7 +8,16 @@ import fu.osms.sync.lazada.service.LazadaImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -37,7 +46,7 @@ public class LazadaImageServiceImpl implements LazadaImageService {
             }
 
             try {
-                String payload = "<Request><Image><Url>" + originalUrl + "</Url></Image></Request>";
+                String payload = buildImageMigratePayload(originalUrl);
                 Map<String, String> params = new HashMap<>();
                 params.put("payload", payload);
 
@@ -64,5 +73,33 @@ public class LazadaImageServiceImpl implements LazadaImageService {
         }
 
         return migratedUrls;
+    }
+
+    private String buildImageMigratePayload(String imageUrl) {
+        try {
+            Document document = DocumentBuilderFactory.newInstance()
+                    .newDocumentBuilder()
+                    .newDocument();
+
+            Element request = document.createElement("Request");
+            document.appendChild(request);
+
+            Element image = document.createElement("Image");
+            request.appendChild(image);
+
+            Element url = document.createElement("Url");
+            url.setTextContent(imageUrl);
+            image.appendChild(url);
+
+            Transformer transformer = TransformerFactory.newInstance().newTransformer();
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+            transformer.setOutputProperty(OutputKeys.INDENT, "no");
+
+            StringWriter writer = new StringWriter();
+            transformer.transform(new DOMSource(document), new StreamResult(writer));
+            return writer.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build Lazada image migrate payload", e);
+        }
     }
 }

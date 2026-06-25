@@ -67,10 +67,15 @@ const ProductEditPage = () => {
         const chanList = chanData.data?.data || chanData.data || chanData;
         if (Array.isArray(chanList)) {
           setChannels(chanList);
-          // Match selected channels by platform names returned in productData.channels
           const selectedChanIds = chanList
-            .filter(c => (productData.channels || []).includes(c.platform))
-            .map(c => c.id);
+            .filter((c, i) => {
+              const cid = c.id || c._id || (c.platform + i);
+              if (productData.channelIds && productData.channelIds.length > 0) {
+                return productData.channelIds.includes(cid);
+              }
+              return (productData.channels || []).includes(c.platform);
+            })
+            .map((c, i) => c.id || c._id || (c.platform + i));
           setSelectedChannels(selectedChanIds);
         }
 

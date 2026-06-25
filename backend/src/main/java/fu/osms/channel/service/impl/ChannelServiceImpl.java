@@ -158,6 +158,27 @@ public class ChannelServiceImpl implements ChannelService {
 
     @Override
     @Transactional(readOnly = true)
+    public Map<UUID, List<UUID>> getProductChannelIds(Collection<UUID> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdInAndMappingState(productIds, "ACTIVE");
+        return channelProducts.stream()
+                .filter(cp -> cp.getProduct() != null && cp.getChannel() != null)
+                .collect(Collectors.groupingBy(
+                        cp -> cp.getProduct().getId(),
+                        Collectors.mapping(
+                                cp -> cp.getChannel().getId(),
+                                Collectors.collectingAndThen(
+                                        Collectors.toList(),
+                                        list -> list.stream().distinct().collect(Collectors.toList())
+                                )
+                        )
+                ));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Map<UUID, List<ChannelSyncResponse>> getProductChannelSyncs(Collection<UUID> productIds) {
         if (productIds == null || productIds.isEmpty()) {
             return Collections.emptyMap();
@@ -193,6 +214,7 @@ public class ChannelServiceImpl implements ChannelService {
 
         Channel channel = channelRepository
                 .findActiveShopifyByShopDomain(normalizedShop)
+                .or(() -> channelRepository.findByPlatformAndDisplayName(PlatformType.SHOPIFY, normalizedShop))
                 .orElseGet(() -> Channel.builder()
                         .platform(PlatformType.SHOPIFY)
                         .displayName(normalizedShop)

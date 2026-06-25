@@ -22,6 +22,10 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
 
     Optional<Channel> findByPlatformAndDisplayName(PlatformType platform, String displayName);
 
-    @Query(value = "SELECT * FROM channels WHERE platform = 'SHOPIFY' AND metadata->>'shop' = :shop AND deleted_at IS NULL LIMIT 1", nativeQuery = true)
+    @Query(value = "SELECT * FROM channels " +
+            "WHERE platform = 'SHOPIFY' " +
+            "AND deleted_at IS NULL " +
+            "AND (metadata->>'shop' = :shop OR metadata->>'shopDomain' = :shop OR display_name = :shop) " +
+            "LIMIT 1", nativeQuery = true)
     Optional<Channel> findActiveShopifyByShopDomain(@Param("shop") String shop);
 }

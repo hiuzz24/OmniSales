@@ -218,7 +218,7 @@ public class ProductServiceImpl implements ProductService {
         ProductResponse response = productMapper.toResponse(product);
         response.setHasOrders(orderItemRepository.existsByVariant_Product_Id(id));
 
-        List<ProductImage> allImages = productImageRepository.findByProductIdOrderBySortOrderAsc(id);
+        List<ProductImage> allImages = productImageRepository.findByProductIdOrderByIsPrimaryDescSortOrderAsc(id);
 
         List<ProductImageResponse> globalImageResponses = allImages.stream()
                 .filter(img -> img.getVariant() == null)
@@ -231,6 +231,7 @@ public class ProductServiceImpl implements ProductService {
         List<UUID> variantIds = variants.stream().map(ProductVariant::getId).toList();
         Map<UUID, StockSummaryDTO> stockMap = inventoryService.getStockSummary(variantIds);
         Map<UUID, List<String>> channelMap = channelService.getProductChannels(Collections.singletonList(id));
+        Map<UUID, List<UUID>> channelIdMap = channelService.getProductChannelIds(Collections.singletonList(id));
         Map<UUID, List<ChannelSyncResponse>> channelSyncMap = channelService.getProductChannelSyncs(Collections.singletonList(id));
 
         List<ProductVariantResponse> variantResponses = variants.stream().map(v -> {
@@ -250,6 +251,7 @@ public class ProductServiceImpl implements ProductService {
 
         response.setVariants(variantResponses);
         response.setChannels(channelMap.getOrDefault(id, Collections.emptyList()));
+        response.setChannelIds(channelIdMap.getOrDefault(id, Collections.emptyList()));
         response.setChannelSyncs(channelSyncMap.getOrDefault(id, Collections.emptyList()));
 
         return response;
@@ -579,11 +581,12 @@ public class ProductServiceImpl implements ProductService {
 
         if (!productIds.isEmpty()) {
             List<ProductVariant> allVariants = productVariantRepository.findByProductIdInAndDeletedAtIsNull(productIds);
-            List<ProductImage> allImages = productImageRepository.findByProductIdInOrderBySortOrderAsc(productIds);
+            List<ProductImage> allImages = productImageRepository.findByProductIdInOrderByIsPrimaryDescSortOrderAsc(productIds);
 
             List<UUID> allVariantIds = allVariants.stream().map(ProductVariant::getId).toList();
             Map<UUID, StockSummaryDTO> stockMap = inventoryService.getStockSummary(allVariantIds);
             Map<UUID, List<String>> channelMap = channelService.getProductChannels(productIds);
+            Map<UUID, List<UUID>> channelIdMap = channelService.getProductChannelIds(productIds);
             Map<UUID, List<ChannelSyncResponse>> channelSyncMap = channelService.getProductChannelSyncs(productIds);
 
             Map<UUID, List<ProductVariant>> variantsByProductId = allVariants.stream()
@@ -619,6 +622,7 @@ public class ProductServiceImpl implements ProductService {
                 }).toList();
                 res.setVariants(variantResponses);
                 res.setChannels(channelMap.getOrDefault(pId, Collections.emptyList()));
+                res.setChannelIds(channelIdMap.getOrDefault(pId, Collections.emptyList()));
                 res.setChannelSyncs(channelSyncMap.getOrDefault(pId, Collections.emptyList()));
             });
         }

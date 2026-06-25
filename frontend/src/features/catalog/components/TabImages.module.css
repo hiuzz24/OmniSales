@@ -1,8 +1,11 @@
 .card {
-  background: white;
-  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.72)),
+    #ffffff;
+  border-radius: 16px;
   padding: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  border: 1px solid var(--catalog-line-soft, #edf1f7);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.05);
 }
 
 .cardHeader {
@@ -24,24 +27,24 @@
 
 .cardTitle {
   font-size: 16px;
-  font-weight: 600;
-  color: #111827;
+  font-weight: 700;
+  color: var(--catalog-ink, #101828);
   margin: 0;
 }
 
 .cardSubtitle {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--catalog-muted, #667085);
   margin: 0;
 }
 
 .emptyState {
   text-align: center;
   padding: 40px;
-  color: #6b7280;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px dashed #d1d5db;
+  color: var(--catalog-muted, #667085);
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px dashed #cbd5e1;
 }
 
 .imageGrid {
@@ -53,9 +56,9 @@
 .imageWrapper {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 8px;
+  border-radius: 14px;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #d8deea;
 }
 
 .image {
@@ -73,7 +76,7 @@
   position: absolute;
   top: 8px;
   left: 8px;
-  background: #2563eb;
+  background: var(--catalog-accent, #0756c7);
   color: white;
   font-size: 11px;
   font-weight: 500;

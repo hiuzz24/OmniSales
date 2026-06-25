@@ -13,6 +13,8 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 import fu.osms.common.exception.TokenExpiredException;
 import fu.osms.sync.lazada.service.LazadaApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;
@@ -23,10 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -44,6 +43,15 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
     @Override
     public boolean syncProduct(Product product, List<ProductVariant> variants, List<ProductImage> images, Channel channel, ChannelProduct channelProduct) {
         try {
+            List<ChannelProductVariant> channelProductVariants = channelProductVariantRepository.findByChannelProductId(channelProduct.getId());
+            Map<String,String> mapExternalSkuId = new HashMap<>();
+            for(ChannelProductVariant channelProductVariant : channelProductVariants){
+                ProductVariant variant = channelProductVariant.getVariant();
+                if(variant != null && variant.getSku() != null && channelProductVariant.getExternalVariantId() != null){
+                    mapExternalSkuId.put(variant.getSku(),channelProductVariant.getExternalVariantId());
+                }
+            }
+
             ChannelCredential credential = channelCredentialRepository
                     .findByChannelIdAndConnectionState(channel.getId(), "CONNECTED")
                     .orElse(null);
@@ -68,6 +76,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
             String apiPath = isNew ? "/product/create" : "/product/update";
 
             String responseStr = lazadaApiClient.executePost(apiPath, params, credential.getAccessToken(), tokenExpiresAt);
+            log.error("[LazadaSync] Raw Lazada response for {}: {}", apiPath, responseStr);
             JsonNode root = objectMapper.readTree(responseStr);
 
             if (root.has("code") && "0".equals(root.get("code").asText())) {
@@ -131,6 +140,8 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
                     throw new RuntimeException("Missing item_id in response data");
                 }
             } else {
+                log.error("[LazadaSync] Lazada create/update failed. apiPath={}, payload={}, response={}",
+                        apiPath, xmlPayload, responseStr);
                 String errorMsg = root.has("message") ? root.get("message").asText() : "Unknown API error";
                 throw new RuntimeException("Lazada API returned error: " + errorMsg);
             }
