@@ -26,79 +26,71 @@ const CascadingAddress = ({ value = {}, onChange, countryCode: countryCodeProp }
   const [wardLoading, setWardLoading] = useState(false);
   const [cityLoading, setCityLoading] = useState(false);
 
-  // ── PREVIOUS COUNTRY REF (for detecting country changes) ─────────────────
-  const previousCountryRef = useRef('');
-  const hasEmittedInitialRef = useRef(false);
+  // ── MOUNT TRACKING: prevent auto-select on initial value propagation ──────
+  const vnProvinceMounted = useRef(false);
+  const vnDistrictMounted = useRef(false);
+  const vnWardMounted = useRef(false);
+  const foreignCityMounted = useRef(false);
 
-  // ── RESET ALL WHEN COUNTRY ACTUALLY CHANGES ────────────────────────────────
+  // ── RESET ALL WHEN COUNTRY CHANGES ────────────────────────────────────────
   useEffect(() => {
-    if (previousCountryRef.current === countryCode) return;
-    const prev = previousCountryRef.current;
-    previousCountryRef.current = countryCode;
-
-    // Only reset if country changed (skip initial mount where prev='')
-    if (prev !== '' && prev !== countryCode) {
-      setProvinces([]);
-      setDistricts([]);
-      setWards([]);
-      setProvinceCode('');
-      setDistrictCode('');
-      setWardCode('');
-      setCities([]);
-      setCityCode('');
-      setCityManual('');
-      hasEmittedInitialRef.current = false;
-    }
+    setProvinces([]);
+    setDistricts([]);
+    setWards([]);
+    setProvinceCode('');
+    setDistrictCode('');
+    setWardCode('');
+    setCities([]);
+    setCityCode('');
+    setCityManual('');
+    vnProvinceMounted.current = false;
+    vnDistrictMounted.current = false;
+    vnWardMounted.current = false;
+    foreignCityMounted.current = false;
   }, [countryCode]);
-
-  // ── EMIT INITIAL VALUE ON MOUNT (so form has data even if user doesn't change anything) ──
-  useEffect(() => {
-    if (!hasCountry) return;
-    if (hasEmittedInitialRef.current) return;
-
-    // For Vietnam: wait for provinces to load, then emit
-    if (countryCode === 'VN' && provinces.length > 0) {
-      hasEmittedInitialRef.current = true;
-      onChange({
-        country: countryCode,
-        province: value.province || '',
-        district: value.district || '',
-        ward: value.ward || '',
-        detail: value.detail || '',
-      });
-    }
-
-    // For foreign: emit immediately (no cascading needed)
-    if (countryCode !== 'VN') {
-      hasEmittedInitialRef.current = true;
-      onChange({
-        country: countryCode,
-        province: value.province || '',
-        district: '',
-        ward: '',
-        detail: value.detail || '',
-      });
-    }
-  }, [hasCountry, countryCode, provinces.length, onChange, value]);
 
   // ── VIETNAM: LOAD PROVINCES ────────────────────────────────────────────────
   useEffect(() => {
     if (!hasCountry || countryCode !== 'VN') return;
     setProvinceLoading(true);
     addressApi.getDivisions(countryCode, 1).then((data) => {
-      const loadedProvinces = data || [];
-      setProvinces(loadedProvinces);
+      setProvinces(data || []);
       setProvinceLoading(false);
-
-      // Sync province from value
-      if (value.province && !provinceCode) {
-        const found = loadedProvinces.find((p) => p.name === value.province);
-        if (found) {
-          setProvinceCode(found.code);
-        }
-      }
     }).catch(() => setProvinceLoading(false));
-  }, [countryCode, hasCountry, value.province]);
+  }, [countryCode, hasCountry]);
+
+  // ── VIETNAM: SYNC PROVINCE CODE FROM EXTERNAL VALUE (on mount only) ───────
+  useEffect(() => {
+    if (!provinces.length || provinceCode || !value.province) return;
+    if (vnProvinceMounted.current) return;
+    const found = provinces.find((p) => p.name === value.province);
+    if (found) {
+      vnProvinceMounted.current = true;
+      setProvinceCode(found.code);
+    }
+  }, [provinces]);
+
+  // ── VIETNAM: SYNC DISTRICT CODE FROM EXTERNAL VALUE (on mount only) ───────
+  useEffect(() => {
+    if (!districts.length || districtCode || !value.district) return;
+    if (vnDistrictMounted.current) return;
+    const found = districts.find((d) => d.name === value.district);
+    if (found) {
+      vnDistrictMounted.current = true;
+      setDistrictCode(found.code);
+    }
+  }, [districts]);
+
+  // ── VIETNAM: SYNC WARD CODE FROM EXTERNAL VALUE (on mount only) ───────────
+  useEffect(() => {
+    if (!wards.length || wardCode || !value.ward) return;
+    if (vnWardMounted.current) return;
+    const found = wards.find((w) => w.name === value.ward);
+    if (found) {
+      vnWardMounted.current = true;
+      setWardCode(found.code);
+    }
+  }, [wards]);
 
   // ── VIETNAM: LOAD DISTRICTS ────────────────────────────────────────────────
   useEffect(() => {
@@ -109,19 +101,10 @@ const CascadingAddress = ({ value = {}, onChange, countryCode: countryCodeProp }
     }
     setDistrictLoading(true);
     addressApi.getDivisions(countryCode, 2, provinceCode).then((data) => {
-      const loadedDistricts = data || [];
-      setDistricts(loadedDistricts);
+      setDistricts(data || []);
       setDistrictLoading(false);
-
-      // Sync district from value
-      if (value.district && !districtCode) {
-        const found = loadedDistricts.find((d) => d.name === value.district);
-        if (found) {
-          setDistrictCode(found.code);
-        }
-      }
     }).catch(() => setDistrictLoading(false));
-  }, [countryCode, provinceCode, value.district]);
+  }, [countryCode, provinceCode]);
 
   // ── VIETNAM: LOAD WARDS ────────────────────────────────────────────────────
   useEffect(() => {
@@ -131,38 +114,31 @@ const CascadingAddress = ({ value = {}, onChange, countryCode: countryCodeProp }
     }
     setWardLoading(true);
     addressApi.getDivisions(countryCode, 3, districtCode).then((data) => {
-      const loadedWards = data || [];
-      setWards(loadedWards);
+      setWards(data || []);
       setWardLoading(false);
-
-      // Sync ward from value
-      if (value.ward && !wardCode) {
-        const found = loadedWards.find((w) => w.name === value.ward);
-        if (found) {
-          setWardCode(found.code);
-        }
-      }
     }).catch(() => setWardLoading(false));
-  }, [countryCode, districtCode, value.ward]);
+  }, [countryCode, districtCode]);
 
   // ── FOREIGN: LOAD CITIES ───────────────────────────────────────────────────
   useEffect(() => {
     if (!hasCountry || countryCode === 'VN') return;
     setCityLoading(true);
     addressApi.getDivisions(countryCode, 1).then((data) => {
-      const loadedCities = data || [];
-      setCities(loadedCities);
+      setCities(data || []);
       setCityLoading(false);
-
-      // Sync city from value
-      if (value.province && !cityCode) {
-        const found = loadedCities.find((c) => c.name === value.province);
-        if (found) {
-          setCityCode(found.code);
-        }
-      }
     }).catch(() => setCityLoading(false));
-  }, [countryCode, hasCountry, value.province]);
+  }, [countryCode, hasCountry]);
+
+  // ── FOREIGN: SYNC CITY CODE FROM EXTERNAL VALUE (on mount only) ────────────
+  useEffect(() => {
+    if (!cities.length || cityCode || !value.province) return;
+    if (foreignCityMounted.current) return;
+    const found = cities.find((c) => c.name === value.province);
+    if (found) {
+      foreignCityMounted.current = true;
+      setCityCode(found.code);
+    }
+  }, [cities]);
 
   // ── EMIT CHANGE (VN) ───────────────────────────────────────────────────────
   const emitVietnamChange = useCallback((prov, dist, ward, detail) => {
@@ -186,13 +162,15 @@ const CascadingAddress = ({ value = {}, onChange, countryCode: countryCodeProp }
     });
   }, [onChange, countryCode, value.detail]);
 
-  // ── HANDLERS (VN) ─────────────────────────────────────────────────────────
+  // ── HANDLERS (VN) ──────────────────────────────────────────────────────────
   const handleProvinceChange = (code) => {
     setProvinceCode(code);
     setDistrictCode('');
     setWardCode('');
     setDistricts([]);
     setWards([]);
+    vnDistrictMounted.current = false;
+    vnWardMounted.current = false;
     const prov = provinces.find((p) => p.code === code);
     emitVietnamChange(prov?.name || '', '', '', '');
   };
@@ -201,6 +179,7 @@ const CascadingAddress = ({ value = {}, onChange, countryCode: countryCodeProp }
     setDistrictCode(code);
     setWardCode('');
     setWards([]);
+    vnWardMounted.current = false;
     const prov = provinces.find((p) => p.code === provinceCode);
     const dist = districts.find((d) => d.code === code);
     emitVietnamChange(prov?.name || '', dist?.name || '', '', '');
@@ -259,7 +238,7 @@ const CascadingAddress = ({ value = {}, onChange, countryCode: countryCodeProp }
     );
   }
 
-  // ── RENDER: VIETNAM ───────────────────────────────────────────────────────
+  // ── RENDER: VIETNAM ────────────────────────────────────────────────────────
   if (isVietnam) {
     return (
       <div className={styles.wrapper}>
