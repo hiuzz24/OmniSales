@@ -22,4 +22,6 @@ public class StockTransferResponseDTO {
     private String note;
     private Integer skuCount;
     private Integer totalQuantity;
+    private UUID toWarehouseId;
+    private UUID createdById;
 }

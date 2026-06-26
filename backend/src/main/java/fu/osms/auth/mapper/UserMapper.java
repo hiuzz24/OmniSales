@@ -22,6 +22,8 @@ public interface UserMapper {
 
     @Mapping(target = "role", ignore = true)
     @Mapping(target = "createdAt", source = "createdAt")
+    @Mapping(target = "warehouseId", source = "warehouse.id")
+    @Mapping(target = "warehouseName", source = "warehouse.name")
     UserResponse toResponse(User user);
 
     @Mapping(target = "id", ignore = true)
