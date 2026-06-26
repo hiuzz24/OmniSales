@@ -48,4 +48,9 @@ public class WarehouseController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         throw new UnsupportedOperationException("Chưa code");
     }
+
+    @GetMapping("/userWarehouse/{id}")
+    public ResponseEntity<ApiResponse<WarehouseResponse>> getUserWarehouseById(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.getWarehouseByUserId(id)));
+    }
 }

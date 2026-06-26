@@ -98,4 +98,40 @@ public class StokeTransferController {
         }
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> getTransferDetail(@PathVariable UUID id) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            var data = stokeTransferService.getTransferDetail(id);
+            response.put("success", true);
+            response.put("data", data);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Map<String, Object>> updateStatus(
+            @PathVariable UUID id,
+            @RequestParam String status,
+            @RequestParam UUID userId) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            stokeTransferService.updateStatus(id, status, userId);
+            response.put("success", true);
+            response.put("message", "Cập nhật trạng thái thành công.");
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Lỗi: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
 }

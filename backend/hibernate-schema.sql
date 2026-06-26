@@ -586,10 +586,10 @@ CREATE TABLE sync_logs (
                            started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                            completed_at    TIMESTAMPTZ
 );
+
 CREATE UNIQUE INDEX uq_sync_logs_running ON sync_logs(channel_id, job_type) WHERE status = 'PENDING';
 
 -- Migration: add product_id to sync_logs (for per-product sync tracking)
-ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
 
 CREATE TABLE sync_tasks (
                             id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -622,7 +622,7 @@ CREATE TABLE system_logs (
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
-                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED')),
+                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','STOCK_TRANSFER')),
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
@@ -1031,9 +1031,43 @@ ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_entity_type_ch
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_entity_type_check
-        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY'));
-
+        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY', 'TRANSFER'));
 
 ALTER TABLE stock_transfers ADD COLUMN note TEXT;
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
 
 ALTER TABLE stock_transfers ADD COLUMN transfer_time TIMESTAMPTZ;
+
+-- 1. Thêm cột warehouse_id vào bảng users kèm theo khóa ngoại liên kết tới bảng warehouses
+ALTER TABLE users
+    ADD COLUMN warehouse_id UUID REFERENCES warehouses(id) ON DELETE SET NULL;
+
+-- 2. Tạo hàm (Trigger Function) để kiểm tra ràng buộc role khi gán kho
+CREATE OR REPLACE FUNCTION fn_check_user_warehouse_role()
+    RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+    user_role_code VARCHAR(50);
+BEGIN
+    -- Nếu warehouse_id được gán giá trị (không phải NULL)
+    IF NEW.warehouse_id IS NOT NULL THEN
+        -- Tìm code của role tương ứng với user trong bảng user_roles liên kết sang bảng roles
+        SELECT r.name INTO user_role_code
+        FROM user_roles ur
+                 JOIN roles r ON ur.role_id = r.id
+        WHERE ur.user_id = NEW.id;
+
+        -- Nếu user chưa được gán role nào, hoặc role đó không phải là 'OPERATIONS' hay 'SALES'
+        IF user_role_code IS NULL OR (user_role_code != 'OPERATIONS' AND user_role_code != 'SALES') THEN
+            RAISE EXCEPTION 'Lỗi ràng buộc: Chỉ nhân viên thuộc quyền OPERATIONS hoặc SALES mới được phép chỉ định kho làm việc.';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+-- 3. Tạo Trigger áp dụng hàm trên vào bảng users trước khi INSERT hoặc UPDATE
+CREATE TRIGGER trg_users_warehouse_role_check
+    BEFORE INSERT OR UPDATE ON users
+    FOR EACH ROW
+EXECUTE FUNCTION fn_check_user_warehouse_role();

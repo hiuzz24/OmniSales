@@ -11,6 +11,7 @@ import { toast } from 'react-toastify';
 import transferApi from '../../../../api/transferApi';
 import warehouseService from '../../services/warehouseService';
 import { ROUTES } from '../../../../app/router/routes';
+import { ROLES } from '../../../auth/constants/roles';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const today = new Date();
@@ -321,6 +322,10 @@ export default function StockTransferCreatePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [transferCode, setTransferCode] = useState('');
+  const [userWarehouse, setUserWarehouse] = useState(null);
+  const [loadingWarehouse, setLoadingWarehouse] = useState(false);
+
+  const isOperations = user?.role === ROLES.OPERATIONS;
 
   // Load danh sách kho và mã chuyển kho gợi ý từ BE
   useEffect(() => {
@@ -332,6 +337,25 @@ export default function StockTransferCreatePage() {
       })
       .catch(() => setWarehouses([]));
 
+    if (isOperations && user?.id) {
+      setLoadingWarehouse(true);
+      warehouseService.getUserWarehouse(user.id)
+        .then((res) => {
+          const w = res?.data?.data;
+          if (w) {
+            setUserWarehouse(w);
+            setFromWarehouseId(w.id);
+          }
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error('Không thể lấy thông tin kho của bạn.');
+        })
+        .finally(() => {
+          setLoadingWarehouse(false);
+        });
+    }
+
     transferApi.getSuggestedCode()
       .then((code) => {
         setTransferCode(code);
@@ -340,7 +364,7 @@ export default function StockTransferCreatePage() {
         // Fallback phòng khi API lỗi
         setTransferCode(genTransferCode());
       });
-  }, []);
+  }, [isOperations, user?.id]);
 
   // Swap kho xuất ↔ kho nhận
   const handleSwap = () => {
@@ -415,6 +439,7 @@ export default function StockTransferCreatePage() {
         transferTime: formattedTransferDate,
         createdById: user?.id,
         note: note || null,
+        status: 'IN_TRANSIT',
         items: items.map((it) => ({
           variantId: it.variantId,
           quantity: it.quantity,
@@ -447,7 +472,9 @@ export default function StockTransferCreatePage() {
         fromWarehouseId,
         toWarehouseId,
         transferTime: formattedTransferDate,
+        createdById: user?.id,
         note: note || null,
+        status: 'DRAFT',
         items: items.map((it) => ({ 
           variantId: it.variantId, 
           quantity: it.quantity,
@@ -579,44 +606,81 @@ export default function StockTransferCreatePage() {
               <label style={labelStyle}>
                 Xuất tại kho <span style={{ color: '#ef4444' }}>*</span>
               </label>
-              <select
-                value={fromWarehouseId}
-                onChange={(e) => {
-                  setFromWarehouseId(e.target.value);
-                  setItems([]); // Reset items khi đổi kho xuất
-                }}
-                style={selectStyle(!fromWarehouseId && submitting)}
-                onFocus={(e) => e.target.style.borderColor = '#7c3aed'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-              >
-                <option value="">Chọn kho xuất</option>
-                {fromWarehouseOptions.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
+              {isOperations ? (
+                <div style={{ position: 'relative' }}>
+                  <input
+                    value={loadingWarehouse ? 'Đang tải thông tin kho...' : (userWarehouse?.name || 'Chưa liên kết kho')}
+                    readOnly
+                    style={{
+                      ...inputStyle(!fromWarehouseId && submitting),
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569',
+                      cursor: 'not-allowed',
+                      fontWeight: 600,
+                    }}
+                  />
+                  {loadingWarehouse && (
+                    <Loader2
+                      size={15}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        animation: 'spin 1s linear infinite',
+                        color: '#94a3b8',
+                      }}
+                    />
+                  )}
+                </div>
+              ) : (
+                <select
+                  value={fromWarehouseId}
+                  onChange={(e) => {
+                    setFromWarehouseId(e.target.value);
+                    setItems([]); // Reset items khi đổi kho xuất
+                  }}
+                  style={selectStyle(!fromWarehouseId && submitting)}
+                  onFocus={(e) => e.target.style.borderColor = '#7c3aed'}
+                  onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                >
+                  <option value="">Chọn kho xuất</option>
+                  {fromWarehouseOptions.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Swap button */}
             <button
               onClick={handleSwap}
               title="Hoán đổi kho xuất / kho nhận"
+              disabled={isOperations}
               style={{
                 width: 38, height: 38, borderRadius: 8,
-                border: '1.5px solid #e2e8f0', background: '#f8fafc',
-                cursor: 'pointer', display: 'flex',
+                border: '1.5px solid #e2e8f0',
+                background: isOperations ? '#f1f5f9' : '#f8fafc',
+                cursor: isOperations ? 'not-allowed' : 'pointer',
+                display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
-                color: '#64748b', flexShrink: 0, marginBottom: 0,
+                color: isOperations ? '#94a3b8' : '#64748b', flexShrink: 0, marginBottom: 0,
                 transition: 'all 0.15s',
+                opacity: isOperations ? 0.6 : 1,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = '#7c3aed';
-                e.currentTarget.style.color = '#7c3aed';
-                e.currentTarget.style.backgroundColor = '#f5f3ff';
+                if (!isOperations) {
+                  e.currentTarget.style.borderColor = '#7c3aed';
+                  e.currentTarget.style.color = '#7c3aed';
+                  e.currentTarget.style.backgroundColor = '#f5f3ff';
+                }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = '#e2e8f0';
-                e.currentTarget.style.color = '#64748b';
-                e.currentTarget.style.backgroundColor = '#f8fafc';
+                if (!isOperations) {
+                  e.currentTarget.style.borderColor = '#e2e8f0';
+                  e.currentTarget.style.color = '#64748b';
+                  e.currentTarget.style.backgroundColor = '#f8fafc';
+                }
               }}
             >
               <ArrowRightLeft size={16} />
@@ -642,7 +706,7 @@ export default function StockTransferCreatePage() {
               </select>
               {!fromWarehouseId && (
                 <p style={{ margin: '4px 0 0', fontSize: 11, color: '#94a3b8' }}>
-                  Chọn kho xuất trước
+                  {isOperations ? 'Vui lòng đợi tải thông tin kho' : 'Chọn kho xuất trước'}
                 </p>
               )}
             </div>
@@ -999,7 +1063,9 @@ export default function StockTransferCreatePage() {
               'Số lượng chuyển không được vượt quá tồn kho hiện tại.',
               'Kho xuất và kho nhận phải khác nhau.',
               'Tồn kho sẽ cập nhật ngay sau khi xác nhận chuyển.',
-              'Chọn kho xuất trước để xem danh sách sản phẩm có sẵn.',
+              isOperations
+                ? 'Sản phẩm được lấy từ kho làm việc của bạn.'
+                : 'Chọn kho xuất trước để xem danh sách sản phẩm có sẵn.',
             ].map((note) => (
               <li key={note} style={{
                 fontSize: 12, color: '#0369a1', lineHeight: 1.6,

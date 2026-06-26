@@ -6,13 +6,13 @@ export const Badge = ({ label, icon: Icon, color = '#475569', bg = '#f8fafc', bo
     display: 'inline-flex',
     alignItems: 'center',
     gap: 5,
-    padding: '4px 10px',
+    padding: '6px 14px',
     borderRadius: 999,
     border: `1px solid ${border}`,
     background: bg,
     color,
-    fontSize: 12,
-    fontWeight: 600,
+    fontSize: 13,
+    fontWeight: 700,
     whiteSpace: 'nowrap',
   }}>
     {Icon && <Icon size={13} />}

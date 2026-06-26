@@ -21,4 +21,6 @@ public class UserResponse {
     private String role;
     private OffsetDateTime createdAt;
     private Boolean passwordExpired;
+    private UUID warehouseId;
+    private String warehouseName;
 }

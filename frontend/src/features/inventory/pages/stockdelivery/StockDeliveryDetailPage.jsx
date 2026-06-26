@@ -68,7 +68,7 @@ const StatusBadge = ({ status }) => {
     <span style={{
       display: 'inline-flex',
       alignItems: 'center',
-      padding: '5px 12px',
+      padding: '6px 14px',
       borderRadius: 999,
       border: `1px solid ${config.border}`,
       background: config.bg,

@@ -16,7 +16,7 @@ import java.util.UUID;
 public interface StockTransferRepository extends JpaRepository<StockTransfer, UUID> {
     @Query("SELECT new fu.osms.inventory.dto.response.TransferSummaryDTO(" +
             "COUNT(st), " +
-            "SUM(CASE WHEN st.status = 'COMPLETED' THEN 1 ELSE 0 END), " +
+            "SUM(CASE WHEN st.status = 'RECEIVED' OR st.status = 'COMPLETED' THEN 1 ELSE 0 END), " +
             "SUM(CASE WHEN st.status = 'IN_TRANSIT' THEN 1 ELSE 0 END), " +
             "SUM(CASE WHEN st.status = 'DRAFT' THEN 1 ELSE 0 END)) " +
             "FROM StockTransfer st")
