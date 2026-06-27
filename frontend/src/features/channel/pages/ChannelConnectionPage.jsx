@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Plus, Link2Off, Edit2, Wifi, WifiOff, RefreshCw, History } from 'lucide-react';
 import { toast } from 'react-toastify';
 import channelApi from '../../../api/channelApi';
+import { ROUTES } from '../../../app/router/routes';
 import ChannelFormModal from '../components/ChannelFormModal';
 import styles from './ChannelConnectionPage.module.css';
 
@@ -85,10 +86,17 @@ const ChannelConnectionPage = () => {
           <h1 className={styles.title}>Kênh Bán hàng</h1>
           <p className={styles.subtitle}>Quản lý các kênh thương mại điện tử đã kết nối với hệ thống</p>
         </div>
-        <button className={styles.addBtn} onClick={openCreate}>
+        <div className={styles.headerActions}>
+          <button className={`${styles.actionBtn} ${styles.secondaryBtn}`} onClick={() => navigate(ROUTES.CHANNEL_CONNECTION_HISTORY)}>
+            <History size={16} />
+            Lịch sử kết nối
+          </button>
+          <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
           <Plus size={16} />
           Thêm kênh mới
         </button>
+      </div>
+
       </div>
 
       <div className={styles.statsRow}>
@@ -121,7 +129,7 @@ const ChannelConnectionPage = () => {
             <Wifi size={48} className={styles.emptyIcon} />
             <p className={styles.emptyTitle}>Chưa có kênh nào được kết nối</p>
             <p className={styles.emptyDesc}>Nhấn "Thêm kênh mới" để bắt đầu đồng bộ sản phẩm lên các sàn TMĐT</p>
-            <button className={styles.addBtn} onClick={openCreate}>
+            <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
               <Plus size={16} /> Thêm kênh mới
             </button>
           </div>

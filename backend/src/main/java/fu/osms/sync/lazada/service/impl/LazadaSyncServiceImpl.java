@@ -13,8 +13,6 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.SyncStatus;
-import fu.osms.common.exception.AppException;
-import fu.osms.common.exception.ErrorCode;
 import fu.osms.common.exception.TokenExpiredException;
 import fu.osms.sync.lazada.service.LazadaApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;

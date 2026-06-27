@@ -56,7 +56,7 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
                 appendCdataElement(document, attributes, "description", product.getDescription());
             }
             appendTextElement(document, attributes, "clothing_material", "100% Cotton");
-            appendTextElement(document,attributes, "fa_pattern","Plain");
+            appendTextElement(document, attributes, "fa_pattern", "Plain");
             appendTextElement(document, attributes, "size_chart", "https://sg-test-11.slatic.net/p/53cfc24074576554c748b6fa43eb833e.png");
             appendTextElement(document, attributes, "gender", "Unisex");
 

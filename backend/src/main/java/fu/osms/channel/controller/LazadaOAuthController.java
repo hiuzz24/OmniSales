@@ -1,7 +1,10 @@
 package fu.osms.channel.controller;
 
 import fu.osms.channel.service.ChannelService;
+import fu.osms.channel.service.ChannelConnectionLogService;
+import fu.osms.channel.enums.ChannelConnectionAction;
 import fu.osms.common.dto.ApiResponse;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.lazada.service.LazadaOAuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +29,7 @@ public class LazadaOAuthController {
 
     private final LazadaOAuthService lazadaOAuthService;
     private final ChannelService channelService;
+    private final ChannelConnectionLogService channelConnectionLogService;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
@@ -51,12 +55,26 @@ public class LazadaOAuthController {
             HttpServletResponse response) throws IOException {
         if (error != null) {
             log.error("[LazadaOAuthController] Lazada returned error: {}", error);
+            channelConnectionLogService.logFailure(
+                    PlatformType.LAZADA,
+                    ChannelConnectionAction.CONNECT,
+                    "Failed to connect Lazada channel",
+                    error,
+                    Map.of("oauthError", error)
+            );
             response.sendRedirect(frontendUrl + "/channels?error=" + error);
             return;
         }
 
         if (code == null || code.isBlank()) {
             log.error("[LazadaOAuthController] Missing code in callback");
+            channelConnectionLogService.logFailure(
+                    PlatformType.LAZADA,
+                    ChannelConnectionAction.CONNECT,
+                    "Failed to connect Lazada channel",
+                    "Missing code in callback",
+                    Map.of("reason", "missing_code")
+            );
             response.sendRedirect(frontendUrl + "/channels?error=missing_code");
             return;
         }
@@ -74,6 +92,13 @@ public class LazadaOAuthController {
             response.sendRedirect(frontendUrl + "/channels?success=lazada_connected");
         } catch (Exception e) {
             log.error("[LazadaOAuthController] Failed to exchange token and connect channel", e);
+            channelConnectionLogService.logFailure(
+                    PlatformType.LAZADA,
+                    ChannelConnectionAction.CONNECT,
+                    "Failed to connect Lazada channel",
+                    e.getMessage(),
+                    Map.of("reason", "connection_failed")
+            );
             response.sendRedirect(frontendUrl + "/channels?error=connection_failed");
         }
     }

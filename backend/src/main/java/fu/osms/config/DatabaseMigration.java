@@ -94,5 +94,6 @@ public class DatabaseMigration {
         } catch (Exception e) {
             log.warn("Migration skipped or already applied for users password_expired: {}", e.getMessage());
         }
+
     }
 }

@@ -1,7 +1,10 @@
 package fu.osms.channel.controller;
 
 import fu.osms.channel.service.ChannelService;
+import fu.osms.channel.service.ChannelConnectionLogService;
+import fu.osms.channel.enums.ChannelConnectionAction;
 import fu.osms.common.dto.ApiResponse;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.shopify.ShopifyOAuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +23,7 @@ public class ShopifyOAuthController {
 
     private final ShopifyOAuthService shopifyOAuthService;
     private final ChannelService channelService;
+    private final ChannelConnectionLogService channelConnectionLogService;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
@@ -48,6 +52,13 @@ public class ShopifyOAuthController {
                     .build();
         } catch (Exception e) {
             log.error("[ShopifyOAuth] callback failed — shop={}, error={}", shop, e.getMessage());
+            channelConnectionLogService.logFailure(
+                    PlatformType.SHOPIFY,
+                    ChannelConnectionAction.CONNECT,
+                    "Failed to connect Shopify channel",
+                    e.getMessage(),
+                    Map.of("shop", shop != null ? shop : "")
+            );
             return ResponseEntity.status(302)
                     .location(URI.create(frontendUrl + "/channels?error=oauth_failed"))
                     .build();

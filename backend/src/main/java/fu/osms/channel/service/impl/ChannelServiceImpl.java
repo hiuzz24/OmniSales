@@ -9,12 +9,14 @@ import fu.osms.channel.dto.response.ChannelSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProduct;
+import fu.osms.channel.enums.ChannelConnectionAction;
 import fu.osms.channel.mapper.ChannelCredentialMapper;
 import fu.osms.channel.mapper.ChannelMapper;
 import fu.osms.channel.mapper.ChannelProductMapper;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
@@ -44,6 +46,7 @@ public class ChannelServiceImpl implements ChannelService {
     private final ChannelProductRepository channelProductRepository;
     private final ChannelMapper channelMapper;
     private final ChannelProductMapper channelProductMapper;
+    private final ChannelConnectionLogService channelConnectionLogService;
 
     @Override
     @Transactional
@@ -127,6 +130,13 @@ public class ChannelServiceImpl implements ChannelService {
             cp.setMappingState("ARCHIVED");
         }
         channelProductRepository.saveAll(mappedProducts);
+
+        channelConnectionLogService.logSuccess(
+                channel,
+                ChannelConnectionAction.DISCONNECT,
+                "Disconnected channel " + channel.getDisplayName(),
+                Map.of("channelName", channel.getDisplayName())
+        );
     }
 
     @Override
@@ -219,6 +229,9 @@ public class ChannelServiceImpl implements ChannelService {
                         .platform(PlatformType.SHOPIFY)
                         .displayName(normalizedShop)
                         .build());
+        ChannelConnectionAction action = channel.getId() == null
+                ? ChannelConnectionAction.CONNECT
+                : ChannelConnectionAction.RECONNECT;
 
         channel.setStatus("CONNECTED");
         channel.setMetadata(metadata);
@@ -231,6 +244,12 @@ public class ChannelServiceImpl implements ChannelService {
         credential.setAccessToken(accessToken);
         credential.setConnectionState("CONNECTED");
         credentialRepository.save(credential);
+        channelConnectionLogService.logSuccess(
+                channel,
+                action,
+                "Connected Shopify channel " + normalizedShop,
+                Map.of("shopDomain", normalizedShop)
+        );
 
         log.info("[ChannelService] connectShopify success — channelId={}", channel.getId());
         return channelMapper.toResponse(channel);
@@ -255,6 +274,9 @@ public class ChannelServiceImpl implements ChannelService {
                         .platform(PlatformType.LAZADA)
                         .displayName(displayName)
                         .build());
+        ChannelConnectionAction action = channel.getId() == null
+                ? ChannelConnectionAction.CONNECT
+                : ChannelConnectionAction.RECONNECT;
 
         channel.setStatus("CONNECTED");
         channel.setMetadata(metadata);
@@ -273,8 +295,17 @@ public class ChannelServiceImpl implements ChannelService {
         
         OffsetDateTime tokenExpiresAt = OffsetDateTime.now().plusSeconds(expiresIn);
         credential.setTokenExpiresAt(tokenExpiresAt);
-        
+
         credentialRepository.save(credential);
+        channelConnectionLogService.logSuccess(
+                channel,
+                action,
+                "Connected Lazada channel " + displayName,
+                Map.of(
+                        "accountId", accountId != null ? accountId : "",
+                        "accountName", accountName != null ? accountName : ""
+                )
+        );
 
         log.info("[ChannelService] connectLazada success — channelId={}, expiresAt={}", channel.getId(), tokenExpiresAt);
         return channelMapper.toResponse(channel);
