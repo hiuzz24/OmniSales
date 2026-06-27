@@ -22,11 +22,12 @@ const NAV_ITEMS = [
     icon: Warehouse,
     roles: [],
     children: [
-      { name: 'Tổng quan kho', href: '/inventory', icon: Warehouse, exact: true },
-      { name: 'Phiếu nhập kho', href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS, icon: PackagePlus },
-      { name: 'Phiếu xuất kho', href: ROUTES.STOCK_DELIVERIES, icon: PackageMinus },
-      { name: 'Phiếu chuyển kho', href: '/warehouse/transfers', icon: ArrowRightLeft },
-      { name: 'Phiếu kiểm kho', href: '/warehouse/stocktakes', icon: ClipboardList },
+      { name: 'Tổng quan kho', href: '/inventory', icon: Warehouse, exact: true, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
+      { name: 'Phiếu nhập kho', href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS, icon: PackagePlus, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
+      { name: 'Phiếu xuất kho', href: ROUTES.STOCK_DELIVERIES, icon: PackageMinus, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
+      { name: 'Phiếu chuyển kho', href: '/warehouse/transfers', icon: ArrowRightLeft, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
+      { name: 'Phiếu kiểm kho', href: '/warehouse/stocktakes', icon: ClipboardList, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
+      { name: 'Lịch sử thay đổi', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
     ],
   },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
@@ -39,7 +40,7 @@ const NAV_ITEMS = [
 ];
 
 const ROLE_HIDDEN = {
-  [ROLES.SALES]: ['Sản phẩm', 'Kho hàng', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
+  [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
   [ROLES.OPERATIONS]: ['Phân tích', 'Nhân sự'],
   [ROLES.OWNER]: [],
   [ROLES.SYSTEM_ADMIN]: [],
@@ -60,6 +61,7 @@ const NOTIF_META = {
   SYNC: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
   SYNC_FAILED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
   INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
+  STOCK_TRANSFER: { icon: ArrowRightLeft, color: '#7c3aed', bg: '#f5f3ff' },
   SYSTEM: { icon: Info, color: '#475569', bg: '#f8fafc' },
 };
 
@@ -256,7 +258,7 @@ export default function MainLayout() {
                 {/* Children */}
                 {hasChildren && open && isExp && (
                   <div style={{ marginLeft: 16, paddingLeft: 16, borderLeft: '1px solid #e2e8f0', marginTop: 4 }}>
-                    {item.children.map((child) => {
+                    {item.children.filter((child) => isVisible(child, role)).map((child) => {
                       const CIcon = child.icon;
                       const active = isActive(child.href, child.exact);
                       return (
@@ -379,7 +381,11 @@ export default function MainLayout() {
                               setNotifOpen(false);
                             }
                             if (n.entityType === 'INVENTORY' && n.entityId) {
-                              navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
+                              if (n.type === 'STOCK_TRANSFER') {
+                                navigate(ROUTES.STOCK_TRANSFER, { state: { openTransferId: n.entityId } });
+                              } else {
+                                navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
+                              }
                               setNotifOpen(false);
                             }
                           }}

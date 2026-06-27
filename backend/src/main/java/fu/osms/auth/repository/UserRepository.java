@@ -19,6 +19,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     User findUserById(UUID id);
     java.util.List<User> findByStatus(UserStatus status);
+    java.util.List<User> findByWarehouseId(UUID warehouseId);
 
     @Query("SELECT u FROM User u WHERE u.id = :id AND u.deletedAt IS NULL")
     Optional<User> findActiveById(@Param("id") UUID id);

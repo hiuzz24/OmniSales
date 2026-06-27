@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -54,5 +55,10 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Transactional
     public void delete(UUID id) {
         throw new UnsupportedOperationException("Chưa code");
+    }
+
+    @Override
+    public WarehouseResponse getWarehouseByUserId(UUID userId) {
+        return warehouseMapper.toResponse(warehouseRepository.findWarehouseByUserId(userId));
     }
 }

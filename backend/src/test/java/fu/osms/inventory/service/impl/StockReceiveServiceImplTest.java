@@ -11,6 +11,7 @@ import fu.osms.inventory.dto.request.StockReceiveItemRequest;
 import fu.osms.inventory.dto.request.StockReceiveRequest;
 import fu.osms.inventory.dto.response.StockReceiveItemResponse;
 import fu.osms.inventory.dto.response.StockReceiveResponse;
+import fu.osms.common.dto.PageResponse;
 import fu.osms.inventory.entity.*;
 import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.mapper.StockReceiveMapper;
@@ -604,7 +605,7 @@ class StockReceiveServiceImplTest {
             when(receiptMapper.toItemResponse(any(InventoryReceiptItem.class))).thenReturn(itemResponse);
 
             // Act
-            var result = stockReceiveService.getReceipts(0, 10);
+            PageResponse<StockReceiveResponse> result = stockReceiveService.getReceipts(0, 10);
 
             // Assert
             assertThat(result).isNotNull();
@@ -635,7 +636,7 @@ class StockReceiveServiceImplTest {
                     .thenReturn(emptyPage);
 
             // Act
-            var result = stockReceiveService.getReceipts(0, 10);
+            PageResponse<StockReceiveResponse> result = stockReceiveService.getReceipts(0, 10);
 
             // Assert
             assertThat(result).isNotNull();

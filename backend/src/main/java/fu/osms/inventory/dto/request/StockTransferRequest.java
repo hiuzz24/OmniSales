@@ -39,4 +39,5 @@ public class StockTransferRequest {
     private List<StockTransferItemRequest> items;
 
     private String note;
+    private String status;
 }
