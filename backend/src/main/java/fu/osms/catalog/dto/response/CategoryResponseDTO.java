@@ -4,19 +4,18 @@ import lombok.*;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
-
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CategoryResponse {
-
+public class CategoryResponseDTO {
     private UUID id;
-    private UUID parentId;
-    private String parentName;
     private String name;
     private String slug;
+    private String parentCategoryName;
     private Integer sortOrder;
+    private long productCount;
+    private String status;
     private OffsetDateTime createdAt;
 }

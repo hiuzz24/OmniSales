@@ -39,6 +39,11 @@ const inventoryApi = {
     return res.data?.data ?? res.data;
   },
 
+  updateInventoryItemDetail: async (id, data) => {
+    const res = await axiosClient.put(`/inventory/detail/${id}`, data);
+    return res.data?.data ?? res.data;
+  },
+
   getTransactions: async (variantId = null, page = 0, size = 10, sortBy = 'performedAt', sortDir = 'desc') => {
     const params = { page, size, sortBy, sortDir };
     if (variantId) params.variantId = variantId;

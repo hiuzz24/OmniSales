@@ -1,12 +1,15 @@
 package fu.osms.catalog.controller;
 
 import fu.osms.catalog.dto.request.CategoryRequest;
+import fu.osms.catalog.dto.response.CategoryDashboardResponse;
 import fu.osms.catalog.dto.response.CategoryNodeResponse;
 import fu.osms.catalog.dto.response.CategoryResponse;
 import fu.osms.catalog.service.CategoryService;
+import fu.osms.catalog.service.impl.CategoryServiceImpl;
 import fu.osms.common.dto.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,10 +23,12 @@ import java.util.UUID;
 public class CategoryController {
 
     private final CategoryService categoryService;
+    private final CategoryServiceImpl categoryServiceImpl;
 
     @PostMapping
     public ResponseEntity<ApiResponse<CategoryResponse>> create(@Valid @RequestBody CategoryRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        CategoryResponse response = categoryService.create(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
     @GetMapping("/{id}")
@@ -50,17 +55,30 @@ public class CategoryController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<CategoryResponse>> update(@PathVariable UUID id,
                                                                 @Valid @RequestBody CategoryRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        CategoryResponse response = categoryService.update(id, request);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        categoryService.delete(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/tree")
     public ResponseEntity<List<CategoryNodeResponse>> getCategoryTree() {
         List<CategoryNodeResponse> tree = categoryService.getCategoryTree();
         return ResponseEntity.ok(tree);
+    }
+    @GetMapping("/dashboard")
+    public ResponseEntity<ApiResponse<CategoryDashboardResponse>> getDashboard(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+
+        CategoryDashboardResponse response =
+                categoryServiceImpl.getCategoryDashboardData(PageRequest.of(page, size));
+
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 }
