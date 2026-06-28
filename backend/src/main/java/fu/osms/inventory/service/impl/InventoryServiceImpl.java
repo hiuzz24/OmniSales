@@ -10,6 +10,7 @@ import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.dto.request.InventoryItemRequest;
+import fu.osms.inventory.dto.request.InventoryItemUpdateRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryDetailDTO;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
@@ -245,7 +246,7 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public InventoryDetailDTO getInventoryItemDetail(UUID inventoryItemId) {
         InventoryItem inventoryItem = inventoryItemRepository.findDetailById(inventoryItemId)
                 .orElseThrow(() -> new RuntimeException(
@@ -254,13 +255,65 @@ public class InventoryServiceImpl implements InventoryService {
 
         UUID variantId = inventoryItem.getVariant().getId();
 
+        dto.setLastUpdatedAt(inventoryItem.getUpdatedAt());
+
         transactionRepository.findFirstByVariantIdOrderByPerformedAtDesc(variantId)
-                .ifPresent(txn -> dto.setLastUpdatedAt(txn.getPerformedAt()));
+                .ifPresent(txn -> {
+                    if (dto.getLastUpdatedAt() == null || txn.getPerformedAt().isAfter(dto.getLastUpdatedAt())) {
+                        dto.setLastUpdatedAt(txn.getPerformedAt());
+                    }
+                });
 
         transactionRepository.findFirstByVariantIdAndTypeOrderByPerformedAtDesc(variantId, InvTxnType.IMPORT)
                 .ifPresent(txn -> dto.setLastImportedAt(txn.getPerformedAt()));
 
         return dto;
+    }
+
+    @Override
+    @Transactional
+    public InventoryDetailDTO updateInventoryDetail(UUID inventoryItemId, InventoryItemUpdateRequest request) {
+        InventoryItem inventoryItem = inventoryItemRepository.findById(inventoryItemId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin tồn kho yêu cầu"));
+
+        // If warehouse is changed, check constraint
+        if (request.getWarehouseId() != null && !request.getWarehouseId().equals(inventoryItem.getWarehouse().getId())) {
+            Optional<InventoryItem> existing = inventoryItemRepository.findByWarehouseIdAndVariantId(request.getWarehouseId(), inventoryItem.getVariant().getId());
+            if (existing.isPresent() && !existing.get().getId().equals(inventoryItemId)) {
+                throw new IllegalArgumentException("Sản phẩm này đã tồn tại trong kho hàng được chọn.");
+            }
+            fu.osms.inventory.entity.Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
+                    .orElseThrow(() -> new IllegalArgumentException("Kho hàng không tồn tại."));
+            inventoryItem.setWarehouse(warehouse);
+        }
+
+        if (request.getQuantityOnHand() != null) {
+            inventoryItem.setQuantityOnHand(request.getQuantityOnHand());
+        }
+        if (request.getAverageCost() != null) {
+            inventoryItem.setAverageCost(request.getAverageCost());
+        }
+
+        ProductVariant variant = inventoryItem.getVariant();
+        if (variant != null) {
+            if (request.getProductVariantName() != null) {
+                variant.setName(request.getProductVariantName());
+            }
+            if (request.getPrice() != null) {
+                variant.setPrice(request.getPrice());
+            }
+            if (request.getAverageCost() != null) {
+                variant.setCostPrice(request.getAverageCost());
+            }
+            variantRepository.save(variant);
+        }
+
+        User currentUser = getCurrentUser();
+        inventoryItem.setUpdatedBy(currentUser);
+        inventoryItemRepository.save(inventoryItem);
+
+        // Fetch refreshed details to return
+        return getInventoryItemDetail(inventoryItemId);
     }
 
     @Override

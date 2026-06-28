@@ -13,10 +13,14 @@ import {
   User,
   Hash,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Edit2,
+  X
 } from 'lucide-react';
+import { toast } from 'react-toastify';
 import styles from './InventoryDetailPage.module.css';
 import inventoryApi from '../../../../api/inventoryApi';
+import warehouseService from '../../services/warehouseService';
 import { ROUTES } from '../../../../app/router/routes';
 
 const PAGE_SIZE = 10;
@@ -37,6 +41,16 @@ const InventoryDetailPage = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [loadingTx, setLoadingTx] = useState(false);
   const [txFilter, setTxFilter] = useState('all');
+
+  // Edit State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [warehouses, setWarehouses] = useState([]);
+  const [editName, setEditName] = useState('');
+  const [editWarehouseId, setEditWarehouseId] = useState('');
+  const [editQty, setEditQty] = useState(0);
+  const [editPrice, setEditPrice] = useState(0);
+  const [editCost, setEditCost] = useState(0);
+  const [updating, setUpdating] = useState(false);
 
   // Fetch Detail
   useEffect(() => {
@@ -125,6 +139,55 @@ const InventoryDetailPage = () => {
 
   const isLowStock = detail.quantityOnHand < detail.lowStockThreshold;
   const progressPercent = Math.min(100, Math.max(0, (detail.quantityOnHand / (detail.lowStockThreshold * 3)) * 100));
+  const handleOpenEditModal = async () => {
+    setEditName(detail.productVariantName);
+    setEditWarehouseId(detail.warehouseId);
+    setEditQty(detail.quantityOnHand);
+    setEditPrice(detail.price);
+    setEditCost(detail.averageCost);
+    setIsEditModalOpen(true);
+
+    try {
+      const res = await warehouseService.getAll();
+      setWarehouses(res.data?.data ?? res.data ?? []);
+    } catch (err) {
+      console.error('Error fetching warehouses:', err);
+    }
+  };
+
+  const handleUpdateDetail = async (e) => {
+    e.preventDefault();
+    if (!editName.trim()) {
+      toast.error('Tên sản phẩm không được để trống');
+      return;
+    }
+    if (editPrice < 0 || editCost < 0 || editQty < 0) {
+      toast.error('Giá bán, giá vốn và số lượng không được âm');
+      return;
+    }
+    try {
+      setUpdating(true);
+      const payload = {
+        productVariantName: editName,
+        price: editPrice,
+        averageCost: editCost,
+        quantityOnHand: editQty,
+        warehouseId: editWarehouseId
+      };
+      const updatedDetail = await inventoryApi.updateInventoryItemDetail(id, payload);
+      setDetail(updatedDetail);
+      toast.success('Cập nhật thông tin tồn kho thành công');
+      setIsEditModalOpen(false);
+      // Refresh transactions too
+      fetchTransactions(currentPage, txFilter);
+    } catch (err) {
+      console.error('Error updating inventory detail:', err);
+      toast.error(err?.response?.data?.message || 'Có lỗi xảy ra khi cập nhật thông tin');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleReceiveStock = () => {
     const params = new URLSearchParams({
       warehouseId: detail.warehouseId || '',
@@ -158,6 +221,9 @@ const InventoryDetailPage = () => {
           </button>
           <button className={styles.btnOutline}>
             <ArrowRightLeft size={16} /> Chuyển kho
+          </button>
+          <button className={styles.btnOutline} onClick={handleOpenEditModal}>
+            <Edit2 size={16} /> Sửa
           </button>
         </div>
       </div>
@@ -437,6 +503,107 @@ const InventoryDetailPage = () => {
           </div>
         )}
       </div>
+
+      {/* Edit Inventory Item Modal */}
+      {isEditModalOpen && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalContent}>
+            <div className={styles.modalHeader}>
+              <div className={styles.modalTitleWrapper}>
+                <Package size={20} />
+                <h3 className={styles.modalTitle}>Sửa thông tin tồn kho</h3>
+              </div>
+              <button className={styles.modalCloseBtn} onClick={() => setIsEditModalOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateDetail}>
+              <div className={styles.modalBody}>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    Tên sản phẩm <span className={styles.requiredStar}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className={styles.formInput}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    Kho hàng <span className={styles.requiredStar}>*</span>
+                  </label>
+                  <select
+                    required
+                    value={editWarehouseId}
+                    onChange={(e) => setEditWarehouseId(e.target.value)}
+                    className={styles.formSelect}
+                  >
+                    {warehouses.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    Số lượng tồn kho <span className={styles.requiredStar}>*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={editQty}
+                    onChange={(e) => setEditQty(parseInt(e.target.value) || 0)}
+                    className={styles.formInput}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    Giá bán <span className={styles.requiredStar}>*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0)}
+                    className={styles.formInput}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    Giá vốn <span className={styles.requiredStar}>*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={editCost}
+                    onChange={(e) => setEditCost(parseFloat(e.target.value) || 0)}
+                    className={styles.formInput}
+                  />
+                </div>
+              </div>
+              <div className={styles.modalFooter}>
+                <button type="button" className={styles.cancelBtn} onClick={() => setIsEditModalOpen(false)} disabled={updating}>
+                  Hủy
+                </button>
+                <button type="submit" className={styles.primaryBtn} disabled={updating}>
+                  {updating ? 'Đang lưu...' : 'Lưu lại'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
