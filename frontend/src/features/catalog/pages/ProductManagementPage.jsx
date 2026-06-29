@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import useDebounce from '../../../shared/hooks/useDebounce';
-import { Plus, History, FileDown, FileUp, Package } from 'lucide-react';
+import { Plus, History, FileUp, FileDown, RefreshCcw, Package } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';
@@ -25,10 +25,17 @@ const ProductManagementPage = () => {
     <>
       <button
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
+        onClick={() => navigate(ROUTES.SYNC_HISTORY)}
+      >
+        <RefreshCcw className={styles.secondaryIcon} />
+        Lịch sử đồng bộ
+      </button>
+      <button
+        className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
       >
         <History className={styles.secondaryIcon} />
-        Nhật ký sản phẩm
+        Nhật ký hệ thống
       </button>
       <button
         className={`${styles.actionBtn} ${styles.importBtn}`}

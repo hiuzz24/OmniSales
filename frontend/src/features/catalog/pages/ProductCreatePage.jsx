@@ -62,7 +62,7 @@ const ProductCreatePage = () => {
         const chanList = chanData.data?.data || chanData.data || chanData;
         if (Array.isArray(chanList)) {
           setChannels(chanList);
-          setSelectedChannels(chanList.map(c => c.id));
+          setSelectedChannels(chanList.map((c, i) => c.id || c._id || (c.platform + i)));
         }
       } catch (error) {
         console.error('Failed to load initial data:', error);

@@ -57,6 +57,10 @@ public class ChannelProductVariant {
     @Column(name = "last_synced_at")
     private OffsetDateTime lastSyncedAt;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private java.util.Map<String, Object> metadata;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

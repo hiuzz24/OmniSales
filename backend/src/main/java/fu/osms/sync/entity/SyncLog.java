@@ -1,6 +1,7 @@
 package fu.osms.sync.entity;
 
 import fu.osms.auth.entity.User;
+import fu.osms.catalog.entity.Product;
 import fu.osms.channel.entity.Channel;
 import fu.osms.common.enums.SyncStatus;
 import jakarta.persistence.*;
@@ -27,6 +28,10 @@ public class SyncLog {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "channel_id")
     private Channel channel;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id")
+    private Product product;
 
     @Column(name = "job_type", nullable = false, length = 50)
     private String jobType;

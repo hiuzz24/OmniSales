@@ -1,7 +1,7 @@
-import { ArrowLeft, Cloud, Edit, Trash2 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Edit, Trash2 } from 'lucide-react';
 import styles from './ProductDetailHeader.module.css';
 
-const ProductDetailHeader = ({ product, onBack, onDelete, onEdit }) => {
+const ProductDetailHeader = ({ product, onBack, onDelete, onEdit, onSync, isSyncing }) => {
   const primaryImage = product.images?.find(img => img.isPrimary)?.url || 'https://via.placeholder.com/40';
 
   return (
@@ -27,15 +27,15 @@ const ProductDetailHeader = ({ product, onBack, onDelete, onEdit }) => {
       </div>
 
       <div className={styles.actions}>
-        <button className={styles.btnSync}>
-          <Cloud className={styles.btnIcon} />
-          Đồng bộ
+        <button className={styles.btnSecondary} onClick={onSync} disabled={isSyncing}>
+          <RefreshCw className={`${styles.btnIcon} ${isSyncing ? styles.spin : ''}`} />
+          {isSyncing ? 'Đang đồng bộ...' : 'Sync now'}
         </button>
-        <button className={styles.btnEdit} onClick={onEdit}>
+        <button className={styles.btnSecondary} onClick={onEdit}>
           <Edit className={styles.btnIcon} />
           Chỉnh sửa
         </button>
-        <button
+        <button 
           className={styles.btnDanger}
           onClick={() => {
             if (window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này không thể hoàn tác.')) {
