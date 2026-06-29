@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  X, Download, CheckSquare, Square, Columns3, ChevronDown, Check,
+  X, Download, CheckSquare, Square, Columns3, ChevronDown,
 } from 'lucide-react';
 import orderApi from '../../../api/orderApi';
+import Pagination from '../../../shared/components/Pagination';
 import { exportOrdersToExcel, ORDER_EXPORT_COLUMNS } from '../utils/exportOrders';
 import styles from './ExportOrdersModal.module.css';
 
@@ -243,6 +244,20 @@ const ExportOrdersModal = ({ isOpen, onClose, currentFilters = {} }) => {
 
           {/* Pagination */}
           {totalElements > PAGE_SIZE && (
+            <Pagination
+              currentPage={page}
+              totalPages={Math.ceil(totalElements / PAGE_SIZE)}
+              totalElements={totalElements}
+              pageSize={PAGE_SIZE}
+              currentCount={orders.length}
+              itemLabel="đơn hàng"
+              onPageChange={(nextPage) => {
+                setPage(nextPage);
+                fetchPage(nextPage);
+              }}
+            />
+          )}
+          {totalElements < 0 && (
             <div className={styles.pagination}>
               <button className={styles.pageBtn} disabled={page === 0} onClick={() => { setPage(0); fetchPage(0); }}>«</button>
               <button className={styles.pageBtn} disabled={page === 0} onClick={() => { const p = page - 1; setPage(p); fetchPage(p); }}>‹</button>

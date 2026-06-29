@@ -10,6 +10,7 @@ import {
   Check,
 } from 'lucide-react';
 import Badge from '../../../shared/components/Badge';
+import Pagination from '../../../shared/components/Pagination';
 import customerApi from '../../../api/customerApi';
 import { exportCustomersToExcel, CUSTOMER_EXPORT_COLUMNS } from '../utils/exportCustomers';
 import styles from './ExportCustomersModal.module.css';
@@ -399,7 +400,16 @@ const ExportCustomersModal = ({ isOpen, onClose }) => {
         </div>
 
         <div className={styles.footer}>
-          <div className={styles.pagination}>
+          <Pagination
+            currentPage={page}
+            totalPages={Math.ceil(totalElements / PAGE_SIZE)}
+            totalElements={totalElements}
+            pageSize={PAGE_SIZE}
+            currentCount={customers.length}
+            itemLabel="khách hàng"
+            onPageChange={setPage}
+          />
+          <div className={styles.pagination} hidden>
             <button
               type="button"
               className={styles.pageBtn}

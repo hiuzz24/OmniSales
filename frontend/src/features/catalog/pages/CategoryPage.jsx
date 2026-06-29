@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import categoryApi from '../../../api/categoryApi';
 import PageHeader from '../../../shared/components/PageHeader';
+import Pagination from '../../../shared/components/Pagination';
 import styles from './CategoryPage.module.css';
 
 const CategoryPage = () => {
@@ -67,14 +68,16 @@ const CategoryPage = () => {
       setError(null);
       const res = await categoryApi.getDashboard(page, size);
       if (res) {
+        const categories = res.categories ?? [];
+        const nextTotalElements = res.totalElements ?? res.totalCategories ?? categories.length ?? 0;
         setData({
           totalCategories: res.totalCategories ?? 0,
           totalActiveCategories: res.totalActiveCategories ?? 0,
           totalParentCategories: res.totalParentCategories ?? 0,
           totalProducts: res.totalProducts ?? 0,
-          categories: res.categories ?? [],
-          totalPages: res.totalPages ?? 0,
-          totalElements: res.totalElements ?? 0
+          categories,
+          totalPages: res.totalPages ?? Math.ceil(nextTotalElements / size),
+          totalElements: nextTotalElements
         });
       }
     } catch (err) {
@@ -544,7 +547,18 @@ const CategoryPage = () => {
         )}
 
         {/* Pagination Footer */}
-        {!loading && !error && data.totalPages > 1 && (
+        {!loading && !error && (
+          <Pagination
+            currentPage={page}
+            totalPages={data.totalPages}
+            totalElements={data.totalElements}
+            pageSize={size}
+            currentCount={filteredCategories.length}
+            itemLabel="danh mục"
+            onPageChange={setPage}
+          />
+        )}
+        {data.totalPages < 0 && (
           <div className={styles.pagination}>
             <span className={styles.paginationInfo}>
               Hiển thị {page * size + 1} - {Math.min((page + 1) * size, data.totalElements)} trong tổng số {data.totalElements} danh mục
