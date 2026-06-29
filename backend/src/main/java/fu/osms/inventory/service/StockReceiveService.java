@@ -13,4 +13,5 @@ public interface StockReceiveService {
     StockReceiveResponse updateReceipt(UUID receiptId, StockReceiveRequest request, UUID updatedByUserId);
     StockReceiveResponse completeReceipt(UUID receiptId, UUID approvedByUserId);
     Object getReceiptStatistics();
+    String getNextReceiptCode();
 }

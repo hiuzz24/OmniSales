@@ -260,6 +260,27 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
                 {errors.commissionRate && <span className={styles.errorMsg}>{errors.commissionRate}</span>}
               </div>
 
+              {isLazada && isEdit && (
+                <div className={styles.shopifyOAuthBox}>
+                  <div className={styles.shopifyOAuthInfo}>
+                    <span className={styles.shopifyBadge} style={{ background: '#0f146d', color: '#fff' }}>OAuth 2.0</span>
+                    <p>Kết nối lại Lazada để lấy access_token mới và lưu vào hệ thống.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.shopifyConnectBtn}
+                    style={{ background: '#0f146d', color: '#fff', borderColor: '#0f146d' }}
+                    onClick={handleLazadaConnect}
+                    disabled={isRedirecting}
+                  >
+                    {isRedirecting
+                      ? <><Loader2 size={16} className={styles.spinIcon} /> Đang chuyển hướng...</>
+                      : <><ExternalLink size={16} /> Kết nối lại Lazada</>
+                    }
+                  </button>
+                </div>
+              )}
+
               <div className={styles.actions}>
                 <button type="button" className={styles.cancelBtn} onClick={onClose} disabled={isSubmitting}>
                   Hủy

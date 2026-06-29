@@ -3,11 +3,14 @@ package fu.osms.channel.controller;
 import fu.osms.channel.dto.request.ChannelRequest;
 import fu.osms.channel.dto.request.CreateManualChannelRequest;
 import fu.osms.channel.dto.response.ChannelCredentialResponse;
+import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.dto.response.ChannelProductResponse;
 import fu.osms.channel.dto.response.ChannelResponse;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.sync.lazada.dto.LazadaSyncTask;
+import fu.osms.sync.lazada.service.LazadaSyncTaskDispatcher;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,6 +26,7 @@ import java.util.UUID;
 public class ChannelController {
 
     private final ChannelService channelService;
+    private final LazadaSyncTaskDispatcher lazadaSyncTaskDispatcher;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ChannelResponse>> create(@Valid @RequestBody ChannelRequest request) {
@@ -64,5 +68,10 @@ public class ChannelController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         throw new UnsupportedOperationException("Chưa code");
+    }
+    @PostMapping("/{id}/sync")
+    public ResponseEntity<ApiResponse<ChannelImportSyncResponse>> sync(@PathVariable UUID id) {
+        ChannelImportSyncResponse response = lazadaSyncTaskDispatcher.dispatch(LazadaSyncTask.localChanges(id));
+        return ResponseEntity.ok(ApiResponse.success("Đồng bộ kênh thành công", response));
     }
 }

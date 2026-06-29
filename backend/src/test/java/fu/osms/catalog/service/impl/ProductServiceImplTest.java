@@ -214,8 +214,8 @@ class ProductServiceImplTest {
 
                 when(productRepository.findById(productId)).thenReturn(Optional.of(product));
                 when(productMapper.toResponse(product)).thenReturn(response);
-                when(productImageRepository.findByProductIdOrderBySortOrderAsc(productId)).thenReturn(Collections.emptyList());
-                when(productVariantRepository.findByProductIdAndDeletedAtIsNull(productId)).thenReturn(List.of(variant));
+//                when(productImageRepository.findByProductIdOrderBySortOrderAsc(productId)).thenReturn(Collections.emptyList());
+//                when(productVariantRepository.findByProductIdAndDeletedAtIsNull(productId)).thenReturn(List.of(variant));
                 when(inventoryService.getStockSummary(anyList())).thenReturn(Map.of(variantId, new StockSummaryDTO(50, 50, 0)));
                 when(channelService.getProductChannels(anyList())).thenReturn(Map.of());
                 when(channelService.getProductChannelSyncs(anyList())).thenReturn(Map.of());

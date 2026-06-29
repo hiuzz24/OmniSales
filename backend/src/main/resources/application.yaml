@@ -66,6 +66,7 @@ lazada:
   app-secret: ${LAZADA_APP_SECRET:}
   redirect-uri: ${LAZADA_REDIRECT_URI:}
   api-url: https://api.lazada.vn/rest
+  auth-api-url: https://auth.lazada.com/rest
   auth-url: https://auth.lazada.com/oauth/authorize
   default-category-id: ${LAZADA_DEFAULT_CATEGORY_ID:7932}
   default-package-weight: 0.5

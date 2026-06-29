@@ -60,6 +60,14 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
     List<InventoryTransaction> findByReferenceTypeAndReferenceId(
             String referenceType, UUID referenceId);
 
+    @Query("SELECT DISTINCT t FROM InventoryTransaction t " +
+            "JOIN FETCH t.warehouse " +
+            "JOIN FETCH t.variant v " +
+            "LEFT JOIN FETCH v.product " +
+            "WHERE t.performedAt >= :changedSince " +
+            "AND t.referenceType IN ('RECEIPT', 'ISSUE')")
+    List<InventoryTransaction> findStockDocumentChangesSince(@Param("changedSince") OffsetDateTime changedSince);
+
 
     Page<InventoryTransaction> findAll(Pageable pageable);
 }

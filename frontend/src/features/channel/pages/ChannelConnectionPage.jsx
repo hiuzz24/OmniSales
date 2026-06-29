@@ -1,17 +1,57 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, Link2Off, Edit2, Wifi, WifiOff, RefreshCw, History } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  BarChart3,
+  CheckCircle2,
+  Link2Off,
+  Music2,
+  Plus,
+  RefreshCw,
+  Settings,
+  ShoppingBag,
+  ShoppingCart,
+  Store,
+  Wifi,
+  WifiOff,
+  Share2,
+} from 'lucide-react';
 import { toast } from 'react-toastify';
 import channelApi from '../../../api/channelApi';
 import ChannelFormModal from '../components/ChannelFormModal';
 import styles from './ChannelConnectionPage.module.css';
+import PageHeader from '../../../shared/components/PageHeader';
 
 const PLATFORM_META = {
-  SHOPEE: { label: 'Shopee', color: '#ee4d2d', bg: '#fff1ee', abbr: 'S' },
-  TIKTOK: { label: 'TikTok Shop', color: '#010101', bg: '#f0f0f0', abbr: 'T' },
-  LAZADA: { label: 'Lazada', color: '#0f146d', bg: '#eef0ff', abbr: 'L' },
-  SHOPIFY: { label: 'Shopify', color: '#96bf48', bg: '#f3f9ea', abbr: 'SH' },
-  MANUAL: { label: 'Thủ công', color: '#6b7280', bg: '#f3f4f6', abbr: 'M' },
+  SHOPEE: { label: 'Shopee', color: '#0284c7', bg: '#eff6ff', icon: ShoppingBag },
+  TIKTOK: { label: 'TikTok Shop', color: '#6d5bd0', bg: '#f5f3ff', icon: Music2 },
+  LAZADA: { label: 'Lazada', color: '#64748b', bg: '#f8fafc', icon: ShoppingCart },
+  SHOPIFY: { label: 'Shopify', color: '#15803d', bg: '#f0fdf4', icon: Store },
+  MANUAL: { label: 'Thủ công', color: '#475569', bg: '#f8fafc', icon: Store },
+};
+
+const getPlatformMeta = (platform) => PLATFORM_META[platform] || PLATFORM_META.MANUAL;
+
+const getChannelStats = (channel) => ({
+  productCount: Number(channel.metadata?.productCount || 0),
+  skuVariantCount: Number(channel.metadata?.skuVariantCount || 0),
+  warehouseCount: Number(channel.metadata?.warehouseCount || 0),
+});
+
+const getAccountLabel = (channel) =>
+  channel.metadata?.accountId
+  || channel.metadata?.shopDomain
+  || channel.metadata?.accountName
+  || '-';
+
+const formatLastSync = (value) => {
+  if (!value) return 'Chưa đồng bộ';
+  return new Date(value).toLocaleString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 };
 
 const ChannelConnectionPage = () => {
@@ -22,6 +62,7 @@ const ChannelConnectionPage = () => {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(null);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [syncingChannelId, setSyncingChannelId] = useState(null);
 
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -39,29 +80,44 @@ const ChannelConnectionPage = () => {
     }
   }, []);
 
-  useEffect(() => { loadChannels(); }, [loadChannels]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadChannels();
+  }, [loadChannels]);
 
   useEffect(() => {
     const success = searchParams.get('success');
     const error = searchParams.get('error');
 
     if (success === 'true') {
-      toast.success('🎉 Kết nối Shopify thành công! Kênh đã được thêm vào hệ thống.');
+      toast.success('Kết nối Shopify thành công.');
       navigate('/channels', { replace: true });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadChannels();
     } else if (success === 'lazada_connected') {
-      toast.success('🎉 Kết nối Lazada thành công! Kênh đã được thêm vào hệ thống.');
+      toast.success('Kết nối Lazada thành công.');
       navigate('/channels', { replace: true });
       loadChannels();
     } else if (error) {
-      const msg = error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : 'Kết nối kênh thất bại. Vui lòng thử lại.';
+      const msg = error === 'oauth_failed'
+        ? 'Kết nối Shopify thất bại.'
+        : 'Kết nối kênh thất bại. Vui lòng thử lại.';
       toast.error(msg);
       navigate('/channels', { replace: true });
     }
-  }, []);
+  }, [loadChannels, navigate, searchParams]);
 
-  const openCreate = () => { setModalMode('create'); setSelectedChannel(null); setIsModalOpen(true); };
-  const openEdit = (ch) => { setModalMode('edit'); setSelectedChannel(ch); setIsModalOpen(true); };
+  const openCreate = () => {
+    setModalMode('create');
+    setSelectedChannel(null);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (channel) => {
+    setModalMode('edit');
+    setSelectedChannel(channel);
+    setIsModalOpen(true);
+  };
 
   const handleDisconnect = async () => {
     if (!confirmDisconnect) return;
@@ -78,131 +134,173 @@ const ChannelConnectionPage = () => {
     }
   };
 
+  const handleSync = async (channel) => {
+    if (channel.platform !== 'LAZADA' || channel.status !== 'CONNECTED') {
+      toast.error('Kênh Lazada chưa kết nối hợp lệ. Vui lòng kết nối lại Lazada.');
+      return;
+    }
+
+    setSyncingChannelId(channel.id);
+    try {
+      const res = await channelApi.sync(channel.id);
+      const result = res.data?.data || res.data;
+      toast.success(
+        `Đồng bộ ${channel.displayName}: ${result?.productCount ?? 0} sản phẩm, ${result?.variantCount ?? 0} SKU, ${result?.warehouseCount ?? 0} kho`
+      );
+      loadChannels();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Không thể đồng bộ kênh');
+    } finally {
+      setSyncingChannelId(null);
+    }
+  };
+
+  const connectedCount = useMemo(
+    () => channels.filter((channel) => channel.status === 'CONNECTED').length,
+    [channels],
+  );
+
+  const actions = (
+    <button className={styles.addBtn} type="button" onClick={openCreate}>
+          <Plus size={16} />
+          Kết nối kênh mới
+        </button>
+  );
+
   return (
     <div className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Kênh Bán hàng</h1>
-          <p className={styles.subtitle}>Quản lý các kênh thương mại điện tử đã kết nối với hệ thống</p>
-        </div>
-        <button className={styles.addBtn} onClick={openCreate}>
-          <Plus size={16} />
-          Thêm kênh mới
-        </button>
-      </div>
+      <PageHeader
+        title="Quản lý kênh bán hàng"
+        subtitle="Kết nối và quản lý các kênh bán hàng của bạn"
+        icon={<Share2 size={20} />}
+        actions={actions}
+      />
 
-      <div className={styles.statsRow}>
-        <div className={styles.statCard}>
-          <div className={styles.statValue}>{channels.length}</div>
-          <div className={styles.statLabel}>Kênh đã kết nối</div>
+      {isLoading ? (
+        <div className={styles.loading}>
+          <RefreshCw className={styles.loadingIcon} size={24} />
+          <span>Đang tải danh sách kênh...</span>
         </div>
-        <div className={styles.statCard}>
-          <div className={styles.statValue}>
-            {channels.filter(c => c.status === 'CONNECTED').length}
+      ) : channels.length === 0 ? (
+        <div className={styles.empty}>
+          <Wifi size={48} className={styles.emptyIcon} />
+          <p className={styles.emptyTitle}>Chưa có kênh nào được kết nối</p>
+          <p className={styles.emptyDesc}>Nhấn "Kết nối kênh mới" để bắt đầu đồng bộ sản phẩm và kho.</p>
+          <button className={styles.addBtn} type="button" onClick={openCreate}>
+            <Plus size={16} />
+            Kết nối kênh mới
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className={styles.summaryLine}>
+            <span>{channels.length} kênh bán hàng</span>
+            <span>{connectedCount} kênh đang hoạt động</span>
           </div>
-          <div className={styles.statLabel}>Đang hoạt động</div>
-        </div>
-        <div className={styles.statCard}>
-          <div className={styles.statValue}>
-            {[...new Set(channels.map(c => c.platform))].length}
-          </div>
-          <div className={styles.statLabel}>Nền tảng</div>
-        </div>
-      </div>
 
-      <div className={styles.card}>
-        {isLoading ? (
-          <div className={styles.loading}>
-            <RefreshCw className={styles.loadingIcon} size={24} />
-            <span>Đang tải danh sách kênh...</span>
-          </div>
-        ) : channels.length === 0 ? (
-          <div className={styles.empty}>
-            <Wifi size={48} className={styles.emptyIcon} />
-            <p className={styles.emptyTitle}>Chưa có kênh nào được kết nối</p>
-            <p className={styles.emptyDesc}>Nhấn "Thêm kênh mới" để bắt đầu đồng bộ sản phẩm lên các sàn TMĐT</p>
-            <button className={styles.addBtn} onClick={openCreate}>
-              <Plus size={16} /> Thêm kênh mới
-            </button>
-          </div>
-        ) : (
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Kênh</th>
-                  <th>Nền tảng</th>
-                  <th>Hoa hồng</th>
-                  <th>Trạng thái</th>
-                  <th>Ngày thêm</th>
-                  <th>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {channels.map(ch => {
-                  const meta = PLATFORM_META[ch.platform] || PLATFORM_META.MANUAL;
-                  const isConnected = ch.status === 'CONNECTED';
-                  return (
-                    <tr key={ch.id}>
-                      <td>
-                        <div className={styles.channelCell}>
-                          <div
-                            className={styles.platformAvatar}
-                            style={{ color: meta.color, background: meta.bg }}
-                          >
-                            {meta.abbr}
-                          </div>
-                          <div>
-                            <div className={styles.channelName}>{ch.displayName}</div>
-                            <div className={styles.channelMeta}>{ch.metadata?.shopDomain || ''}</div>
-                          </div>
+          <div className={styles.channelGrid}>
+            {channels.map((channel) => {
+              const meta = getPlatformMeta(channel.platform);
+              const PlatformIcon = meta.icon;
+              const stats = getChannelStats(channel);
+              const isConnected = channel.status === 'CONNECTED';
+              const isSyncing = syncingChannelId === channel.id;
+              const canSync = isConnected && channel.platform === 'LAZADA';
+
+              return (
+                <section key={channel.id} className={styles.channelCard}>
+                  <div className={styles.cardTop}>
+                    <div className={styles.channelCell}>
+                      <div className={styles.platformAvatar} style={{ color: meta.color, background: meta.bg }}>
+                        <PlatformIcon size={24} />
+                      </div>
+                      <div>
+                        <div className={styles.channelName}>{channel.displayName || meta.label}</div>
+                        <div className={styles.badgeRow}>
+                          <span className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
+                            {isConnected ? <CheckCircle2 size={12} /> : <WifiOff size={12} />}
+                            {isConnected ? 'Đã kết nối' : 'Ngắt kết nối'}
+                          </span>
+                          {channel.syncEnabled === false && (
+                            <span className={styles.warningBadge}>Tạm dừng</span>
+                          )}
                         </div>
-                      </td>
-                      <td>
-                        <span className={styles.platformTag} style={{ color: meta.color, background: meta.bg }}>
-                          {meta.label}
-                        </span>
-                      </td>
-                      <td className={styles.commissionCell}>
-                        {ch.commissionRate != null ? `${ch.commissionRate}%` : '—'}
-                      </td>
-                      <td>
-                        <span className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
-                          {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                          {isConnected ? 'Đã kết nối' : 'Ngắt kết nối'}
-                        </span>
-                      </td>
-                      <td className={styles.dateCell}>
-                        {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString('vi-VN') : '—'}
-                      </td>
-                      <td>
-                        <div className={styles.actionBtns}>
-                          <button
-                            className={styles.editBtn}
-                            onClick={() => openEdit(ch)}
-                            title="Chỉnh sửa"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            className={styles.disconnectBtn}
-                            onClick={() => setConfirmDisconnect(ch)}
-                            title="Ngắt kết nối"
-                          >
-                            <Link2Off size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                      </div>
+                    </div>
 
-      {/* Channel Form Modal */}
+                    <button
+                      className={`${styles.toggleBtn} ${isConnected ? styles.toggleOn : ''}`}
+                      type="button"
+                      aria-label="Trạng thái kết nối"
+                      title={isConnected ? 'Đã kết nối' : 'Ngắt kết nối'}
+                    />
+                  </div>
+
+                  <div className={styles.metricGrid}>
+                    <div className={styles.metricItem}>
+                      <span>Sản phẩm</span>
+                      <strong>{stats.productCount.toLocaleString('vi-VN')}</strong>
+                    </div>
+                    <div className={styles.metricItem}>
+                      <span>SKU</span>
+                      <strong>{stats.skuVariantCount.toLocaleString('vi-VN')}</strong>
+                    </div>
+                    <div className={styles.metricItem}>
+                      <span>Kho</span>
+                      <strong>{stats.warehouseCount.toLocaleString('vi-VN')}</strong>
+                    </div>
+                  </div>
+
+                  <div className={styles.syncBlock}>
+                    <div className={styles.syncInfo}>
+                      <span>Đồng bộ lần cuối:</span>
+                      <strong>{formatLastSync(channel.lastSyncedAt)}</strong>
+                    </div>
+                    <div className={styles.syncInfo}>
+                      <span>{channel.platform === 'LAZADA' ? 'Seller ID:' : 'Shop ID:'}</span>
+                      <strong>{getAccountLabel(channel)}</strong>
+                    </div>
+                  </div>
+
+                  <div className={styles.cardActions}>
+                    <button
+                      className={styles.syncBtn}
+                      type="button"
+                      onClick={() => handleSync(channel)}
+                      disabled={!canSync || isSyncing}
+                      title={canSync ? 'Đồng bộ sản phẩm và kho' : 'Chỉ hỗ trợ đồng bộ trực tiếp cho kênh Lazada đã kết nối'}
+                    >
+                      <RefreshCw size={15} className={isSyncing ? styles.loadingIcon : ''} />
+                      {isSyncing ? 'Đang đồng bộ' : 'Đồng bộ'}
+                    </button>
+                    <button className={styles.settingsBtn} type="button" onClick={() => openEdit(channel)}>
+                      <Settings size={15} />
+                      Cài đặt
+                    </button>
+                    <button
+                      className={styles.iconBtn}
+                      type="button"
+                      title="Thống kê"
+                      onClick={() => toast.info('Thống kê kênh đang được phát triển')}
+                    >
+                      <BarChart3 size={15} />
+                    </button>
+                    <button
+                      className={styles.iconBtnDanger}
+                      type="button"
+                      title="Ngắt kết nối"
+                      onClick={() => setConfirmDisconnect(channel)}
+                    >
+                      <Link2Off size={15} />
+                    </button>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {isModalOpen && (
         <ChannelFormModal
           mode={modalMode}
@@ -212,18 +310,16 @@ const ChannelConnectionPage = () => {
         />
       )}
 
-      {/* Confirm Disconnect Dialog */}
       {confirmDisconnect && (
-        <div className={styles.confirmOverlay} onClick={(e) => e.target === e.currentTarget && setConfirmDisconnect(null)}>
+        <div className={styles.confirmOverlay} onClick={(event) => event.target === event.currentTarget && setConfirmDisconnect(null)}>
           <div className={styles.confirmDialog}>
             <div className={styles.confirmIcon}>
               <Link2Off size={28} />
             </div>
             <h3 className={styles.confirmTitle}>Xác nhận ngắt kết nối</h3>
             <p className={styles.confirmDesc}>
-              Bạn có chắc muốn ngắt kết nối kênh{' '}
-              <strong>"{confirmDisconnect.displayName}"</strong>?
-              Các sản phẩm đã đồng bộ sẽ không bị ảnh hưởng, nhưng bạn sẽ không thể đồng bộ mới.
+              Bạn có chắc muốn ngắt kết nối kênh <strong>"{confirmDisconnect.displayName}"</strong>?
+              Các sản phẩm đã đồng bộ sẽ không bị ảnh hưởng, nhưng kênh này sẽ không thể đồng bộ mới.
             </p>
             <div className={styles.confirmActions}>
               <button className={styles.confirmCancelBtn} onClick={() => setConfirmDisconnect(null)} disabled={isDisconnecting}>

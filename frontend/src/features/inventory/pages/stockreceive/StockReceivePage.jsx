@@ -43,7 +43,6 @@ const columns = [
   { label: 'Mã phiếu' },
   { label: 'Kho' },
   { label: 'Nhà cung cấp' },
-  { label: 'Số HĐ' },
   { label: 'SL SKU', align: 'right' },
   { label: 'Tổng SL', align: 'right' },
   { label: 'Giá trị', align: 'right' },
@@ -64,7 +63,6 @@ const RECEIPT_EXPORT_COLUMNS = [
   { key: 'debtAmount', label: 'Công nợ', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.debtAmount ?? Math.max(Number(receipt.totalCost ?? 0) - Number(receipt.paidAmount ?? receipt.totalCost ?? 0), 0) },
   { key: 'supplierName', label: 'Nhà cung cấp', width: 28, defaultChecked: true, getValue: (receipt) => receipt.supplierName ?? '' },
   { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: false, getValue: (receipt) => receipt.warehouseName ?? '' },
-  { key: 'invoiceNumber', label: 'Số hóa đơn', width: 18, defaultChecked: false, getValue: (receipt) => receipt.invoiceNumber ?? '' },
   { key: 'totalSkuCount', label: 'SL SKU', width: 10, type: 'number', defaultChecked: false, getValue: (receipt) => receipt.totalSkuCount ?? 0 },
   { key: 'totalQuantity', label: 'Tổng SL', width: 12, type: 'number', defaultChecked: false, getValue: (receipt) => receipt.totalQuantity ?? 0 },
   { key: 'createdByName', label: 'Người tạo', width: 20, defaultChecked: false, getValue: (receipt) => receipt.createdByName ?? '' },
@@ -85,7 +83,6 @@ const RECEIPT_DETAIL_EXPORT_COLUMNS = [
   { key: 'unitCost', label: 'Đơn giá', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.unitCost },
   { key: 'lineTotal', label: 'Thành tiền', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.lineTotal },
   { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => getStatusLabel(row.status) },
-  { key: 'invoiceNumber', label: 'Số hóa đơn', width: 18, defaultChecked: false, getValue: (row) => row.invoiceNumber },
   { key: 'createdByName', label: 'Người tạo', width: 20, defaultChecked: false, getValue: (row) => row.createdByName },
 ];
 
@@ -104,7 +101,7 @@ const buildReceiptDetailRows = async (receipts) => {
       receiptDate: getReceiptExportDate(receipt),
       warehouseName: receipt.warehouseName ?? '',
       supplierName: receipt.supplierName ?? '',
-      invoiceNumber: receipt.invoiceNumber ?? '',
+      invoiceNumber: receipt.receiptCode ?? '',
       status: receipt.status,
       createdByName: receipt.createdByName ?? '',
       sku: item.sku ?? item.variantSku ?? '',
@@ -237,7 +234,7 @@ export default function StockReceivePage() {
     const matchesKeyword = !keyword
       || (receipt.receiptCode ?? '').toLowerCase().includes(keyword)
       || (receipt.supplierName ?? '').toLowerCase().includes(keyword)
-      || (receipt.invoiceNumber ?? '').toLowerCase().includes(keyword);
+      || (receipt.receiptCode ?? '').toLowerCase().includes(keyword);
     const matchesStatus = statusFilter === 'ALL' || receipt.status === statusFilter;
     return matchesKeyword && matchesStatus;
   });
@@ -262,7 +259,6 @@ export default function StockReceivePage() {
       <td style={{ ...tableCellStyle, color: '#2563eb', fontFamily: 'monospace', fontWeight: 700 }}>{receipt.receiptCode ?? '-'}</td>
       <td style={tableCellStyle}>{receipt.warehouseName ?? '-'}</td>
       <td style={{ ...tableCellStyle, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{receipt.supplierName ?? '-'}</td>
-      <td style={{ ...tableCellStyle, color: '#64748b', fontFamily: 'monospace' }}>{receipt.invoiceNumber ?? '-'}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(receipt.totalSkuCount ?? 0)}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatNumber(receipt.totalQuantity ?? 0)}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatVND(receipt.totalCost)}</td>

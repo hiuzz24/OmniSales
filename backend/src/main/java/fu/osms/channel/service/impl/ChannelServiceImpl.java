@@ -14,6 +14,7 @@ import fu.osms.channel.mapper.ChannelMapper;
 import fu.osms.channel.mapper.ChannelProductMapper;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.PageResponse;
@@ -42,6 +43,7 @@ public class ChannelServiceImpl implements ChannelService {
     private final ChannelRepository channelRepository;
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductRepository channelProductRepository;
+    private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ChannelMapper channelMapper;
     private final ChannelProductMapper channelProductMapper;
 
@@ -73,6 +75,7 @@ public class ChannelServiceImpl implements ChannelService {
         Channel channel = channelRepository.findById(id)
                 .filter(c -> c.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+        enrichChannelStats(channel);
         return channelMapper.toResponse(channel);
     }
 
@@ -81,6 +84,7 @@ public class ChannelServiceImpl implements ChannelService {
     public List<ChannelResponse> getAll() {
         return channelRepository.findByDeletedAtIsNull()
                 .stream()
+                .peek(this::enrichChannelStats)
                 .map(channelMapper::toResponse)
                 .toList();
     }
@@ -241,16 +245,25 @@ public class ChannelServiceImpl implements ChannelService {
     public ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName) {
         log.info("[ChannelService] connectLazada — accountId={}, accountName={}", accountId, accountName);
 
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("accountId", accountId);
-        metadata.put("accountName", accountName);
+        String resolvedAccountName = firstNonBlank(accountName, accountId, "Connected");
+        String resolvedAccountId = firstNonBlank(accountId, resolvedAccountName);
 
-        String displayName = "Lazada-" + accountName;
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("accountId", resolvedAccountId);
+        metadata.put("accountName", resolvedAccountName);
+
+        String displayName = "Lazada-" + resolvedAccountName;
 
         Channel channel = channelRepository
                 .findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
-                .filter(c -> c.getMetadata() != null && java.util.Objects.equals(accountId, c.getMetadata().get("accountId")))
+                .filter(c -> c.getMetadata() != null && java.util.Objects.equals(resolvedAccountId, c.getMetadata().get("accountId")))
                 .findFirst()
+                .or(() -> channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
+                        .filter(c -> c.getDisplayName() == null
+                                || "Lazada-null".equalsIgnoreCase(c.getDisplayName())
+                                || c.getMetadata() == null
+                                || c.getMetadata().get("accountId") == null)
+                        .findFirst())
                 .orElseGet(() -> Channel.builder()
                         .platform(PlatformType.LAZADA)
                         .displayName(displayName)
@@ -278,5 +291,23 @@ public class ChannelServiceImpl implements ChannelService {
 
         log.info("[ChannelService] connectLazada success — channelId={}, expiresAt={}", channel.getId(), tokenExpiresAt);
         return channelMapper.toResponse(channel);
+    }
+    private void enrichChannelStats(Channel channel) {
+        Map<String, Object> metadata = channel.getMetadata() == null
+                ? new HashMap<>()
+                : new HashMap<>(channel.getMetadata());
+        metadata.put("productCount", channelProductRepository.countByChannelIdAndMappingState(channel.getId(), "ACTIVE"));
+        metadata.put("skuVariantCount", channelProductVariantRepository.countActiveByChannelId(channel.getId()));
+        metadata.putIfAbsent("warehouseCount", 0);
+        channel.setMetadata(metadata);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank() && !"null".equalsIgnoreCase(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 }

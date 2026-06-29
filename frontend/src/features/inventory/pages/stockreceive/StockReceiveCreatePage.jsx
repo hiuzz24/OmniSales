@@ -151,6 +151,7 @@ export default function StockReceiveCreatePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [nextReceiptCode, setNextReceiptCode] = useState('');
 
   const { register, handleSubmit, setValue, formState: { errors, isSubmitting, isDirty } } = useForm({
     resolver: zodResolver(schema),
@@ -163,11 +164,12 @@ export default function StockReceiveCreatePage() {
   const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
   useEffect(() => {
-    Promise.all([warehouseService.getAll(), supplierService.getAll()])
-      .then(([wRes, sRes]) => {
+    Promise.all([warehouseService.getAll(), supplierService.getAll(), stockReceiveService.getNextReceiptCode()])
+      .then(([wRes, sRes, codeRes]) => {
         const extract = (r) => { const d = r?.data?.data ?? r?.data; if (Array.isArray(d)) return d; if (d?.content && Array.isArray(d.content)) return d.content; return []; };
         setWarehouses(extract(wRes));
         setSuppliers(extract(sRes));
+        setNextReceiptCode(codeRes?.data?.data ?? codeRes?.data ?? '');
       })
       .catch(() => {});
   }, []);
@@ -253,10 +255,9 @@ export default function StockReceiveCreatePage() {
     if (invalidQty) { toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`); return; }
     const invalidPrice = items.find((it) => { const price = Number(it.unitPrice); return it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || isNaN(price) || price < 0; });
     if (invalidPrice) { toast.error(`Đơn giá của sản phẩm "${invalidPrice.productName}" phải lớn hơn hoặc bằng 0.`); return; }
-    if (!data.invoiceNumber || data.invoiceNumber.trim() === '') { toast.error('Số hóa đơn là bắt buộc khi xác nhận phiếu nhập.'); return; }
     try {
       await stockReceiveService.createReceipt({
-        warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: data.invoiceNumber || null,
+        warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
         receivedAt: data.receivedAt, notes: data.notes || null,
         items: items.map((it) => ({ variantId: it.variantId, quantity: Number(it.quantity), unitCost: Number(it.unitPrice) })), isDraft: false,
       });
@@ -275,7 +276,7 @@ export default function StockReceiveCreatePage() {
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
     try {
       await stockReceiveService.createReceipt({
-        warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: data.invoiceNumber || null,
+        warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
         receivedAt: data.receivedAt, notes: data.notes || null,
         items: items.map((it) => ({ variantId: it.variantId, quantity: it.quantity ? Number(it.quantity) : null, unitCost: it.unitPrice !== '' && it.unitPrice !== null && it.unitPrice !== undefined ? Number(it.unitPrice) : null })), isDraft: true,
       });
@@ -340,8 +341,8 @@ export default function StockReceiveCreatePage() {
                 </select>
               </div>
               <div>
-                <label className={styles.fieldLabel}>Số hóa đơn <span>*</span></label>
-                <input {...register('invoiceNumber')} maxLength={100} placeholder="INV-2026-001" className={styles.fieldInput} />
+                <label className={styles.fieldLabel}>Mã phiếu</label>
+                <input value={nextReceiptCode || 'Đang tạo mã...'} disabled className={styles.fieldInput} />
               </div>
               <div>
                 <label className={styles.fieldLabel}>Ngày nhập <span>*</span></label>

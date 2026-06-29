@@ -63,11 +63,15 @@ public class LazadaOAuthController {
 
         try {
             Map<String, Object> tokenData = lazadaOAuthService.exchangeToken(code);
-            String accessToken = (String) tokenData.get("access_token");
-            String refreshToken = (String) tokenData.get("refresh_token");
-            int expiresIn = tokenData.get(("expires_in")) != null ? (Integer) tokenData.get("expires_in") : 604800;
-            String accountId = (String) tokenData.get("account_id");
-            String accountName = (String) tokenData.get("account_name");
+            String accessToken = toStringValue(tokenData.get("access_token"));
+            String refreshToken = toStringValue(tokenData.get("refresh_token"));
+            int expiresIn = toIntValue(tokenData.get("expires_in"), 604800);
+            String accountId = toStringValue(tokenData.get("account_id"));
+            String accountName = toStringValue(tokenData.get("account_name"));
+
+            if (accessToken == null || accessToken.isBlank()) {
+                throw new IllegalStateException("Lazada OAuth callback không có access_token.");
+            }
 
             channelService.connectLazada(accessToken, refreshToken, expiresIn, accountId, accountName);
 
@@ -78,4 +82,21 @@ public class LazadaOAuthController {
         }
     }
 
+    private String toStringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private int toIntValue(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value != null) {
+            try {
+                return Integer.parseInt(String.valueOf(value));
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
 }
