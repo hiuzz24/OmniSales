@@ -54,6 +54,12 @@ public class StockReceiveController {
         return ResponseEntity.ok(ApiResponse.success("Thống kê phiếu nhập thành công", statistics));
     }
 
+    @GetMapping("/next-code")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<String>> getNextReceiptCode() {
+        return ResponseEntity.ok(ApiResponse.success(stockReceiveService.getNextReceiptCode()));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<StockReceiveResponse>> getReceiptById(@PathVariable UUID id) {

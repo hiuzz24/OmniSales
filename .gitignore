@@ -62,3 +62,7 @@ desktop.ini
 *.swo
 *~
 *.tmp
+
+### AI workspace/context ###
+.ai/
+repomix.config.json

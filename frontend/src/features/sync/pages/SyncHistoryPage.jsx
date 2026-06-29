@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Loader2 } from 'lucide-react';
 import syncApi from '../../../api/syncApi';
 import channelApi from '../../../api/channelApi';
 import Badge from '../../../shared/components/Badge';
+import Pagination from '../../../shared/components/Pagination';
 import styles from './SyncHistoryPage.module.css';
+
+const PAGE_SIZE = 20;
 
 const SyncHistoryPage = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   
   const [statusFilter, setStatusFilter] = useState('');
   const [channelFilter, setChannelFilter] = useState('');
@@ -28,12 +32,12 @@ const SyncHistoryPage = () => {
     fetchChannels();
   }, []);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       setLoading(true);
       const params = {
         page,
-        size: 20
+        size: PAGE_SIZE
       };
       if (statusFilter) params.status = statusFilter;
       if (channelFilter) params.channelId = channelFilter;
@@ -42,16 +46,17 @@ const SyncHistoryPage = () => {
       const data = res.data?.data || res.data || res;
       setLogs(data.content || []);
       setTotalPages(data.totalPages || 0);
+      setTotalElements(data.totalElements || 0);
     } catch (error) {
       console.error('Lỗi khi tải lịch sử đồng bộ:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, statusFilter, channelFilter]);
 
   useEffect(() => {
     fetchLogs();
-  }, [page, statusFilter, channelFilter]);
+  }, [fetchLogs]);
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -159,6 +164,17 @@ const SyncHistoryPage = () => {
             </div>
             
             {totalPages > 1 && (
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalElements={totalElements}
+                pageSize={PAGE_SIZE}
+                currentCount={logs.length}
+                itemLabel="lần đồng bộ"
+                onPageChange={setPage}
+              />
+            )}
+            {totalPages < 0 && (
               <div className={styles.pagination}>
                 <button 
                   className={styles.pageBtn} 

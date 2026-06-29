@@ -449,7 +449,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         inventoryItem.setQuantityOnHand(quantityAfter);
         inventoryItem.setReservedQuantity(reservedAfter);
         inventoryItem.setUpdatedBy(currentUser);
-        inventoryItemRepository.save(inventoryItem);
+        inventoryItem = inventoryItemRepository.save(inventoryItem);
         inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
 
         inventoryTransactionRepository.save(InventoryTransaction.builder()

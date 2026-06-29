@@ -12,6 +12,7 @@ export const ROUTES = {
   PRODUCT_EDIT: '/products/:id/edit',
   PRODUCT_DETAIL: '/products/:id',
   PRODUCTS: '/products',
+  CATEGORIES: '/products/categories',
   CHANGE_PASSWORD: '/change-password',
   CUSTOMER_LIST: '/customers',
   CUSTOMER_CREATE: '/customers/create',

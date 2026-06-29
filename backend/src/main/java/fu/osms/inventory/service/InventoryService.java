@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import fu.osms.inventory.dto.request.InventoryItemUpdateRequest;
 import org.springframework.data.domain.PageRequest;
 
 public interface InventoryService {
@@ -38,4 +39,5 @@ public interface InventoryService {
 
     public InventoryDetailDTO getInventoryItemDetail(UUID inventoryItemId);
     public List<AvailableVariantDTO> getAvailableVariantsByWarehouse(UUID warehouseId);
+    public InventoryDetailDTO updateInventoryDetail(UUID inventoryItemId, InventoryItemUpdateRequest request);
 }

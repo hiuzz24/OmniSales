@@ -125,10 +125,23 @@ button {
   font-family: inherit;
   border: none;
   background: none;
+  touch-action: manipulation;
 }
 
-input {
+input,
+select,
+textarea {
   font-family: inherit;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+:where(a, button, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary-container);
+  outline-offset: 2px;
 }
 
 .material-symbols-outlined {
@@ -162,4 +175,15 @@ input {
 
 @keyframes spinAnim {
   to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

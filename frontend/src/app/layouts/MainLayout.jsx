@@ -5,7 +5,7 @@ import {
   BarChart3, Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User,
+  ChevronRight, User, Tag,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -15,7 +15,16 @@ import notificationApi from '../../api/notificationApi';
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { name: 'Dashboard', href: ROUTES.DASHBOARD, icon: LayoutDashboard, roles: [] },
-  { name: 'Sản phẩm', href: '/products', icon: Package, roles: [] },
+  {
+    name: 'Sản phẩm',
+    href: '/products',
+    icon: Package,
+    roles: [],
+    children: [
+      { name: 'Danh sách sản phẩm', href: ROUTES.PRODUCTS, icon: Package, exact: true, roles: [] },
+      { name: 'Danh mục sản phẩm', href: ROUTES.CATEGORIES, icon: Tag, roles: [] },
+    ],
+  },
   {
     name: 'Kho hàng',
     href: '/warehouse',

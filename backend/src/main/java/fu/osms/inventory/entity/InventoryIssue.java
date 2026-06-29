@@ -75,6 +75,9 @@ public class InventoryIssue {
     @Builder.Default
     private List<InventoryIssueItem> items = new ArrayList<>();
 
+    @Column(name="document_reference_id", length = 255)
+    private String documentReferenceId;
+
     // Helper methods
     public void addItem(InventoryIssueItem item) {
         items.add(item);

@@ -1,5 +1,7 @@
 package fu.osms.catalog.repository;
 
+import fu.osms.catalog.dto.response.CategoryProductCount;
+import fu.osms.catalog.entity.Category;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.enums.ProductStatus;
 import org.springframework.data.domain.Page;
@@ -11,6 +13,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,4 +37,15 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     boolean existsBySkuInAndIdNotAndDeletedAtIsNull(Collection<String> skus, UUID id);
 
     Optional<Product> findFirstBySkuAndDeletedAtIsNull(String sku);
+
+    long count();
+
+    @Query("""
+            SELECT
+                p.category.id as categoryId,
+                COUNT(p.id) as productCount
+            FROM Product p
+            GROUP BY p.category.id
+            """)
+    List<CategoryProductCount> countProductsByCategory();
 }

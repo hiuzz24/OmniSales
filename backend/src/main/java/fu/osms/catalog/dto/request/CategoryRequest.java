@@ -14,8 +14,6 @@ import java.util.UUID;
 @Builder
 public class CategoryRequest {
 
-    @NotNull(message = "Shop ID must not be null")
-
     private UUID parentId;
 
     @NotBlank(message = "Category name must not be blank")
@@ -28,4 +26,6 @@ public class CategoryRequest {
 
     @Builder.Default
     private Integer sortOrder = 0;
+
+    private String status;
 }

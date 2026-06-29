@@ -25,5 +25,9 @@ const channelApi = {
         const data = await axiosClient.get(`/channels/lazada/authorize`);
         return data;
     },
+    sync: async (id) => {
+        const data = await axiosClient.post(`/channels/${id}/sync`);
+        return data;
+    },
 }
 export default channelApi;

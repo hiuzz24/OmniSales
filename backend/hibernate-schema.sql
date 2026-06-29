@@ -15,7 +15,7 @@ DO $$
             'users','channels','channel_credentials','products',
             'product_variants','channel_products','channel_product_variants',
             'warehouses','inventory_items','daily_sales_summary','report_configs',
-            'customers','suppliers','categories','inventory_receipts',
+            'customers','suppliers','inventory_receipts',
             'inventory_issues','stock_transfers','stocktake_sessions','orders'
             ]) LOOP
                 EXECUTE format('DROP TRIGGER IF EXISTS trg_%I_updated_at ON %I', tbl, tbl);
@@ -728,7 +728,7 @@ DO $$
             'users','channels','channel_credentials','products',
             'product_variants','channel_products','channel_product_variants',
             'warehouses','inventory_items','daily_sales_summary','report_configs',
-            'customers','suppliers','categories','inventory_receipts',
+            'customers','suppliers','inventory_receipts',
             'inventory_issues','stock_transfers','stocktake_sessions'
             ]) LOOP
                 EXECUTE format(
@@ -1088,8 +1088,14 @@ BEGIN
 END;
 $$;
 
--- 3. Tạo Trigger áp dụng hàm trên vào bảng users trước khi INSERT hoặc UPDATE
 CREATE TRIGGER trg_users_warehouse_role_check
     BEFORE INSERT OR UPDATE ON users
     FOR EACH ROW
 EXECUTE FUNCTION fn_check_user_warehouse_role();
+
+CREATE TYPE category_status AS ENUM ('ACTIVE', 'INACTIVE');
+
+ALTER TABLE categories
+    ADD COLUMN status category_status NOT NULL DEFAULT 'ACTIVE';
+
+
