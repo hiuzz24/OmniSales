@@ -4,6 +4,7 @@ import fu.osms.inventory.dto.request.WarehouseRequest;
 import fu.osms.inventory.dto.response.WarehouseResponse;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface WarehouseService {
@@ -17,4 +18,6 @@ public interface WarehouseService {
     WarehouseResponse update(UUID id, WarehouseRequest request);
 
     void delete(UUID id);
+
+    WarehouseResponse getWarehouseByUserId(UUID userId);
 }

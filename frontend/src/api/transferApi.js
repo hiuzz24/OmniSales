@@ -24,6 +24,20 @@ const transferApi = {
         const response = await axiosClient.get('/transfer/suggested-code');
         return response.data;
     },
+
+    // Lấy chi tiết phiếu chuyển kho
+    getTransferDetail: async (id) => {
+        const response = await axiosClient.get(`/transfer/${id}`);
+        return response.data?.data ?? response.data;
+    },
+
+    // Cập nhật trạng thái phiếu chuyển kho
+    updateTransferStatus: async (id, status, userId) => {
+        const response = await axiosClient.patch(`/transfer/${id}/status`, null, {
+            params: { status, userId }
+        });
+        return response.data;
+    },
 };
 
 export default transferApi;

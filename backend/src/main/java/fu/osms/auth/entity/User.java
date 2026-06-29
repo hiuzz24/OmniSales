@@ -2,6 +2,7 @@ package fu.osms.auth.entity;
 
 import fu.osms.auth.enums.UserStatus;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import fu.osms.inventory.entity.Warehouse;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -73,4 +74,8 @@ public class User {
 
     @Column(name = "password_expired")
     private Boolean passwordExpired;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
 }

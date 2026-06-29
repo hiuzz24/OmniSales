@@ -9,4 +9,6 @@ public interface StokeTransferService {
     public TransferInventoryListResponse getTransferListData(String status, UUID warehouseId, String keyword, int page, int size);
     public String generateTransferCode();
     public void createTransferInventory(StockTransferRequest request);
+    public fu.osms.inventory.dto.response.StockTransferResponse getTransferDetail(UUID id);
+    public void updateStatus(UUID transferId, String newStatus, UUID userId);
 }
