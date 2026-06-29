@@ -8,6 +8,7 @@ import fu.osms.sync.dto.WebhookReceiveResult;
 import fu.osms.sync.service.WebhookReceiverService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,14 +23,14 @@ import java.util.UUID;
 public class WebhookController {
 
     private final WebhookReceiverService webhookReceiverService;
-
-    @PostMapping("/api/webhooks/{platform}")
+    @PostMapping(value = "/api/webhooks/{platform}",consumes = MediaType.ALL_VALUE)
     public ResponseEntity<ApiResponse<WebhookReceiveResult>> receiveByPlatform(
-            @PathVariable PlatformType platform,
+            @PathVariable String platform,
             @RequestBody String rawBody,
             HttpServletRequest request
     ) {
-        WebhookReceiveResult result = webhookReceiverService.receive(platform, extractHeaders(request), rawBody);
+        PlatformType platformType = PlatformType.valueOf(platform.toUpperCase());
+        WebhookReceiveResult result = webhookReceiverService.receive(platformType, extractHeaders(request), rawBody);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 

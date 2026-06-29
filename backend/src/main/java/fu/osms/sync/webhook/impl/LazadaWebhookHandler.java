@@ -5,6 +5,7 @@ import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,14 +17,18 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class LazadaWebhookHandler implements PlatformWebhookHandler {
 
     private final ChannelRepository channelRepository;
 
+    @Value("${lazada.app-key}")
+    private String appKey;
+
     @Value("${lazada.app-secret}")
-    private String webhookSecret;
+    private String appSecret;
 
     @Override
     public PlatformType getPlatform() {
@@ -32,17 +37,20 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public boolean verify(Map<String, String> headers, String rawBody) {
-        if (webhookSecret == null || webhookSecret.isBlank()) {
+        if (appSecret == null || appSecret.isBlank()) {
             return true;
         }
-        String signature = headers.get("x-lazada-signature");
-        if (signature == null || signature.isBlank()) {
+        String signature = headers.get("authorization").trim().toLowerCase();
+        log.info("[signature]:{}",signature);
+        if (signature.isBlank()) {
             return false;
         }
         try {
+            String base = appKey + rawBody;
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            String calculated = HexFormat.of().formatHex(mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8)));
+            mac.init(new SecretKeySpec(appSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            String calculated = HexFormat.of().formatHex(mac.doFinal(base.getBytes(StandardCharsets.UTF_8))).toLowerCase();
+            log.info("[calculated]:{}",calculated);
             return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             return false;

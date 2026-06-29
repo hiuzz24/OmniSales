@@ -5,6 +5,7 @@ import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +17,7 @@ import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ShopifyWebhookHandler implements PlatformWebhookHandler {
@@ -32,14 +34,16 @@ public class ShopifyWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public boolean verify(Map<String, String> headers, String rawBody) {
-        String hmac = header(headers, "x-shopify-hmac-sha256");
+        String hmac = header(headers, "x-shopify-hmac-sha256").trim().toLowerCase();
+        log.info("[shopify hmac]: {}",hmac);
         if (apiSecret == null || apiSecret.isBlank() || hmac == null || hmac.isBlank()) {
             return false;
         }
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(apiSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            String calculated = Base64.getEncoder().encodeToString(mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8)));
+            String calculated = Base64.getEncoder().encodeToString(mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8))).trim().toLowerCase();
+            log.info("[shopify calculated]: {}",calculated);
             return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), hmac.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             return false;
