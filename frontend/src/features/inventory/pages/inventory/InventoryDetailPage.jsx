@@ -22,6 +22,7 @@ import styles from './InventoryDetailPage.module.css';
 import inventoryApi from '../../../../api/inventoryApi';
 import warehouseService from '../../services/warehouseService';
 import { ROUTES } from '../../../../app/router/routes';
+import Pagination from '../../../../shared/components/Pagination';
 
 const PAGE_SIZE = 10;
 
@@ -484,7 +485,16 @@ const InventoryDetailPage = () => {
           )}
         </div>
 
-        {totalPages > 1 && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalElements={totalElements}
+          pageSize={PAGE_SIZE}
+          currentCount={transactions.length}
+          itemLabel="giao dịch"
+          onPageChange={handlePageChange}
+        />
+        {totalPages < 0 && (
           <div className={styles.paginationFooter}>
             <span className={styles.paginationInfo}>
               Hiển thị {currentPage * PAGE_SIZE + 1} / {Math.min((currentPage + 1) * PAGE_SIZE, totalElements)} giao dịch

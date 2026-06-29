@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Filter, Loader2, FileText } from 'lucide-react';
 import orderLogApi from '../../../api/orderLogApi';
 import { ROUTES } from '../../../app/router/routes';
+import Pagination from '../../../shared/components/Pagination';
 import styles from './OrderLogPage.module.css';
 
 const ACTION_BADGE_MAP = {
@@ -285,6 +286,17 @@ const OrderLogPage = () => {
 
         {/* Pagination */}
         {!loading && totalElements > 0 && (
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalElements={totalElements}
+            pageSize={20}
+            currentCount={logs.length}
+            itemLabel="bản ghi"
+            onPageChange={setPage}
+          />
+        )}
+        {totalPages < 0 && (
           <div className={styles.pagination}>
             <span className={styles.pageInfo}>
               Hiển thị {logs.length} / {totalElements} bản ghi

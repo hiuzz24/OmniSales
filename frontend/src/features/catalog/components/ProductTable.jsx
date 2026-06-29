@@ -1,5 +1,6 @@
 import { Eye } from 'lucide-react';
 import Badge from '../../../shared/components/Badge';
+import Pagination from '../../../shared/components/Pagination';
 import styles from './ProductTable.module.css';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -42,7 +43,8 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(0);
-  const [size, setSize] = useState(6);
+  const [size] = useState(6);
+  const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -54,16 +56,22 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
         const responseData = response.data?.data || response.data || response;
         if (responseData.content) {
           setProducts(responseData.content);
-          setTotalElements(responseData.totalElements || 0);
+          const nextTotalElements = responseData.totalElements ?? responseData.total ?? responseData.content.length ?? 0;
+          setTotalElements(nextTotalElements);
+          setTotalPages(responseData.totalPages ?? Math.ceil(nextTotalElements / size));
         } else if (Array.isArray(responseData)) {
           setProducts(responseData);
           setTotalElements(responseData.length);
+          setTotalPages(Math.ceil(responseData.length / size));
         } else if (responseData.data) {
           setProducts(responseData.data);
-          setTotalElements(responseData.total || responseData.data.length || 0);
+          const nextTotalElements = responseData.totalElements ?? responseData.total ?? responseData.data.length ?? 0;
+          setTotalElements(nextTotalElements);
+          setTotalPages(responseData.totalPages ?? Math.ceil(nextTotalElements / size));
         } else {
           setProducts([]);
           setTotalElements(0);
+          setTotalPages(0);
         }
       } catch (error) {
         console.error("Failed to fetch products:", error);
@@ -232,7 +240,16 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
         </table>
       </div>
 
-      <div className={styles.tableFooter}>
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalElements={totalElements}
+        pageSize={size}
+        currentCount={products.length}
+        itemLabel="sản phẩm"
+        onPageChange={setPage}
+      />
+      <div className={styles.tableFooter} hidden>
         <div className={styles.paginationInfo}>
           <span>Hiển thị </span>
           <strong>{products.length > 0 ? (page * size) + 1 : 0}–{Math.min((page + 1) * size, totalElements)}</strong>

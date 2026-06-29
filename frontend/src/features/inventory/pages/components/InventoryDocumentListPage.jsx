@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, FileDown, Plus, Search } from 'lucide-react';
+import Pagination from '../../../../shared/components/Pagination';
 import { formatNumber } from './inventoryDocumentListUtils';
 
 export const Badge = ({ label, icon: Icon, color = '#475569', bg = '#f8fafc', border = '#e2e8f0' }) => (
@@ -228,6 +229,24 @@ export default function InventoryDocumentListPage({
         </div>
 
         {!loading && pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            totalElements={pagination.totalElements}
+            pageSize={pagination.pageSize ?? 10}
+            currentCount={rows?.length ?? 0}
+            itemLabel={pagination.itemLabel ?? 'phiếu'}
+            onPageChange={(nextPage) => {
+              if (pagination.onPageChange) {
+                pagination.onPageChange(nextPage);
+                return;
+              }
+              if (nextPage > pagination.page) pagination.onNext?.();
+              if (nextPage < pagination.page) pagination.onPrevious?.();
+            }}
+          />
+        )}
+        {pagination?.totalPages < 0 && (
           <div style={paginationStyle}>
             <span>{pagination.label}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

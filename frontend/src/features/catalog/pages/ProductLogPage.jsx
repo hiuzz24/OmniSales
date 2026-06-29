@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, Plus, RefreshCw, Trash2, User, Search } from 'lucide-react';
 import productLogApi from '../../../api/productLogApi';
 import { ROUTES } from '../../../app/router/routes';
+import Pagination from '../../../shared/components/Pagination';
 import styles from './ProductLogPage.module.css';
 
 const ACTION_CONFIG = {
@@ -224,7 +225,16 @@ const ProductLogPage = () => {
               </table>
             </div>
 
-            {totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalElements={stats.total}
+              pageSize={20}
+              currentCount={logs.length}
+              itemLabel="bản ghi"
+              onPageChange={setPage}
+            />
+            {totalPages < 0 && (
               <div className={styles.pagination}>
                 <div className={styles.paginationInfo}>
                   Trang <strong>{page + 1}</strong> / {totalPages}
