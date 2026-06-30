@@ -62,6 +62,13 @@
   color: #9ca3af;
 }
 
+.input:disabled {
+  color: #667085;
+  background: #f8fafc;
+  border-color: #e4e7ec;
+  cursor: not-allowed;
+}
+
 .inputError {
   border-color: #ef4444;
 }

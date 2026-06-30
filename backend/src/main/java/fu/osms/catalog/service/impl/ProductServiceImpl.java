@@ -50,6 +50,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -135,6 +136,7 @@ public class ProductServiceImpl implements ProductService {
                     .map(vr -> {
                         ProductVariant v = productVariantMapper.toEntity(vr);
                         v.setProduct(savedProduct);
+                        applyCreateDefaultPrices(v);
                         return v;
                     })
                     .toList();
@@ -405,9 +407,14 @@ public class ProductServiceImpl implements ProductService {
             for (int i = 0; i < request.getVariants().size(); i++) {
                 ProductVariantRequest vr = request.getVariants().get(i);
                 ProductVariant variant;
+                BigDecimal existingPrice = null;
+                BigDecimal existingCostPrice = null;
+                boolean isNewVariant = vr.getId() == null;
                 if (vr.getId() != null) {
                     if (existingVariantMap.containsKey(vr.getId())) {
                         variant = existingVariantMap.get(vr.getId());
+                        existingPrice = variant.getPrice();
+                        existingCostPrice = variant.getCostPrice();
 
                         if (!Objects.equals(variant.getSku(), vr.getSku()) && orderItemRepository.existsByVariant_Product_Id(id)) {
                             throw new AppException(ErrorCode.PRODUCT_HAS_ORDERS);
@@ -422,6 +429,10 @@ public class ProductServiceImpl implements ProductService {
                 }
 
                 productVariantMapper.updateEntityFromRequest(vr, variant);
+                if (variant.getPrice() == null) {
+                    variant.setPrice(isNewVariant ? BigDecimal.ZERO : existingPrice);
+                }
+                variant.setCostPrice(isNewVariant ? BigDecimal.ZERO : existingCostPrice);
                 if (variant.getOptionValues() == null) {
                     variant.setOptionValues(new HashMap<>());
                 }
@@ -652,5 +663,10 @@ public class ProductServiceImpl implements ProductService {
                 .notes(notes)
                 .build();
         productLogRepository.save(productLog);
+    }
+
+    private void applyCreateDefaultPrices(ProductVariant variant) {
+        variant.setPrice(BigDecimal.ZERO);
+        variant.setCostPrice(BigDecimal.ZERO);
     }
 }

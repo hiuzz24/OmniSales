@@ -1,7 +1,16 @@
 import { Info } from 'lucide-react';
 import styles from './ProductPriceStock.module.css';
 
-const ProductPriceStock = ({ price, costPrice, onChange, errors = {}, channels = [], selectedChannels = [] }) => {
+const ProductPriceStock = ({
+  price,
+  costPrice,
+  onChange,
+  errors = {},
+  channels = [],
+  selectedChannels = [],
+  disablePrice = false,
+  disableCostPrice = false,
+}) => {
   const renderSuggestedPrices = () => {
     const numPrice = Number(price);
     if (!numPrice || isNaN(numPrice) || numPrice <= 0) return null;
@@ -37,9 +46,10 @@ const ProductPriceStock = ({ price, costPrice, onChange, errors = {}, channels =
             type="number"
             className={`${styles.input} ${errors.price ? styles.inputError : ''}`}
             placeholder="150000"
-            value={price ?? ''}
-            onChange={(e) => onChange('price', e.target.value)}
+            value={disablePrice ? '0' : (price ?? '')}
+            onChange={(e) => onChange('price', disablePrice ? '0' : e.target.value)}
             min="0"
+            disabled={disablePrice}
           />
           {renderSuggestedPrices()}
           {errors.price && <span className={styles.errorText}>{errors.price}</span>}
@@ -51,9 +61,10 @@ const ProductPriceStock = ({ price, costPrice, onChange, errors = {}, channels =
             type="number"
             className={styles.input}
             placeholder="80000"
-            value={costPrice ?? ''}
-            onChange={(e) => onChange('costPrice', e.target.value)}
+            value={disableCostPrice ? (costPrice ?? '0') : (costPrice ?? '')}
+            onChange={(e) => onChange('costPrice', disableCostPrice ? (costPrice ?? '0') : e.target.value)}
             min="0"
+            disabled={disableCostPrice}
           />
         </div>
       </div>

@@ -110,7 +110,7 @@ const ProductEditPage = () => {
           if (isDefaultVariant) {
             setHasVariants(false);
             setPrice(firstVariant.price || '');
-            setCostPrice(firstVariant.costPrice || '');
+            setCostPrice(firstVariant.costPrice ?? '0');
             setVariants(productData.variants);
             setFormData(prev => ({
               ...prev,
@@ -257,7 +257,7 @@ const ProductEditPage = () => {
 
   const handlePriceChange = (field, value) => {
     if (field === 'price') setPrice(value);
-    if (field === 'costPrice') setCostPrice(value);
+    if (field === 'costPrice') setCostPrice(costPrice ?? '0');
   };
 
   const handleShippingChange = (field, value) => {
@@ -334,6 +334,7 @@ const ProductEditPage = () => {
               errors={errors}
               channels={channels}
               selectedChannels={selectedChannels}
+              disableCostPrice
             />
           )}
 
@@ -348,6 +349,7 @@ const ProductEditPage = () => {
               hasOrders={formData.hasOrders}
               channels={channels}
               selectedChannels={selectedChannels}
+              disableCostPrice
             />
           )}
 
