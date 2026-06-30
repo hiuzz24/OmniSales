@@ -12,6 +12,8 @@ import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 import ProfilePage from '../../features/user/pages/ProfilePage';
+import UserListPage from '../../features/user/pages/UserListPage';
+import InviteRegisterPage from '../../features/auth/pages/InviteRegisterPage';
 import ProductManagementPage from '../../features/catalog/pages/ProductManagementPage';
 import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
@@ -59,6 +61,7 @@ const AppRouter = () => {
           <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
           <Route path={ROUTES.CHANGE_PASSWORD} element={<ChangePasswordPage />} />
           <Route path={ROUTES.RESET_PASSWORD} element={<ChangePasswordPage />} />
+          <Route path={ROUTES.INVITE_USER} element={<InviteRegisterPage />} />
         </Route>
 
         <Route element={<PrivateRoute />}>
@@ -72,6 +75,10 @@ const AppRouter = () => {
           <Route element={<MainLayout />}>
 
             <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.USERS} element={<UserListPage />} />
+            </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />

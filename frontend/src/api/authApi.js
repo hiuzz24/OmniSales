@@ -54,6 +54,23 @@ const authApi = {
     });
     return res.data?.data ?? res.data;
   },
+
+  inviteUser: async (email, roleName) => {
+    const res = await axiosClient.post('/auth/invite-user', { email, roleName });
+    return res.data;
+  },
+
+  validateInviteToken: async (token) => {
+    const res = await axiosClient.get('/auth/accept-invite/validate', {
+      params: { token },
+    });
+    return res.data?.data ?? res.data;
+  },
+
+  acceptInvite: async (data) => {
+    const res = await axiosClient.post('/auth/accept-invite', data);
+    return res.data;
+  },
 };
 
 export default authApi;

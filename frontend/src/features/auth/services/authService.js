@@ -64,6 +64,21 @@ const authService = {
     const data = await authApi.changePasswordAfterLogin(oldPassword, newPassword, confirmPassword);
     return data;
   },
+
+  inviteUser: async (email, roleName) => {
+    const data = await authApi.inviteUser(email, roleName);
+    return data;
+  },
+
+  validateInviteToken: async (token) => {
+    const data = await authApi.validateInviteToken(token);
+    return data;
+  },
+
+  acceptInvite: async (data) => {
+    const res = await authApi.acceptInvite(data);
+    return res;
+  },
 };
 
 export default authService;
