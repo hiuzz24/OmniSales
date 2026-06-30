@@ -9,6 +9,7 @@ import {
   FileDown, UserCheck, UserX, TrendingUp, Phone, Mail, Users
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
+import Pagination from '../../../shared/components/Pagination';
 import customerService from '../services/customerService';
 import ExportCustomersModal from '../components/ExportCustomersModal';
 import styles from './CustomerListPage.module.css';
@@ -295,7 +296,16 @@ const CustomerListPage = () => {
             )}
           </tbody>
         </table>
-        <div className={styles.tableFooter}>
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalElements={totalElements}
+          pageSize={PAGE_SIZE}
+          currentCount={customers.length}
+          itemLabel="khách hàng"
+          onPageChange={setPage}
+        />
+        <div className={styles.tableFooter} hidden>
           <span className={styles.footerInfo}>
             Hiển thị {customers.length} / {totalElements} khách hàng
           </span>

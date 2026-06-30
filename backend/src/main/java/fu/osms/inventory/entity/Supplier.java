@@ -47,4 +47,7 @@ public class Supplier {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
+
+    @Column(name="supplier_code", nullable = false, unique = true, length = 100)
+    private String supplierCode;
 }

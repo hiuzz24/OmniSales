@@ -170,13 +170,6 @@ export default function StockReceiveDetailPage() {
   const handleComplete = async () => {
     // Validate before completing
     const items = receipt.items || [];
-    
-    // Check invoice number
-    if (!receipt.invoiceNumber || receipt.invoiceNumber.trim() === '') {
-      toast.error('Số hóa đơn là bắt buộc khi hoàn thành phiếu nhập. Vui lòng chỉnh sửa phiếu để thêm số hóa đơn.');
-      return;
-    }
-    
     // Check items quantity and unitCost
     const invalidQty = items.find(item => !item.quantity || item.quantity <= 0);
     if (invalidQty) {
@@ -784,8 +777,8 @@ export default function StockReceiveDetailPage() {
             />
             <InfoRow
               icon={Hash}
-              label="Số hóa đơn"
-              value={receipt.invoiceNumber ?? 'Không có'}
+              label="Mã phiếu"
+              value={receipt.receiptCode ?? receipt.invoiceNumber ?? 'Không có'}
             />
             <InfoRow
               icon={Calendar}

@@ -263,7 +263,7 @@ export default function StockReceiveEditPage() {
       await stockReceiveService.updateReceipt(id, {
         warehouseId: data.warehouseId,
         supplierId: data.supplierId || null,
-        invoiceNumber: data.invoiceNumber || null,
+        invoiceNumber: receipt.receiptCode || null,
         receivedAt: data.receivedAt,
         notes: data.notes || null,
         items: items.map((it) => ({ 
@@ -439,12 +439,12 @@ export default function StockReceiveEditPage() {
                 </select>
               </div>
 
-              {/* Số hóa đơn */}
+              {/* Mã phiếu */}
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#374151', marginBottom: 4 }}>
-                  Số hóa đơn <span style={{ fontSize: 9, color: '#94a3b8', marginLeft: 4 }}>(Bắt buộc khi hoàn thành)</span>
+                  Mã phiếu
                 </label>
-                <input {...register('invoiceNumber')} maxLength={100} placeholder="INV-2026-001"
+                <input value={receipt.receiptCode || 'Đang tạo mã...'} disabled
                   style={{ width: '100%', padding: '7px 9px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
               </div>
 

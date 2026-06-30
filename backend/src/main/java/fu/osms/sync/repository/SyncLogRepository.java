@@ -10,10 +10,18 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+
 @Repository
-public interface SyncLogRepository extends JpaRepository<SyncLog, UUID> {
+public interface SyncLogRepository extends JpaRepository<SyncLog, UUID>, JpaSpecificationExecutor<SyncLog> {
 
     Page<SyncLog> findByStatus(SyncStatus status, Pageable pageable);
 
     Optional<SyncLog> findByIdempotencyKey(String idempotencyKey);
+
+    Page<SyncLog> findAllByOrderByStartedAtDesc(Pageable pageable);
+
 }

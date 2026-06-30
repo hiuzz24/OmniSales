@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, FileDown, Plus, Search } from 'lucide-react';
+import Pagination from '../../../../shared/components/Pagination';
 import { formatNumber } from './inventoryDocumentListUtils';
 
 export const Badge = ({ label, icon: Icon, color = '#475569', bg = '#f8fafc', border = '#e2e8f0' }) => (
@@ -85,6 +86,7 @@ export default function InventoryDocumentListPage({
   createLabel,
   onCreate,
   onExport,
+  statUnit = 'phiếu',
   stats = [],
   filters,
   columns = [],
@@ -99,7 +101,7 @@ export default function InventoryDocumentListPage({
 }) {
   return (
     <div style={pageStyle}>
-      {/* ── Page Header ── */}
+      {/* â”€â”€ Page Header â”€â”€ */}
       <div style={headerContainerStyle}>
         <div style={titleWrapperStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -132,7 +134,7 @@ export default function InventoryDocumentListPage({
         </div>
       </div>
 
-      {/* ── Stats Cards ── */}
+      {/* â”€â”€ Stats Cards â”€â”€ */}
       {stats.length > 0 && (
         <div style={statsGridStyle}>
           {stats.map((stat) => {
@@ -158,7 +160,7 @@ export default function InventoryDocumentListPage({
                   <strong style={{ fontSize: 28, color: '#111827', lineHeight: 1.1, fontWeight: 800, letterSpacing: '-0.5px', marginTop: 4 }}>
                     {formatNumber(stat.value ?? 0)}
                   </strong>
-                  <span style={{ fontSize: 12, color: '#9ca3af', marginTop: 6 }}>phiếu</span>
+                  <span style={{ fontSize: 12, color: '#9ca3af', marginTop: 6 }}>{statUnit}</span>
                 </div>
                 <div style={{
                   width: 40, height: 40, borderRadius: 12,
@@ -175,12 +177,12 @@ export default function InventoryDocumentListPage({
         </div>
       )}
 
-      {/* ── Filter Bar ── */}
+      {/* â”€â”€ Filter Bar â”€â”€ */}
       <div style={filterBarStyle}>
         {filters}
       </div>
 
-      {/* ── Table Card ── */}
+      {/* â”€â”€ Table Card â”€â”€ */}
       <div style={tableCardStyle}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', minWidth: minTableWidth, borderCollapse: 'collapse', fontSize: 14 }}>
@@ -227,6 +229,24 @@ export default function InventoryDocumentListPage({
         </div>
 
         {!loading && pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            totalElements={pagination.totalElements}
+            pageSize={pagination.pageSize ?? 10}
+            currentCount={rows?.length ?? 0}
+            itemLabel={pagination.itemLabel ?? 'phiếu'}
+            onPageChange={(nextPage) => {
+              if (pagination.onPageChange) {
+                pagination.onPageChange(nextPage);
+                return;
+              }
+              if (nextPage > pagination.page) pagination.onNext?.();
+              if (nextPage < pagination.page) pagination.onPrevious?.();
+            }}
+          />
+        )}
+        {pagination?.totalPages < 0 && (
           <div style={paginationStyle}>
             <span>{pagination.label}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -263,7 +283,7 @@ export default function InventoryDocumentListPage({
   );
 }
 
-/* ─── Layout ─────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const pageStyle = {
   display: 'flex',
   flexDirection: 'column',
@@ -284,7 +304,7 @@ const titleWrapperStyle = {
   gap: 0,
 };
 
-/* ─── Action Buttons ─────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Action Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const primaryButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -318,7 +338,7 @@ const secondaryButtonStyle = {
   transition: 'all 0.2s ease',
 };
 
-/* ─── Stats Grid ─────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Stats Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const statsGridStyle = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
@@ -338,7 +358,7 @@ const statCardStyle = {
   outline: 'none',
 };
 
-/* ─── Filter Bar ─────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Filter Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const filterBarStyle = {
   border: '1px solid #e5e7eb',
   borderRadius: 14,
@@ -366,7 +386,7 @@ const filterControlStyle = {
   transition: 'border-color 0.15s',
 };
 
-/* ─── Table Card ─────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Table Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const tableCardStyle = {
   border: '1px solid #e5e7eb',
   borderRadius: 14,
@@ -383,7 +403,7 @@ const emptyCellStyle = {
   fontSize: 14,
 };
 
-/* ─── Footer ──────────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const footerStyle = {
   minHeight: 46,
   padding: '0 16px',
@@ -398,7 +418,7 @@ const footerStyle = {
   flexWrap: 'wrap',
 };
 
-/* ─── Pagination ──────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Pagination â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const paginationStyle = {
   padding: '13px 16px',
   borderTop: '1px solid #f3f4f6',
@@ -428,7 +448,7 @@ const paginationButtonStyle = {
   transition: 'all 0.15s',
 };
 
-/* ─── Action Menu ─────────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Action Menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const menuButtonStyle = {
   width: 30,
   height: 30,

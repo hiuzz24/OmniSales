@@ -76,16 +76,17 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
     const numPrice = Number(price);
     if (!numPrice || isNaN(numPrice) || numPrice <= 0) return '-';
 
-    const selectedList = channels.filter(c => selectedChannels.includes(c.id));
+    const selectedList = channels.filter((c, i) => selectedChannels.includes(c.id || c._id || (c.platform + i)));
     if (selectedList.length === 0) return '-';
 
     return (
       <div style={{ fontSize: '12px', color: '#059669', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {selectedList.map(channel => {
+        {selectedList.map((channel, i) => {
+          const channelId = channel.id || channel._id || (channel.platform + i);
           const rate = (channel.commissionRate || 0) / 100;
-          if (rate >= 1) return <div key={channel.id}>{channel.platform}: N/A</div>;
+          if (rate >= 1) return <div key={channelId}>{channel.platform}: N/A</div>;
           const suggested = Math.round(numPrice / (1 - rate));
-          return <div key={channel.id}>{channel.platform}: {suggested.toLocaleString('vi-VN')}đ</div>;
+          return <div key={channelId}>{channel.platform}: {suggested.toLocaleString('vi-VN')}đ</div>;
         })}
       </div>
     );

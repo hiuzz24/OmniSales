@@ -9,8 +9,6 @@ import {
   AlertTriangle,
   AlertCircle,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
   ArrowUpAZ,
   ArrowDownAZ,
@@ -26,6 +24,7 @@ import {
 } from 'lucide-react';
 import styles from './InventoryPage.module.css';
 import PageHeader from '../../../../shared/components/PageHeader';
+import Pagination from '../../../../shared/components/Pagination';
 import { ROUTES } from '../../../../app/router/routes';
 import categoryApi from '../../../../api/categoryApi';
 import inventoryService from '../../services/inventoryService';
@@ -128,78 +127,6 @@ const Select = ({ value, onChange, options }) => (
     <ChevronDown className={styles.selectIcon} size={14} />
   </div>
 );
-
-// ─── Pagination Component ─────────────────────────────────────────────────────
-const Pagination = ({ currentPage, totalPages, totalElements, pageSize, onPageChange }) => {
-  if (totalPages <= 1) return null;
-
-  // currentPage is 0-indexed from BE; display as 1-indexed
-  const displayPage = currentPage + 1;
-  const startItem = currentPage * pageSize + 1;
-  const endItem = Math.min((currentPage + 1) * pageSize, totalElements);
-
-  const getPages = () => {
-    const pages = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (displayPage > 3) pages.push('...');
-      for (
-        let i = Math.max(2, displayPage - 1);
-        i <= Math.min(totalPages - 1, displayPage + 1);
-        i++
-      ) pages.push(i);
-      if (displayPage < totalPages - 2) pages.push('...');
-      pages.push(totalPages);
-    }
-    return pages;
-  };
-
-  return (
-    <div className={styles.pagination}>
-      <span className={styles.paginationInfo}>
-        Hiển thị {startItem}–{endItem} / {totalElements} mục
-      </span>
-      <div className={styles.paginationControls}>
-        <button
-          id="btn-page-prev"
-          className={`${styles.pageBtn} ${currentPage === 0 ? styles.pageBtnDisabled : ''}`}
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 0}
-          aria-label="Trang trước"
-        >
-          <ChevronLeft size={15} />
-        </button>
-
-        {getPages().map((p, i) =>
-          p === '...' ? (
-            <span key={`ellipsis-${i}`} className={styles.pageEllipsis}>…</span>
-          ) : (
-            <button
-              key={p}
-              id={`btn-page-${p}`}
-              className={`${styles.pageBtn} ${p === displayPage ? styles.pageBtnActive : ''}`}
-              onClick={() => onPageChange(p - 1)} // convert back to 0-indexed
-            >
-              {p}
-            </button>
-          )
-        )}
-
-        <button
-          id="btn-page-next"
-          className={`${styles.pageBtn} ${currentPage === totalPages - 1 ? styles.pageBtnDisabled : ''}`}
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages - 1}
-          aria-label="Trang sau"
-        >
-          <ChevronRight size={15} />
-        </button>
-      </div>
-    </div>
-  );
-};
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const InventoryPage = () => {
@@ -779,6 +706,8 @@ const InventoryPage = () => {
             totalPages={totalPages}
             totalElements={totalElements}
             pageSize={PAGE_SIZE}
+            currentCount={filtered.length}
+            itemLabel="SKU"
             onPageChange={handlePageChange}
           />
         )}
