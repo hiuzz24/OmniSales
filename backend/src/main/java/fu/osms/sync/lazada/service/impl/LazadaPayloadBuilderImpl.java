@@ -37,7 +37,7 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
     private String defaultPackageHeight;
 
     @Override
-    public String buildPayload(Product product, List<ProductVariant> variants, List<String> lazadaImageUrls) {
+    public String buildPayload(Product product, List<ProductVariant> variants, List<String> lazadaImageUrls, Map<String, String> externalSkuIdBySku) {
         try {
             Document document = DocumentBuilderFactory.newInstance()
                     .newDocumentBuilder()
@@ -68,6 +68,10 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
             Element skus = appendElement(document, productElement, "Skus");
             for (ProductVariant variant : variants) {
                 Element sku = appendElement(document, skus, "Sku");
+                String skuId = externalSkuIdBySku != null ? externalSkuIdBySku.get(variant.getSku()) : null;
+                if (skuId != null && !skuId.isBlank()) {
+                    appendTextElement(document, sku, "SkuId", skuId);
+                }
                 appendTextElement(document, sku, "SellerSku", variant.getSku());
                 appendTextElement(document, sku, "price", variant.getPrice() != null ? variant.getPrice().toPlainString() : "0");
                 appendTextElement(document, sku, "quantity", "0");
