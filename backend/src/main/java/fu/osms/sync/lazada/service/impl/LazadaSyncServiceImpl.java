@@ -13,8 +13,6 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.SyncStatus;
-import fu.osms.common.exception.AppException;
-import fu.osms.common.exception.ErrorCode;
 import fu.osms.common.exception.TokenExpiredException;
 import fu.osms.sync.lazada.service.LazadaApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;
@@ -67,12 +65,17 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
 
             List<String> migratedImageUrls = lazadaImageService.migrateImages(images, credential.getAccessToken(), tokenExpiresAt);
 
-            String xmlPayload = lazadaPayloadBuilder.buildPayload(product, variants, migratedImageUrls);
+            boolean isNew = (channelProduct.getExternalProductId() == null);
+            String xmlPayload = lazadaPayloadBuilder.buildPayload(
+                    product,
+                    variants,
+                    migratedImageUrls,
+                    isNew ? Map.of() : mapExternalSkuId
+            );
 
             Map<String, String> params = new HashMap<>();
             params.put("payload", xmlPayload);
 
-            boolean isNew = (channelProduct.getExternalProductId() == null);
             String apiPath = isNew ? "/product/create" : "/product/update";
 
             String responseStr = lazadaApiClient.executePost(apiPath, params, credential.getAccessToken(), tokenExpiresAt);
@@ -81,64 +84,64 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
 
             if (root.has("code") && "0".equals(root.get("code").asText())) {
                 JsonNode data = root.path("data");
-                if (data != null && data.has("item_id")) {
-                    String itemId = data.get("item_id").asText();
-                    if (isNew) {
-                        channelProduct.setExternalProductId(itemId);
-                    }
-
-                    JsonNode skuList = data.path("sku_list");
-                    if (skuList != null && skuList.isArray()) {
-                        int variantIndex = 0;
-                        for (JsonNode skuNode : skuList) {
-                            String sellerSku = skuNode.path("seller_sku").asText(null);
-                            String skuId = skuNode.path("sku_id").asText(null);
-
-                            if (skuId != null) {
-                                Optional<ProductVariant> matchedVariantOpt = Optional.empty();
-
-                                if (sellerSku != null && !sellerSku.isBlank()) {
-                                    matchedVariantOpt = variants.stream()
-                                            .filter(v -> sellerSku.equals(v.getSku()))
-                                            .findFirst();
-                                }
-
-                                if (matchedVariantOpt.isEmpty() && variantIndex < variants.size()) {
-                                    log.warn("[LazadaSync] SKU match failed or empty, using index fallback: index={}", variantIndex);
-                                    matchedVariantOpt = Optional.of(variants.get(variantIndex));
-                                }
-
-                                if (matchedVariantOpt.isPresent()) {
-                                    ProductVariant localVariant = matchedVariantOpt.get();
-
-                                    ChannelProductVariant cpv = channelProductVariantRepository
-                                            .findByChannelProductIdAndVariantId(channelProduct.getId(), localVariant.getId())
-                                            .orElse(ChannelProductVariant.builder()
-                                                    .channelProduct(channelProduct)
-                                                    .variant(localVariant)
-                                                    .externalVariantId(skuId)
-                                                    .build());
-
-                                    cpv.setExternalVariantId(skuId);
-                                    cpv.setExternalSku(sellerSku);
-                                    cpv.setSyncStatus(SyncStatus.SYNCED);
-                                    cpv.setLastSyncedAt(OffsetDateTime.now());
-
-                                    channelProductVariantRepository.save(cpv);
-                                }
-                            }
-                            variantIndex++;
-                        }
-                    }
-
-                    channelProduct.setSyncStatus(SyncStatus.SYNCED);
-                    channelProduct.setLastSyncedAt(OffsetDateTime.now());
-                    channelProduct.setLastSyncError(null);
-                    channelProductRepository.save(channelProduct);
-                    return true;
-                } else {
-                    throw new RuntimeException("Missing item_id in response data");
+                String itemId = data.path("item_id").asText(null);
+                if (isNew && (itemId == null || itemId.isBlank())) {
+                    throw new RuntimeException("Missing item_id in create response data");
                 }
+
+                if (itemId != null && !itemId.isBlank()) {
+                    channelProduct.setExternalProductId(itemId);
+                }
+
+                JsonNode skuList = data.path("sku_list");
+                if (skuList != null && skuList.isArray()) {
+                    int variantIndex = 0;
+                    for (JsonNode skuNode : skuList) {
+                        String sellerSku = skuNode.path("seller_sku").asText(null);
+                        String skuId = skuNode.path("sku_id").asText(null);
+
+                        if (skuId != null) {
+                            Optional<ProductVariant> matchedVariantOpt = Optional.empty();
+
+                            if (sellerSku != null && !sellerSku.isBlank()) {
+                                matchedVariantOpt = variants.stream()
+                                        .filter(v -> sellerSku.equals(v.getSku()))
+                                        .findFirst();
+                            }
+
+                            if (matchedVariantOpt.isEmpty() && variantIndex < variants.size()) {
+                                log.warn("[LazadaSync] SKU match failed or empty, using index fallback: index={}", variantIndex);
+                                matchedVariantOpt = Optional.of(variants.get(variantIndex));
+                            }
+
+                            if (matchedVariantOpt.isPresent()) {
+                                ProductVariant localVariant = matchedVariantOpt.get();
+
+                                ChannelProductVariant cpv = channelProductVariantRepository
+                                        .findByChannelProductIdAndVariantId(channelProduct.getId(), localVariant.getId())
+                                        .orElse(ChannelProductVariant.builder()
+                                                .channelProduct(channelProduct)
+                                                .variant(localVariant)
+                                                .externalVariantId(skuId)
+                                                .build());
+
+                                cpv.setExternalVariantId(skuId);
+                                cpv.setExternalSku(sellerSku);
+                                cpv.setSyncStatus(SyncStatus.SYNCED);
+                                cpv.setLastSyncedAt(OffsetDateTime.now());
+
+                                channelProductVariantRepository.save(cpv);
+                            }
+                        }
+                        variantIndex++;
+                    }
+                }
+
+                channelProduct.setSyncStatus(SyncStatus.SYNCED);
+                channelProduct.setLastSyncedAt(OffsetDateTime.now());
+                channelProduct.setLastSyncError(null);
+                channelProductRepository.save(channelProduct);
+                return true;
             } else {
                 log.error("[LazadaSync] Lazada create/update failed. apiPath={}, payload={}, response={}",
                         apiPath, xmlPayload, responseStr);

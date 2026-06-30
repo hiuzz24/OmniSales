@@ -63,6 +63,7 @@ DROP TABLE IF EXISTS customer_platform_ids        CASCADE;
 DROP TABLE IF EXISTS customers                    CASCADE;
 DROP TABLE IF EXISTS channel_product_variants     CASCADE;
 DROP TABLE IF EXISTS channel_products             CASCADE;
+DROP TABLE IF EXISTS channel_connection_logs      CASCADE;
 DROP TABLE IF EXISTS channel_credentials          CASCADE;
 DROP TABLE IF EXISTS channels                     CASCADE;
 DROP TABLE IF EXISTS product_logs                 CASCADE;
@@ -299,6 +300,27 @@ CREATE TABLE channel_credentials (
                                      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                                      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE channel_connection_logs (
+                                         id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+                                         platform      platform_type NOT NULL,
+                                         channel_id    UUID          REFERENCES channels(id) ON DELETE SET NULL,
+                                         channel_name  VARCHAR(100),
+                                         entity_type   VARCHAR(50)   NOT NULL DEFAULT 'CHANNEL',
+                                         action        VARCHAR(30)   NOT NULL
+                                             CHECK (action IN ('CONNECT', 'DISCONNECT', 'RECONNECT')),
+                                         status        VARCHAR(30)   NOT NULL
+                                             CHECK (status IN ('SUCCESS', 'FAILED')),
+                                         message       TEXT,
+                                         error_message TEXT,
+                                         metadata      JSONB         DEFAULT '{}',
+                                         created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_channel_connection_logs_created_at ON channel_connection_logs(created_at DESC);
+CREATE INDEX idx_channel_connection_logs_platform ON channel_connection_logs(platform);
+CREATE INDEX idx_channel_connection_logs_channel_id ON channel_connection_logs(channel_id);
+CREATE INDEX idx_channel_connection_logs_status ON channel_connection_logs(status);
+CREATE INDEX idx_channel_connection_logs_action ON channel_connection_logs(action);
 
 CREATE TABLE channel_products (
                                   id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -597,10 +619,10 @@ CREATE TABLE sync_logs (
                            started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                            completed_at    TIMESTAMPTZ
 );
-
 CREATE UNIQUE INDEX uq_sync_logs_running ON sync_logs(channel_id, job_type) WHERE status = 'PENDING';
 
 -- Migration: add product_id to sync_logs (for per-product sync tracking)
+ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
 
 CREATE TABLE sync_tasks (
                             id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

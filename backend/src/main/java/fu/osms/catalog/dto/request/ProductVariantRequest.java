@@ -1,8 +1,7 @@
 package fu.osms.catalog.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -30,8 +29,7 @@ public class ProductVariantRequest {
     @Size(max = 100)
     private String barcode;
 
-    @NotNull(message = "Price must not be null")
-    @Positive(message = "Price must be greater than 0")
+    @PositiveOrZero(message = "Price must be greater than or equal to 0")
     private BigDecimal price;
 
     private BigDecimal costPrice;

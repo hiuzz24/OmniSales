@@ -11,7 +11,7 @@ export const productVariantSchema = z.object({
     .transform((val) => (val === '' ? undefined : Number(val)))
     .pipe(
       z.number({ error: 'Giá phải là số' })
-        .positive('Giá phải > 0')
+        .nonnegative('Giá phải >= 0')
     ),
   costPrice: z
     .union([z.string(), z.number()])

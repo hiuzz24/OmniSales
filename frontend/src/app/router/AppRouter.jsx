@@ -43,6 +43,7 @@ import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/Stoc
 import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
 import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
 import ChannelConnectionPage from '../../features/channel/pages/ChannelConnectionPage';
+import ChannelConnectionHistoryPage from '../../features/channel/pages/ChannelConnectionHistoryPage';
 import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/StockDeliveryEditPage';
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
@@ -104,6 +105,7 @@ const AppRouter = () => {
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
               <Route path={ROUTES.CATEGORIES} element={<CategoryPage />} />
               <Route path={ROUTES.CHANNELS} element={<ChannelConnectionPage />} />
+              <Route path={ROUTES.CHANNEL_CONNECTION_HISTORY} element={<ChannelConnectionHistoryPage />} />
               <Route path={ROUTES.SYNC_HISTORY} element={<SyncHistoryPage />} />
               <Route path={ROUTES.CUSTOMER_LIST} element={<CustomerListPage />} />
               <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />

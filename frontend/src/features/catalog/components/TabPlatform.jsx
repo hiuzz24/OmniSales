@@ -1,24 +1,43 @@
 import React, { useState } from 'react';
-import { LinkIcon, ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, LinkIcon } from 'lucide-react';
 import styles from './TabPlatform.module.css';
+
+const statusLabel = {
+  SYNCED: 'Thành công',
+  SUCCESS: 'Thành công',
+  PENDING: 'Chờ đồng bộ',
+  FAILED: 'Lỗi',
+  OUT_OF_SYNC: 'Cần đồng bộ',
+};
 
 const TabPlatform = ({ product, channels = [] }) => {
   const [expandedPlatform, setExpandedPlatform] = useState(null);
 
-  const productChannels = channels.filter(c => {
+  const productChannels = channels.filter(channel => {
+    const channelId = channel.id || channel._id;
     if (product?.channelIds && product.channelIds.length > 0) {
-      return product.channelIds.includes(c.id || c._id);
+      return product.channelIds.includes(channelId);
     }
-    return (product?.channels || []).includes(c.platform);
+    return (product?.channels || []).includes(channel.platform);
   });
 
-  const toggleExpand = (platformName) => {
-    setExpandedPlatform(prev => prev === platformName ? null : platformName);
+  const toggleExpand = (key) => {
+    setExpandedPlatform(prev => prev === key ? null : key);
   };
 
   const calculateTotalStock = () => {
     if (!product?.variants) return 0;
-    return product.variants.reduce((sum, v) => sum + (v.quantityOnHand || 0), 0);
+    return product.variants.reduce((sum, variant) => sum + (variant.quantityOnHand || 0), 0);
+  };
+
+  const renderStatusBadge = (syncStatus) => {
+    if (syncStatus === 'SYNCED' || syncStatus === 'SUCCESS') {
+      return <span className={styles.badgeSuccess}>{statusLabel[syncStatus]}</span>;
+    }
+    if (syncStatus === 'FAILED') {
+      return <span className={styles.badgeDanger}>{statusLabel[syncStatus]}</span>;
+    }
+    return <span className={styles.badgeWarning}>{statusLabel[syncStatus] || syncStatus}</span>;
   };
 
   return (
@@ -38,70 +57,73 @@ const TabPlatform = ({ product, channels = [] }) => {
               <th style={{ width: '40px' }}></th>
               <th>Nền tảng</th>
               <th>Trạng thái</th>
-              <th>Tồn kho (Dự kiến)</th>
+              <th>Tồn kho dự kiến</th>
               <th>Lần đồng bộ cuối</th>
             </tr>
           </thead>
           <tbody>
             {productChannels.length === 0 ? (
               <tr>
-                <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#6b7280' }}>
+                <td colSpan="5" className={styles.emptyCell}>
                   Sản phẩm chưa được liên kết với kênh bán hàng nào.
                 </td>
               </tr>
             ) : (
               productChannels.map(channel => {
-                const isExpanded = expandedPlatform === channel.platform;
+                const channelId = channel.id || channel._id;
+                const rowKey = `${channel.platform}-${channelId}`;
+                const isExpanded = expandedPlatform === rowKey;
                 const commissionRate = channel.commissionRate || 0;
-
-                const syncInfo = (product?.channelSyncs || []).find(s => s.platform === channel.platform) || {};
+                const syncInfo = (product?.channelSyncs || []).find(sync =>
+                  sync.channelId === channelId || sync.platform === channel.platform
+                ) || {};
                 const syncStatus = syncInfo.syncStatus || 'PENDING';
-                const lastSyncedAt = syncInfo.lastSyncedAt ? new Date(syncInfo.lastSyncedAt).toLocaleString('vi-VN') : 'Chưa đồng bộ';
+                const lastSyncedAt = syncInfo.lastSyncedAt
+                  ? new Date(syncInfo.lastSyncedAt).toLocaleString('vi-VN')
+                  : 'Chưa đồng bộ';
 
                 return (
-                  <React.Fragment key={channel.id}>
-                    <tr onClick={() => toggleExpand(channel.platform)} style={{ cursor: 'pointer', backgroundColor: isExpanded ? '#f9fafb' : 'white' }}>
-                      <td style={{ textAlign: 'center' }}>
-                        {isExpanded ? <ChevronDown size={18} color="#6b7280" /> : <ChevronRight size={18} color="#6b7280" />}
+                  <React.Fragment key={rowKey}>
+                    <tr
+                      onClick={() => toggleExpand(rowKey)}
+                      className={isExpanded ? styles.expandedRow : styles.clickableRow}
+                    >
+                      <td className={styles.centerCell}>
+                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </td>
                       <td className={styles.fw500}>{channel.displayName || channel.platform}</td>
-                      <td>
-                        {syncStatus === 'SUCCESS' && <span className={styles.badgeSuccess}>Thành công</span>}
-                        {syncStatus === 'PENDING' && <span className={styles.badgeWarning} style={{ backgroundColor: '#fef08a', color: '#854d0e', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>Chờ đồng bộ</span>}
-                        {syncStatus === 'FAILED' && <span className={styles.badgeDanger} style={{ backgroundColor: '#fee2e2', color: '#b91c1c', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>Lỗi</span>}
-                        {!['SUCCESS', 'PENDING', 'FAILED'].includes(syncStatus) && <span>{syncStatus}</span>}
-                      </td>
+                      <td>{renderStatusBadge(syncStatus)}</td>
                       <td>{calculateTotalStock()}</td>
                       <td className={styles.textGray}>{lastSyncedAt}</td>
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan="5" style={{ padding: '0' }}>
-                          <div style={{ backgroundColor: '#f9fafb', padding: '16px 24px', borderBottom: '1px solid #e5e7eb' }}>
-                            <h4 style={{ fontSize: '13px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>
-                              Chi tiết giá bán từng biến thể
-                            </h4>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <td colSpan="5" className={styles.expandedCell}>
+                          <div className={styles.expandedPanel}>
+                            <h4 className={styles.sectionTitle}>Chi tiết giá bán từng biến thể</h4>
+                            <table className={styles.variantTable}>
                               <thead>
-                                <tr style={{ borderBottom: '1px solid #d1d5db', textAlign: 'left', color: '#4b5563' }}>
-                                  <th style={{ padding: '8px' }}>SKU Biến thể</th>
-                                  <th style={{ padding: '8px' }}>Thuộc tính</th>
-                                  <th style={{ padding: '8px' }}>Giá gốc</th>
-                                  <th style={{ padding: '8px' }}>Giá bán đề xuất ({commissionRate}%)</th>
+                                <tr>
+                                  <th>SKU biến thể</th>
+                                  <th>Thuộc tính</th>
+                                  <th>Giá gốc</th>
+                                  <th>Giá bán đề xuất ({commissionRate}%)</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {(product.variants || []).map(v => {
+                                {(product.variants || []).map(variant => {
                                   const rate = commissionRate / 100;
-                                  const numPrice = Number(v.price);
-                                  const suggestedPrice = (rate >= 1 || !numPrice) ? 'N/A' : Math.round(numPrice / (1 - rate)).toLocaleString('vi-VN') + 'đ';
+                                  const price = Number(variant.price);
+                                  const suggestedPrice = rate >= 1 || !price
+                                    ? 'N/A'
+                                    : `${Math.round(price / (1 - rate)).toLocaleString('vi-VN')}đ`;
 
                                   return (
-                                    <tr key={v.id || v.sku} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                      <td style={{ padding: '10px 8px', fontWeight: 500 }}>{v.sku}</td>
-                                      <td style={{ padding: '10px 8px' }}>{[v.optionValues?.Size, v.optionValues?.['Màu']].filter(Boolean).join(' / ') || 'Mặc định'}</td>
-                                      <td style={{ padding: '10px 8px' }}>{numPrice ? numPrice.toLocaleString('vi-VN') + 'đ' : '0đ'}</td>
-                                      <td style={{ padding: '10px 8px', color: '#059669', fontWeight: 600 }}>{suggestedPrice}</td>
+                                    <tr key={variant.id || variant.sku}>
+                                      <td>{variant.sku}</td>
+                                      <td>{Object.values(variant.optionValues || {}).filter(Boolean).join(' / ') || 'Mặc định'}</td>
+                                      <td>{price ? `${price.toLocaleString('vi-VN')}đ` : '0đ'}</td>
+                                      <td className={styles.suggestedPrice}>{suggestedPrice}</td>
                                     </tr>
                                   );
                                 })}

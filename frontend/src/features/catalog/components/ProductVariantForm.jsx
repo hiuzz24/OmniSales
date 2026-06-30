@@ -7,13 +7,25 @@ const emptyVariant = () => ({
   sku: '',
   barcode: '',
   name: '',
-  price: '',
-  costPrice: '',
+  price: '0',
+  costPrice: '0',
   optionValues: { Size: '', 'Màu': '' },
   images: [],
 });
 
-const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors = {}, globalError, hasOrders = false, channels = [], selectedChannels = [] }) => {
+const ProductVariantForm = ({
+  variants = [],
+  onAdd,
+  onRemove,
+  onChange,
+  errors = {},
+  globalError,
+  hasOrders = false,
+  channels = [],
+  selectedChannels = [],
+  disablePrice = false,
+  disableCostPrice = false,
+}) => {
   const [editingImageIndex, setEditingImageIndex] = useState(null);
   const [urlValue, setUrlValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -199,25 +211,25 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         type="number"
                         className={`${styles.variantInput} ${variantErrors.price ? styles.inputError : ''}`}
                         placeholder="0"
-                        value={variant.price}
-                        onChange={(e) => handleFieldChange(index, 'price', e.target.value)}
+                        value={disablePrice ? '0' : variant.price}
+                        onChange={(e) => handleFieldChange(index, 'price', disablePrice ? '0' : e.target.value)}
                         min="0"
-                        disabled={variant.isActive === false}
+                        disabled={disablePrice || variant.isActive === false}
                       />
                       {variantErrors.price && <div className={styles.errorText}>{variantErrors.price}</div>}
                     </td>
                     <td>
-                      {renderSuggestedPrices(variant.price)}
+                      {renderSuggestedPrices(disablePrice ? 0 : variant.price)}
                     </td>
                     <td>
                       <input
                         type="number"
                         className={styles.variantInput}
                         placeholder="0"
-                        value={variant.costPrice}
-                        onChange={(e) => handleFieldChange(index, 'costPrice', e.target.value)}
+                        value={disableCostPrice ? (variant.costPrice ?? '0') : variant.costPrice}
+                        onChange={(e) => handleFieldChange(index, 'costPrice', disableCostPrice ? (variant.costPrice ?? '0') : e.target.value)}
                         min="0"
-                        disabled={variant.isActive === false}
+                        disabled={disableCostPrice || variant.isActive === false}
                       />
                     </td>
                     <td className={styles.removeCell}>

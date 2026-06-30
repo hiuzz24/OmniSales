@@ -110,6 +110,13 @@
   color: #9ca3af;
 }
 
+.variantInput:disabled {
+  color: #667085;
+  background: #f8fafc;
+  border-color: #e4e7ec;
+  cursor: not-allowed;
+}
+
 .imgCell {
   width: 40px;
 }
