@@ -45,4 +45,6 @@ export const ROUTES = {
   ORDER_DETAIL: '/orders/:id',
   ORDER_LOGS: '/orders/logs',
   INVENTORY_LOGS: '/inventory/logs',
+  USERS: '/users',
+  INVITE_USER: '/inviteUser',
 };
