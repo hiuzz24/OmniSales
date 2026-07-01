@@ -29,8 +29,8 @@ const ProductEditPage = () => {
     unit: '',
   });
   const [images, setImages] = useState([]);
-  const [price, setPrice] = useState('');
-  const [costPrice, setCostPrice] = useState('');
+  const [price, setPrice] = useState('0');
+  const [costPrice, setCostPrice] = useState('0');
   const [hasVariants, setHasVariants] = useState(false);
   const [variants, setVariants] = useState([]);
   const [weightGrams, setWeightGrams] = useState('');
@@ -138,8 +138,8 @@ const ProductEditPage = () => {
     const dataToValidate = {
       ...formData,
       hasVariants,
-      price: price,
-      costPrice: costPrice,
+      price: '0',
+      costPrice: '0',
       weightGrams: weightGrams,
       lowStockThreshold: lowStockThreshold,
       dimensions: dimensions,
@@ -169,7 +169,7 @@ const ProductEditPage = () => {
         sku: v.sku,
         barcode: v.barcode || null,
         name: [v.optionValues?.Size, v.optionValues?.['Màu']].filter(Boolean).join(' / ') || v.sku,
-        price: Number(v.price),
+        price: 0,
         costPrice: v.costPrice ? Number(v.costPrice) : null,
         isActive: v.isActive !== false,
         optionValues: v.optionValues,
@@ -183,7 +183,7 @@ const ProductEditPage = () => {
         sku: formData.sku,
         barcode: formData.barcode || null,
         name: formData.name || 'Mặc định',
-        price: Number(price),
+        price: 0,
         costPrice: costPrice ? Number(costPrice) : null,
         optionValues: Object.fromEntries(
           Object.entries({ Size: formData.size, 'Màu': formData.color }).filter(([_, v]) => v)
@@ -256,8 +256,7 @@ const ProductEditPage = () => {
   };
 
   const handlePriceChange = (field, value) => {
-    if (field === 'price') setPrice(value);
-    if (field === 'costPrice') setCostPrice(costPrice ?? '0');
+    // Price is disabled, do nothing
   };
 
   const handleShippingChange = (field, value) => {
@@ -334,6 +333,7 @@ const ProductEditPage = () => {
               errors={errors}
               channels={channels}
               selectedChannels={selectedChannels}
+              disablePrice
               disableCostPrice
             />
           )}
@@ -349,6 +349,7 @@ const ProductEditPage = () => {
               hasOrders={formData.hasOrders}
               channels={channels}
               selectedChannels={selectedChannels}
+              disablePrice
               disableCostPrice
             />
           )}
