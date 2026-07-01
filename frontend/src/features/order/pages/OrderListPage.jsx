@@ -346,11 +346,15 @@ const OrderListPage = () => {
                     <td className={styles.tdAction}>
                       <div className={styles.actionGroup}>
                         <button
-                          className={styles.actionBtn}
+                          type="button"
                           onClick={() => navigate(ROUTES.ORDER_DETAIL.replace(':id', order.id))}
                           title="Xem chi tiết"
+                          className={styles.detailBtn}
                         >
-                          <Eye size={14} />
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
                         </button>
                       </div>
                     </td>
