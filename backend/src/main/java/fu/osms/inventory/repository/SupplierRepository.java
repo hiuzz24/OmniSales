@@ -22,13 +22,13 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
     Optional<Supplier> findByIdAndIsActiveTrue(UUID id);
 
     @Query("""
-    SELECT s.code
+    SELECT s.supplierCode
     FROM Supplier s
-    WHERE s.code IS NOT NULL
-    ORDER BY s.code DESC
+    WHERE s.supplierCode IS NOT NULL
+    ORDER BY s.supplierCode DESC
     LIMIT 1
 """)
     String findLatestCode();
 
-    Optional<Supplier> findTopByOrderByCodeDesc();
+    Optional<Supplier> findTopByOrderBySupplierCodeDesc();
 }
