@@ -18,7 +18,11 @@ public interface SupplierMapper {
 
     @Mapping(target = "id", ignore = true)
 
+    @Mapping(target = "isActive", ignore = true)
+
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     void updateEntityFromRequest(SupplierRequest request, @MappingTarget Supplier supplier);
+
+
 }

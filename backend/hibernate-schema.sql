@@ -76,6 +76,7 @@ DROP TABLE IF EXISTS countries                    CASCADE;
 DROP TABLE IF EXISTS warehouses                   CASCADE;
 DROP TABLE IF EXISTS suppliers                    CASCADE;
 DROP TABLE IF EXISTS password_reset_tokens        CASCADE;
+DROP TABLE IF EXISTS user_invite_tokens           CASCADE;
 DROP TABLE IF EXISTS refresh_tokens               CASCADE;
 DROP TABLE IF EXISTS user_roles                   CASCADE;
 DROP TABLE IF EXISTS roles                        CASCADE;
@@ -158,6 +159,16 @@ CREATE TABLE password_reset_tokens (
                                        expires_at TIMESTAMPTZ  NOT NULL,
                                        used_at    TIMESTAMPTZ,
                                        created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_invite_tokens (
+                                    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                                    email       VARCHAR(255) NOT NULL,
+                                    role_name   VARCHAR(50)  NOT NULL,
+                                    token       VARCHAR(255) NOT NULL UNIQUE,
+                                    expires_at  TIMESTAMPTZ  NOT NULL,
+                                    used_at     TIMESTAMPTZ,
+                                    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ── Catalogue ────────────────────────────────────────────────
@@ -1098,4 +1109,23 @@ CREATE TYPE category_status AS ENUM ('ACTIVE', 'INACTIVE');
 ALTER TABLE categories
     ADD COLUMN status category_status NOT NULL DEFAULT 'ACTIVE';
 
+ALTER TABLE suppliers
+    ADD COLUMN IF NOT EXISTS supplier_code VARCHAR(255);
+ALTER TABLE inventory_issues
+    ADD COLUMN IF NOT EXISTS document_reference_id VARCHAR(255);
+
+UPDATE suppliers s
+SET supplier_code = x.code
+FROM (
+         SELECT id, 'SUP-' || LPAD(ROW_NUMBER() OVER (ORDER BY created_at, id)::text, 5, '0') AS code
+         FROM suppliers
+         WHERE supplier_code IS NULL
+     ) x
+WHERE s.id = x.id;
+
+ALTER TABLE suppliers
+    ALTER COLUMN supplier_code SET NOT NULL;
+
+ALTER TABLE suppliers
+    ADD CONSTRAINT uq_suppliers_supplier_code UNIQUE (supplier_code);
 

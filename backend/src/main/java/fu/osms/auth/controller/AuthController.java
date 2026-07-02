@@ -4,6 +4,7 @@ import fu.osms.auth.dto.request.*;
 import fu.osms.auth.dto.response.AuthResponse;
 import fu.osms.auth.dto.response.ResetPasswordResponse;
 import fu.osms.auth.dto.response.TokenPairDTO;
+import fu.osms.auth.entity.UserInviteToken;
 import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.CookieService;
@@ -97,11 +98,67 @@ public class AuthController {
             ));
         }
     }
+    @PostMapping("/invite-user")
+    public ResponseEntity<?> InviteUser(
+            @Valid @RequestBody InviteUserRequest inviteUserRequest) {
+
+        try {
+            authService.processInviteUser(inviteUserRequest.getEmail(), inviteUserRequest.getRoleName());
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Vui lòng kiểm tra email của bạn"
+            ));
+
+        } catch (IllegalArgumentException ex) {
+
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", ex.getMessage()
+            ));
+        }
+    }
+
+    @GetMapping("/accept-invite/validate")
+    public ResponseEntity<?> validateInviteToken(@RequestParam String token) {
+        try {
+            UserInviteToken inviteToken = authService.validateInviteToken(token);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "data", Map.of(
+                            "email", inviteToken.getEmail(),
+                            "roleName", inviteToken.getRoleName()
+                    )
+            ));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", ex.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/accept-invite")
+    public ResponseEntity<?> acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
+        try {
+            authService.acceptInvite(request);
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Kích hoạt tài khoản thành công"
+            ));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", ex.getMessage()
+            ));
+        }
+    }
+
     @GetMapping("/change-password/validate")
     public ResponseEntity<?> validateToken(@RequestParam String token) {
 
         try {
-            authService.validateResetToken(token);
+            authService.validateToken(token);
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "Token hợp lệ"
