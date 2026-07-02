@@ -8,6 +8,7 @@ import fu.osms.channel.dto.response.ChannelResponse;
 import fu.osms.common.dto.PageResponse;
 
 import fu.osms.channel.dto.response.ChannelSyncResponse;
+import fu.osms.sync.dto.shopify.WebhookRegistrationResult;
 
 import java.util.Collection;
 import java.util.List;
@@ -36,5 +37,9 @@ public interface ChannelService {
 
     ChannelResponse connectShopify(String shop, String accessToken);
 
+    void registerShopifyWebhooks(String shop, String accessToken, UUID channelId);
+
     ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName);
+
+    void updateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result);
 }

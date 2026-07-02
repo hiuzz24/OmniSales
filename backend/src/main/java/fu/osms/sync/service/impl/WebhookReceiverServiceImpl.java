@@ -15,6 +15,8 @@ import fu.osms.sync.service.WebhookReceiverService;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,6 +35,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WebhookReceiverServiceImpl implements WebhookReceiverService {
@@ -46,6 +49,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
     @Override
     @Transactional
     public WebhookReceiveResult receive(PlatformType platform, Map<String, String> headers, String rawBody) {
+        log.info("[receive webhook]");
         PlatformWebhookHandler handler = handlerMap().get(platform);
         if (handler == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported webhook platform");
@@ -78,7 +82,14 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                 .status("RECEIVED")
                 .rawPayload(payload)
                 .build();
-        event = webhookEventRepository.save(event);
+        try {
+            event = webhookEventRepository.saveAndFlush(event);
+        } catch (DataIntegrityViolationException e) {
+            if (externalEventId != null) {
+                return duplicateResult(platform, externalEventId);
+            }
+            throw e;
+        }
 
         if (channel == null) {
             event.setStatus("FAILED");
@@ -141,6 +152,19 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
 
     private Map<PlatformType, PlatformWebhookHandler> handlerMap() {
         return handlers.stream().collect(Collectors.toMap(PlatformWebhookHandler::getPlatform, Function.identity()));
+    }
+
+    private WebhookReceiveResult duplicateResult(PlatformType platform, String externalEventId) {
+        return webhookEventRepository.findByPlatformAndExternalEventId(platform, externalEventId)
+                .map(existing -> WebhookReceiveResult.builder()
+                        .webhookEventId(existing.getId())
+                        .status(existing.getStatus())
+                        .message("Duplicate webhook ignored")
+                        .build())
+                .orElseGet(() -> WebhookReceiveResult.builder()
+                        .status("IGNORED")
+                        .message("Duplicate webhook ignored")
+                        .build());
     }
 
     private Map<String, Object> parsePayload(String rawBody) {

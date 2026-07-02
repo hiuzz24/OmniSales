@@ -1,5 +1,6 @@
 package fu.osms.channel.controller;
 
+import fu.osms.channel.dto.response.ChannelResponse;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.enums.ChannelConnectionAction;
@@ -45,7 +46,8 @@ public class ShopifyOAuthController {
 
         try {
             String accessToken = shopifyOAuthService.exchangeCodeForToken(shop, code);
-            channelService.connectShopify(shop, accessToken);
+            ChannelResponse channel = channelService.connectShopify(shop, accessToken);
+            channelService.registerShopifyWebhooks(shop, accessToken, channel.getId());
             log.info("[ShopifyOAuth] callback success — shop={}", shop);
             return ResponseEntity.status(302)
                     .location(URI.create(frontendUrl + "/channels?success=true"))
@@ -64,4 +66,5 @@ public class ShopifyOAuthController {
                     .build();
         }
     }
+
 }

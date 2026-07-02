@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSMS Lazada Sensitive Data Flow Diagram</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #ffffff;
+      color: #1e293b;
+      padding: 40px 48px;
+      max-width: 1200px;
+      margin: 0 auto;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+
+    .header .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    .header .badge {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 4px 14px;
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border: 1px solid #fcd34d;
+    }
+
+    .diagram-container {
+      background: #fafbfc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 32px 24px;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    .diagram-container .mermaid {
+      display: inline-block;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    table th {
+      background: #f1f5f9;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 700;
+      color: #334155;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+      vertical-align: top;
+      line-height: 1.5;
+    }
+
+    table tr:last-child td { border-bottom: none; }
+    table tr:hover td { background: #f8fafc; }
+
+    .flow-id {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 700;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .tag-green { background: #dcfce7; color: #166534; }
+    .tag-blue { background: #dbeafe; color: #1e40af; }
+    .tag-orange { background: #ffedd5; color: #9a3412; }
+    .tag-red { background: #fee2e2; color: #991b1b; }
+    .tag-gray { background: #f1f5f9; color: #475569; }
+    .tag-purple { background: #f3e8ff; color: #6b21a8; }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .control-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      font-size: 12.5px;
+      color: #166534;
+      line-height: 1.4;
+    }
+
+    .control-icon {
+      flex-shrink: 0;
+      font-size: 14px;
+      margin-top: 1px;
+    }
+
+    .no-sharing-banner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 14px;
+      background: #fef2f2;
+      border: 1.5px solid #fecaca;
+      border-radius: 8px;
+      color: #991b1b;
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+
+    .data-class-table td:first-child {
+      font-weight: 600;
+    }
+
+    .footer {
+      text-align: center;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11.5px;
+      color: #94a3b8;
+    }
+
+    @media print {
+      body { padding: 20px; }
+      .diagram-container { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <h1>OSMS Lazada Sensitive Data Flow Diagram</h1>
+    <div class="subtitle">OmniSales Management System — Lazada Apply Unmask Security Review</div>
+    <div class="badge">Confidential — Internal Use Only</div>
+  </div>
+
+  <!-- Diagram -->
+  <div class="diagram-container">
+    <pre class="mermaid">
+flowchart LR
+    subgraph INTERNAL["Internal Environment"]
+        direction TB
+        USER["👤 Authorized Internal\nUser / Staff"]
+        FE["🖥️ OSMS Frontend\n(React SPA)"]
+    end
+
+    BE["⚙️ OSMS Backend API\n(Spring Boot)"]
+    DB[("🗄️ PostgreSQL\nDatabase")]
+
+    subgraph LAZADA["Lazada External Services"]
+        direction TB
+        API["🌐 Lazada Open\nPlatform API"]
+        WH["📨 Lazada Push\nMechanism / Webhook"]
+        SC["🏪 Lazada Seller\nCenter / Account"]
+    end
+
+    NOSHARE["🚫 No Third-Party\nData Sharing"]
+
+    USER -- "① HTTPS/TLS\nLogin · View Orders\nManage Products" --> FE
+    FE -- "② HTTPS/TLS + JWT\nAuthenticated API\nRequests" --> BE
+    BE -- "③ HTTPS/TLS + OAuth\nGet Orders · Items\nSync Products · Inventory" --> API
+    API -- "③ HTTPS/TLS\nOrder & Product\nData Responses" --> BE
+    WH -- "④ Webhook\nOrder Notifications\nSignature Verified" --> BE
+    BE -- "⑤ Backend-only Access\nStore Sensitive Data\n& Audit Logs" --> DB
+    SC -. "⑥ Seller Account\nOAuth Authorization" .-> API
+
+    style INTERNAL fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#1B5E20
+    style LAZADA fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    style USER fill:#C8E6C9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
+    style FE fill:#C8E6C9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
+    style BE fill:#BBDEFB,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style DB fill:#90CAF9,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style API fill:#FFE0B2,stroke:#E65100,stroke-width:1px,color:#BF360C
+    style WH fill:#FFE0B2,stroke:#E65100,stroke-width:1px,color:#BF360C
+    style SC fill:#FFE0B2,stroke:#E65100,stroke-width:1px,color:#BF360C
+    style NOSHARE fill:#FFCDD2,stroke:#C62828,stroke-width:2px,color:#B71C1C
+    </pre>
+  </div>
+
+  <!-- No Third-Party Sharing Banner -->
+  <div class="no-sharing-banner">
+    🚫 No Lazada sensitive data (buyer name, phone, shipping address) is shared with any third party.
+  </div>
+
+  <!-- Data Flow Description -->
+  <div class="section">
+    <div class="section-title">📋 Data Flow Description</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px">Flow</th>
+          <th style="width:180px">From → To</th>
+          <th>Description</th>
+          <th style="width:180px">Security Controls</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="flow-id">①</span></td>
+          <td>Internal User → OSMS Frontend</td>
+          <td>Staff logs in to view/manage orders, products, and inventory. Access requires authentication and role-based authorization.</td>
+          <td><span class="tag tag-green">HTTPS/TLS</span> <span class="tag tag-blue">RBAC</span></td>
+        </tr>
+        <tr>
+          <td><span class="flow-id">②</span></td>
+          <td>OSMS Frontend → Backend API</td>
+          <td>Frontend sends authenticated API requests (JWT token) to retrieve order details, product data, and manage inventory.</td>
+          <td><span class="tag tag-green">HTTPS/TLS</span> <span class="tag tag-purple">JWT Auth</span></td>
+        </tr>
+        <tr>
+          <td><span class="flow-id">③</span></td>
+          <td>Backend API ↔ Lazada API</td>
+          <td>Backend calls Lazada Open Platform APIs to: get order details (buyer name, phone, address), get order items, sync products, sync inventory. Uses App Key + App Secret + seller access token.</td>
+          <td><span class="tag tag-green">HTTPS/TLS</span> <span class="tag tag-orange">OAuth 2.0</span> <span class="tag tag-gray">App Key/Secret</span></td>
+        </tr>
+        <tr>
+          <td><span class="flow-id">④</span></td>
+          <td>Lazada Webhook → Backend API</td>
+          <td>Lazada pushes order event notifications to <code>/api/webhooks/lazada</code>. Backend verifies webhook signature before processing any data.</td>
+          <td><span class="tag tag-green">HTTPS/TLS</span> <span class="tag tag-blue">Signature Verify</span></td>
+        </tr>
+        <tr>
+          <td><span class="flow-id">⑤</span></td>
+          <td>Backend API → PostgreSQL</td>
+          <td>Backend stores: orders, order items, buyer name, buyer phone, shipping address, products, inventory levels, synchronization/audit logs, and encrypted access tokens. Only the backend service has database access.</td>
+          <td><span class="tag tag-blue">Backend-only DB Access</span> <span class="tag tag-gray">Audit Logs</span></td>
+        </tr>
+        <tr>
+          <td><span class="flow-id">⑥</span></td>
+          <td>Seller Center → Lazada API</td>
+          <td>Lazada seller account authorizes OSMS via OAuth 2.0. OSMS receives and securely stores access/refresh tokens for API calls.</td>
+          <td><span class="tag tag-orange">OAuth 2.0</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Sensitive Data Classification -->
+  <div class="section">
+    <div class="section-title">🔐 Lazada Sensitive Data Stored in OSMS</div>
+    <table class="data-class-table">
+      <thead>
+        <tr>
+          <th style="width:200px">Data Field</th>
+          <th style="width:120px">Source</th>
+          <th style="width:120px">Storage Location</th>
+          <th>Purpose</th>
+          <th style="width:100px">Shared?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Buyer Name</td>
+          <td><span class="tag tag-orange">Lazada API</span></td>
+          <td><span class="tag tag-blue">PostgreSQL</span></td>
+          <td>Display in order detail for internal fulfillment staff</td>
+          <td><span class="tag tag-red">No</span></td>
+        </tr>
+        <tr>
+          <td>Buyer Phone Number</td>
+          <td><span class="tag tag-orange">Lazada API</span></td>
+          <td><span class="tag tag-blue">PostgreSQL</span></td>
+          <td>Contact buyer for shipping/delivery coordination</td>
+          <td><span class="tag tag-red">No</span></td>
+        </tr>
+        <tr>
+          <td>Shipping Address</td>
+          <td><span class="tag tag-orange">Lazada API</span></td>
+          <td><span class="tag tag-blue">PostgreSQL</span></td>
+          <td>Order fulfillment and delivery management</td>
+          <td><span class="tag tag-red">No</span></td>
+        </tr>
+        <tr>
+          <td>Order Details & Items</td>
+          <td><span class="tag tag-orange">Lazada API</span></td>
+          <td><span class="tag tag-blue">PostgreSQL</span></td>
+          <td>Internal order tracking, inventory management, and sales reporting</td>
+          <td><span class="tag tag-red">No</span></td>
+        </tr>
+        <tr>
+          <td>Access / Refresh Tokens</td>
+          <td><span class="tag tag-orange">Lazada OAuth</span></td>
+          <td><span class="tag tag-blue">PostgreSQL</span></td>
+          <td>Authenticate API calls to Lazada on behalf of seller</td>
+          <td><span class="tag tag-red">No</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Security Controls -->
+  <div class="section">
+    <div class="section-title">🛡️ Security Controls Summary</div>
+    <div class="controls-grid">
+      <div class="control-item">
+        <span class="control-icon">🔒</span>
+        <div><strong>HTTPS/TLS Encryption</strong><br/>All data in transit encrypted. Frontend ↔ Backend, Backend ↔ Lazada API, Webhook endpoints.</div>
+      </div>
+      <div class="control-item">
+        <span class="control-icon">🔑</span>
+        <div><strong>Backend-only Secret Storage</strong><br/>App Secret, access tokens, and refresh tokens stored only in backend database. Never exposed to frontend.</div>
+      </div>
+      <div class="control-item">
+        <span class="control-icon">👥</span>
+        <div><strong>Role-Based Access Control (RBAC)</strong><br/>Internal users require login + role authorization to view order details containing sensitive buyer data.</div>
+      </div>
+      <div class="control-item">
+        <span class="control-icon">🗄️</span>
+        <div><strong>Database Access Restriction</strong><br/>PostgreSQL database is only accessible by the backend service. No direct external database access.</div>
+      </div>
+      <div class="control-item">
+        <span class="control-icon">✅</span>
+        <div><strong>Webhook Signature Verification</strong><br/>All incoming Lazada webhook requests are verified by signature before processing to prevent spoofing.</div>
+      </div>
+      <div class="control-item">
+        <span class="control-icon">📝</span>
+        <div><strong>Audit & Sync Logs</strong><br/>All webhook events, API sync operations, and data changes are logged for traceability and debugging.</div>
+      </div>
+      <div class="control-item">
+        <span class="control-icon">🚫</span>
+        <div><strong>No Third-Party Data Sharing</strong><br/>Lazada buyer data (name, phone, address) is never shared with third parties. Data flows only between OSMS and Lazada.</div>
+      </div>
+      <div class="control-item">
+        <span class="control-icon">🏠</span>
+        <div><strong>Internal System Only</strong><br/>OSMS is an internal seller management system. Not a public marketplace app. No external user registration.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    OSMS — OmniSales Management System &nbsp;|&nbsp; Document generated for Lazada Apply Unmask Security Review &nbsp;|&nbsp; Confidential
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      themeVariables: {
+        fontFamily: 'Inter, sans-serif',
+        fontSize: '13px',
+        primaryColor: '#BBDEFB',
+        primaryTextColor: '#0D47A1',
+        primaryBorderColor: '#1565C0',
+        lineColor: '#64748b',
+        secondaryColor: '#FFE0B2',
+        tertiaryColor: '#E8F5E9',
+      },
+      flowchart: {
+        htmlLabels: true,
+        curve: 'basis',
+        padding: 16,
+        nodeSpacing: 50,
+        rankSpacing: 60,
+      },
+    });
+  </script>
+</body>
+</html>
