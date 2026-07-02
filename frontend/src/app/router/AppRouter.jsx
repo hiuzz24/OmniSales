@@ -42,6 +42,7 @@ import StockDeliveryDetailPage from '../../features/inventory/pages/stockdeliver
 import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/StockDeliveryEditPage';
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
+import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 
@@ -101,6 +102,7 @@ const AppRouter = () => {
               <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />
               <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
               <Route path={ROUTES.INVENTORY_LOGS} element={<InventoryLogPage />} />
+              <Route path={ROUTES.SUPPLIERS} element={<SupplierPage />} />
               {/* <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} /> */}
               <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
               <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
