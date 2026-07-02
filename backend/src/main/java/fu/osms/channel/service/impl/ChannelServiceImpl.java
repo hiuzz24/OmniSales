@@ -23,6 +23,8 @@ import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.sync.dto.shopify.WebhookRegistrationResult;
+import fu.osms.sync.shopify.ShopifyWebhookSubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -49,6 +51,7 @@ public class ChannelServiceImpl implements ChannelService {
     private final ChannelMapper channelMapper;
     private final ChannelProductMapper channelProductMapper;
     private final ChannelConnectionLogService channelConnectionLogService;
+    private final ShopifyWebhookSubscriptionService shopifyWebhookSubscriptionService;
 
     @Override
     @Transactional
@@ -120,6 +123,8 @@ public class ChannelServiceImpl implements ChannelService {
         Channel channel = channelRepository.findById(id)
                 .filter(c -> c.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+
+        unregisterShopifyWebhooks(channel);
 
         channel.setDeletedAt(OffsetDateTime.now());
         channelRepository.save(channel);
@@ -217,14 +222,12 @@ public class ChannelServiceImpl implements ChannelService {
     @Override
     @Transactional
     public ChannelResponse connectShopify(String shop, String accessToken) {
+        log.info("1");
         String normalizedShop = shop.endsWith(".myshopify.com")
                 ? shop.substring(0, shop.length() - ".myshopify.com".length())
                 : shop;
 
         log.info("[ChannelService] connectShopify — shop={}", normalizedShop);
-
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("shopDomain", normalizedShop);
 
         Channel channel = channelRepository
                 .findActiveShopifyByShopDomain(normalizedShop)
@@ -236,6 +239,11 @@ public class ChannelServiceImpl implements ChannelService {
         ChannelConnectionAction action = channel.getId() == null
                 ? ChannelConnectionAction.CONNECT
                 : ChannelConnectionAction.RECONNECT;
+
+        Map<String, Object> metadata = channel.getMetadata() == null
+                ? new HashMap<>()
+                : new HashMap<>(channel.getMetadata());
+        metadata.put("shopDomain", normalizedShop);
 
         channel.setStatus("CONNECTED");
         channel.setMetadata(metadata);
@@ -257,6 +265,24 @@ public class ChannelServiceImpl implements ChannelService {
 
         log.info("[ChannelService] connectShopify success — channelId={}", channel.getId());
         return channelMapper.toResponse(channel);
+    }
+
+    @Override
+    public void registerShopifyWebhooks(String shop, String accessToken, UUID channelId) {
+        try {
+            log.info("2");
+            WebhookRegistrationResult result = shopifyWebhookSubscriptionService.registerWebhooks(shop, accessToken);
+            safeUpdateShopifyWebhookMetadata(channelId, result);
+            log.info("[ChannelService] Shopify webhook registration status={} shop={}", result.getStatus(), shop);
+        } catch (Exception e) {
+            log.warn("[ChannelService] Shopify webhook registration failed but channel connected: {}", e.getMessage());
+            WebhookRegistrationResult result = WebhookRegistrationResult.builder()
+                    .status("FAILED")
+                    .error(e.getMessage())
+                    .webhooks(Collections.emptyList())
+                    .build();
+            safeUpdateShopifyWebhookMetadata(channelId, result);
+        }
     }
 
     @Override
@@ -323,6 +349,59 @@ public class ChannelServiceImpl implements ChannelService {
         log.info("[ChannelService] connectLazada success — channelId={}, expiresAt={}", channel.getId(), tokenExpiresAt);
         return channelMapper.toResponse(channel);
     }
+
+    @Override
+    @Transactional
+    public void updateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result) {
+        Channel channel = channelRepository.findById(channelId)
+                .filter(c -> c.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+
+        Map<String, Object> metadata = channel.getMetadata() == null
+                ? new HashMap<>()
+                : new HashMap<>(channel.getMetadata());
+        metadata.put("shopifyWebhooks", result.getWebhooks());
+        metadata.put("webhookRegistrationStatus", result.getStatus());
+        metadata.put("webhookRegistrationError", result.getError());
+
+        channel.setMetadata(metadata);
+        channelRepository.save(channel);
+    }
+
+    private void safeUpdateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result) {
+        try {
+            updateShopifyWebhookMetadata(channelId, result);
+        } catch (Exception e) {
+            log.warn("[ChannelService] Failed to update Shopify webhook metadata for channel {}: {}", channelId, e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void unregisterShopifyWebhooks(Channel channel) {
+        if (channel.getPlatform() != PlatformType.SHOPIFY) {
+            return;
+        }
+
+        try {
+            ChannelCredential credential = credentialRepository.findByChannelId(channel.getId()).orElse(null);
+            if (credential == null || credential.getAccessToken() == null || credential.getAccessToken().isBlank()) {
+                return;
+            }
+
+            Map<String, Object> metadata = channel.getMetadata();
+            String shopDomain = metadata != null && metadata.get("shopDomain") != null
+                    ? metadata.get("shopDomain").toString()
+                    : channel.getDisplayName();
+            List<Map<String, Object>> savedWebhooks = metadata != null
+                    ? (List<Map<String, Object>>) metadata.get("shopifyWebhooks")
+                    : Collections.emptyList();
+
+            shopifyWebhookSubscriptionService.unregisterWebhooks(shopDomain, credential.getAccessToken(), savedWebhooks);
+        } catch (Exception e) {
+            log.warn("[ChannelService] Failed to unregister Shopify webhooks for channel {}: {}", channel.getId(), e.getMessage());
+        }
+    }
+
     private void enrichChannelStats(Channel channel) {
         Map<String, Object> metadata = channel.getMetadata() == null
                 ? new HashMap<>()

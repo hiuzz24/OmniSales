@@ -20,6 +20,18 @@ public interface ChannelProductVariantRepository extends JpaRepository<ChannelPr
     Optional<ChannelProductVariant> findByChannelProductIdAndExternalVariantId(UUID channelProductId,
                                                                                  String externalVariantId);
 
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "WHERE ch.id = :channelId " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND cpv.externalVariantId = :externalVariantId")
+    Optional<ChannelProductVariant> findActiveByChannelIdAndExternalVariantId(
+            @Param("channelId") UUID channelId,
+            @Param("externalVariantId") String externalVariantId);
+
     @Query("SELECT COUNT(cpv) FROM ChannelProductVariant cpv " +
             "WHERE cpv.channelProduct.channel.id = :channelId " +
             "AND cpv.channelProduct.mappingState = 'ACTIVE'")

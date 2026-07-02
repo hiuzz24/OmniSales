@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import {
@@ -14,7 +14,7 @@ import channelApi from '../../../api/channelApi';
 import ExportOrdersModal from '../components/ExportOrdersModal';
 import styles from './OrderListPage.module.css';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',  icon: Clock,       color: 'orange'    },
@@ -263,7 +263,7 @@ const OrderListPage = () => {
               <th style={{ textAlign: 'center' }}>Tổng tiền</th>
               <th>Trạng thái</th>
               <th>Thanh toán</th>
-              <th className={styles.thAction}></th>
+              <th className={styles.thAction}>Thao tác</th>
             </tr>
           </thead>
           <tbody>

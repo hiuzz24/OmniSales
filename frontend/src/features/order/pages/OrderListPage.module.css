@@ -377,10 +377,13 @@
 
 .orderCode {
   font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
-  color: #2563eb;
-  letter-spacing: 0.03em;
+  color: #1d4ed8;
+  letter-spacing: 0.5px;
+  background: #eff6ff;
+  padding: 4px 8px;
+  border-radius: 6px;
 }
 
 .channelBadge {
@@ -569,7 +572,7 @@
   font-weight: 600;
   transition: all 0.2s ease;
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
   outline: none;
   font-family: inherit;
   white-space: nowrap;

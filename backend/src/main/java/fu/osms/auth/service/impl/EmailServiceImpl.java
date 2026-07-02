@@ -89,4 +89,28 @@ public class EmailServiceImpl implements EmailService {
             System.err.println("Failed to send notification email to " + toEmail + ": " + e.getMessage());
         }
     }
+
+    @Override
+    public void sendInviteEmail(String toEmail, String token) {
+        try {
+            String inviteLink = "http://localhost:5174/inviteUser?token=" + token;
+
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(toEmail);
+            message.setSubject("Hệ thống OmniSALE mời bạn trở thành người dùng chính thức của chúng tôi");
+            message.setText("Chào bạn,\n\nVui lòng click vào đường dẫn sau để tạo tài khoản của bạn. "
+                    + "Liên kết này có hiệu lực trong 15 phút:\n" + inviteLink);
+
+            mailSender.send(message);
+
+            // Log success (optional)
+            System.out.println("Email sent successfully to: " + toEmail);
+        } catch (Exception e) {
+            // Log error but don't throw exception to avoid breaking async flow
+            System.err.println("Failed to send email to " + toEmail + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
 }

@@ -1,0 +1,234 @@
+.page {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(circle at 50% 50%, #f4f7fa 0%, #e9eef5 100%);
+    font-family: var(--font-family-base, sans-serif);
+    position: relative;
+    padding: 1.5rem;
+}
+
+.card {
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 1px solid rgba(0, 0, 0, 0.02);
+}
+
+.logoContainer {
+    width: 48px;
+    height: 48px;
+    background-color: #10b981; /* Green color for new account creation */
+    border-radius: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+
+.logoIcon {
+    width: 26px;
+    height: 26px;
+}
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #111111;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+.subtitle {
+    font-size: 0.9rem;
+    color: #757575;
+    line-height: 1.5;
+    margin-bottom: 1.75rem;
+    text-align: center;
+    max-width: 360px;
+}
+
+.form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+}
+
+.label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #111111;
+    margin-bottom: 0.4rem;
+}
+
+.input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    background-color: #f1f3f4;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #111111;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.input:focus:not(:disabled) {
+    background-color: #ffffff;
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.input:disabled {
+    background-color: #e8eaed;
+    color: #5f6368;
+    cursor: not-allowed;
+    border-color: #dadce0;
+}
+
+.inputError {
+    border-color: #d32f2f;
+    background-color: #fff0f0;
+}
+
+.fieldError {
+    width: 100%;
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: #d32f2f;
+    text-align: left;
+}
+
+.submitBtn {
+    width: 100%;
+    padding: 0.85rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #ffffff;
+    background-color: #05050a;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    margin-top: 0.5rem;
+}
+
+.submitBtn:hover:not(:disabled) {
+    background-color: #1f1f24;
+}
+
+.submitBtn:disabled {
+    background-color: #9aa0a6;
+    cursor: not-allowed;
+}
+
+.errorCard {
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+    padding: 3rem 2rem;
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    border: 1px solid rgba(211, 47, 47, 0.1);
+}
+
+.errorIconContainer {
+    width: 56px;
+    height: 56px;
+    background-color: #ffebee;
+    color: #c62828;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.errorTitle {
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: #c62828;
+    margin-bottom: 0.75rem;
+}
+
+.errorText {
+    font-size: 0.925rem;
+    color: #5f6368;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+    max-width: 380px;
+}
+
+.backLink {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: #1a73e8;
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.2s ease;
+}
+
+.backLink:hover {
+    opacity: 0.8;
+}
+
+.successCard {
+    background-color: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+    padding: 3rem 2rem;
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    border: 1px solid rgba(16, 185, 129, 0.1);
+}
+
+.successIconContainer {
+    width: 56px;
+    height: 56px;
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.successTitle {
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: #2e7d32;
+    margin-bottom: 0.75rem;
+}
+
+.successText {
+    font-size: 0.925rem;
+    color: #5f6368;
+    line-height: 1.6;
+    margin-bottom: 2rem;
+}

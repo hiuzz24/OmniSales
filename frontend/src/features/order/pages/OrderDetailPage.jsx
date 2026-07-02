@@ -161,11 +161,33 @@ const OrderDetailPage = () => {
     });
   };
 
-  const formatAddress = (address) => {
-    if (!address) return '-';
-    if (typeof address === 'string') return address;
-    const parts = [address.detail, address.ward, address.district, address.province].filter(Boolean);
-    return parts.length > 0 ? parts.join(', ') : '-';
+  const compact = (parts) => parts.filter(Boolean).join(', ');
+
+  const fullNameFromAddress = (address) => {
+    if (!address || typeof address === 'string') return null;
+    const fullName = compact([address.first_name, address.last_name]);
+    return address.name || fullName || null;
+  };
+
+  const formatAddressLines = (address) => {
+    if (!address) return ['-'];
+    if (typeof address === 'string') return [address];
+
+    const recipient = fullNameFromAddress(address);
+    const phone = address.phone;
+    const streetLine = compact([address.detail, address.address1, address.address2]);
+    const localLine = compact([address.ward, address.district, address.city]);
+    const regionLine = compact([address.province, address.province_code, address.zip]);
+    const countryLine = compact([address.country, address.country_code]);
+
+    return [
+      recipient,
+      phone,
+      streetLine,
+      localLine,
+      regionLine,
+      countryLine,
+    ].filter(Boolean);
   };
 
   const getCurrentStep = () => {
@@ -476,7 +498,16 @@ const OrderDetailPage = () => {
                   <MapPin size={13} />
                   Địa chỉ giao hàng
                 </div>
-                <p className={styles.addressText}>{formatAddress(order.shippingAddress)}</p>
+                <div className={styles.addressText}>
+                  {formatAddressLines(order.shippingAddress).map((line, index) => (
+                    <span
+                      key={`${line}-${index}`}
+                      className={index < 2 ? styles.addressContactLine : styles.addressLine}
+                    >
+                      {line}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>

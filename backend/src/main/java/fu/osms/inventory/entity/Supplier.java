@@ -21,6 +21,9 @@ public class Supplier {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "supplier_code", length = 255)
+    private String code;
+
     @Column(nullable = false, length = 255)
     private String name;
 

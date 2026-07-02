@@ -14,6 +14,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 
@@ -34,17 +35,16 @@ public class ShopifyWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public boolean verify(Map<String, String> headers, String rawBody) {
-        String hmac = header(headers, "x-shopify-hmac-sha256").trim().toLowerCase();
-        log.info("[shopify hmac]: {}",hmac);
+        String hmac = header(headers, "x-shopify-hmac-sha256");
         if (apiSecret == null || apiSecret.isBlank() || hmac == null || hmac.isBlank()) {
             return false;
         }
         try {
+            String normalizedHmac = hmac.trim().toLowerCase();
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(apiSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             String calculated = Base64.getEncoder().encodeToString(mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8))).trim().toLowerCase();
-            log.info("[shopify calculated]: {}",calculated);
-            return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), hmac.getBytes(StandardCharsets.UTF_8));
+            return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), normalizedHmac.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             return false;
         }
@@ -53,7 +53,10 @@ public class ShopifyWebhookHandler implements PlatformWebhookHandler {
     @Override
     public String extractEventType(Map<String, String> headers, Map<String, Object> payload) {
         String topic = header(headers, "x-shopify-topic");
-        return topic != null ? topic.toUpperCase().replace('/', '_') : "UNKNOWN";
+        if (topic != null && !topic.isBlank()) {
+            return topic.toUpperCase().replace('/', '_');
+        }
+        return payload.get("id") != null ? "ORDERS_UNKNOWN" : "UNKNOWN";
     }
 
     @Override
@@ -62,8 +65,7 @@ public class ShopifyWebhookHandler implements PlatformWebhookHandler {
         if (webhookId != null && !webhookId.isBlank()) {
             return webhookId;
         }
-        Object id = payload.get("id");
-        return id != null ? "shopify-" + id : null;
+        return "shopify-" + sha256(rawBody);
     }
 
     @Override
@@ -80,5 +82,14 @@ public class ShopifyWebhookHandler implements PlatformWebhookHandler {
 
     private String header(Map<String, String> headers, String name) {
         return headers.get(name.toLowerCase());
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            return String.valueOf(value.hashCode());
+        }
     }
 }

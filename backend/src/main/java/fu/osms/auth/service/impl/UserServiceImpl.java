@@ -9,6 +9,8 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.entity.UserRole;
 import fu.osms.auth.enums.UserStatus;
 import fu.osms.auth.mapper.UserMapper;
+import fu.osms.auth.entity.Role;
+import fu.osms.auth.repository.RoleRepository;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.auth.repository.UserRoleRepository;
 import fu.osms.auth.service.UserService;
@@ -35,6 +37,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
+    private final RoleRepository roleRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
 
@@ -45,13 +48,45 @@ public class UserServiceImpl implements UserService {
     @Override
     @Transactional
     public UserResponse create(UserRequest request) {
+        if (request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new IllegalArgumentException("Mật khẩu không được để trống khi tạo mới tài khoản");
+        }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Email is already in use: " + request.getEmail());
         }
         User user = userMapper.toEntity(request);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setStatus(UserStatus.ACTIVE);
-        return userMapper.toResponse(userRepository.save(user));
+        
+        User savedUser = userRepository.save(user);
+
+        // Assign role if provided
+        if (request.getRole() != null && !request.getRole().trim().isEmpty()) {
+            String roleName = request.getRole().trim().toUpperCase();
+            if ("SALES STAFF".equals(roleName)) {
+                roleName = "SALES";
+            } else if ("OPERATIONS STAFF".equals(roleName)) {
+                roleName = "OPERATIONS";
+            }
+
+            final String finalRoleName = roleName;
+            Role role = roleRepository.findByName(finalRoleName)
+                    .orElseThrow(() -> new IllegalArgumentException("Vai trò không tồn tại: " + finalRoleName));
+
+            UserRole userRole = UserRole.builder()
+                    .user(savedUser)
+                    .role(role)
+                    .grantedAt(java.time.OffsetDateTime.now())
+                    .build();
+            userRoleRepository.save(userRole);
+        }
+
+        UserResponse response = userMapper.toResponse(savedUser);
+        List<UserRole> roles = userRoleRepository.findByUserId(savedUser.getId());
+        if (!roles.isEmpty()) {
+            response.setRole(roles.get(0).getRole().getName());
+        }
+        return response;
     }
 
     @Override
@@ -74,8 +109,17 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public PageResponse<UserResponse> getAll(int page, int size) {
         Page<User> pageResult = userRepository.findAll(PageRequest.of(page, size));
+        List<UserResponse> content = pageResult.getContent().stream()
+                .map(user -> {
+                    UserResponse res = userMapper.toResponse(user);
+                    List<UserRole> roles = userRoleRepository.findByUserId(user.getId());
+                    if (!roles.isEmpty()) {
+                        res.setRole(roles.get(0).getRole().getName());
+                    }
+                    return res;
+                }).toList();
         return PageResponse.<UserResponse>builder()
-                .content(pageResult.getContent().stream().map(userMapper::toResponse).toList())
+                .content(content)
                 .page(page).size(size)
                 .totalElements(pageResult.getTotalElements())
                 .totalPages(pageResult.getTotalPages())
@@ -88,8 +132,59 @@ public class UserServiceImpl implements UserService {
     public UserResponse update(UUID id, UserRequest request) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        
         userMapper.updateEntityFromRequest(request, user);
-        return userMapper.toResponse(userRepository.save(user));
+
+        // Update status if provided
+        if (request.getStatus() != null && !request.getStatus().trim().isEmpty()) {
+            try {
+                UserStatus newStatus = UserStatus.valueOf(request.getStatus().trim().toUpperCase());
+                user.setStatus(newStatus);
+                if (newStatus == UserStatus.ACTIVE) {
+                    user.setDeletedAt(null);
+                }
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Trạng thái không hợp lệ: " + request.getStatus());
+            }
+        }
+
+        User savedUser = userRepository.save(user);
+
+        // Update role if provided
+        if (request.getRole() != null && !request.getRole().trim().isEmpty()) {
+            String roleName = request.getRole().trim().toUpperCase();
+            if ("SALES STAFF".equals(roleName)) {
+                roleName = "SALES";
+            } else if ("OPERATIONS STAFF".equals(roleName)) {
+                roleName = "OPERATIONS";
+            }
+
+            final String finalRoleName = roleName;
+            Role role = roleRepository.findByName(finalRoleName)
+                    .orElseThrow(() -> new IllegalArgumentException("Vai trò không tồn tại: " + finalRoleName));
+
+            List<UserRole> existingRoles = userRoleRepository.findByUserId(savedUser.getId());
+            UserRole userRole;
+            if (!existingRoles.isEmpty()) {
+                userRole = existingRoles.get(0);
+                userRole.setRole(role);
+                userRole.setGrantedAt(java.time.OffsetDateTime.now());
+            } else {
+                userRole = UserRole.builder()
+                        .user(savedUser)
+                        .role(role)
+                        .grantedAt(java.time.OffsetDateTime.now())
+                        .build();
+            }
+            userRoleRepository.save(userRole);
+        }
+
+        UserResponse response = userMapper.toResponse(savedUser);
+        List<UserRole> roles = userRoleRepository.findByUserId(savedUser.getId());
+        if (!roles.isEmpty()) {
+            response.setRole(roles.get(0).getRole().getName());
+        }
+        return response;
     }
 
     @Override
