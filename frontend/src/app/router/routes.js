@@ -46,4 +46,6 @@ export const ROUTES = {
   ORDER_LOGS: '/orders/logs',
   INVENTORY_LOGS: '/inventory/logs',
   SUPPLIERS: '/inventory/suppliers',
+  USERS: '/users',
+  INVITE_USER: '/inviteUser',
 };

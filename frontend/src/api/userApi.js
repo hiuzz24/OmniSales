@@ -38,6 +38,26 @@ const userApi = {
     const res = await axiosClient.get('/users', { params: { page, size } });
     return res.data?.data ?? res.data;
   },
+
+  createUser: async (data) => {
+    const res = await axiosClient.post('/users', data);
+    return res.data?.data ?? res.data;
+  },
+
+  updateUser: async (id, data) => {
+    const res = await axiosClient.put(`/users/${id}`, data);
+    return res.data?.data ?? res.data;
+  },
+
+  resetUserPassword: async (userId) => {
+    const res = await axiosClient.post('/auth/reset-password', { userId });
+    return res.data?.data ?? res.data;
+  },
+
+  deleteUser: async (id) => {
+    const res = await axiosClient.delete(`/users/${id}`);
+    return res.data?.data ?? res.data;
+  },
 };
 
 export default userApi;

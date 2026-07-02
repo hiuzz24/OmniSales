@@ -53,6 +53,7 @@ class AuthServiceImplTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuditLogRepository auditLogRepository;
     @Mock private RoleRepository roleRepository;
+    @Mock private UserInviteTokenRepository userInviteTokenRepository;
 
     private AuthServiceImpl authService;
 
@@ -78,7 +79,7 @@ class AuthServiceImplTest {
                 authenticationManager, userRepository, userRoleRepository,
                 refreshTokenRepository, userDetailsService, jwtService,
                 userMapper, tokenRepository, emailService, passwordEncoder,
-                auditLogRepository, roleRepository);
+                auditLogRepository, roleRepository, userInviteTokenRepository);
         injectFields();
 
         testUser = User.builder()
