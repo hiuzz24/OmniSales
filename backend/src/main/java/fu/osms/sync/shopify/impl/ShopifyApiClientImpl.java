@@ -1,9 +1,11 @@
 package fu.osms.sync.shopify.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
 import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyProductRootResponse;
+import fu.osms.sync.dto.shopify.response.ShopifyWebhookResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -12,9 +14,11 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import fu.osms.sync.shopify.ShopifyApiClient;
@@ -40,6 +44,92 @@ public class ShopifyApiClientImpl implements ShopifyApiClient {
         Map<String, Object> root = new HashMap<>();
         root.put("product", payload);
         return executeRequest(url, accessToken, HttpMethod.PUT, root);
+    }
+
+    @Override
+    public ShopifyWebhookResponse createWebhook(String shopDomain, String accessToken, String topic, String callbackUrl) {
+        log.info("4");
+        String url = buildUrl(shopDomain, "/webhooks.json");
+        log.info("[shopify url call to webhook]:{}",url);
+
+        Map<String, Object> webhookBody = new HashMap<>();
+        webhookBody.put("topic", topic);
+        webhookBody.put("address", callbackUrl);
+        webhookBody.put("format", "json");
+
+        Map<String, Object> root = new HashMap<>();
+        root.put("webhook", webhookBody);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Shopify-Access-Token", accessToken);
+
+        HttpEntity<String> entity;
+        try {
+            entity = new HttpEntity<>(objectMapper.writeValueAsString(root), headers);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize webhook request", e);
+        }
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            log.info("[shopify response]:{}",response);
+            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {
+            });
+            Object webhook = responseBody.get("webhook");
+            return objectMapper.convertValue(webhook, ShopifyWebhookResponse.class);
+        } catch (RestClientResponseException e) {
+            log.error("Shopify createWebhook error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Shopify webhook creation failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create Shopify webhook", e);
+        }
+    }
+
+    @Override
+    public List<ShopifyWebhookResponse> listWebhooks(String shopDomain, String accessToken) {
+        String url = buildUrl(shopDomain, "/webhooks.json");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Shopify-Access-Token", accessToken);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {
+            });
+            Object webhooks = responseBody.get("webhooks");
+            if (webhooks == null) {
+                return List.of();
+            }
+            return objectMapper.convertValue(webhooks, new TypeReference<List<ShopifyWebhookResponse>>() {
+            });
+        } catch (RestClientResponseException e) {
+            log.error("Shopify listWebhooks error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Shopify list webhooks failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to list Shopify webhooks", e);
+        }
+    }
+
+    @Override
+    public void deleteWebhook(String shopDomain, String accessToken, Long webhookId) {
+        String url = buildUrl(shopDomain, "/webhooks/" + webhookId + ".json");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Shopify-Access-Token", accessToken);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            restTemplate.exchange(url, HttpMethod.DELETE, entity, String.class);
+        } catch (RestClientResponseException e) {
+            log.error("Shopify deleteWebhook error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Shopify webhook deletion failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to delete Shopify webhook", e);
+        }
     }
 
     private ShopifyProductResponse executeRequest(String url, String accessToken, HttpMethod method, Object body) {

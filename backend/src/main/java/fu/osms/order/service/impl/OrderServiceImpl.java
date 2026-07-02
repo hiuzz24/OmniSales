@@ -47,7 +47,9 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -165,7 +167,6 @@ public class OrderServiceImpl implements OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
-        // Ghi audit log
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
         String actorEmail = userOpt.map(User::getEmail).orElse("system");
@@ -319,6 +320,7 @@ public class OrderServiceImpl implements OrderService {
         List<OrderResponse> content = orderPage.getContent().stream()
                 .map(orderMapper::toResponse)
                 .toList();
+        attachItems(content);
 
         return PageResponse.<OrderResponse>builder()
                 .content(content)
@@ -329,6 +331,24 @@ public class OrderServiceImpl implements OrderService {
                 .first(orderPage.isFirst())
                 .last(orderPage.isLast())
                 .build();
+    }
+
+    private void attachItems(List<OrderResponse> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return;
+        }
+
+        List<UUID> orderIds = orders.stream()
+                .map(OrderResponse::getId)
+                .toList();
+        Map<UUID, List<OrderItemResponse>> itemsByOrderId = orderItemRepository.findByOrderIdIn(orderIds).stream()
+                .collect(Collectors.groupingBy(
+                        item -> item.getOrder().getId(),
+                        Collectors.mapping(orderItemMapper::toResponse, Collectors.toList())
+                ));
+
+        orders.forEach(order ->
+                order.setItems(itemsByOrderId.getOrDefault(order.getId(), List.of())));
     }
 
     private ProductVariant resolveVariant(OrderItemRequest itemReq) {

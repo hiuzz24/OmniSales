@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -23,6 +24,54 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     Page<Order> findByChannelId(UUID channelId, Pageable pageable);
 
     Optional<Order> findByExternalOrderId(String externalOrderId);
+
+    Optional<Order> findByChannel_IdAndExternalOrderId(UUID channelId, String externalOrderId);
+
+    @Modifying
+    @Query(value = """
+            INSERT INTO orders (
+                id,
+                channel_id,
+                platform,
+                channel_name,
+                external_order_id,
+                status,
+                payment_status,
+                shipping_address,
+                subtotal,
+                discount_amount,
+                shipping_fee,
+                currency,
+                version,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                :id,
+                :channelId,
+                CAST(:platform AS platform_type),
+                :channelName,
+                :externalOrderId,
+                CAST('PENDING' AS order_status),
+                'UNPAID',
+                '{}'::jsonb,
+                0,
+                0,
+                0,
+                'VND',
+                0,
+                NOW(),
+                NOW()
+            )
+            ON CONFLICT (channel_id, external_order_id)
+            WHERE channel_id IS NOT NULL
+            DO NOTHING
+            """, nativeQuery = true)
+    void insertWebhookOrderIfAbsent(@Param("id") UUID id,
+                                    @Param("channelId") UUID channelId,
+                                    @Param("platform") String platform,
+                                    @Param("channelName") String channelName,
+                                    @Param("externalOrderId") String externalOrderId);
 
     Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
 

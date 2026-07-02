@@ -40,18 +40,17 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
         if (appSecret == null || appSecret.isBlank()) {
             return true;
         }
-        String signature = headers.get("authorization").trim().toLowerCase();
-        log.info("[signature]:{}",signature);
-        if (signature.isBlank()) {
+        String signature = headers.get("authorization");
+        if (signature == null || signature.isBlank()) {
             return false;
         }
         try {
+            String normalizedSignature = signature.trim().toLowerCase();
             String base = appKey + rawBody;
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(appSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             String calculated = HexFormat.of().formatHex(mac.doFinal(base.getBytes(StandardCharsets.UTF_8))).toLowerCase();
-            log.info("[calculated]:{}",calculated);
-            return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8));
+            return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), normalizedSignature.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             return false;
         }
@@ -59,22 +58,28 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public String extractEventType(Map<String, String> headers, Map<String, Object> payload) {
-        Object type = firstPresent(payload, "message_type", "event_type", "type", "topic");
-        return type != null ? type.toString().toUpperCase() : "UNKNOWN";
+        Object messageType = firstPresent(payload, "message_type");
+        if (messageType == null) {
+            return "UNKNOWN";
+        }
+        String type = messageType.toString();
+        if ("0".equals(type)) {
+            return "TRADE_ORDER";
+        }
+        if ("10".equals(type)) {
+            return "REVERSE_ORDER";
+        }
+        return type;
     }
 
     @Override
     public String extractExternalEventId(Map<String, String> headers, Map<String, Object> payload, String rawBody) {
-        Object eventId = firstPresent(payload, "message_id", "event_id", "id", "order_id", "trade_order_id");
-        if (eventId != null && !eventId.toString().isBlank()) {
-            return eventId.toString();
-        }
         return "lazada-" + sha256(rawBody);
     }
 
     @Override
     public Optional<Channel> resolveChannel(Map<String, String> headers, Map<String, Object> payload) {
-        Object accountId = firstPresent(payload, "account_id", "seller_id", "user_id");
+        Object accountId = firstPresent(payload, "seller_id");
         if (accountId == null) {
             return Optional.empty();
         }

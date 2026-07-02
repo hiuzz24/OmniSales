@@ -1,0 +1,41 @@
+%% OSMS Lazada Sensitive Data Flow Diagram
+%% Source: Mermaid (https://mermaid.js.org)
+%% For Lazada Apply Unmask Security Review
+
+flowchart LR
+    subgraph INTERNAL["Internal Environment"]
+        direction TB
+        USER["👤 Authorized Internal\nUser / Staff"]
+        FE["🖥️ OSMS Frontend\n(React SPA)"]
+    end
+
+    BE["⚙️ OSMS Backend API\n(Spring Boot)"]
+    DB[("🗄️ PostgreSQL\nDatabase")]
+
+    subgraph LAZADA["Lazada External Services"]
+        direction TB
+        API["🌐 Lazada Open\nPlatform API"]
+        WH["📨 Lazada Push\nMechanism / Webhook"]
+        SC["🏪 Lazada Seller\nCenter / Account"]
+    end
+
+    NOSHARE["🚫 No Third-Party\nData Sharing"]
+
+    USER -- "① HTTPS/TLS\nLogin · View Orders\nManage Products" --> FE
+    FE -- "② HTTPS/TLS + JWT\nAuthenticated API\nRequests" --> BE
+    BE -- "③ HTTPS/TLS + OAuth\nGet Orders · Items\nSync Products · Inventory" --> API
+    API -- "③ HTTPS/TLS\nOrder & Product\nData Responses" --> BE
+    WH -- "④ Webhook\nOrder Notifications\nSignature Verified" --> BE
+    BE -- "⑤ Backend-only Access\nStore Sensitive Data\n& Audit Logs" --> DB
+    SC -. "⑥ Seller Account\nOAuth Authorization" .-> API
+
+    style INTERNAL fill:#E8F5E9,stroke:#388E3C,stroke-width:2px,color:#1B5E20
+    style LAZADA fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    style USER fill:#C8E6C9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
+    style FE fill:#C8E6C9,stroke:#2E7D32,stroke-width:1px,color:#1B5E20
+    style BE fill:#BBDEFB,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style DB fill:#90CAF9,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    style API fill:#FFE0B2,stroke:#E65100,stroke-width:1px,color:#BF360C
+    style WH fill:#FFE0B2,stroke:#E65100,stroke-width:1px,color:#BF360C
+    style SC fill:#FFE0B2,stroke:#E65100,stroke-width:1px,color:#BF360C
+    style NOSHARE fill:#FFCDD2,stroke:#C62828,stroke-width:2px,color:#B71C1C

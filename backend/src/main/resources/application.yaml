@@ -55,7 +55,8 @@ shopify:
   api-key: ${SHOPIFY_API_KEY:}
   api-secret: ${SHOPIFY_API_SECRET:}
   redirect-uri: ${SHOPIFY_REDIRECT_URI:}
-  scopes: ${SHOPIFY_SCOPES:write_products,read_products,write_inventory,read_inventory,read_orders,write_orders}
+  scopes: ${SHOPIFY_SCOPES:}
+  webhook-callback-url: ${SHOPIFY_WEBHOOK_CALLBACK_URL:}
 
 
 rest-countries:
