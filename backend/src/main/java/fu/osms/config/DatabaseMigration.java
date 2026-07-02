@@ -103,5 +103,6 @@ public class DatabaseMigration {
         } catch (Exception e) {
             log.warn("Migration skipped or already applied for stock_transfers note: {}", e.getMessage());
         }
+
     }
 }

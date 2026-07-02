@@ -19,12 +19,6 @@ public class ProductVariantController {
 
     private final ProductVariantService productVariantService;
 
-    /**
-     * GET /api/catalog/variants?search={keyword}&page=0&size=20
-     * Tìm kiếm product variant theo SKU hoặc tên sản phẩm.
-     * Chỉ trả về variant có is_active = true và deleted_at IS NULL.
-     * Yêu cầu role OWNER hoặc OPERATIONS.
-     */
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<PageResponse<ProductVariantResponse>>> search(

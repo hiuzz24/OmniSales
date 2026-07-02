@@ -7,13 +7,25 @@ const emptyVariant = () => ({
   sku: '',
   barcode: '',
   name: '',
-  price: '',
-  costPrice: '',
+  price: '0',
+  costPrice: '0',
   optionValues: { Size: '', 'Màu': '' },
   images: [],
 });
 
-const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors = {}, globalError, hasOrders = false, channels = [], selectedChannels = [] }) => {
+const ProductVariantForm = ({
+  variants = [],
+  onAdd,
+  onRemove,
+  onChange,
+  errors = {},
+  globalError,
+  hasOrders = false,
+  channels = [],
+  selectedChannels = [],
+  disablePrice = false,
+  disableCostPrice = false,
+}) => {
   const [editingImageIndex, setEditingImageIndex] = useState(null);
   const [urlValue, setUrlValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -76,16 +88,17 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
     const numPrice = Number(price);
     if (!numPrice || isNaN(numPrice) || numPrice <= 0) return '-';
 
-    const selectedList = channels.filter(c => selectedChannels.includes(c.id));
+    const selectedList = channels.filter((c, i) => selectedChannels.includes(c.id || c._id || (c.platform + i)));
     if (selectedList.length === 0) return '-';
 
     return (
       <div style={{ fontSize: '12px', color: '#059669', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {selectedList.map(channel => {
+        {selectedList.map((channel, i) => {
+          const channelId = channel.id || channel._id || (channel.platform + i);
           const rate = (channel.commissionRate || 0) / 100;
-          if (rate >= 1) return <div key={channel.id}>{channel.platform}: N/A</div>;
+          if (rate >= 1) return <div key={channelId}>{channel.platform}: N/A</div>;
           const suggested = Math.round(numPrice / (1 - rate));
-          return <div key={channel.id}>{channel.platform}: {suggested.toLocaleString('vi-VN')}đ</div>;
+          return <div key={channelId}>{channel.platform}: {suggested.toLocaleString('vi-VN')}đ</div>;
         })}
       </div>
     );
@@ -198,25 +211,25 @@ const ProductVariantForm = ({ variants = [], onAdd, onRemove, onChange, errors =
                         type="number"
                         className={`${styles.variantInput} ${variantErrors.price ? styles.inputError : ''}`}
                         placeholder="0"
-                        value={variant.price}
-                        onChange={(e) => handleFieldChange(index, 'price', e.target.value)}
+                        value={disablePrice ? '0' : variant.price}
+                        onChange={(e) => handleFieldChange(index, 'price', disablePrice ? '0' : e.target.value)}
                         min="0"
-                        disabled={variant.isActive === false}
+                        disabled={disablePrice || variant.isActive === false}
                       />
                       {variantErrors.price && <div className={styles.errorText}>{variantErrors.price}</div>}
                     </td>
                     <td>
-                      {renderSuggestedPrices(variant.price)}
+                      {renderSuggestedPrices(disablePrice ? 0 : variant.price)}
                     </td>
                     <td>
                       <input
                         type="number"
                         className={styles.variantInput}
                         placeholder="0"
-                        value={variant.costPrice}
-                        onChange={(e) => handleFieldChange(index, 'costPrice', e.target.value)}
+                        value={disableCostPrice ? (variant.costPrice ?? '0') : variant.costPrice}
+                        onChange={(e) => handleFieldChange(index, 'costPrice', disableCostPrice ? (variant.costPrice ?? '0') : e.target.value)}
                         min="0"
-                        disabled={variant.isActive === false}
+                        disabled={disableCostPrice || variant.isActive === false}
                       />
                     </td>
                     <td className={styles.removeCell}>

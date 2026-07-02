@@ -10,6 +10,7 @@ import {
   Check,
 } from 'lucide-react';
 import Badge from '../../../shared/components/Badge';
+import Pagination from '../../../shared/components/Pagination';
 import productApi from '../../../api/productApi';
 import { exportProductsToExcel, PRODUCT_EXPORT_COLUMNS } from '../utils/exportProducts';
 import styles from './ExportProductsModal.module.css';
@@ -419,7 +420,16 @@ const ExportProductsModal = ({ isOpen, onClose }) => {
         </div>
 
         <div className={styles.footer}>
-          <div className={styles.pagination}>
+          <Pagination
+            currentPage={page}
+            totalPages={Math.ceil(totalElements / PAGE_SIZE)}
+            totalElements={totalElements}
+            pageSize={PAGE_SIZE}
+            currentCount={products.length}
+            itemLabel="sản phẩm"
+            onPageChange={setPage}
+          />
+          <div className={styles.pagination} hidden>
             <button
               type="button"
               className={styles.pageBtn}

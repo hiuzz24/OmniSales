@@ -4,9 +4,9 @@ spring:
   application:
     name: OSMS
   datasource:
-    url: jdbc:postgresql://localhost:5432/osms
+    url: jdbc:postgresql://localhost:5432/OSMS
     username: postgres
-    password: 123456
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -48,6 +48,28 @@ app:
     max-failed-attempts: 5
     lock-time-duration: 5
     jwt:
-      secret: ${JWT_SECRET:my-secret-key-12345678901234567890}
-  rest-countries:
-    api-key: ${REST_COUNTRIES_API_KEY:test}
+      secret: ${JWT_SECRET}
+  frontend-url: ${FRONTEND_URL:http://localhost:5174}
+
+shopify:
+  api-key: ${SHOPIFY_API_KEY:}
+  api-secret: ${SHOPIFY_API_SECRET:}
+  redirect-uri: ${SHOPIFY_REDIRECT_URI:}
+  scopes: ${SHOPIFY_SCOPES:write_products,read_products,write_inventory,read_inventory,read_orders,write_orders}
+
+
+rest-countries:
+    api-key: ${REST_COUNTRIES_API_KEY}
+
+lazada:
+  app-key: ${LAZADA_APP_KEY:}
+  app-secret: ${LAZADA_APP_SECRET:}
+  redirect-uri: ${LAZADA_REDIRECT_URI:}
+  api-url: https://api.lazada.vn/rest
+  auth-api-url: https://auth.lazada.com/rest
+  auth-url: https://auth.lazada.com/oauth/authorize
+  default-category-id: ${LAZADA_DEFAULT_CATEGORY_ID:7932}
+  default-package-weight: 0.5
+  default-package-length: 20
+  default-package-width: 15
+  default-package-height: 5

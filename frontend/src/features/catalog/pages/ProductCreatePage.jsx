@@ -30,8 +30,8 @@ const ProductCreatePage = () => {
     unit: '',
   });
   const [images, setImages] = useState([]);
-  const [price, setPrice] = useState('');
-  const [costPrice, setCostPrice] = useState('');
+  const [price, setPrice] = useState('0');
+  const [costPrice, setCostPrice] = useState('0');
   const [hasVariants, setHasVariants] = useState(false);
   const [variants, setVariants] = useState([]);
   const [weightGrams, setWeightGrams] = useState('');
@@ -62,7 +62,7 @@ const ProductCreatePage = () => {
         const chanList = chanData.data?.data || chanData.data || chanData;
         if (Array.isArray(chanList)) {
           setChannels(chanList);
-          setSelectedChannels(chanList.map(c => c.id));
+          setSelectedChannels(chanList.map((c, i) => c.id || c._id || (c.platform + i)));
         }
       } catch (error) {
         console.error('Failed to load initial data:', error);
@@ -75,12 +75,12 @@ const ProductCreatePage = () => {
     const dataToValidate = {
       ...formData,
       hasVariants,
-      price: price,
-      costPrice: costPrice,
+      price: '0',
+      costPrice: '0',
       weightGrams: weightGrams,
       lowStockThreshold: lowStockThreshold,
       dimensions: dimensions,
-      variants: hasVariants ? variants : [],
+      variants: hasVariants ? variants.map((variant) => ({ ...variant, price: '0', costPrice: '0' })) : [],
     };
 
     const result = validateProductForm(dataToValidate);
@@ -105,8 +105,8 @@ const ProductCreatePage = () => {
         sku: v.sku,
         barcode: v.barcode || null,
         name: [v.optionValues?.Size, v.optionValues?.['Màu']].filter(Boolean).join(' / ') || v.sku,
-        price: Number(v.price),
-        costPrice: v.costPrice ? Number(v.costPrice) : null,
+        price: 0,
+        costPrice: 0,
         optionValues: v.optionValues,
         images: v.images?.length > 0 ? v.images.map((img, i) => ({ url: img.url, isPrimary: false, sortOrder: i })) : [],
       }));
@@ -115,8 +115,8 @@ const ProductCreatePage = () => {
         sku: formData.sku,
         barcode: formData.barcode || null,
         name: formData.name || 'Mặc định',
-        price: Number(price),
-        costPrice: costPrice ? Number(costPrice) : null,
+        price: 0,
+        costPrice: 0,
         optionValues: Object.fromEntries(
           Object.entries({ Size: formData.size, 'Màu': formData.color }).filter(([_, v]) => v)
         ),
@@ -190,8 +190,8 @@ const ProductCreatePage = () => {
   };
 
   const handlePriceChange = (field, value) => {
-    if (field === 'price') setPrice(value);
-    if (field === 'costPrice') setCostPrice(value);
+    if (field === 'price') setPrice('0');
+    if (field === 'costPrice') setCostPrice('0');
   };
 
   const handleShippingChange = (field, value) => {
@@ -261,6 +261,8 @@ const ProductCreatePage = () => {
               errors={errors}
               channels={channels}
               selectedChannels={selectedChannels}
+              disablePrice
+              disableCostPrice
             />
           )}
 
@@ -274,6 +276,8 @@ const ProductCreatePage = () => {
               globalError={errors.variants}
               channels={channels}
               selectedChannels={selectedChannels}
+              disablePrice
+              disableCostPrice
             />
           )}
 

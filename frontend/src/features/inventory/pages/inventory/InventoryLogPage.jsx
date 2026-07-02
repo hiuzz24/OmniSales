@@ -20,6 +20,7 @@ import {
 import { toast } from 'react-toastify';
 import styles from './InventoryLogPage.module.css';
 import { ROUTES } from '../../../../app/router/routes';
+import Pagination from '../../../../shared/components/Pagination';
 import inventoryService from '../../services/inventoryService';
 import warehouseService from '../../services/warehouseService';
 import userApi from '../../../../api/userApi';
@@ -481,7 +482,16 @@ export default function InventoryLogPage() {
             </div>
 
             {/* Pagination Panel */}
-            {totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalElements={totalElements}
+              pageSize={PAGE_SIZE}
+              currentCount={logs.length}
+              itemLabel="mục"
+              onPageChange={handlePageChange}
+            />
+            {totalPages < 0 && (
               <div className={styles.pagination}>
                 <span className={styles.paginationInfo}>
                   Hiển thị {startItem}–{endItem} / {totalElements} mục

@@ -3,6 +3,7 @@ package fu.osms.inventory.controller;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.inventory.dto.request.InventoryItemRequest;
+import fu.osms.inventory.dto.request.InventoryItemUpdateRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryDetailDTO;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
@@ -126,6 +127,19 @@ public class InventoryController {
                 .data(detailDTO)
                 .build();
 
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/detail/{id}")
+    public ResponseEntity<ApiResponse<InventoryDetailDTO>> updateInventoryItemDetail(
+            @PathVariable UUID id,
+            @Valid @RequestBody InventoryItemUpdateRequest request) {
+        InventoryDetailDTO detailDTO = inventoryService.updateInventoryDetail(id, request);
+        ApiResponse<InventoryDetailDTO> response = ApiResponse.<InventoryDetailDTO>builder()
+                .success(true)
+                .message("Cập nhật thông tin tồn kho sản phẩm thành công")
+                .data(detailDTO)
+                .build();
         return ResponseEntity.ok(response);
     }
 

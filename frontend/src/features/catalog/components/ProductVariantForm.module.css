@@ -1,8 +1,10 @@
 .card {
-  background-color: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.72)),
+    #ffffff;
+  border-radius: 16px;
+  border: 1px solid var(--catalog-line, #d8deea);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.06);
   padding: 24px;
 }
 
@@ -15,14 +17,15 @@
 
 .cardTitle {
   font-size: 16px;
-  font-weight: 600;
-  color: #111827;
+  font-weight: 700;
+  color: var(--catalog-ink, #101828);
   margin-bottom: 4px;
 }
 
 .cardSubtitle {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--catalog-muted, #667085);
+  line-height: 1.5;
 }
 
 .addBtn {
@@ -30,20 +33,22 @@
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
-  font-weight: 500;
-  color: #374151;
+  font-weight: 650;
+  color: #344054;
   background-color: #ffffff;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--catalog-line, #d8deea);
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .addBtn:hover {
-  background-color: #f9fafb;
-  border-color: #9ca3af;
+  color: var(--catalog-accent, #0756c7);
+  background-color: var(--catalog-accent-soft, #edf5ff);
+  border-color: rgba(7, 86, 199, 0.28);
+  transform: translateY(-1px);
 }
 
 .addBtnIcon {
@@ -64,18 +69,18 @@
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  color: #6b7280;
+  color: #667085;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 8px 10px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--catalog-line-soft, #edf1f7);
   white-space: nowrap;
 }
 
 .table td {
   padding: 10px 10px;
   vertical-align: middle;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f2f5f9;
 }
 
 .table tr:last-child td {
@@ -85,24 +90,31 @@
 .variantInput {
   width: 100%;
   min-width: 80px;
-  padding: 8px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  padding: 9px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 9px;
   font-size: 13px;
-  color: #111827;
+  color: var(--catalog-ink, #101828);
   outline: none;
-  background: #f9fafb;
-  transition: border-color 0.2s, background-color 0.2s;
+  background: #ffffff;
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
 }
 
 .variantInput:focus {
-  border-color: #3b82f6;
+  border-color: rgba(7, 86, 199, 0.52);
   background: #ffffff;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 4px rgba(7, 86, 199, 0.1);
 }
 
 .variantInput::placeholder {
   color: #9ca3af;
+}
+
+.variantInput:disabled {
+  color: #667085;
+  background: #f8fafc;
+  border-color: #e4e7ec;
+  cursor: not-allowed;
 }
 
 .imgCell {
@@ -112,7 +124,7 @@
 .imgPlaceholder {
   width: 36px;
   height: 36px;
-  border-radius: 6px;
+  border-radius: 9px;
   background: #f3f4f6;
   display: flex;
   align-items: center;
@@ -125,9 +137,9 @@
 }
 
 .imgPlaceholder:hover {
-  border-color: #3b82f6;
-  background: #eff6ff;
-  color: #3b82f6;
+  border-color: rgba(7, 86, 199, 0.42);
+  background: var(--catalog-accent-soft, #edf5ff);
+  color: var(--catalog-accent, #0756c7);
 }
 
 .imgThumbnail {
@@ -167,9 +179,12 @@
 
 .emptyState {
   text-align: center;
-  padding: 24px;
-  color: #9ca3af;
+  padding: 32px 24px;
+  color: var(--catalog-muted, #667085);
   font-size: 13px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
 }
 
 .inputError {
@@ -186,7 +201,7 @@
 .urlInputOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.46);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -196,11 +211,11 @@
 
 .urlInputModal {
   background: #fff;
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 24px;
   width: 480px;
   max-width: 90vw;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 24px 70px rgba(16, 24, 40, 0.22);
   animation: slideUp 0.25s ease;
 }
 
@@ -214,16 +229,16 @@
 .urlInputField {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .urlInputField:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  border-color: rgba(7, 86, 199, 0.52);
+  box-shadow: 0 0 0 4px rgba(7, 86, 199, 0.1);
 }
 
 .uploadSection {
@@ -240,16 +255,16 @@
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: #3b82f6;
-  background-color: #eff6ff;
-  border: 1px dashed #93c5fd;
+  color: var(--catalog-accent, #0756c7);
+  background-color: var(--catalog-accent-soft, #edf5ff);
+  border: 1px dashed rgba(7, 86, 199, 0.36);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .uploadBtnModal:hover:not(:disabled) {
-  background-color: #dbeafe;
-  border-color: #60a5fa;
+  background-color: #e1eeff;
+  border-color: rgba(7, 86, 199, 0.52);
 }
 
 .uploadBtnModal:disabled {
@@ -306,18 +321,18 @@
 
 .urlAddBtn {
   padding: 8px 20px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  background: var(--catalog-accent, #0756c7);
   border: none;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .urlAddBtn:hover {
-  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+  background: var(--catalog-accent-strong, #063f9e);
 }
 
 .urlAddBtn:disabled {
@@ -362,7 +377,7 @@
   border-radius: 6px;
   background: none;
   border: none;
-  color: #3b82f6;
+  color: var(--catalog-accent, #0756c7);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -371,6 +386,6 @@
 }
 
 .reactivateBtn:hover {
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--catalog-accent-soft, #edf5ff);
+  color: var(--catalog-accent-strong, #063f9e);
 }

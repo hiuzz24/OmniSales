@@ -1,15 +1,17 @@
 .card {
-  background-color: #ffffff;
-  border-radius: 12px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.72)),
+    #ffffff;
+  border-radius: 16px;
+  border: 1px solid var(--catalog-line, #d8deea);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.06);
   padding: 24px;
 }
 
 .cardTitle {
   font-size: 16px;
-  font-weight: 600;
-  color: #111827;
+  font-weight: 700;
+  color: var(--catalog-ink, #101828);
   margin-bottom: 20px;
 }
 
@@ -27,25 +29,27 @@
 
 .label {
   font-size: 13px;
-  font-weight: 500;
-  color: #374151;
+  font-weight: 650;
+  color: #344054;
 }
 
 .input {
   width: 100%;
-  padding: 10px 14px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  min-height: 42px;
+  padding: 10px 13px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
   font-size: 14px;
-  color: #111827;
+  color: var(--catalog-ink, #101828);
   outline: none;
   background: #ffffff;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font-variant-numeric: tabular-nums;
 }
 
 .input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  border-color: rgba(7, 86, 199, 0.52);
+  box-shadow: 0 0 0 4px rgba(7, 86, 199, 0.1);
 }
 
 .inputError {

@@ -7,6 +7,7 @@ import {
   Store, ShoppingBag, PenTool, History,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
+import Pagination from '../../../shared/components/Pagination';
 import orderService from '../services/orderService';
 import orderApi from '../../../api/orderApi';
 import channelApi from '../../../api/channelApi';
@@ -359,18 +360,15 @@ const OrderListPage = () => {
             )}
           </tbody>
         </table>
-        <div className={styles.tableFooter}>
-          <span className={styles.footerInfo}>
-            Hiển thị {orders.length} / {totalElements} đơn hàng
-          </span>
-          {totalPages > 1 && (
-            <div className={styles.pagination}>
-              <button className={styles.pageBtn} disabled={page === 0} onClick={() => setPage((p) => p - 1)}>‹</button>
-              <span className={styles.pageInfo}>Trang {page + 1} / {totalPages}</span>
-              <button className={styles.pageBtn} disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>›</button>
-            </div>
-          )}
-        </div>
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          totalElements={totalElements}
+          pageSize={PAGE_SIZE}
+          currentCount={orders.length}
+          itemLabel="đơn hàng"
+          onPageChange={setPage}
+        />
       </div>
 
       <ExportOrdersModal

@@ -64,19 +64,12 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     .orElseThrow(() -> new AppException(ErrorCode.SUPPLIER_NOT_FOUND));
         }
 
-        // 3. Validate invoice number is unique (if provided)
-        if (request.getInvoiceNumber() != null && !request.getInvoiceNumber().trim().isEmpty()) {
-            if (stockReceiveRepository.existsByInvoiceNumber(request.getInvoiceNumber())) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED, "Số hóa đơn đã bị trùng");
-            }
-        }
-
-        // 4. Validate items not empty (double-check)
+        // 3. Validate items not empty (double-check)
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
 
-        // 4.5. Validate based on status (DRAFT vs CONFIRMED)
+        // 4. Validate based on status (DRAFT vs CONFIRMED)
         boolean isDraft = Boolean.TRUE.equals(request.getIsDraft());
         if (!isDraft) {
             // When confirming (not draft), validate all items have quantity and unitCost
@@ -91,12 +84,6 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     throw new AppException(ErrorCode.VALIDATION_FAILED,
                         "Tất cả sản phẩm phải có đơn giá lớn hơn hoặc bằng 0 khi xác nhận phiếu nhập");
                 }
-            }
-            
-            // Validate invoice number is required when confirming
-            if (request.getInvoiceNumber() == null || request.getInvoiceNumber().trim().isEmpty()) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED, 
-                    "Số hóa đơn là bắt buộc khi xác nhận phiếu nhập");
             }
         } else {
             // For DRAFT: set default values for null quantity/unitCost and validate if provided
@@ -145,9 +132,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         }
 
         // 8. Generate receiptCode: "PN-{YYYY}-{SEQ}"
-        int currentYear = LocalDate.now().getYear();
-        long count = stockReceiveRepository.countByYear(currentYear);
-        String receiptCode = "PN-" + currentYear + "-" + String.format("%03d", count + 1);
+        String receiptCode = getNextReceiptCode();
 
         // 9. Load createdBy user (optional)
         var createdByUser = userRepository.findById(createdByUserId).orElse(null);
@@ -163,7 +148,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 .warehouse(warehouse)
                 .supplier(supplier)
                 .receiptCode(receiptCode)
-                .invoiceNumber(request.getInvoiceNumber())
+                .invoiceNumber(receiptCode)
                 .status(status)
                 .confirmedAt(confirmedAt)
                 .receivedAt(receivedAt)
@@ -389,17 +374,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     .orElseThrow(() -> new AppException(ErrorCode.SUPPLIER_NOT_FOUND));
         }
 
-        // 5. Validate invoice number is unique (if provided and changed)
-        if (request.getInvoiceNumber() != null && !request.getInvoiceNumber().trim().isEmpty()) {
-            // Only check if invoice number has changed
-            if (!request.getInvoiceNumber().equals(receipt.getInvoiceNumber())) {
-                if (stockReceiveRepository.existsByInvoiceNumber(request.getInvoiceNumber())) {
-                    throw new AppException(ErrorCode.VALIDATION_FAILED, "Số hóa đơn đã bị trùng");
-                }
-            }
-        }
-
-        // 6. Validate items not empty
+        // 5. Validate items not empty
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
@@ -448,7 +423,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         receipt.setWarehouse(warehouse);
         receipt.setSupplier(supplier);
-        receipt.setInvoiceNumber(request.getInvoiceNumber());
+        receipt.setInvoiceNumber(receipt.getReceiptCode());
         receipt.setReceivedAt(receivedAt);
         receipt.setNotes(request.getNotes());
         receipt.setTotalCost(totalCost);
@@ -525,12 +500,6 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         if (!"DRAFT".equals(receipt.getStatus())) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, 
                 "Chỉ có thể hoàn thành phiếu nhập ở trạng thái Lưu tạm");
-        }
-
-        // 2.5. Validate invoice number is required when completing
-        if (receipt.getInvoiceNumber() == null || receipt.getInvoiceNumber().trim().isEmpty()) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, 
-                "Số hóa đơn là bắt buộc khi hoàn thành phiếu nhập");
         }
 
         // 3. Load receipt items
@@ -661,7 +630,16 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         return statistics;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public String getNextReceiptCode() {
+        int currentYear = LocalDate.now().getYear();
+        long count = stockReceiveRepository.countByYear(currentYear);
+        return "PN-" + currentYear + "-" + String.format("%03d", count + 1);
+    }
+
     private OffsetDateTime resolveDocumentTime(LocalDate documentDate) {
         return OffsetDateTime.now();
     }
+
 }

@@ -17,6 +17,7 @@ import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
 import ProductDetailPage from '../../features/catalog/pages/ProductDetailPage';
 import ProductLogPage from '../../features/catalog/pages/ProductLogPage';
+import CategoryPage from '../../features/catalog/pages/CategoryPage';
 import CustomerListPage from '../../features/customer/pages/CustomerListPage';
 import CustomerDetailPage from '../../features/customer/pages/CustomerDetailPage';
 import CustomerCreatePage from '../../features/customer/pages/CustomerCreatePage';
@@ -39,9 +40,12 @@ import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/St
 import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
 import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
 import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
+import ChannelConnectionPage from '../../features/channel/pages/ChannelConnectionPage';
+import ChannelConnectionHistoryPage from '../../features/channel/pages/ChannelConnectionHistoryPage';
 import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/StockDeliveryEditPage';
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
+import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
@@ -93,6 +97,10 @@ const AppRouter = () => {
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
               <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
+              <Route path={ROUTES.CATEGORIES} element={<CategoryPage />} />
+              <Route path={ROUTES.CHANNELS} element={<ChannelConnectionPage />} />
+              <Route path={ROUTES.CHANNEL_CONNECTION_HISTORY} element={<ChannelConnectionHistoryPage />} />
+              <Route path={ROUTES.SYNC_HISTORY} element={<SyncHistoryPage />} />
               <Route path={ROUTES.CUSTOMER_LIST} element={<CustomerListPage />} />
               <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />
               <Route path={ROUTES.CUSTOMER_EDIT} element={<CustomerEditPage />} />

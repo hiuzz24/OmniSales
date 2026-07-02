@@ -34,13 +34,14 @@ const ProductChannelSidebar = ({
           <div className={styles.emptyChannels}>Chưa có kênh nào được thiết lập</div>
         ) : (
           <div className={styles.channelList}>
-            {channels.map((channel) => {
+            {channels.map((channel, index) => {
               const icon = getIcon(channel.platform);
-              const isSelected = selectedChannels.includes(channel.id);
+              const channelId = channel.id || channel._id || (channel.platform + index);
+              const isSelected = selectedChannels.includes(channelId);
               const commissionRate = channel.commissionRate || 0;
 
               return (
-                <div key={channel.id} className={styles.channelItem}>
+                <div key={channelId} className={styles.channelItem}>
                   <div className={styles.channelInfo}>
                     <div className={`${styles.channelIcon} ${styles[icon.className]}`}>
                       {icon.label}
@@ -58,7 +59,7 @@ const ProductChannelSidebar = ({
                     type="checkbox"
                     className={styles.toggle}
                     checked={isSelected}
-                    onChange={() => onChannelToggle(channel.id)}
+                    onChange={() => onChannelToggle(channelId)}
                   />
                 </div>
               );

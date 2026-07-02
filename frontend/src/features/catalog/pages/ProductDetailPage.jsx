@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Loader2 } from 'lucide-react';
 import productApi from '../../../api/productApi';
@@ -21,6 +21,7 @@ const ProductDetailPage = () => {
   const [product, setProduct] = useState(null);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
@@ -32,7 +33,7 @@ const ProductDetailPage = () => {
       setLoading(true);
       const [prodRes, chanRes] = await Promise.all([
         productApi.getById(id),
-        channelApi.getAll()
+        channelApi.getAll(),
       ]);
       const responseData = prodRes.data?.data || prodRes.data || prodRes;
       setProduct(responseData);
@@ -57,6 +58,26 @@ const ProductDetailPage = () => {
     }
   };
 
+  const handleSync = async () => {
+    try {
+      setIsSyncing(true);
+      const res = await productApi.sync(id);
+      const data = res.data?.data || res.data || res;
+
+      if (data && data.failedCount > 0) {
+        toast.warning(`Đồng bộ xong nhưng có ${data.failedCount} kênh thất bại! Vui lòng kiểm tra Lịch sử đồng bộ.`);
+      } else {
+        toast.success('Đồng bộ thành công lên tất cả các kênh!');
+      }
+
+      await fetchProduct();
+    } catch (error) {
+      toast.error('Đồng bộ thất bại. Vui lòng thử lại.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
@@ -75,6 +96,8 @@ const ProductDetailPage = () => {
         onBack={() => navigate(ROUTES.PRODUCTS)}
         onDelete={handleDelete}
         onEdit={() => navigate(ROUTES.PRODUCT_EDIT.replace(':id', product.id))}
+        onSync={handleSync}
+        isSyncing={isSyncing}
       />
 
       <div className={styles.mainContent}>
@@ -101,4 +124,3 @@ const ProductDetailPage = () => {
 };
 
 export default ProductDetailPage;
-

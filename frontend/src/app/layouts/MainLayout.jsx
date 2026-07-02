@@ -5,7 +5,7 @@ import {
   BarChart3, Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User,
+  ChevronRight, User, Tag,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -15,7 +15,16 @@ import notificationApi from '../../api/notificationApi';
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { name: 'Dashboard', href: ROUTES.DASHBOARD, icon: LayoutDashboard, roles: [] },
-  { name: 'Sản phẩm', href: '/products', icon: Package, roles: [] },
+  {
+    name: 'Sản phẩm',
+    href: '/products',
+    icon: Package,
+    roles: [],
+    children: [
+      { name: 'Danh sách sản phẩm', href: ROUTES.PRODUCTS, icon: Package, exact: true, roles: [] },
+      { name: 'Danh mục sản phẩm', href: ROUTES.CATEGORIES, icon: Tag, roles: [] },
+    ],
+  },
   {
     name: 'Kho hàng',
     href: '/warehouse',
@@ -32,13 +41,13 @@ const NAV_ITEMS = [
       { name: 'Lịch sử thay đổi', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
     ],
   },
-  { name: 'Khách hàng', href: ROUTES.CUSTOMER_LIST, icon: Users, roles: [] },
-  { name: 'Bán hàng (POS)', href: '/pos', icon: Store, roles: [] },
-  { name: 'Đơn hàng', href: '/orders', icon: ShoppingCart, roles: [] },
-  { name: 'Kênh bán hàng', href: '/channels', icon: Share2, roles: [] },
-  { name: 'Phân tích', href: '/analytics', icon: BarChart3, roles: [] },
-  { name: 'Nhân sự', href: '/users', icon: Users, roles: [ROLES.OWNER] },
-  { name: 'Cài đặt', href: '/settings', icon: Settings, roles: [] },
+  { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
+  { name: 'Bán hàng (POS)', href: '/pos',      icon: Store,    roles: [] },
+  { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
+  { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
+  { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
+  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER] },
+  { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
 ];
 
 const ROLE_HIDDEN = {
@@ -495,7 +504,7 @@ function UserDropdown({ user, role, onLogout }) {
           </div>
 
           {[
-            { label: 'Hồ sơ', icon: User, href: ROUTES.PROFILE },
+            { label: 'Hồ sơ', icon: User,     href: ROUTES.PROFILE },
             { label: 'Cài đặt', icon: Settings, href: '/settings' },
           ].map((m) => (
             <Link key={m.label} to={m.href} onClick={() => setShow(false)}

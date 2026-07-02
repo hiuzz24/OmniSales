@@ -9,6 +9,7 @@ import fu.osms.catalog.service.ProductService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.sync.dto.SyncResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -69,6 +70,12 @@ public class ProductController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         productService.delete(id);
         return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/{productId}/sync")
+    public ResponseEntity<ApiResponse<SyncResult>> syncProduct(@PathVariable UUID productId) {
+        SyncResult result = productService.syncProductToAllChannels(productId);
+        return ResponseEntity.ok(ApiResponse.success("Sync triggered", result));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
