@@ -253,13 +253,11 @@ public class ProductImportServiceImpl implements ProductImportService {
             if (vSku.isEmpty()) {
                 errors.add("Dòng " + r.rowIndex + ": thiếu SKU biến thể");
             }
-            if (priceStr.isEmpty()) {
-                errors.add("Dòng " + r.rowIndex + ": thiếu Giá bán");
-            } else {
+            if (!priceStr.isEmpty()) {
                 try {
                     BigDecimal price = new BigDecimal(priceStr.replace(",", ""));
-                    if (price.compareTo(BigDecimal.ZERO) <= 0) {
-                        errors.add("Dòng " + r.rowIndex + ": Giá bán phải lớn hơn 0");
+                    if (price.compareTo(BigDecimal.ZERO) < 0) {
+                        errors.add("Dòng " + r.rowIndex + ": Giá bán không được âm");
                     }
                 } catch (NumberFormatException ex) {
                     errors.add("Dòng " + r.rowIndex + ": Giá bán không đúng định dạng số");
@@ -269,7 +267,10 @@ public class ProductImportServiceImpl implements ProductImportService {
             String costPriceStr = r.values.getOrDefault("costPrice", "");
             if (!costPriceStr.isEmpty()) {
                 try {
-                    new BigDecimal(costPriceStr.replace(",", ""));
+                    BigDecimal costPrice = new BigDecimal(costPriceStr.replace(",", ""));
+                    if (costPrice.compareTo(BigDecimal.ZERO) < 0) {
+                        errors.add("Dòng " + r.rowIndex + ": Giá vốn không được âm");
+                    }
                 } catch (NumberFormatException ex) {
                     errors.add("Dòng " + r.rowIndex + ": Giá vốn không đúng định dạng số");
                 }
@@ -322,12 +323,22 @@ public class ProductImportServiceImpl implements ProductImportService {
             vr.setName(emptyToNull(r.values.get("variantName")));
             vr.setBarcode(emptyToNull(r.values.get("barcode")));
 
-            String priceStr = r.values.getOrDefault("price", "0").replace(",", "");
-            vr.setPrice(new BigDecimal(priceStr));
+            String priceStr = r.values.getOrDefault("price", "").replace(",", "");
+            if (!priceStr.isEmpty()) {
+                try {
+                    vr.setPrice(new BigDecimal(priceStr));
+                } catch (NumberFormatException ex) {
+                    vr.setPrice(BigDecimal.ZERO);
+                }
+            }
 
-            String costPriceStr = r.values.getOrDefault("costPrice", "");
+            String costPriceStr = r.values.getOrDefault("costPrice", "").replace(",", "");
             if (!costPriceStr.isEmpty()) {
-                vr.setCostPrice(new BigDecimal(costPriceStr.replace(",", "")));
+                try {
+                    vr.setCostPrice(new BigDecimal(costPriceStr));
+                } catch (NumberFormatException ex) {
+                    // ignore invalid cost price
+                }
             }
 
             String weightStr = r.values.getOrDefault("weightGrams", "");
