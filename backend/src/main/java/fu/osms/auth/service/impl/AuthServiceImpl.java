@@ -214,12 +214,49 @@ public class AuthServiceImpl implements AuthService {
         }
 
         Optional<User> existingUser = userRepository.findByEmail(email);
-        if (existingUser.isPresent() && existingUser.get().getStatus() == UserStatus.ACTIVE) {
-            throw new IllegalArgumentException("Email này đã được sử dụng bởi một tài khoản đang hoạt động");
+        User user;
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+            if (user.getStatus() == UserStatus.ACTIVE) {
+                throw new IllegalArgumentException("Email này đã được sử dụng bởi một tài khoản đang hoạt động");
+            }
+            user.setFullName("Chờ kích hoạt");
+            user.setDeletedAt(null);
+            userRepository.save(user);
+
+            // Clean up old invite tokens
+            List<UserInviteToken> oldTokens = userInviteTokenRepository.findAll().stream()
+                    .filter(t -> t.getEmail().equalsIgnoreCase(email))
+                    .toList();
+            userInviteTokenRepository.deleteAll(oldTokens);
+        } else {
+            user = User.builder()
+                    .email(email)
+                    .fullName("Chờ kích hoạt")
+                    .passwordHash(passwordEncoder.encode(java.util.UUID.randomUUID().toString()))
+                    .status(UserStatus.INACTIVE)
+                    .build();
+            userRepository.save(user);
         }
 
         Role dbRole = roleRepository.findByName(normRole)
                 .orElseThrow(() -> new IllegalArgumentException("Vai trò không tồn tại trong hệ thống: " + roleName));
+
+        // Ensure user role matches dbRole
+        List<UserRole> existingRoles = userRoleRepository.findByUserId(user.getId());
+        if (!existingRoles.isEmpty()) {
+            UserRole ur = existingRoles.get(0);
+            ur.setRole(dbRole);
+            ur.setGrantedAt(OffsetDateTime.now());
+            userRoleRepository.save(ur);
+        } else {
+            UserRole userRole = UserRole.builder()
+                    .user(user)
+                    .role(dbRole)
+                    .grantedAt(OffsetDateTime.now())
+                    .build();
+            userRoleRepository.save(userRole);
+        }
 
         String tokenStr = UUID.randomUUID().toString();
 

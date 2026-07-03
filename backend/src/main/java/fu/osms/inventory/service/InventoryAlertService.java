@@ -49,7 +49,7 @@ public class InventoryAlertService {
         String body = sku + " tại " + warehouseName + " còn có thể bán " + available
                 + " / mức tối thiểu " + reorderLevel + ".";
 
-        userRoleRepository.findByRoleNameIn(List.of("OWNER", "OPERATIONS")).stream()
+        userRoleRepository.findByRoleNameIn(List.of("OWNER", "OPERATIONS", "SYSTEM_ADMIN")).stream()
                 .map(userRole -> userRole.getUser().getId())
                 .distinct()
                 .filter(userId -> !enforceRepeatWindow || shouldSendLowStockNotification(userId, item))

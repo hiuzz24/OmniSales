@@ -90,7 +90,7 @@ DROP TYPE IF EXISTS order_status       CASCADE;
 DROP TYPE IF EXISTS inv_txn_type       CASCADE;
 DROP TYPE IF EXISTS sync_status        CASCADE;
 DROP TYPE IF EXISTS product_log_action CASCADE;
-
+DROP TYPE IF EXISTS category_status CASCADE;
 -- ============================================================
 --  CREATE ENUM TYPES
 -- ============================================================

@@ -46,7 +46,7 @@ const NAV_ITEMS = [
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
   { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
-  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER] },
+  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },
   { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
 ];
 
@@ -54,7 +54,7 @@ const ROLE_HIDDEN = {
   [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
   [ROLES.OPERATIONS]: ['Phân tích', 'Nhân sự'],
   [ROLES.OWNER]: [],
-  [ROLES.SYSTEM_ADMIN]: [],
+  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Bán hàng (POS)', 'Đơn hàng', 'Kênh bán hàng', 'Phân tích', 'Cài đặt'],
 };
 
 const isVisible = (item, role) => {
@@ -397,6 +397,10 @@ export default function MainLayout() {
                               } else {
                                 navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
                               }
+                              setNotifOpen(false);
+                            }
+                            if (n.entityType === 'SYNC') {
+                              navigate(ROUTES.SYNC_HISTORY);
                               setNotifOpen(false);
                             }
                           }}

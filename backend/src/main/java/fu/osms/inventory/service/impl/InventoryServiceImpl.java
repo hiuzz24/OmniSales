@@ -310,7 +310,8 @@ public class InventoryServiceImpl implements InventoryService {
 
         User currentUser = getCurrentUser();
         inventoryItem.setUpdatedBy(currentUser);
-        inventoryItemRepository.save(inventoryItem);
+        inventoryItem = inventoryItemRepository.save(inventoryItem);
+        inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
 
         // Fetch refreshed details to return
         return getInventoryItemDetail(inventoryItemId);

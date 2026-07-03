@@ -58,6 +58,11 @@ const userApi = {
     const res = await axiosClient.delete(`/users/${id}`);
     return res.data?.data ?? res.data;
   },
+
+  cancelInvite: async (id) => {
+    const res = await axiosClient.post(`/users/${id}/cancel-invite`);
+    return res.data?.data ?? res.data;
+  },
 };
 
 export default userApi;
