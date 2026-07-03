@@ -21,9 +21,6 @@ public class Supplier {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "code", nullable = false, unique = true, length = 100)
-    private String code;
-
     @Column(nullable = false, length = 255)
     private String name;
 
@@ -51,4 +48,6 @@ public class Supplier {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    @Column(name="supplier_code", nullable = false, unique = true, length = 100)
+    private String supplierCode;
 }

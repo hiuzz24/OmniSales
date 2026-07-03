@@ -81,10 +81,6 @@ const buildTemplateSheet = () => {
     group.rows.forEach((rowData) => {
       const row = IMPORT_TEMPLATE_COLUMNS.map((col) => {
         const v = rowData[col.key];
-        if (col.key === 'price' || col.key === 'costPrice') {
-          const n = Number(v);
-          return Number.isFinite(n) ? n : '';
-        }
         return v == null ? '' : v;
       });
       aoa.push(row);
@@ -180,32 +176,36 @@ const buildInstructionsSheet = () => {
   aoa.push([]);
 
   aoa.push(['2. Các cột BẮT BUỘC (không được để trống)']);
-  aoa.push(['- Mã sản phẩm (SKU cha) - productSku: Mã duy nhất, dùng để gộp các biến thể']);
+  aoa.push(['- Mã sản phẩm (SKU) - productSku: Mã duy nhất, dùng để gộp các biến thể']);
   aoa.push(['- Tên sản phẩm - productName: Tên hiển thị chính']);
   aoa.push(['- Danh mục - categoryName: Tên danh mục đã có trong hệ thống (không phân biệt hoa/thường)']);
   aoa.push(['- SKU biến thể - variantSku: Mã duy nhất cho từng biến thể, không trùng nhau']);
-  aoa.push(['- Giá bán - price: Số nguyên dương, ví dụ 150000 (= 150.000đ)']);
+  aoa.push([]);
+  aoa.push(['3. Cột TÙY CHỌN (có thể để trống)']);
+  aoa.push(['- Tên biến thể - variantName: Tên hiển thị biến thể (VD: Đỏ / M)']);
+  aoa.push(['- Mô tả, Thương hiệu, Đơn vị, Barcode, Trọng lượng: Tùy chọn']);
+  aoa.push(['- Trạng thái - status: DRAFT (mặc định), ACTIVE, INACTIVE']);
   aoa.push([]);
 
-  aoa.push(['3. Cập nhật sản phẩm đã có']);
-  aoa.push(['- Nếu Mã sản phẩm (SKU cha) đã tồn tại trong hệ thống, các dòng có cùng SKU sẽ CẬP NHẬT']);
+  aoa.push(['4. Cập nhật sản phẩm đã có']);
+  aoa.push(['- Nếu Mã sản phẩm (SKU) đã tồn tại trong hệ thống, các dòng có cùng SKU sẽ CẬP NHẬT']);
   aoa.push(['  sản phẩm đó (thay vì tạo mới).']);
   aoa.push(['- Nếu SKU biến thể đã tồn tại thuộc sản phẩm khác, hệ thống sẽ báo lỗi trùng SKU biến thể.']);
   aoa.push([]);
 
-  aoa.push(['4. Trạng thái (status) - Các giá trị hợp lệ']);
+  aoa.push(['5. Trạng thái (status) - Các giá trị hợp lệ']);
   aoa.push(['- DRAFT: Nháp (mặc định nếu bỏ trống)']);
   aoa.push(['- ACTIVE: Đang bán']);
   aoa.push(['- INACTIVE: Ngừng bán']);
   aoa.push([]);
 
-  aoa.push(['5. Ví dụ mẫu (xem sheet "Template")']);
+  aoa.push(['6. Ví dụ mẫu (xem sheet "Template")']);
   IMPORT_TEMPLATE_EXAMPLES.forEach((group) => {
     aoa.push([`- ${group.label}: ${group.rows.length} dòng (${group.rows.length} biến thể)`]);
   });
   aoa.push([]);
 
-  aoa.push(['6. Giới hạn']);
+  aoa.push(['7. Giới hạn']);
   aoa.push(['- Kích thước file tối đa: 20MB']);
   aoa.push(['- Định dạng hỗ trợ: .xlsx, .xls']);
   aoa.push(['- Nếu có bất kỳ lỗi nào, toàn bộ file sẽ được rollback (không lưu gì cả).']);
@@ -240,29 +240,27 @@ const buildInstructionsSheet = () => {
 const buildColumnsSheet = () => {
   const aoa = [
     ['#', 'Tên cột (header)', 'Key', 'Bắt buộc?', 'Ví dụ', 'Mô tả'],
-    [1, 'Mã sản phẩm (SKU cha)', 'productSku', 'BẮT BUỘC', 'SP-001', 'SKU cha - dùng gộp các biến thể. Trùng SKU = cập nhật sản phẩm có sẵn.'],
+    [1, 'Mã sản phẩm (SKU)', 'productSku', 'BẮT BUỘC', 'SP-001', 'Mã sản phẩm - dùng gộp các biến thể. Trùng SKU = cập nhật sản phẩm có sẵn.'],
     [2, 'Tên sản phẩm', 'productName', 'BẮT BUỘC', 'Áo thun nam cổ tròn', 'Tên hiển thị chính của sản phẩm.'],
     [3, 'Danh mục', 'categoryName', 'BẮT BUỘC', 'Thời trang nam', 'Tên danh mục đã có trong hệ thống.'],
-    [4, 'Thương hiệu', 'brand', 'Tùy chọn', 'OEM', 'Thương hiệu sản phẩm.'],
-    [5, 'Mô tả', 'description', 'Tùy chọn', 'Áo thun cotton 100%', 'Mô tả chi tiết.'],
+    [4, 'Mô tả', 'description', 'Tùy chọn', 'Áo thun cotton 100%', 'Mô tả chi tiết sản phẩm.'],
+    [5, 'Thương hiệu', 'brand', 'Tùy chọn', 'OEM', 'Thương hiệu sản phẩm.'],
     [6, 'Đơn vị', 'unit', 'Tùy chọn', 'cái', 'Đơn vị tính (cái, hộp, kg...).'],
     [7, 'Trạng thái', 'status', 'Tùy chọn', 'DRAFT', 'DRAFT / ACTIVE / INACTIVE. Mặc định DRAFT.'],
     [8, 'SKU biến thể', 'variantSku', 'BẮT BUỘC', 'SP-001-RED-M', 'SKU riêng cho từng biến thể, không được trùng.'],
     [9, 'Tên biến thể', 'variantName', 'Tùy chọn', 'Đỏ / M', 'Tên hiển thị của biến thể.'],
-    [10, 'Giá bán', 'price', 'BẮT BUỘC', '150000', 'Giá bán lẻ, số nguyên dương, tính bằng VNĐ.'],
-    [11, 'Giá vốn', 'costPrice', 'Tùy chọn', '80000', 'Giá vốn, số nguyên dương, VNĐ.'],
-    [12, 'Barcode', 'barcode', 'Tùy chọn', '8934673001234', 'Mã vạch của biến thể, không trùng.'],
-    [13, 'Trọng lượng (g)', 'weightGrams', 'Tùy chọn', '250', 'Trọng lượng tính bằng gram.'],
+    [10, 'Barcode', 'barcode', 'Tùy chọn', '8934673001234', 'Mã vạch của biến thể, không trùng.'],
+    [11, 'Trọng lượng (g)', 'weightGrams', 'Tùy chọn', '250', 'Trọng lượng tính bằng gram.'],
   ];
 
   const worksheet = XLSX.utils.aoa_to_sheet(aoa);
   worksheet['!cols'] = [
     { wch: 5 },
-    { wch: 24 },
+    { wch: 22 },
     { wch: 18 },
     { wch: 12 },
     { wch: 22 },
-    { wch: 60 },
+    { wch: 50 },
   ];
 
   applyRowStyle(worksheet, 1, HEADER_STYLE, 6);

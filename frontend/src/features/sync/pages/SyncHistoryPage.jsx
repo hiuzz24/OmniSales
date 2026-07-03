@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import syncApi from '../../../api/syncApi';
 import channelApi from '../../../api/channelApi';
 import Badge from '../../../shared/components/Badge';
@@ -9,6 +10,7 @@ import styles from './SyncHistoryPage.module.css';
 const PAGE_SIZE = 20;
 
 const SyncHistoryPage = () => {
+  const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
@@ -80,6 +82,10 @@ const SyncHistoryPage = () => {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
+        <button onClick={() => navigate(-1)} className={styles.backBtn}>
+          <ArrowLeft size={20} />
+          Quay lại
+        </button>
         <h1 className={styles.title}>Lịch sử đồng bộ</h1>
         <p className={styles.subtitle}>Theo dõi quá trình đẩy dữ liệu lên các sàn thương mại điện tử</p>
       </div>

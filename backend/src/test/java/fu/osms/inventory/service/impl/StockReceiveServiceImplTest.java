@@ -71,7 +71,7 @@ class StockReceiveServiceImplTest {
     private UUID variantId;
     private UUID userId;
     private UUID receiptId;
-    
+
     private Warehouse warehouse;
     private Supplier supplier;
     private ProductVariant variant;
@@ -147,7 +147,7 @@ class StockReceiveServiceImplTest {
                 .notes("Test item")
                 .build();
 
-        // Setup receipt request
+        // Setup receipt request - isDraft=false means CONFIRMED immediately
         request = StockReceiveRequest.builder()
                 .warehouseId(warehouseId)
                 .supplierId(supplierId)
@@ -164,7 +164,7 @@ class StockReceiveServiceImplTest {
                 .warehouse(warehouse)
                 .supplier(supplier)
                 .receiptCode("PN-2026-001")
-                .invoiceNumber("INV001")
+                .invoiceNumber("PN-2026-001")  // Note: invoiceNumber is set to receiptCode
                 .status("CONFIRMED")
                 .totalCost(new BigDecimal("600.00"))
                 .receivedAt(OffsetDateTime.now())
@@ -201,7 +201,7 @@ class StockReceiveServiceImplTest {
                 .supplierId(supplierId)
                 .supplierName("Test Supplier")
                 .receiptCode("PN-2026-001")
-                .invoiceNumber("INV001")
+                .invoiceNumber("PN-2026-001")
                 .status("CONFIRMED")
                 .totalCost(new BigDecimal("600.00"))
                 .items(List.of(itemResponse))
@@ -220,11 +220,10 @@ class StockReceiveServiceImplTest {
             // Arrange
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
+            // Note: NO existsByInvoiceNumber call for CONFIRMED receipt
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
             when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-            
             when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
             when(inventoryItemRepository.findByWarehouseIdAndVariantId(warehouseId, variantId))
                     .thenReturn(Optional.of(inventoryItem));
@@ -234,7 +233,6 @@ class StockReceiveServiceImplTest {
             when(stockReceiveItemRepository.save(any(InventoryReceiptItem.class))).thenReturn(receiptItem);
             when(inventoryTransactionRepository.save(any(InventoryTransaction.class)))
                     .thenReturn(new InventoryTransaction());
-            
             when(receiptMapper.toResponse(any(InventoryReceipt.class))).thenReturn(response);
             when(receiptMapper.toItemResponse(any(InventoryReceiptItem.class))).thenReturn(itemResponse);
 
@@ -247,11 +245,12 @@ class StockReceiveServiceImplTest {
             assertThat(result.getTotalCost()).isEqualTo(new BigDecimal("600.00"));
             assertThat(result.getTotalSkuCount()).isEqualTo(1);
             assertThat(result.getTotalQuantity()).isEqualTo(10);
-            
+
             // Verify repository calls
             verify(warehouseRepository).findById(warehouseId);
             verify(supplierRepository).findById(supplierId);
-            verify(stockReceiveRepository).existsByInvoiceNumber("INV001");
+            // NO existsByInvoiceNumber call for CONFIRMED receipt
+            verify(stockReceiveRepository, never()).existsByInvoiceNumber(any());
             verify(variantRepository).findById(variantId);
             verify(stockReceiveRepository).save(any(InventoryReceipt.class));
             verify(inventoryItemRepository).save(any(InventoryItem.class));
@@ -267,11 +266,11 @@ class StockReceiveServiceImplTest {
             request.setInvoiceNumber(null);  // Invoice number not required for draft
             itemRequest.setQuantity(5);      // DRAFT still requires quantity > 0 per current validation
             itemRequest.setUnitCost(BigDecimal.ZERO);
-            
+
             receipt.setStatus("DRAFT");
             receipt.setConfirmedAt(null);
-            receipt.setInvoiceNumber(null);
-            
+            receipt.setInvoiceNumber("PN-2026-001");
+
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
@@ -281,7 +280,7 @@ class StockReceiveServiceImplTest {
             when(stockReceiveItemRepository.save(any(InventoryReceiptItem.class))).thenReturn(receiptItem);
             when(inventoryTransactionRepository.save(any(InventoryTransaction.class)))
                     .thenReturn(new InventoryTransaction());
-            
+
             response.setStatus("DRAFT");
             when(receiptMapper.toResponse(any(InventoryReceipt.class))).thenReturn(response);
             when(receiptMapper.toItemResponse(any(InventoryReceiptItem.class))).thenReturn(itemResponse);
@@ -292,7 +291,7 @@ class StockReceiveServiceImplTest {
             // Assert
             assertThat(result).isNotNull();
             assertThat(result.getStatus()).isEqualTo("DRAFT");
-            
+
             // Verify inventory NOT updated for DRAFT
             verify(inventoryItemRepository, never()).findByWarehouseIdAndVariantIdWithLock(any(), any());
             verify(stockReceiveItemRepository).save(any(InventoryReceiptItem.class));
@@ -341,18 +340,18 @@ class StockReceiveServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should throw exception when invoice number already exists")
-        void shouldThrowExceptionWhenInvoiceNumberExists() {
+        @DisplayName("Should throw exception when items list is empty")
+        void shouldThrowExceptionWhenItemsEmpty() {
             // Arrange
+            request.setItems(Collections.emptyList());
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(true);
 
             // Act & Assert
             assertThatThrownBy(() -> stockReceiveService.createReceipt(request, userId))
                     .isInstanceOf(AppException.class)
                     .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, "Số hóa đơn đã bị trùng");
+                    .containsExactly(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
 
         @Test
@@ -362,13 +361,12 @@ class StockReceiveServiceImplTest {
             itemRequest.setQuantity(null);
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
 
             // Act & Assert
             assertThatThrownBy(() -> stockReceiveService.createReceipt(request, userId))
                     .isInstanceOf(AppException.class)
                     .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, 
+                    .containsExactly(ErrorCode.VALIDATION_FAILED,
                             "Tất cả sản phẩm phải có số lượng lớn hơn 0 khi xác nhận phiếu nhập");
         }
 
@@ -379,46 +377,13 @@ class StockReceiveServiceImplTest {
             itemRequest.setUnitCost(null);
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
 
             // Act & Assert
             assertThatThrownBy(() -> stockReceiveService.createReceipt(request, userId))
                     .isInstanceOf(AppException.class)
                     .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, 
+                    .containsExactly(ErrorCode.VALIDATION_FAILED,
                             "Tất cả sản phẩm phải có đơn giá lớn hơn hoặc bằng 0 khi xác nhận phiếu nhập");
-        }
-
-        @Test
-        @DisplayName("Should throw exception when confirming receipt without invoice number")
-        void shouldThrowExceptionWhenConfirmingWithoutInvoiceNumber() {
-            // Arrange
-            request.setInvoiceNumber(null);
-            when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
-            when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-
-            // Act & Assert
-            assertThatThrownBy(() -> stockReceiveService.createReceipt(request, userId))
-                    .isInstanceOf(AppException.class)
-                    .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, 
-                            "Số hóa đơn là bắt buộc khi xác nhận phiếu nhập");
-        }
-
-        @Test
-        @DisplayName("Should throw exception when items list is empty")
-        void shouldThrowExceptionWhenItemsEmpty() {
-            // Arrange
-            request.setItems(Collections.emptyList());
-            when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
-            when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
-
-            // Act & Assert
-            assertThatThrownBy(() -> stockReceiveService.createReceipt(request, userId))
-                    .isInstanceOf(AppException.class)
-                    .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
 
         @Test
@@ -431,10 +396,9 @@ class StockReceiveServiceImplTest {
                     .unitCost(new BigDecimal("70.00"))
                     .build();
             request.setItems(List.of(itemRequest, duplicateItem));
-            
+
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
 
             // Act & Assert
             assertThatThrownBy(() -> stockReceiveService.createReceipt(request, userId))
@@ -449,7 +413,6 @@ class StockReceiveServiceImplTest {
             // Arrange
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
             when(variantRepository.findById(variantId)).thenReturn(Optional.empty());
 
             // Act & Assert
@@ -465,7 +428,6 @@ class StockReceiveServiceImplTest {
             variant.setIsActive(false);
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
 
             // Act & Assert
@@ -480,7 +442,6 @@ class StockReceiveServiceImplTest {
             // Arrange
             request.setSupplierId(null);
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
             when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -510,16 +471,15 @@ class StockReceiveServiceImplTest {
             // Arrange
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
             when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
-            
+
             // First call returns empty (item doesn't exist), second call returns the created item
             when(inventoryItemRepository.findByWarehouseIdAndVariantId(warehouseId, variantId))
                     .thenReturn(Optional.empty());
-            
+
             InventoryItem newInventoryItem = InventoryItem.builder()
                     .id(UUID.randomUUID())
                     .warehouse(warehouse)
@@ -527,7 +487,7 @@ class StockReceiveServiceImplTest {
                     .quantityOnHand(0)
                     .averageCost(BigDecimal.ZERO)
                     .build();
-            
+
             when(inventoryItemRepository.save(any(InventoryItem.class))).thenReturn(newInventoryItem);
             when(inventoryItemRepository.findByWarehouseIdAndVariantIdWithLock(warehouseId, variantId))
                     .thenReturn(Optional.of(newInventoryItem));
@@ -542,7 +502,7 @@ class StockReceiveServiceImplTest {
 
             // Assert
             assertThat(result).isNotNull();
-            
+
             // Verify inventory item was created (saved twice - once for creation, once for update)
             verify(inventoryItemRepository, times(2)).save(any(InventoryItem.class));
         }
@@ -553,10 +513,9 @@ class StockReceiveServiceImplTest {
             // Arrange
             inventoryItem.setQuantityOnHand(100);
             inventoryItem.setAverageCost(new BigDecimal("50.00"));
-            
+
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("INV001")).thenReturn(false);
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
             when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -578,7 +537,7 @@ class StockReceiveServiceImplTest {
             // Assert - Capture the saved inventory item to verify average cost calculation
             ArgumentCaptor<InventoryItem> itemCaptor = ArgumentCaptor.forClass(InventoryItem.class);
             verify(inventoryItemRepository).save(itemCaptor.capture());
-            
+
             InventoryItem savedItem = itemCaptor.getValue();
             // Expected: (100 * 50.00 + 10 * 60.00) / (100 + 10) = 50.91
             assertThat(savedItem.getAverageCost()).isEqualByComparingTo(new BigDecimal("50.91"));
@@ -596,7 +555,7 @@ class StockReceiveServiceImplTest {
             // Arrange
             List<InventoryReceipt> receipts = List.of(receipt);
             Page<InventoryReceipt> receiptsPage = new PageImpl<>(receipts, PageRequest.of(0, 10), 1);
-            
+
             when(stockReceiveRepository.findAllByOrderByCreatedAtDesc(any(PageRequest.class)))
                     .thenReturn(receiptsPage);
             when(stockReceiveItemRepository.findByReceiptId(receiptId))
@@ -616,11 +575,11 @@ class StockReceiveServiceImplTest {
             assertThat(result.getTotalPages()).isEqualTo(1);
             assertThat(result.isFirst()).isTrue();
             assertThat(result.isLast()).isTrue();
-            
+
             StockReceiveResponse firstReceipt = result.getContent().get(0);
             assertThat(firstReceipt.getTotalSkuCount()).isEqualTo(1);
             assertThat(firstReceipt.getTotalQuantity()).isEqualTo(10);
-            
+
             verify(stockReceiveRepository).findAllByOrderByCreatedAtDesc(any(PageRequest.class));
             verify(stockReceiveItemRepository).findByReceiptId(receiptId);
         }
@@ -629,9 +588,9 @@ class StockReceiveServiceImplTest {
         @DisplayName("Should return empty page when no receipts found")
         void shouldReturnEmptyPageWhenNoReceiptsFound() {
             // Arrange
-            Page<InventoryReceipt> emptyPage = new PageImpl<>(Collections.emptyList(), 
+            Page<InventoryReceipt> emptyPage = new PageImpl<>(Collections.emptyList(),
                     PageRequest.of(0, 10), 0);
-            
+
             when(stockReceiveRepository.findAllByOrderByCreatedAtDesc(any(PageRequest.class)))
                     .thenReturn(emptyPage);
 
@@ -668,7 +627,7 @@ class StockReceiveServiceImplTest {
             assertThat(result.getItems()).hasSize(1);
             assertThat(result.getTotalSkuCount()).isEqualTo(1);
             assertThat(result.getTotalQuantity()).isEqualTo(10);
-            
+
             verify(stockReceiveRepository).findById(receiptId);
             verify(stockReceiveItemRepository).findByReceiptId(receiptId);
         }
@@ -695,7 +654,7 @@ class StockReceiveServiceImplTest {
         void shouldUpdateDraftReceiptSuccessfully() {
             // Arrange
             receipt.setStatus("DRAFT");
-            
+
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
@@ -717,7 +676,7 @@ class StockReceiveServiceImplTest {
 
             // Assert
             assertThat(result).isNotNull();
-            
+
             verify(stockReceiveRepository).findById(receiptId);
             verify(stockReceiveRepository).save(any(InventoryReceipt.class));
             verify(stockReceiveItemRepository).deleteAll(any());
@@ -736,7 +695,7 @@ class StockReceiveServiceImplTest {
             assertThatThrownBy(() -> stockReceiveService.updateReceipt(receiptId, request, userId))
                     .isInstanceOf(AppException.class)
                     .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, 
+                    .containsExactly(ErrorCode.VALIDATION_FAILED,
                             "Chỉ có thể chỉnh sửa phiếu nhập ở trạng thái Lưu tạm");
         }
 
@@ -753,46 +712,12 @@ class StockReceiveServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should allow updating invoice number if changed")
-        void shouldAllowUpdatingInvoiceNumberIfChanged() {
+        @DisplayName("Should not check invoice number uniqueness for DRAFT update")
+        void shouldNotCheckInvoiceNumberUniquenessForDraftUpdate() {
             // Arrange
             receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("OLD_INV");
-            request.setInvoiceNumber("NEW_INV");
             request.setIsDraft(true);
-            
-            when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
-            when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
-            when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
-            when(stockReceiveRepository.existsByInvoiceNumber("NEW_INV")).thenReturn(false);
-            when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
-            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-            when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
-            when(stockReceiveItemRepository.findByReceiptId(receiptId))
-                    .thenReturn(List.of(receiptItem));
-            when(stockReceiveItemRepository.save(any(InventoryReceiptItem.class))).thenReturn(receiptItem);
-            when(inventoryTransactionRepository.save(any(InventoryTransaction.class)))
-                    .thenReturn(new InventoryTransaction());
-            when(receiptMapper.toResponse(any(InventoryReceipt.class))).thenReturn(response);
-            when(receiptMapper.toItemResponse(any(InventoryReceiptItem.class))).thenReturn(itemResponse);
 
-            // Act
-            StockReceiveResponse result = stockReceiveService.updateReceipt(receiptId, request, userId);
-
-            // Assert
-            assertThat(result).isNotNull();
-            verify(stockReceiveRepository).existsByInvoiceNumber("NEW_INV");
-        }
-
-        @Test
-        @DisplayName("Should not check invoice number uniqueness if unchanged")
-        void shouldNotCheckInvoiceNumberUniquenessIfUnchanged() {
-            // Arrange
-            receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("INV001");
-            request.setInvoiceNumber("INV001");  // Same invoice number
-            request.setIsDraft(true);
-            
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
@@ -812,6 +737,7 @@ class StockReceiveServiceImplTest {
 
             // Assert
             assertThat(result).isNotNull();
+            // NO existsByInvoiceNumber check for DRAFT update
             verify(stockReceiveRepository, never()).existsByInvoiceNumber(any());
         }
     }
@@ -825,8 +751,8 @@ class StockReceiveServiceImplTest {
         void shouldCompleteDraftReceiptSuccessfully() {
             // Arrange
             receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("INV001");
-            
+            receipt.setInvoiceNumber("PN-2026-001");  // Note: invoiceNumber is set to receiptCode
+
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(stockReceiveItemRepository.findByReceiptId(receiptId))
                     .thenReturn(List.of(receiptItem));
@@ -848,7 +774,7 @@ class StockReceiveServiceImplTest {
 
             // Assert
             assertThat(result).isNotNull();
-            
+
             // Verify receipt status was updated
             ArgumentCaptor<InventoryReceipt> receiptCaptor = ArgumentCaptor.forClass(InventoryReceipt.class);
             verify(stockReceiveRepository).save(receiptCaptor.capture());
@@ -856,7 +782,7 @@ class StockReceiveServiceImplTest {
             assertThat(savedReceipt.getStatus()).isEqualTo("CONFIRMED");
             assertThat(savedReceipt.getConfirmedAt()).isNotNull();
             assertThat(savedReceipt.getApprovedBy()).isEqualTo(user);
-            
+
             // Verify inventory was updated
             verify(inventoryItemRepository).save(any(InventoryItem.class));
             verify(inventoryTransactionRepository).save(any(InventoryTransaction.class));
@@ -873,24 +799,8 @@ class StockReceiveServiceImplTest {
             assertThatThrownBy(() -> stockReceiveService.completeReceipt(receiptId, userId))
                     .isInstanceOf(AppException.class)
                     .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, 
+                    .containsExactly(ErrorCode.VALIDATION_FAILED,
                             "Chỉ có thể hoàn thành phiếu nhập ở trạng thái Lưu tạm");
-        }
-
-        @Test
-        @DisplayName("Should throw exception when completing receipt without invoice number")
-        void shouldThrowExceptionWhenCompletingWithoutInvoiceNumber() {
-            // Arrange
-            receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber(null);
-            when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
-
-            // Act & Assert
-            assertThatThrownBy(() -> stockReceiveService.completeReceipt(receiptId, userId))
-                    .isInstanceOf(AppException.class)
-                    .extracting("errorCode", "message")
-                    .containsExactly(ErrorCode.VALIDATION_FAILED, 
-                            "Số hóa đơn là bắt buộc khi hoàn thành phiếu nhập");
         }
 
         @Test
@@ -898,7 +808,6 @@ class StockReceiveServiceImplTest {
         void shouldThrowExceptionWhenCompletingWithEmptyItems() {
             // Arrange
             receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("INV001");
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(stockReceiveItemRepository.findByReceiptId(receiptId))
                     .thenReturn(Collections.emptyList());
@@ -915,9 +824,8 @@ class StockReceiveServiceImplTest {
         void shouldThrowExceptionWhenItemHasZeroQuantity() {
             // Arrange
             receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("INV001");
             receiptItem.setQuantity(0);
-            
+
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(stockReceiveItemRepository.findByReceiptId(receiptId))
                     .thenReturn(List.of(receiptItem));
@@ -934,9 +842,8 @@ class StockReceiveServiceImplTest {
         void shouldThrowExceptionWhenItemHasZeroUnitCost() {
             // Arrange
             receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("INV001");
             receiptItem.setUnitCost(BigDecimal.ZERO);
-            
+
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(stockReceiveItemRepository.findByReceiptId(receiptId))
                     .thenReturn(List.of(receiptItem));
@@ -953,15 +860,14 @@ class StockReceiveServiceImplTest {
         void shouldCreateNewInventoryItemWhenCompleting() {
             // Arrange
             receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("INV001");
-            
+
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(stockReceiveItemRepository.findByReceiptId(receiptId))
                     .thenReturn(List.of(receiptItem));
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(inventoryItemRepository.findByWarehouseIdAndVariantId(warehouseId, variantId))
                     .thenReturn(Optional.empty());
-            
+
             InventoryItem newInventoryItem = InventoryItem.builder()
                     .id(UUID.randomUUID())
                     .warehouse(warehouse)
@@ -969,7 +875,7 @@ class StockReceiveServiceImplTest {
                     .quantityOnHand(0)
                     .averageCost(BigDecimal.ZERO)
                     .build();
-            
+
             when(inventoryItemRepository.save(any(InventoryItem.class))).thenReturn(newInventoryItem);
             when(inventoryItemRepository.findByWarehouseIdAndVariantIdWithLock(warehouseId, variantId))
                     .thenReturn(Optional.of(newInventoryItem));
@@ -985,7 +891,7 @@ class StockReceiveServiceImplTest {
 
             // Assert
             assertThat(result).isNotNull();
-            
+
             // Verify inventory item was created (saved twice - once for creation, once for update)
             verify(inventoryItemRepository, times(2)).save(any(InventoryItem.class));
         }
@@ -995,8 +901,7 @@ class StockReceiveServiceImplTest {
         void shouldCreateConfirmedTransactionWhenCompleting() {
             // Arrange
             receipt.setStatus("DRAFT");
-            receipt.setInvoiceNumber("INV001");
-            
+
             when(stockReceiveRepository.findById(receiptId)).thenReturn(Optional.of(receipt));
             when(stockReceiveItemRepository.findByReceiptId(receiptId))
                     .thenReturn(List.of(receiptItem));
@@ -1017,10 +922,10 @@ class StockReceiveServiceImplTest {
             stockReceiveService.completeReceipt(receiptId, userId);
 
             // Assert - Verify transaction was created with correct note
-            ArgumentCaptor<InventoryTransaction> transactionCaptor = 
+            ArgumentCaptor<InventoryTransaction> transactionCaptor =
                     ArgumentCaptor.forClass(InventoryTransaction.class);
             verify(inventoryTransactionRepository).save(transactionCaptor.capture());
-            
+
             InventoryTransaction savedTransaction = transactionCaptor.getValue();
             assertThat(savedTransaction.getType()).isEqualTo(InvTxnType.IMPORT);
             assertThat(savedTransaction.getReferenceType()).isEqualTo("RECEIPT");
