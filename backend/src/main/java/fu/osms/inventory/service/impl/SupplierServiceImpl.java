@@ -49,13 +49,13 @@ public class SupplierServiceImpl implements SupplierService {
     private String generateSupplierCode() {
 
         Optional<Supplier> latestSupplier =
-                supplierRepository.findTopByOrderByCodeDesc();
+                supplierRepository.findTopByOrderBySupplierCodeDesc();
 
         if (latestSupplier.isEmpty()) {
             return "NCC0001";
         }
 
-        String latestCode = latestSupplier.get().getCode();
+        String latestCode = latestSupplier.get().getSupplierCode();
 
         try {
             int number = Integer.parseInt(
@@ -79,7 +79,7 @@ public class SupplierServiceImpl implements SupplierService {
 
         Supplier supplier = supplierMapper.toEntity(request);
 
-        supplier.setCode(generateSupplierCode());
+        supplier.setSupplierCode(generateSupplierCode());
         supplier.setIsActive(true);
 
         Supplier savedSupplier = supplierRepository.save(supplier);
