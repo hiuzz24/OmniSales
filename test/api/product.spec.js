@@ -16,22 +16,15 @@ test.describe('Product API Tests', () => {
   let categoryId;
 
   test.beforeAll(async ({ request }) => {
-    // Login once and reuse token for all tests
     authToken = await getAuthToken(request);
     expect(authToken).toBeTruthy();
-
-    // Get a category for creating products
     categoryId = await getFirstCategoryId(request, authToken);
   });
 
-  test.afterAll(async ({ request }) => {
-    // Cleanup is handled per-test below to keep tests independent
-  });
-
   // =========================================================
-  // P1: Seed data - verify login
+  // P1: Auth - Login
   // =========================================================
-  test('P1 - Login successfully (seed)', async ({ request }) => {
+  test('P1 - Login successfully', async ({ request }) => {
     const response = await request.post(`${API_URL}/auth/login`, {
       data: { email: 'manager@osms.vn', password: 'Duy16042004%' },
     });
@@ -44,7 +37,7 @@ test.describe('Product API Tests', () => {
   });
 
   // =========================================================
-  // P2: GET /api/products - List with pagination
+  // P2-P5: GET /api/products - List with filters
   // =========================================================
   test('P2 - GET /api/products - List with pagination returns 200', async ({ request }) => {
     const response = await request.get(`${API_URL}/products?page=0&size=6`, {
@@ -56,12 +49,10 @@ test.describe('Product API Tests', () => {
     expect(body.success).toBe(true);
     expect(body.data).toHaveProperty('content');
     expect(body.data).toHaveProperty('totalElements');
+    expect(body.data).toHaveProperty('totalPages');
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  // =========================================================
-  // P3: GET /api/products - Search by keyword
-  // =========================================================
   test('P3 - GET /api/products - Search by keyword', async ({ request }) => {
     const response = await request.get(`${API_URL}/products?keyword=áo&page=0&size=6`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -73,9 +64,6 @@ test.describe('Product API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  // =========================================================
-  // P4: GET /api/products - Filter by status
-  // =========================================================
   test('P4 - GET /api/products - Filter by ACTIVE status', async ({ request }) => {
     const response = await request.get(`${API_URL}/products?status=ACTIVE&page=0&size=6`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -85,16 +73,26 @@ test.describe('Product API Tests', () => {
     const body = await response.json();
     expect(body.success).toBe(true);
 
-    // All returned products should have ACTIVE status
-    for (const product of body.data.content) {
-      expect(product.status).toBe('ACTIVE');
+    // All returned products should have ACTIVE status (if any exist)
+    if (body.data.content.length > 0) {
+      for (const product of body.data.content) {
+        expect(product.status).toBe('ACTIVE');
+      }
     }
   });
 
-  // =========================================================
-  // P5: GET /api/products - Filter by platform
-  // =========================================================
-  test('P5 - GET /api/products - Filter by SHOPEE platform', async ({ request }) => {
+  test('P5 - GET /api/products - Filter by DRAFT status', async ({ request }) => {
+    const response = await request.get(`${API_URL}/products?status=DRAFT&page=0&size=6`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(Array.isArray(body.data.content)).toBe(true);
+  });
+
+  test('P6 - GET /api/products - Filter by SHOPEE platform', async ({ request }) => {
     const response = await request.get(`${API_URL}/products?platform=SHOPEE&page=0&size=6`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
@@ -105,28 +103,27 @@ test.describe('Product API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  // =========================================================
-  // P6: POST /api/products - Create product successfully
-  // =========================================================
-  test('P6 - POST /api/products - Create product successfully', async ({ request }) => {
-    const productData = {
-      name: `API Test Product ${Date.now()}`,
-      sku: uniqueSku('API'),
-      status: 'ACTIVE',
-      lowStockThreshold: 5,
-      variants: [
-        {
-          sku: uniqueSku('APIV'),
-          price: 199000,
-          costPrice: 100000,
-          isActive: true,
-          optionValues: { Size: 'M', 'Màu': 'Xanh' },
-        },
-      ],
-    };
+  test('P7 - GET /api/products - Pagination with different page sizes', async ({ request }) => {
+    const response = await request.get(`${API_URL}/products?page=0&size=10`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
 
-    // categoryId may be null (no categories in DB) - use createTestProduct to get valid data
-    // For P6 we use createTestProduct helper which handles categoryId correctly
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.data.content.length).toBeLessThanOrEqual(10);
+  });
+
+  test('P8 - GET /api/products - Without auth returns 401', async ({ request }) => {
+    const response = await request.get(`${API_URL}/products?page=0&size=6`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // =========================================================
+  // P9-P14: POST /api/products - Create
+  // =========================================================
+  test('P9 - POST /api/products - Create product successfully', async ({ request }) => {
     const created = await createTestProduct(request, authToken, {
       name: `API Test Product ${Date.now()}`,
       sku: uniqueSku('API'),
@@ -135,88 +132,118 @@ test.describe('Product API Tests', () => {
     expect(created.id).toBeTruthy();
     expect(created.name).toContain('API Test Product');
 
-    // Cleanup
     await deleteTestProduct(request, authToken, created.id);
   });
 
-  // =========================================================
-  // P7: POST /api/products - Create without auth returns 401
-  // =========================================================
-  test('P7 - POST /api/products - Without auth returns 401', async ({ request }) => {
-    const productData = {
-      name: 'Unauthorized Product',
-      sku: uniqueSku('UNAUTH'),
-      variants: [{ sku: uniqueSku('UA'), price: 100000 }],
-    };
-
-    const response = await request.post(`${API_URL}/products`, {
-      data: productData,
+  test('P10 - POST /api/products - Create product with variants', async ({ request }) => {
+    const created = await createTestProduct(request, authToken, {
+      name: `API Variant Product ${Date.now()}`,
+      sku: uniqueSku('VAR'),
+      variants: [
+        {
+          sku: uniqueSku('V1'),
+          price: 199000,
+          costPrice: 100000,
+          isActive: true,
+          optionValues: { Size: 'M', 'Màu': 'Đen' },
+        },
+        {
+          sku: uniqueSku('V2'),
+          price: 299000,
+          costPrice: 150000,
+          isActive: true,
+          optionValues: { Size: 'L', 'Màu': 'Đen' },
+        },
+      ],
     });
 
-    // Spring Security returns 401 or 403 when no auth token provided
+    expect(created.id).toBeTruthy();
+    expect(created.variants).toHaveLength(2);
+
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  test('P11 - POST /api/products - Without auth returns 401', async ({ request }) => {
+    const response = await request.post(`${API_URL}/products`, {
+      data: {
+        name: 'Unauthorized Product',
+        sku: uniqueSku('UNAUTH'),
+        variants: [{ sku: uniqueSku('UA'), price: 100000 }],
+      },
+    });
+
     expect([401, 403]).toContain(response.status());
   });
 
-  // =========================================================
-  // P8: POST /api/products - Missing name returns 400/422
-  // =========================================================
-  test('P8 - POST /api/products - Missing name returns validation error', async ({ request }) => {
-    // Backend requires valid categoryId before name validation runs
-    // So we create a product first to get a categoryId, then use it
+  test('P12 - POST /api/products - Missing name returns validation error', async ({ request }) => {
     const seed = await createTestProduct(request, authToken);
     const catId = seed.categoryId;
-
-    const productData = {
-      name: 'Product Without Name',
-      sku: uniqueSku('NONAME'),
-      categoryId: catId,
-      variants: [{ sku: uniqueSku('NONAMEV'), price: 50000 }],
-    };
 
     const response = await request.post(`${API_URL}/products`, {
       headers: {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
-      data: productData,
+      data: {
+        name: 'Product Without Name',
+        sku: uniqueSku('NONAME'),
+        categoryId: catId,
+        variants: [{ sku: uniqueSku('NONAMEV'), price: 50000 }],
+      },
     });
 
-    // With valid categoryId, backend validates name and returns 4xx or 5xx on error
     expect(response.status()).toBeGreaterThanOrEqual(400);
     const body = await response.json();
     expect(body.success).toBe(false);
 
-    // Cleanup seed product
     await deleteTestProduct(request, authToken, seed.id);
   });
 
-  // =========================================================
-  // P9: POST /api/products - Missing variants returns 400
-  // =========================================================
-  test('P9 - POST /api/products - Missing variants returns validation error', async ({ request }) => {
-    const productData = {
-      name: 'Product Without Variants',
-      sku: uniqueSku('NOVAR'),
-      // variants intentionally omitted - will trigger backend validation
-    };
-
+  test('P13 - POST /api/products - Missing variants returns validation error', async ({ request }) => {
     const response = await request.post(`${API_URL}/products`, {
       headers: {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
-      data: productData,
+      data: {
+        name: 'Product Without Variants',
+        sku: uniqueSku('NOVAR'),
+      },
     });
 
-    // Backend throws if variants is null/empty
     expect([400, 422, 500]).toContain(response.status());
   });
 
+  test('P14 - POST /api/products - Duplicate SKU returns error', async ({ request }) => {
+    const product = await createTestProduct(request, authToken, {
+      name: `First Product ${Date.now()}`,
+      sku: uniqueSku('DUP'),
+    });
+
+    // Try to create another product with same SKU
+    const response = await request.post(`${API_URL}/products`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        name: 'Duplicate SKU Product',
+        sku: product.sku,
+        categoryId: product.categoryId,
+        variants: [{ sku: uniqueSku('DUPV'), price: 50000 }],
+      },
+    });
+
+    // Should return error for duplicate SKU
+    expect(response.status()).toBeGreaterThanOrEqual(400);
+
+    await deleteTestProduct(request, authToken, product.id);
+  });
+
   // =========================================================
-  // P10: GET /api/products/{id} - Get product by ID
+  // P15-P17: GET /api/products/{id} - Get by ID
   // =========================================================
-  test('P10 - GET /api/products/{id} - Get product by ID', async ({ request }) => {
-    // Create a product first
+  test('P15 - GET /api/products/{id} - Get product by ID', async ({ request }) => {
     const created = await createTestProduct(request, authToken);
 
     const response = await request.get(`${API_URL}/products/${created.id}`, {
@@ -229,40 +256,54 @@ test.describe('Product API Tests', () => {
     expect(body.data.id).toBe(created.id);
     expect(body.data.name).toBe(created.name);
 
-    // Cleanup
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  test('P16 - GET /api/products/{id} - Get non-existent product returns 404', async ({ request }) => {
+    const response = await request.get(`${API_URL}/products/00000000-0000-0000-0000-000000000000`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(response.status()).toBe(404);
+  });
+
+  test('P17 - GET /api/products/{id} - Without auth returns 401', async ({ request }) => {
+    const created = await createTestProduct(request, authToken);
+
+    const response = await request.get(`${API_URL}/products/${created.id}`);
+
+    expect([401, 403]).toContain(response.status());
+
     await deleteTestProduct(request, authToken, created.id);
   });
 
   // =========================================================
-  // P11: PUT /api/products/{id} - Update product name
+  // P18-P23: PUT /api/products/{id} - Update
   // =========================================================
-  test('P11 - PUT /api/products/{id} - Update product name', async ({ request }) => {
-    // Create a product first
+  test('P18 - PUT /api/products/{id} - Update product name', async ({ request }) => {
     const created = await createTestProduct(request, authToken);
-
     const updatedName = `Updated Product ${Date.now()}`;
-    const updatePayload = {
-      name: updatedName,
-      sku: created.sku,
-      categoryId: created.categoryId,
-      status: created.status,
-      lowStockThreshold: 5,
-      variants: created.variants.map((v) => ({
-        id: v.id,
-        sku: v.sku,
-        price: v.price,
-        costPrice: v.costPrice,
-        isActive: v.isActive,
-        optionValues: v.optionValues,
-      })),
-    };
 
     const updateResponse = await request.put(`${API_URL}/products/${created.id}`, {
       headers: {
         Authorization: `Bearer ${authToken}`,
         'Content-Type': 'application/json',
       },
-      data: updatePayload,
+      data: {
+        name: updatedName,
+        sku: created.sku,
+        categoryId: created.categoryId,
+        status: created.status,
+        lowStockThreshold: 5,
+        variants: created.variants.map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          price: v.price,
+          costPrice: v.costPrice,
+          isActive: v.isActive,
+          optionValues: v.optionValues,
+        })),
+      },
     });
 
     expect(updateResponse.status()).toBe(200);
@@ -270,18 +311,99 @@ test.describe('Product API Tests', () => {
     expect(updateBody.success).toBe(true);
     expect(updateBody.data.name).toBe(updatedName);
 
-    // Cleanup
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  test('P19 - PUT /api/products/{id} - Update product status to DRAFT', async ({ request }) => {
+    const created = await createTestProduct(request, authToken, { status: 'ACTIVE' });
+
+    const updateResponse = await request.put(`${API_URL}/products/${created.id}`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        name: created.name,
+        sku: created.sku,
+        categoryId: created.categoryId,
+        status: 'DRAFT',
+        lowStockThreshold: 5,
+        variants: created.variants.map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          price: v.price,
+          costPrice: v.costPrice,
+          isActive: v.isActive,
+          optionValues: v.optionValues,
+        })),
+      },
+    });
+
+    expect(updateResponse.status()).toBe(200);
+    const updateBody = await updateResponse.json();
+    expect(updateBody.success).toBe(true);
+    expect(updateBody.data.status).toBe('DRAFT');
+
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  test('P20 - PUT /api/products/{id} - Update with invalid data returns error', async ({ request }) => {
+    const created = await createTestProduct(request, authToken);
+
+    const updateResponse = await request.put(`${API_URL}/products/${created.id}`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        name: '',
+        sku: created.sku,
+        categoryId: created.categoryId,
+        status: created.status,
+        variants: [],
+      },
+    });
+
+    expect(updateResponse.status()).toBeGreaterThanOrEqual(400);
+
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  test('P21 - PUT /api/products/{id} - Update non-existent product returns 400 or 404', async ({ request }) => {
+    const updateResponse = await request.put(`${API_URL}/products/00000000-0000-0000-0000-000000000000`, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      data: {
+        name: 'Updated Name',
+        sku: 'TEST',
+        variants: [],
+      },
+    });
+
+    // Backend may return 400 (bad request) or 404 (not found) for invalid product
+    expect([400, 404]).toContain(updateResponse.status());
+  });
+
+  test('P22 - PUT /api/products/{id} - Without auth returns 401', async ({ request }) => {
+    const created = await createTestProduct(request, authToken);
+
+    const response = await request.put(`${API_URL}/products/${created.id}`, {
+      data: { name: 'Updated' },
+    });
+
+    expect([401, 403]).toContain(response.status());
+
     await deleteTestProduct(request, authToken, created.id);
   });
 
   // =========================================================
-  // P12: DELETE /api/products/{id}/delete - Delete product
+  // P23-P27: DELETE /api/products/{id}/delete
   // =========================================================
-  test('P12 - DELETE /api/products/{id}/delete - Delete product', async ({ request }) => {
-    // Create a product first
+  test('P23 - DELETE /api/products/{id}/delete - Delete product', async ({ request }) => {
     const created = await createTestProduct(request, authToken);
 
-    // Delete it
     const deleteResponse = await request.delete(`${API_URL}/products/${created.id}/delete`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
@@ -294,7 +416,59 @@ test.describe('Product API Tests', () => {
     const getResponse = await request.get(`${API_URL}/products/${created.id}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
-
     expect(getResponse.status()).toBe(404);
+  });
+
+  test('P24 - DELETE /api/products/{id}/delete - Delete non-existent product returns 404', async ({ request }) => {
+    const response = await request.delete(`${API_URL}/products/00000000-0000-0000-0000-000000000000/delete`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(response.status()).toBe(404);
+  });
+
+  test('P25 - DELETE /api/products/{id}/delete - Without auth returns 401', async ({ request }) => {
+    const created = await createTestProduct(request, authToken);
+
+    const response = await request.delete(`${API_URL}/products/${created.id}/delete`);
+
+    expect([401, 403]).toContain(response.status());
+
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  // =========================================================
+  // P26-P28: POST /api/products/{productId}/sync
+  // =========================================================
+  test('P26 - POST /api/products/{productId}/sync - Sync product', async ({ request }) => {
+    const created = await createTestProduct(request, authToken);
+
+    const syncResponse = await request.post(`${API_URL}/products/${created.id}/sync`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(syncResponse.status()).toBe(200);
+    const syncBody = await syncResponse.json();
+    expect(syncBody.success).toBe(true);
+
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  test('P27 - POST /api/products/{productId}/sync - Sync non-existent product returns 404', async ({ request }) => {
+    const response = await request.post(`${API_URL}/products/00000000-0000-0000-0000-000000000000/sync`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+
+    expect(response.status()).toBe(404);
+  });
+
+  test('P28 - POST /api/products/{productId}/sync - Without auth returns 401', async ({ request }) => {
+    const created = await createTestProduct(request, authToken);
+
+    const response = await request.post(`${API_URL}/products/${created.id}/sync`);
+
+    expect([401, 403]).toContain(response.status());
+
+    await deleteTestProduct(request, authToken, created.id);
   });
 });
