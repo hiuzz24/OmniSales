@@ -33,6 +33,8 @@ import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
 import fu.osms.order.service.OrderService;
 import fu.osms.order.spec.OrderSpec;
+import fu.osms.sync.order.OrderStatusPushResult;
+import fu.osms.sync.order.OrderStatusPushService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -67,6 +69,7 @@ public class OrderServiceImpl implements OrderService {
     private final ProductVariantRepository productVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryAlertService inventoryAlertService;
+    private final OrderStatusPushService orderStatusPushService;
 
     @Override
     @Transactional
@@ -152,6 +155,8 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
         }
 
+        OrderStatusPushResult pushResult = orderStatusPushService.push(order, status, null);
+
         if (status == OrderStatus.CANCELLED) {
             order.setStatus(OrderStatus.CANCELLED);
             releaseReservedInventory(order);
@@ -172,13 +177,15 @@ public class OrderServiceImpl implements OrderService {
         String actorEmail = userOpt.map(User::getEmail).orElse("system");
 
         boolean autoPaid = status == OrderStatus.DELIVERED && "PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus);
+        Map<String, Object> auditChanges = new java.util.HashMap<>();
+        auditChanges.put("oldStatus", oldStatus.name());
+        auditChanges.put("newStatus", status.name());
+        auditChanges.put("platformPushStatus", pushResult.getStatus().name());
+        auditChanges.put("platformPushMessage", pushResult.getMessage());
         if (autoPaid) {
-            auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id,
-                    id.toString(), java.util.Map.of("oldStatus", oldStatus.name(), "newStatus", status.name(), "autoPaymentStatus", "PAID"));
-        } else {
-            auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id,
-                    id.toString(), java.util.Map.of("oldStatus", oldStatus.name(), "newStatus", status.name()));
+            auditChanges.put("autoPaymentStatus", "PAID");
         }
+        auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id, id.toString(), auditChanges);
 
         return toResponseWithItems(savedOrder);
     }
@@ -244,6 +251,8 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
         }
 
+        OrderStatusPushResult pushResult = orderStatusPushService.push(order, OrderStatus.CANCELLED, reason);
+
         releaseReservedInventory(order);
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
@@ -253,8 +262,14 @@ public class OrderServiceImpl implements OrderService {
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
         String actorEmail = userOpt.map(User::getEmail).orElse("system");
+        Map<String, Object> auditChanges = new java.util.HashMap<>();
+        auditChanges.put("oldStatus", oldStatus.name());
+        auditChanges.put("newStatus", "CANCELLED");
+        auditChanges.put("reason", reason != null ? reason : "");
+        auditChanges.put("platformPushStatus", pushResult.getStatus().name());
+        auditChanges.put("platformPushMessage", pushResult.getMessage());
         auditService.record(actorId, actorEmail, "ORDER_CANCEL", "ORDER", id,
-                order.getId().toString(), java.util.Map.of("oldStatus", oldStatus.name(), "newStatus", "CANCELLED", "reason", reason != null ? reason : ""));
+                order.getId().toString(), auditChanges);
     }
 
     @Override

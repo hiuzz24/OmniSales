@@ -195,6 +195,15 @@ const OrderDetailPage = () => {
     return idx >= 0 ? idx : -1;
   };
 
+  const isPlatformOrder = (value) => value?.platform && value.platform !== 'MANUAL';
+
+  const getAvailableStatusOptions = () => {
+    const statuses = isPlatformOrder(order)
+      ? STATUS_FLOW.filter((status) => status !== 'DELIVERED')
+      : STATUS_FLOW;
+    return statuses.filter((status) => status !== order.status);
+  };
+
   if (loading) {
     return (
       <div className={styles.loadingWrap}>
@@ -276,8 +285,7 @@ const OrderDetailPage = () => {
               </button>
               {showStatusMenu && (
                 <div className={styles.dropdownMenu}>
-                  {STATUS_FLOW.map((s) => {
-                    if (s === order.status) return null;
+                  {getAvailableStatusOptions().map((s) => {
                     const cfg = STATUS_CONFIG[s];
                     const Icon = cfg.icon;
                     return (
@@ -605,6 +613,14 @@ const OrderDetailPage = () => {
                 </span>
               </div>
               <p className={styles.confirmSubtext}>Hành động này sẽ được ghi nhận trong lịch sử thay đổi.</p>
+              {isPlatformOrder(order) && (
+                <p className={styles.confirmSubtext}>
+                  Hệ thống sẽ đồng bộ trạng thái phù hợp về sàn nếu được hỗ trợ.
+                  {confirmStatus === 'SHIPPED' && order.platform === 'LAZADA'
+                    ? ' Với Lazada, trạng thái này tương ứng sẵn sàng giao/Ready To Ship.'
+                    : ''}
+                </p>
+              )}
               <div className={styles.confirmActions}>
                 <button className={styles.btnGhost} onClick={() => setConfirmStatus(null)} disabled={updating}>
                   Hủy

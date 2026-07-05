@@ -74,3 +74,7 @@ lazada:
   default-package-length: 20
   default-package-width: 15
   default-package-height: 5
+  order:
+    delivery-type: ${LAZADA_ORDER_DELIVERY_TYPE:dropship}
+    shipping-allocate-type: ${LAZADA_ORDER_SHIPPING_ALLOCATE_TYPE:TFS}
+    cancel-reason-id: ${LAZADA_ORDER_CANCEL_REASON_ID:}

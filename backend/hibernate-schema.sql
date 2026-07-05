@@ -404,6 +404,7 @@ CREATE TABLE orders (
                         note              TEXT,
                         tracking_number   VARCHAR(200),
                         cancel_reason     VARCHAR(255),
+                        platform_metadata JSONB,
                         cancelled_by      UUID          REFERENCES users(id) ON DELETE SET NULL,
                         version           BIGINT        NOT NULL DEFAULT 0,
                         created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
