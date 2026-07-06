@@ -8,6 +8,11 @@ const supplierService = {
     return response;
   },
 
+  getAll: async (params) => {
+    const response = await axiosClient.get('/suppliers', { params });
+    return response;
+  },
+
   // Lấy chi tiết một nhà cung cấp
   getSupplierById: async (id) => {
     const response = await axiosClient.get(`/suppliers/${id}`);

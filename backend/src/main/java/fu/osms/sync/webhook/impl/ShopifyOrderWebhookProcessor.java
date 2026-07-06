@@ -3,6 +3,7 @@ package fu.osms.sync.webhook.impl;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
@@ -13,6 +14,7 @@ import fu.osms.sync.service.PlatformOrderWebhookProcessor;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -28,6 +30,7 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
+    private final PlatformOrderInventoryService platformOrderInventoryService;
 
     @Override
     public PlatformType getPlatform() {
@@ -35,6 +38,7 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
     }
 
     @Override
+    @Transactional
     public String process(WebhookEvent event) {
         Map<String, Object> payload = event.getRawPayload();
         String externalOrderId = WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(payload, "id", "order_id"));
@@ -64,6 +68,7 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
 
         Order savedOrder = orderRepository.save(order);
         syncOrderItems(savedOrder, payload);
+        platformOrderInventoryService.syncReservations(savedOrder);
         return "PROCESSED";
     }
 

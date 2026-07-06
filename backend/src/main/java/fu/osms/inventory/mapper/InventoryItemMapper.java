@@ -26,7 +26,11 @@ public interface InventoryItemMapper {
     @Mapping(target = "warehouseName", source = "warehouse.name")
     @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "variantSku", source = "variant.sku")
+    @Mapping(target = "productName", source = "variant.product.name")
     @Mapping(target = "variantName", source = "variant.name")
+    @Mapping(target = "channelId", ignore = true)
+    @Mapping(target = "channelName", ignore = true)
+    @Mapping(target = "platform", ignore = true)
     @Mapping(target = "isLowStock",
             expression = "java(item.getAvailableQuantity() != null && item.getAvailableQuantity() <= item.getLowStockThreshold())")
     InventoryItemResponse toResponse(InventoryItem item);

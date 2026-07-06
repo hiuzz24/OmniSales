@@ -504,6 +504,77 @@
   background: #f0f4f8;
 }
 
+.productRow {
+  background: #f8fafc;
+}
+
+.productRow:hover {
+  background: #f1f5f9;
+}
+
+.productRow .td {
+  border-bottom-color: #e2e8f0;
+}
+
+.variantRow .td {
+  background: #ffffff;
+}
+
+.productInfo,
+.variantInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.productInfo {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.productName {
+  color: #020617;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.productMeta,
+.variantMeta,
+.productActionHint {
+  color: #8aa0bd;
+  font-size: 11.5px;
+}
+
+.variantIndent {
+  width: 22px;
+  height: 1px;
+  background: #cbd5e1;
+  flex-shrink: 0;
+}
+
+.variantName {
+  color: #33476a;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.productSkuSummary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
 .td {
   padding: 13px 16px;
   border-bottom: 1px solid #f1f5f9;
@@ -558,6 +629,73 @@
 .warehouseLink {
   color: #2563eb;
   font-size: 13px;
+}
+
+.channelCell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  max-width: 150px;
+}
+
+.channelBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.channelBadge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.channelLazada {
+  color: #1d2b8f;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.channelLazada::before {
+  background: #1d2b8f;
+}
+
+.channelShopify {
+  color: #3f6212;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.channelShopify::before {
+  background: #65a30d;
+}
+
+.channelLocal {
+  color: #475569;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.channelLocal::before {
+  background: #94a3b8;
+}
+
+.channelSub {
+  max-width: 100%;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Status + sync cell */
@@ -1200,6 +1338,26 @@
   background: #f8fafc;
   border-color: #8aa0bd;
   color: #020617;
+}
+
+.productRow,
+.productRow.trAlt {
+  background: #f8fafc;
+}
+
+.productRow:hover,
+.productRow.trAlt:hover {
+  background: #f1f5f9;
+}
+
+.variantRow,
+.variantRow.trAlt {
+  background: #ffffff;
+}
+
+.variantRow:hover,
+.variantRow.trAlt:hover {
+  background: #fafbfc;
 }
 
 @media (max-width: 1100px) {

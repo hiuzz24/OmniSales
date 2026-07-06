@@ -37,7 +37,11 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
     private String defaultPackageHeight;
 
     @Override
-    public String buildPayload(Product product, List<ProductVariant> variants, List<String> lazadaImageUrls, Map<String, String> externalSkuIdBySku) {
+    public String buildPayload(Product product,
+                               List<ProductVariant> variants,
+                               List<String> lazadaImageUrls,
+                               Map<String, String> externalSkuIdBySku,
+                               boolean includePrimaryCategory) {
         try {
             Document document = DocumentBuilderFactory.newInstance()
                     .newDocumentBuilder()
@@ -47,7 +51,9 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
             document.appendChild(request);
 
             Element productElement = appendElement(document, request, "Product");
-            appendTextElement(document, productElement, "PrimaryCategory", defaultCategoryId);
+            if (includePrimaryCategory) {
+                appendTextElement(document, productElement, "PrimaryCategory", defaultCategoryId);
+            }
 
             Element attributes = appendElement(document, productElement, "Attributes");
             appendCdataElement(document, attributes, "name", product.getName());
@@ -68,19 +74,19 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
             Element skus = appendElement(document, productElement, "Skus");
             for (ProductVariant variant : variants) {
                 Element sku = appendElement(document, skus, "Sku");
-                String skuId = externalSkuIdBySku != null ? externalSkuIdBySku.get(variant.getSku()) : null;
+                String skuId = externalSkuIdBySku == null ? null : externalSkuIdBySku.get(variant.getSku());
                 if (skuId != null && !skuId.isBlank()) {
                     appendTextElement(document, sku, "SkuId", skuId);
                 }
                 appendTextElement(document, sku, "SellerSku", variant.getSku());
-                appendTextElement(document, sku, "price", variant.getPrice() != null ? variant.getPrice().toPlainString() : "0");
+                appendTextElement(document, sku, "price", resolveVariantPrice(variant));
                 appendTextElement(document, sku, "quantity", "0");
                 appendTextElement(document, sku, "package_weight", resolveWeight(product, variant));
                 appendTextElement(document, sku, "package_length", resolveAttribute(product, "length", defaultPackageLength));
                 appendTextElement(document, sku, "package_width", resolveAttribute(product, "width", defaultPackageWidth));
                 appendTextElement(document, sku, "package_height", resolveAttribute(product, "height", defaultPackageHeight));
 
-                appendVariantOptions(document, sku, variant);
+                appendVariantOptions(document, sku, variant, skuId);
                 appendSkuImages(document, sku, lazadaImageUrls);
             }
 
@@ -124,21 +130,42 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
         return defaultValue;
     }
 
-    private void appendVariantOptions(Document document, Element sku, ProductVariant variant) {
-        if (variant.getOptionValues() == null || variant.getOptionValues().isEmpty()) {
-            return;
+    private String resolveVariantPrice(ProductVariant variant) {
+        if (variant.getCostPrice() != null) {
+            return variant.getCostPrice().toPlainString();
         }
+        return variant.getPrice() != null ? variant.getPrice().toPlainString() : "0";
+    }
 
-        int index = 1;
-        for (Map.Entry<String, Object> entry : variant.getOptionValues().entrySet()) {
-            String value = entry.getValue() != null ? entry.getValue().toString() : "";
-            if (index == 1) {
-                appendTextElement(document, sku, "color_family", value);
-            } else if (index == 2) {
-                appendTextElement(document, sku, "size", value);
-            }
-            index++;
+    private void appendVariantOptions(Document document, Element sku, ProductVariant variant, String skuId) {
+        if (variant.getName() != null && !variant.getName().isBlank()) {
+            appendTextElement(document, sku, "color_family", variant.getName());
         }
+        String size = resolveSizeValue(variant, skuId);
+        if (size != null && !size.isBlank()) {
+            appendTextElement(document, sku, "size", size);
+        }
+    }
+
+    private String resolveSizeValue(ProductVariant variant, String skuId) {
+        String size = firstOptionValue(variant, "Size", "size", "model", "Model");
+        if (size != null && !size.isBlank()) {
+            return size;
+        }
+        return skuId;
+    }
+
+    private String firstOptionValue(ProductVariant variant, String... keys) {
+        if (variant.getOptionValues() == null || variant.getOptionValues().isEmpty()) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = variant.getOptionValues().get(key);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+        return null;
     }
 
     private void appendSkuImages(Document document, Element sku, List<String> lazadaImageUrls) {

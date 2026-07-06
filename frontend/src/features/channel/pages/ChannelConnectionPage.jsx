@@ -40,7 +40,9 @@ const ChannelConnectionPage = () => {
     }
   }, []);
 
-  useEffect(() => { loadChannels(); }, [loadChannels]);
+  useEffect(() => {
+    void Promise.resolve().then(loadChannels);
+  }, [loadChannels]);
 
   useEffect(() => {
     const success = searchParams.get('success');
@@ -49,17 +51,17 @@ const ChannelConnectionPage = () => {
     if (success === 'true') {
       toast.success('🎉 Kết nối Shopify thành công! Kênh đã được thêm vào hệ thống.');
       navigate('/channels', { replace: true });
-      loadChannels();
+      void Promise.resolve().then(loadChannels);
     } else if (success === 'lazada_connected') {
       toast.success('🎉 Kết nối Lazada thành công! Kênh đã được thêm vào hệ thống.');
       navigate('/channels', { replace: true });
-      loadChannels();
+      void Promise.resolve().then(loadChannels);
     } else if (error) {
-      const msg = error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : 'Kết nối kênh thất bại. Vui lòng thử lại.';
+      const msg = error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : error;
       toast.error(msg);
       navigate('/channels', { replace: true });
     }
-  }, []);
+  }, [loadChannels, navigate, searchParams]);
 
   const openCreate = () => { setModalMode('create'); setSelectedChannel(null); setIsModalOpen(true); };
   const openEdit = (ch) => { setModalMode('edit'); setSelectedChannel(ch); setIsModalOpen(true); };

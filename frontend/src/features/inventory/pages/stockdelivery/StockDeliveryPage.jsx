@@ -35,6 +35,7 @@ import {
 } from '../components/inventoryDocumentListUtils';
 import InventoryExportModal from '../components/InventoryExportModal';
 import { formatExportDateTime, getStatusLabel } from '../components/inventoryExcelExport';
+import MarketplaceSyncButton from '../components/MarketplaceSyncButton';
 
 const ISSUE_TYPES = {
   ORDER: {
@@ -439,6 +440,7 @@ export default function StockDeliveryPage() {
       createLabel="Tạo phiếu xuất"
       onCreate={() => navigate(ROUTES.STOCK_DELIVERY_CREATE)}
       onExport={() => setExportOpen(true)}
+      extraActions={<MarketplaceSyncButton allowedDirections={['from-app']} onSynced={() => Promise.all([fetchDeliveries(), fetchStatistics()])} />}
       stats={stats}
       filters={(
         <>

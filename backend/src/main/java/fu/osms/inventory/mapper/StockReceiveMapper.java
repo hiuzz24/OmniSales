@@ -45,6 +45,8 @@ public interface StockReceiveMapper {
     InventoryReceiptItem toItemEntity(StockReceiveItemRequest request);
 
     @Mapping(target = "variantId", source = "variant.id")
+    @Mapping(target = "productName", source = "variant.product.name")
+    @Mapping(target = "sku", source = "variant.sku")
     @Mapping(target = "variantSku", source = "variant.sku")
     @Mapping(target = "variantName", source = "variant.name")
     StockReceiveItemResponse toItemResponse(InventoryReceiptItem item);

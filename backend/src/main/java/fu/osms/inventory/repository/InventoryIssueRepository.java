@@ -8,6 +8,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,4 +39,18 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
     @Query("SELECT COUNT(ii) FROM InventoryIssue ii " +
             "WHERE ii.issueType IN ('ORDER', 'ADJUSTMENT', 'DISPOSAL', 'TRANSFER')")
     Long countDeliveries();
+
+    @Query("SELECT DISTINCT item.productVariant.id FROM InventoryIssueItem item " +
+            "WHERE item.inventoryIssue.status <> 'DRAFT' " +
+            "AND item.inventoryIssue.updatedAt >= :changedSince " +
+            "AND item.inventoryIssue.updatedAt <= :changedUntil")
+    List<UUID> findChangedAppliedVariantIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
+                                                   @Param("changedUntil") OffsetDateTime changedUntil);
+
+    @Query("SELECT DISTINCT item.inventoryIssue.warehouse.id FROM InventoryIssueItem item " +
+            "WHERE item.inventoryIssue.status <> 'DRAFT' " +
+            "AND item.inventoryIssue.updatedAt >= :changedSince " +
+            "AND item.inventoryIssue.updatedAt <= :changedUntil")
+    List<UUID> findChangedAppliedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
+                                                     @Param("changedUntil") OffsetDateTime changedUntil);
 }

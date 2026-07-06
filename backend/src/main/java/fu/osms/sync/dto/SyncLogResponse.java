@@ -2,9 +2,11 @@ package fu.osms.sync.dto;
 
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.inventory.dto.response.InventoryTransactionDTO;
 import lombok.*;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -34,4 +36,6 @@ public class SyncLogResponse {
     private OffsetDateTime completedAt;
     
     private String triggeredByEmail;
+
+    private List<InventoryTransactionDTO> inventoryChanges;
 }

@@ -103,6 +103,15 @@ const formatNotificationTime = (value) => {
 const pathMatches = (pathname, href, exact = false) =>
   exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 
+const notificationKey = (notification, index) => [
+  notification?.id,
+  notification?.type,
+  notification?.entityType,
+  notification?.entityId,
+  notification?.createdAt,
+  index,
+].filter((part) => part != null && part !== '').join('-');
+
 // ── Sidebar widths ────────────────────────────────────────────────────────────
 const SIDEBAR_OPEN = 256; // px — 16rem / w-64
 const SIDEBAR_CLOSE = 80;  // px — 5rem  / w-20
@@ -223,7 +232,7 @@ export default function MainLayout() {
             const isExp = expanded.includes(item.name);
 
             return (
-              <div key={item.name} style={{ marginBottom: 2 }}>
+              <div key={`${item.href}-${item.name}`} style={{ marginBottom: 2 }}>
                 {hasChildren ? (
                   <button
                     onClick={() => toggleMenu(item.name)}
@@ -274,7 +283,7 @@ export default function MainLayout() {
                       const active = isActive(child.href, child.exact);
                       return (
                         <NavLink
-                          key={child.href}
+                          key={`${item.href}-${child.href}`}
                           to={child.href}
                           end={child.exact}
                           style={() => ({
@@ -376,12 +385,12 @@ export default function MainLayout() {
                         Chưa có thông báo mới
                       </div>
                     )}
-                    {notifications.map((n) => {
+                    {notifications.map((n, index) => {
                       const meta = NOTIF_META[n.type] ?? NOTIF_META.SYSTEM;
                       const NIcon = meta.icon;
                       const isUnread = !n.readAt;
                       return (
-                        <div key={n.id}
+                        <div key={notificationKey(n, index)}
                           onClick={async () => {
                             if (isUnread) {
                               await notificationApi.markAsRead(n.id);

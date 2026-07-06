@@ -27,10 +27,12 @@ public interface InventoryTransactionDTOMapper {
             case IMPORT -> "Nhập kho";
             case EXPORT -> "Xuất kho";
             case ADJUSTMENT -> "Điều chỉnh kho";
+            case TRANSFER_IN -> "Nhập chuyển kho";
+            case TRANSFER_OUT -> "Xuất chuyển kho";
             case ORDER_DEDUCT -> "Trừ kho (Giữ chỗ đơn hàng)";
             case ORDER_CANCEL -> "Hoàn kho (Hủy đơn hàng)";
-
-            default -> type.name();
+            case OUTBOUND -> "Xuất kho";
+            case INBOUND -> "Nhập kho";
         };
     }
 

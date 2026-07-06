@@ -7,5 +7,9 @@ import java.util.List;
 import java.util.Map;
 
 public interface LazadaPayloadBuilder {
-    String buildPayload(Product product, List<ProductVariant> variants, List<String> lazadaImageUrls, Map<String, String> externalSkuIdBySku);
+    String buildPayload(Product product,
+                        List<ProductVariant> variants,
+                        List<String> lazadaImageUrls,
+                        Map<String, String> externalSkuIdBySku,
+                        boolean includePrimaryCategory);
 }

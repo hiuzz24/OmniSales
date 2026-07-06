@@ -245,7 +245,12 @@ public class ChannelServiceImpl implements ChannelService {
                 : new HashMap<>(channel.getMetadata());
         metadata.put("shopDomain", normalizedShop);
 
+        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
         channel.setStatus("CONNECTED");
+        channel.setDeletedAt(null);
+        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
+            channel.setSyncEnabled(true);
+        }
         channel.setMetadata(metadata);
         channelRepository.save(channel);
 
@@ -317,7 +322,12 @@ public class ChannelServiceImpl implements ChannelService {
                 ? ChannelConnectionAction.CONNECT
                 : ChannelConnectionAction.RECONNECT;
 
+        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
         channel.setStatus("CONNECTED");
+        channel.setDeletedAt(null);
+        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
+            channel.setSyncEnabled(true);
+        }
         channel.setMetadata(metadata);
         if (channel.getDisplayName() == null || channel.getDisplayName().startsWith("Lazada-")) {
             channel.setDisplayName(displayName);

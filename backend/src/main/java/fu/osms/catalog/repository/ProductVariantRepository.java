@@ -22,6 +22,8 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     Optional<ProductVariant> findBySkuAndDeletedAtIsNull(String sku);
 
+    Optional<ProductVariant> findByProductIdAndSkuAndDeletedAtIsNull(UUID productId, String sku);
+
     boolean existsBySkuAndDeletedAtIsNull(String sku);
 
     boolean existsByBarcodeAndDeletedAtIsNull(String barcode);

@@ -8,6 +8,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
 import java.util.UUID;
@@ -38,13 +39,20 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
     public String buildAuthorizationUrl(String shop) {
         String normalizedShop = normalizeShop(shop);
         String state = UUID.randomUUID().toString();
+        String requestedScopes = normalizeScopes(scopes);
 
-        String authUrl = String.format(
-                "https://%s.myshopify.com/admin/oauth/authorize?client_id=%s&scope=%s&redirect_uri=%s&state=%s",
-                normalizedShop, apiKey, scopes, redirectUri, state
-        );
+        String authUrl = UriComponentsBuilder
+                .fromUriString("https://" + normalizedShop + ".myshopify.com/admin/oauth/authorize")
+                .queryParam("client_id", apiKey)
+                .queryParam("scope", requestedScopes)
+                .queryParam("redirect_uri", redirectUri)
+                .queryParam("state", state)
+                .build()
+                .encode()
+                .toUriString();
 
-        log.info("[ShopifyOAuth] buildAuthorizationUrl — shop={}, redirectUri={}", normalizedShop, redirectUri);
+        log.info("[ShopifyOAuth] buildAuthorizationUrl - shop={}, redirectUri={}, scopes={}",
+                normalizedShop, redirectUri, requestedScopes);
         return authUrl;
     }
 
@@ -53,7 +61,7 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
         String normalizedShop = normalizeShop(shop);
         String tokenUrl = String.format("https://%s.myshopify.com/admin/oauth/access_token", normalizedShop);
 
-        log.info("[ShopifyOAuth] exchangeCodeForToken — shop={}", normalizedShop);
+        log.info("[ShopifyOAuth] exchangeCodeForToken - shop={}", normalizedShop);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -74,12 +82,24 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
             }
 
             String accessToken = (String) response.get("access_token");
-            log.info("[ShopifyOAuth] Token exchange successful — shop={}", normalizedShop);
+            log.info("[ShopifyOAuth] Token exchange successful - shop={}, grantedScopes={}",
+                    normalizedShop, response.get("scope"));
             return accessToken;
         } catch (Exception e) {
-            log.error("[ShopifyOAuth] Token exchange failed — shop={}, error={}", normalizedShop, e.getMessage());
+            log.error("[ShopifyOAuth] Token exchange failed - shop={}, error={}", normalizedShop, e.getMessage());
             throw new RuntimeException("Failed to exchange Shopify authorization code: " + e.getMessage(), e);
         }
+    }
+
+    private String normalizeScopes(String scopes) {
+        if (scopes == null || scopes.isBlank()) {
+            return "";
+        }
+        return String.join(",",
+                java.util.Arrays.stream(scopes.split(","))
+                        .map(String::trim)
+                        .filter(scope -> !scope.isBlank())
+                        .toList());
     }
 
     private String normalizeShop(String shop) {
