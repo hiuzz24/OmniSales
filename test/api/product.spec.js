@@ -7,6 +7,7 @@ const {
   createTestProduct,
   API_BASE,
 } = require('../utils/product-helpers');
+const { TEST_EMAIL } = require('../utils/env-config');
 
 const API_URL = API_BASE;
 
@@ -21,24 +22,22 @@ test.describe('Product API Tests', () => {
     categoryId = await getFirstCategoryId(request, authToken);
   });
 
-  // =========================================================
   // P1: Auth - Login
-  // =========================================================
+
   test('P1 - Login successfully', async ({ request }) => {
     const response = await request.post(`${API_URL}/auth/login`, {
-      data: { email: 'manager@osms.vn', password: 'Duy16042004%' },
+      data: { email: TEST_EMAIL, password: process.env.TEST_PASSWORD },
     });
 
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
     expect(body.data.accessToken).toBeTruthy();
-    expect(body.data.user.email).toBe('manager@osms.vn');
+    expect(body.data.user.email).toBe(TEST_EMAIL);
   });
 
-  // =========================================================
   // P2-P5: GET /api/products - List with filters
-  // =========================================================
+
   test('P2 - GET /api/products - List with pagination returns 200', async ({ request }) => {
     const response = await request.get(`${API_URL}/products?page=0&size=6`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -120,9 +119,8 @@ test.describe('Product API Tests', () => {
     expect([401, 403]).toContain(response.status());
   });
 
-  // =========================================================
   // P9-P14: POST /api/products - Create
-  // =========================================================
+
   test('P9 - POST /api/products - Create product successfully', async ({ request }) => {
     const created = await createTestProduct(request, authToken, {
       name: `API Test Product ${Date.now()}`,
@@ -240,9 +238,8 @@ test.describe('Product API Tests', () => {
     await deleteTestProduct(request, authToken, product.id);
   });
 
-  // =========================================================
   // P15-P17: GET /api/products/{id} - Get by ID
-  // =========================================================
+
   test('P15 - GET /api/products/{id} - Get product by ID', async ({ request }) => {
     const created = await createTestProduct(request, authToken);
 
@@ -277,9 +274,8 @@ test.describe('Product API Tests', () => {
     await deleteTestProduct(request, authToken, created.id);
   });
 
-  // =========================================================
   // P18-P23: PUT /api/products/{id} - Update
-  // =========================================================
+
   test('P18 - PUT /api/products/{id} - Update product name', async ({ request }) => {
     const created = await createTestProduct(request, authToken);
     const updatedName = `Updated Product ${Date.now()}`;
@@ -398,9 +394,8 @@ test.describe('Product API Tests', () => {
     await deleteTestProduct(request, authToken, created.id);
   });
 
-  // =========================================================
   // P23-P27: DELETE /api/products/{id}/delete
-  // =========================================================
+
   test('P23 - DELETE /api/products/{id}/delete - Delete product', async ({ request }) => {
     const created = await createTestProduct(request, authToken);
 
@@ -437,9 +432,8 @@ test.describe('Product API Tests', () => {
     await deleteTestProduct(request, authToken, created.id);
   });
 
-  // =========================================================
   // P26-P28: POST /api/products/{productId}/sync
-  // =========================================================
+
   test('P26 - POST /api/products/{productId}/sync - Sync product', async ({ request }) => {
     const created = await createTestProduct(request, authToken);
 

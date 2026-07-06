@@ -32,9 +32,7 @@ test.describe('Warehouse API Tests', () => {
     }
   });
 
-  // =========================================================
   // STOK RECEIVE (NHAP KHO) - API-R1 to API-R5
-  // =========================================================
 
   test.describe('Stock Receive (Nhap Kho)', () => {
 
@@ -163,9 +161,7 @@ test.describe('Warehouse API Tests', () => {
     });
   });
 
-  // =========================================================
   // STOCK DELIVERY (XUAT KHO) - API-D1 to API-D5
-  // =========================================================
 
   test.describe('Stock Delivery (Xuat Kho)', () => {
 
@@ -324,9 +320,7 @@ test.describe('Warehouse API Tests', () => {
     });
   });
 
-  // =========================================================
   // STOCKTAKE (KIEM KHO) - API-SK1 to API-SK4
-  // =========================================================
 
   test.describe('Stocktake (Kiem Kho)', () => {
 
@@ -485,9 +479,7 @@ test.describe('Warehouse API Tests', () => {
     });
   });
 
-  // =========================================================
   // STOCK TRANSFER (CHUYEN KHO) - API-CK1 to API-CK4
-  // =========================================================
 
   test.describe('Stock Transfer (Chuyen Kho)', () => {
 
@@ -576,9 +568,7 @@ test.describe('Warehouse API Tests', () => {
     });
   });
 
-  // =========================================================
   // INVENTORY (TON KHO) - API-I1 to API-I3
-  // =========================================================
 
   test.describe('Inventory (Ton Kho)', () => {
 
@@ -652,9 +642,7 @@ test.describe('Warehouse API Tests', () => {
     });
   });
 
-  // =========================================================
   // WAREHOUSE - API-W1
-  // =========================================================
 
   test.describe('Warehouse', () => {
 

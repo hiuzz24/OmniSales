@@ -5,8 +5,9 @@ const {
   getSupplierId,
   API_BASE,
 } = require('../utils/warehouse-helpers');
+const { FRONTEND_URL } = require('../utils/env-config');
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:5174';
+const BASE_URL = process.env.BASE_URL || process.env.FRONTEND_URL || FRONTEND_URL;
 
 test.describe('Warehouse E2E Tests', () => {
 
@@ -20,9 +21,7 @@ test.describe('Warehouse E2E Tests', () => {
     supplierId = await getSupplierId(request, token);
   });
 
-  // =========================================================
   // A. NHAP KHO (STOCK RECEIVE) TESTS
-  // =========================================================
 
   test.describe('Stock Receive (Nhap Kho)', () => {
 
@@ -32,7 +31,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('R1 - Stock receive list page renders correctly', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/receipts`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       
       // Check page title or header
       const pageTitle = page.locator('h1, h2, [class*="title"]').first();
@@ -41,7 +40,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('R2 - Filter by status (All/Completed/Draft)', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/receipts`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for status filter buttons or dropdown
       const statusFilter = page.locator('button, [class*="status"], [class*="filter"]').first();
@@ -55,7 +54,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('R3 - Search by receipt code', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/receipts`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for search input
       const searchInput = page.locator('input[placeholder*="tim"], input[placeholder*="ma"], input[type="search"]').first();
@@ -69,13 +68,13 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('R4 - Navigate to create receipt page', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/receipts`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for create button
       const createBtn = page.locator('a[href*="create"], button:has-text("Tao"), button:has-text("Them"), button:has-text("+")').first();
       if (await createBtn.isVisible({ timeout: 3000 })) {
         await createBtn.click();
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
         
         // Should navigate to create page
         await expect(page).toHaveURL(/create/);
@@ -87,7 +86,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('R5 - Create receipt page renders form fields', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/receipts/create`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Check for warehouse selector
       const warehouseField = page.locator('select[id*="warehouse"], [class*="warehouse"]').first();
@@ -103,13 +102,13 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('R11 - View receipt detail', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/receipts`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for a detail/view button
       const detailBtn = page.locator('button:has-text("Chi tiet"), a:has-text("Chi tiet"), button:has-text("View")').first();
       if (await detailBtn.isVisible({ timeout: 3000 })) {
         await detailBtn.click();
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
         
         // Should navigate to detail or show modal
         const isOnDetail = page.url().includes('/receipts/') && !page.url().includes('/create');
@@ -120,7 +119,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('R13 - Validation: missing warehouse', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/receipts/create`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Try to submit without selecting warehouse
       const submitBtn = page.locator('button[type="submit"], button:has-text("Luu"), button:has-text("Hoan thanh")').first();
@@ -135,9 +134,7 @@ test.describe('Warehouse E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // B. XUAT KHO (STOCK DELIVERY) TESTS
-  // =========================================================
 
   test.describe('Stock Delivery (Xuat Kho)', () => {
 
@@ -147,7 +144,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('D1 - Stock delivery list page renders correctly', async ({ page }) => {
       await page.goto(`${BASE_URL}/inventory/stock-deliveries`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       
       const pageTitle = page.locator('h1, h2, [class*="title"]').first();
       await expect(pageTitle).toBeVisible();
@@ -155,7 +152,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('D2 - Filter by delivery type', async ({ page }) => {
       await page.goto(`${BASE_URL}/inventory/stock-deliveries`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for delivery type filter
       const typeFilter = page.locator('button:has-text("ORDER"), button:has-text("DISPOSAL"), button:has-text("ADJUSTMENT")').first();
@@ -169,12 +166,12 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('D3 - Navigate to create delivery page', async ({ page }) => {
       await page.goto(`${BASE_URL}/inventory/stock-deliveries`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       const createBtn = page.locator('a[href*="create"], button:has-text("Tao"), button:has-text("Them")').first();
       if (await createBtn.isVisible({ timeout: 3000 })) {
         await createBtn.click();
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
         
         await expect(page).toHaveURL(/create/);
       }
@@ -182,7 +179,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('D7 - Delivery type selection shows correct form', async ({ page }) => {
       await page.goto(`${BASE_URL}/inventory/stock-deliveries/create`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for delivery type selector
       const typeSelector = page.locator('select[id*="type"], [class*="type"], button:has-text("ORDER")').first();
@@ -196,12 +193,12 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('D11 - View delivery detail', async ({ page }) => {
       await page.goto(`${BASE_URL}/inventory/stock-deliveries`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       const detailBtn = page.locator('button:has-text("Chi tiet"), a:has-text("Chi tiet")').first();
       if (await detailBtn.isVisible({ timeout: 3000 })) {
         await detailBtn.click();
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
         
         const hasDetail = await page.locator('[class*="detail"], [class*="info"]').first().isVisible({ timeout: 3000 });
         expect(hasDetail || page.url().includes('/stock-deliveries/')).toBeTruthy();
@@ -209,9 +206,7 @@ test.describe('Warehouse E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // C. KIEM KHO (STOCKTAKE) TESTS
-  // =========================================================
 
   test.describe('Stocktake (Kiem Kho)', () => {
 
@@ -221,7 +216,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('SK1 - Stocktake list page renders correctly', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/stocktakes`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       
       const pageTitle = page.locator('h1, h2, [class*="title"]').first();
       await expect(pageTitle).toBeVisible();
@@ -229,12 +224,12 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('SK2 - Navigate to create stocktake page', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/stocktakes`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       const createBtn = page.locator('a[href*="create"], button:has-text("Tao"), button:has-text("Them")').first();
       if (await createBtn.isVisible({ timeout: 3000 })) {
         await createBtn.click();
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
         
         await expect(page).toHaveURL(/create/);
       }
@@ -242,7 +237,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('SK3 - Create stocktake page shows warehouse selector', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/stocktakes/create`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for warehouse selector
       const warehouseField = page.locator('select[id*="warehouse"], [class*="warehouse"]').first();
@@ -257,7 +252,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('SK9 - Cancel stocktake', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/stocktakes`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for cancel button
       const cancelBtn = page.locator('button:has-text("Huy"), button:has-text("Cancel")').first();
@@ -278,9 +273,7 @@ test.describe('Warehouse E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // D. CHUYEN KHO (STOCK TRANSFER) TESTS
-  // =========================================================
 
   test.describe('Stock Transfer (Chuyen Kho)', () => {
 
@@ -290,7 +283,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK1 - Stock transfer list page renders correctly', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/transfers`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       
       const pageTitle = page.locator('h1, h2, [class*="title"]').first();
       await expect(pageTitle).toBeVisible();
@@ -298,7 +291,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK2 - Filter by status', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/transfers`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       const statusFilter = page.locator('button:has-text("DRAFT"), button:has-text("Hoan thanh")').first();
       if (await statusFilter.isVisible({ timeout: 3000 })) {
@@ -311,12 +304,12 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK3 - Navigate to create transfer page', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/transfers`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       const createBtn = page.locator('a[href*="create"], button:has-text("Tao"), button:has-text("Chuyen")').first();
       if (await createBtn.isVisible({ timeout: 3000 })) {
         await createBtn.click();
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
         
         await expect(page).toHaveURL(/create/);
       }
@@ -324,7 +317,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK4 - Create transfer shows source and destination warehouse', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/transfers/create`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for source warehouse field
       const sourceField = page.locator('select[id*="from"], [class*="from"]').first();
@@ -339,7 +332,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK5 - Swap warehouses button works', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/transfers/create`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for swap button
       const swapBtn = page.locator('button:has-text("Doi cho"), button:has-text("Swap"), [class*="swap"]').first();
@@ -361,7 +354,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK8 - Confirm transfer status change', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/transfers`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for confirm button
       const confirmBtn = page.locator('button:has-text("Xac nhan"), button:has-text("Van chuyen")').first();
@@ -377,7 +370,7 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK10 - Cancel transfer', async ({ page }) => {
       await page.goto(`${BASE_URL}/warehouse/transfers`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
       // Look for cancel button
       const cancelBtn = page.locator('button:has-text("Huy phieu"), button:has-text("Huy")').first();

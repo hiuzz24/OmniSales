@@ -13,9 +13,8 @@ test.describe('Audit/Inventory Logs API Tests', () => {
     expect(authToken).toBeTruthy();
   });
 
-  // =========================================================
   // GET /api/audit-logs - List Audit Logs
-  // =========================================================
+
   test('A1 - GET /api/audit-logs - List logs with pagination returns 200', async ({ request }) => {
     const response = await request.get(`${API_BASE}/audit-logs?page=0&size=10`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -63,9 +62,8 @@ test.describe('Audit/Inventory Logs API Tests', () => {
     expect(body.success).toBe(true);
   });
 
-  // =========================================================
   // GET /api/audit-logs/entity/{entityType}/{entityId}
-  // =========================================================
+
   test('A5 - GET /api/audit-logs/entity/{type}/{id} - Get logs by entity returns 200', async ({ request }) => {
     const response = await request.get(`${API_BASE}/audit-logs/entity/ORDER/00000000-0000-0000-0000-000000000000?page=0&size=10`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -95,9 +93,8 @@ test.describe('Audit/Inventory Logs API Tests', () => {
     }
   });
 
-  // =========================================================
   // GET /api/audit-logs/actor/{actorId}
-  // =========================================================
+
   test('A7 - GET /api/audit-logs/actor/{id} - Get logs by actor returns 200', async ({ request }) => {
     const response = await request.get(`${API_BASE}/audit-logs/actor/00000000-0000-0000-0000-000000000000?page=0&size=10`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -106,9 +103,8 @@ test.describe('Audit/Inventory Logs API Tests', () => {
     expect([200, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // Inventory Transaction Logs (via Inventory API)
-  // =========================================================
+
   test('A8 - GET /api/inventory/transactions - List inventory transactions returns 200', async ({ request }) => {
     const response = await request.get(`${API_BASE}/inventory/transactions?page=0&size=10`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -152,9 +148,8 @@ test.describe('Audit/Inventory Logs API Tests', () => {
     expect([200, 404, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // Edge Cases
-  // =========================================================
+
   test('A13 - GET /api/audit-logs - Access without auth returns 401 or 403', async ({ request }) => {
     const response = await request.get(`${API_BASE}/audit-logs?page=0&size=10`);
 

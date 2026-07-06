@@ -2,9 +2,12 @@
  * Helper utilities for order E2E and API tests
  */
 
-const API_BASE = process.env.API_BASE || 'http://localhost:8080/api';
-const TEST_EMAIL = 'manager@osms.vn';
-const TEST_PASSWORD = 'Duy16042004%';
+const {
+  TEST_EMAIL,
+  TEST_PASSWORD,
+  API_BASE: ENV_API_BASE,
+} = require('./env-config');
+const API_BASE = process.env.API_BASE || ENV_API_BASE;
 
 /**
  * Login via API and return access token

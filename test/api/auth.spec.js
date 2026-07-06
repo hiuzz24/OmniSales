@@ -1,14 +1,15 @@
 const { test, expect } = require('@playwright/test');
+const { TEST_EMAIL, TEST_PASSWORD, API_BASE: ENV_API_BASE } = require('../utils/env-config');
 
-const API_BASE = process.env.API_BASE || 'http://localhost:8080/api';
+const API_BASE = process.env.API_BASE || ENV_API_BASE;
 
 test.describe('Auth API Tests', () => {
 
   test('POST /api/auth/login - Login successfully', async ({ request }) => {
     const response = await request.post(`${API_BASE}/auth/login`, {
       data: {
-        email: 'manager@osms.vn',
-        password: 'Duy16042004%',
+        email: TEST_EMAIL,
+        password: TEST_PASSWORD,
       },
     });
 
@@ -17,7 +18,7 @@ test.describe('Auth API Tests', () => {
     expect(body.success).toBe(true);
     expect(body.data).toHaveProperty('accessToken');
     expect(body.data).toHaveProperty('user');
-    expect(body.data.user.email).toBe('manager@osms.vn');
+    expect(body.data.user.email).toBe(TEST_EMAIL);
   });
 
   test('POST /api/auth/login - Login with invalid credentials returns 401', async ({ request }) => {

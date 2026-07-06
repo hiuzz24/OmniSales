@@ -16,9 +16,8 @@ test.describe('Order API Tests', () => {
     expect(authToken).toBeTruthy();
   });
 
-  // =========================================================
   // GET /api/orders - List Orders
-  // =========================================================
+
   test('P1 - GET /api/orders - List orders with pagination returns 200', async ({ request }) => {
     const response = await request.get(`${API_BASE}/orders?page=0&size=10`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -78,9 +77,8 @@ test.describe('Order API Tests', () => {
     expect(page1.status()).toBe(200);
   });
 
-  // =========================================================
   // POST /api/orders - Create Order
-  // =========================================================
+
   test('P6 - POST /api/orders - Create order without auth returns 401 or 403', async ({ request }) => {
     const response = await request.post(`${API_BASE}/orders`, {
       data: {
@@ -129,9 +127,8 @@ test.describe('Order API Tests', () => {
     expect([200, 201, 400, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // GET /api/orders/{id} - Get Order By ID
-  // =========================================================
+
   test('P9 - GET /api/orders/{id} - Get existing order returns 200', async ({ request }) => {
     // First get an existing order from the list
     const listResponse = await request.get(`${API_BASE}/orders?page=0&size=1`, {
@@ -166,9 +163,8 @@ test.describe('Order API Tests', () => {
     expect([404, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // PUT /api/orders/{id}/status - Update Order Status
-  // =========================================================
+
   test('P11 - PUT /api/orders/{id}/status - Update existing order status', async ({ request }) => {
     // Get an existing order
     const listResponse = await request.get(`${API_BASE}/orders?page=0&size=1`, {
@@ -200,9 +196,8 @@ test.describe('Order API Tests', () => {
     expect([200, 400, 404, 405, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // DELETE /api/orders/{id} - Cancel Order
-  // =========================================================
+
   test('P12 - DELETE /api/orders/{id} - Cancel non-existent order returns error', async ({ request }) => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const response = await request.delete(`${API_BASE}/orders/${fakeId}`, {
@@ -213,9 +208,8 @@ test.describe('Order API Tests', () => {
     expect([404, 405, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // GET /api/orders/stats - Get Order Stats
-  // =========================================================
+
   test('P13 - GET /api/orders/stats - Get order stats returns 200', async ({ request }) => {
     const response = await request.get(`${API_BASE}/orders/stats`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -235,9 +229,8 @@ test.describe('Order API Tests', () => {
     expect(hasCountFields).toBeTruthy();
   });
 
-  // =========================================================
   // Edge Cases
-  // =========================================================
+
   test('P14 - GET /api/orders - Access without auth returns 401 or 403', async ({ request }) => {
     const response = await request.get(`${API_BASE}/orders?page=0&size=10`);
 

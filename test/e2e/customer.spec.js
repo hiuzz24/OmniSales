@@ -5,14 +5,15 @@ const {
   deleteTestCustomer,
   API_BASE,
 } = require('../utils/customer-helpers');
+const { TEST_EMAIL, TEST_PASSWORD } = require('../utils/env-config');
 
 /**
  * Login as manager via UI
  */
 async function loginAsManager(page) {
   await page.goto('/login');
-  await page.locator('#login-email').fill('manager@osms.vn');
-  await page.locator('#login-password').fill('Duy16042004%');
+  await page.locator('#login-email').fill(TEST_EMAIL);
+  await page.locator('#login-password').fill(TEST_PASSWORD);
 
   await Promise.all([
     page.waitForURL('**/dashboard', { timeout: 8000 }),
@@ -28,9 +29,8 @@ test.describe('Customer E2E Tests', () => {
     await loginAsManager(page);
   });
 
-  // =========================================================
   // Customer List Page
-  // =========================================================
+
   test('Should navigate to customers page', async ({ page }) => {
     await page.goto('/customers');
     await expect(page).toHaveURL(/\/customers/);
@@ -53,9 +53,8 @@ test.describe('Customer E2E Tests', () => {
     expect(statsCards).toBeGreaterThan(0);
   });
 
-  // =========================================================
   // Create Customer Modal
-  // =========================================================
+
   test('Should open create customer modal', async ({ page }) => {
     await page.goto('/customers');
     await page.waitForTimeout(1000);
@@ -119,9 +118,8 @@ test.describe('Customer E2E Tests', () => {
     }
   });
 
-  // =========================================================
   // Customer Filters
-  // =========================================================
+
   test('Should have status filter', async ({ page }) => {
     await page.goto('/customers');
     
@@ -164,9 +162,8 @@ test.describe('Customer E2E Tests', () => {
     }
   });
 
-  // =========================================================
   // Customer Actions
-  // =========================================================
+
   test('Should have edit button for each customer', async ({ page }) => {
     await page.goto('/customers');
     await page.waitForTimeout(2000);
@@ -203,9 +200,8 @@ test.describe('Customer E2E Tests', () => {
     }
   });
 
-  // =========================================================
   // Sidebar Navigation
-  // =========================================================
+
   test('Should have customers link in sidebar', async ({ page }) => {
     const customersLink = page.locator('a[href*="/customers"], nav a:has-text("Khách hàng"), nav a:has-text("Customers")').first();
     await expect(customersLink).toBeVisible();
@@ -220,9 +216,8 @@ test.describe('Customer E2E Tests', () => {
     }
   });
 
-  // =========================================================
   // Pagination
-  // =========================================================
+
   test('Should have pagination controls', async ({ page }) => {
     await page.goto('/customers');
     await page.waitForTimeout(1000);

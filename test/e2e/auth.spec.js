@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { TEST_EMAIL, TEST_PASSWORD } = require('../utils/env-config');
 
 test.describe('Auth E2E Tests', () => {
 
@@ -7,8 +8,8 @@ test.describe('Auth E2E Tests', () => {
   });
 
   test('Login successfully and redirects to dashboard', async ({ page }) => {
-    await page.locator('#login-email').fill('manager@osms.vn');
-    await page.locator('#login-password').fill('Duy16042004%');
+    await page.locator('#login-email').fill(TEST_EMAIL);
+    await page.locator('#login-password').fill(TEST_PASSWORD);
 
     await Promise.all([
       page.waitForURL('**/dashboard', { timeout: 8000 }),

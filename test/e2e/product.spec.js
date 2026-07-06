@@ -3,15 +3,14 @@ const { loginAsManager, uniqueSku } = require('../utils/product-helpers');
 
 test.describe('Product E2E Tests', () => {
 
-  // =========================================================
   // A. PRODUCT LISTING PAGE
-  // =========================================================
+
   test.describe('Product Listing Page', () => {
 
     test.beforeEach(async ({ page }) => {
       await loginAsManager(page);
       await page.goto('/products');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
     });
 
     test('A1 - Product list page renders correctly', async ({ page }) => {
@@ -118,9 +117,8 @@ test.describe('Product E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // B. PRODUCT CREATE PAGE
-  // =========================================================
+
   test.describe('Product Create Page', () => {
 
     test.beforeEach(async ({ page }) => {
@@ -514,15 +512,14 @@ test.describe('Product E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // C. PRODUCT DETAIL PAGE
-  // =========================================================
+
   test.describe('Product Detail Page', () => {
 
     test.beforeEach(async ({ page }) => {
       await loginAsManager(page);
       await page.goto('/products');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       await page.waitForTimeout(1000);
 
       const rows = page.locator('tbody tr');
@@ -546,7 +543,7 @@ test.describe('Product E2E Tests', () => {
 
     test('C2 - All tabs switch correctly', async ({ page }) => {
       await page.goto('/products');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       await page.waitForTimeout(1000);
 
       const rows = page.locator('tbody tr');
@@ -575,7 +572,7 @@ test.describe('Product E2E Tests', () => {
 
     test('C3 - Edit button navigates to edit page', async ({ page }) => {
       await page.goto('/products');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       await page.waitForTimeout(1000);
 
       const rows = page.locator('tbody tr');
@@ -591,7 +588,7 @@ test.describe('Product E2E Tests', () => {
 
     test('C4 - Back button navigates to product list', async ({ page }) => {
       await page.goto('/products');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       await page.waitForTimeout(1000);
 
       const rows = page.locator('tbody tr');
@@ -607,7 +604,7 @@ test.describe('Product E2E Tests', () => {
 
     test('C5 - Delete product - cancel on dialog', async ({ page }) => {
       await page.goto('/products');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       await page.waitForTimeout(1000);
 
       const rows = page.locator('tbody tr');
@@ -630,7 +627,7 @@ test.describe('Product E2E Tests', () => {
 
     test('C6 - Delete product - confirm', async ({ page }) => {
       await page.goto('/products');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
       await page.waitForTimeout(1000);
 
       const rows = page.locator('tbody tr');
@@ -650,9 +647,8 @@ test.describe('Product E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // D. PRODUCT EDIT PAGE
-  // =========================================================
+
   test.describe('Product Edit Page', () => {
 
     test.beforeEach(async ({ page }) => {

@@ -5,14 +5,15 @@ const {
   deleteTestOrder,
   API_BASE,
 } = require('../utils/order-helpers');
+const { TEST_EMAIL, TEST_PASSWORD } = require('../utils/env-config');
 
 /**
  * Login as manager via UI
  */
 async function loginAsManager(page) {
   await page.goto('/login');
-  await page.locator('#login-email').fill('manager@osms.vn');
-  await page.locator('#login-password').fill('Duy16042004%');
+  await page.locator('#login-email').fill(TEST_EMAIL);
+  await page.locator('#login-password').fill(TEST_PASSWORD);
 
   await Promise.all([
     page.waitForURL('**/dashboard', { timeout: 8000 }),
@@ -28,9 +29,8 @@ test.describe('Order E2E Tests', () => {
     await loginAsManager(page);
   });
 
-  // =========================================================
   // Order List Page
-  // =========================================================
+
   test('Should navigate to orders page', async ({ page }) => {
     await page.goto('/orders');
     await expect(page).toHaveURL(/\/orders/);
@@ -50,9 +50,8 @@ test.describe('Order E2E Tests', () => {
     expect(statsCards).toBeGreaterThan(0);
   });
 
-  // =========================================================
   // Order Filters
-  // =========================================================
+
   test('Should have status filter dropdown', async ({ page }) => {
     await page.goto('/orders');
     const statusFilter = page.locator('select[id*="status"], [class*="filter"] select').first();
@@ -78,9 +77,8 @@ test.describe('Order E2E Tests', () => {
     }
   });
 
-  // =========================================================
   // Order Detail Modal/Page - CHI TIẾT ĐƠN HÀNG
-  // =========================================================
+
   test.describe('Order Detail Tests', () => {
 
     test('Should open order detail when clicking on an order', async ({ page }) => {
@@ -169,9 +167,8 @@ test.describe('Order E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // Order Status Change - CHUYỂN ĐỔI TRẠNG THÁI
-  // =========================================================
+
   test.describe('Order Status Change Tests', () => {
 
     test('Should have status dropdown in order detail', async ({ page }) => {
@@ -238,9 +235,8 @@ test.describe('Order E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // Payment Status Change - ĐỔI TRẠNG THÁI THANH TOÁN
-  // =========================================================
+
   test.describe('Payment Status Change Tests', () => {
 
     test('Should have payment status dropdown in order detail', async ({ page }) => {
@@ -290,9 +286,8 @@ test.describe('Order E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // Cancel Order - HỦY ĐƠN
-  // =========================================================
+
   test.describe('Cancel Order Tests', () => {
 
     test('Should have cancel button in order detail', async ({ page }) => {
@@ -371,9 +366,8 @@ test.describe('Order E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // Order History/Audit Log
-  // =========================================================
+
   test.describe('Order History Tests', () => {
 
     test('Should have order history tab in detail', async ({ page }) => {
@@ -415,9 +409,8 @@ test.describe('Order E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // Order Actions
-  // =========================================================
+
   test.describe('Order Actions Tests', () => {
 
     test('Should have create order button if user has permission', async ({ page }) => {
@@ -451,9 +444,8 @@ test.describe('Order E2E Tests', () => {
     });
   });
 
-  // =========================================================
   // Sidebar Navigation
-  // =========================================================
+
   test.describe('Navigation Tests', () => {
 
     test('Should have orders link in sidebar', async ({ page }) => {

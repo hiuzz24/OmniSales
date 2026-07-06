@@ -18,9 +18,8 @@ test.describe('Customer API Tests', () => {
     expect(authToken).toBeTruthy();
   });
 
-  // =========================================================
   // GET /api/customers - List Customers
-  // =========================================================
+
   test('C1 - GET /api/customers - List customers with pagination returns 200', async ({ request }) => {
     const response = await request.get(`${API_BASE}/customers?page=0&size=10`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -76,9 +75,8 @@ test.describe('Customer API Tests', () => {
     expect(body.success).toBe(true);
   });
 
-  // =========================================================
   // POST /api/customers - Create Customer
-  // =========================================================
+
   test('C6 - POST /api/customers - Create customer without auth returns 401 or 403', async ({ request }) => {
     const timestamp = Date.now();
     const response = await request.post(`${API_BASE}/customers`, {
@@ -162,9 +160,8 @@ test.describe('Customer API Tests', () => {
     expect([400, 403, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // GET /api/customers/{id} - Get Customer By ID
-  // =========================================================
+
   test('C11 - GET /api/customers/{id} - Get customer by ID returns 200', async ({ request }) => {
     // First get an existing customer from the list
     const listResponse = await request.get(`${API_BASE}/customers?page=0&size=1`, {
@@ -205,9 +202,8 @@ test.describe('Customer API Tests', () => {
     expect([404, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // PUT /api/customers/{id} - Update Customer
-  // =========================================================
+
   test('C13 - PUT /api/customers/{id} - Update customer successfully', async ({ request }) => {
     // First get an existing customer
     const listResponse = await request.get(`${API_BASE}/customers?page=0&size=1`, {
@@ -248,9 +244,8 @@ test.describe('Customer API Tests', () => {
     expect([404, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // DELETE /api/customers/{id} - Delete Customer
-  // =========================================================
+
   test('C15 - DELETE /api/customers/{id} - Delete non-existent customer returns 404', async ({ request }) => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const response = await request.delete(`${API_BASE}/customers/${fakeId}`, {
@@ -260,9 +255,8 @@ test.describe('Customer API Tests', () => {
     expect([404, 500]).toContain(response.status());
   });
 
-  // =========================================================
   // GET /api/customers/stats - Get Customer Stats
-  // =========================================================
+
   test('C16 - GET /api/customers/stats - Get customer stats returns 200', async ({ request }) => {
     const stats = await getCustomerStats(request, authToken);
 
@@ -273,9 +267,8 @@ test.describe('Customer API Tests', () => {
     expect(stats).toHaveProperty('totalSpent');
   });
 
-  // =========================================================
   // Edge Cases
-  // =========================================================
+
   test('C17 - POST /api/customers - Create customer without fullName returns 400', async ({ request }) => {
     const timestamp = Date.now();
     const response = await request.post(`${API_BASE}/customers`, {
