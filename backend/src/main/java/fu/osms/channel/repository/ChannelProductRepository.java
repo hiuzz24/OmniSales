@@ -65,4 +65,17 @@ public interface ChannelProductRepository extends JpaRepository<ChannelProduct, 
     List<ChannelProduct> findActiveChangedByChannelIdSince(@Param("channelId") UUID channelId,
                                                            @Param("changedSince") OffsetDateTime changedSince,
                                                            @Param("syncedStatus") SyncStatus syncedStatus);
+
+    @Query("SELECT DISTINCT cp FROM ChannelProduct cp " +
+            "JOIN FETCH cp.product p " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN ChannelProductVariant cpv ON cpv.channelProduct = cp " +
+            "WHERE ch.id = :channelId " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND p.deletedAt IS NULL " +
+            "AND cpv.variant.id IN :variantIds")
+    List<ChannelProduct> findActiveByChannelIdAndVariantIdIn(
+            @Param("channelId") UUID channelId,
+            @Param("variantIds") Collection<UUID> variantIds);
 }

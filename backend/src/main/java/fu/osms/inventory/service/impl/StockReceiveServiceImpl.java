@@ -1,5 +1,6 @@
 package fu.osms.inventory.service.impl;
 
+import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
@@ -198,32 +199,14 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                         .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
                         .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
 
-                // Compute weighted average cost
-                BigDecimal avgCostBefore = inventoryItem.getAverageCost();
-                if (avgCostBefore == null) {
-                    avgCostBefore = BigDecimal.ZERO;
-                }
-                int qtyBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
                 int quantity = itemReq.getQuantity();
                 BigDecimal unitCost = itemReq.getUnitCost();
 
-                BigDecimal numerator = BigDecimal.valueOf(qtyBefore)
-                        .multiply(avgCostBefore)
-                        .add(BigDecimal.valueOf(quantity).multiply(unitCost));
-                BigDecimal denominator = BigDecimal.valueOf((long) qtyBefore + quantity);
-                BigDecimal avgCostAfter = numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+                CostUpdateResult costUpdate = applyReceiptCostAndQuantity(
+                        inventoryItem, productVariant, quantity, unitCost, createdByUser);
 
-                receiptItem.setAvgCostBefore(avgCostBefore);
-                receiptItem.setAvgCostAfter(avgCostAfter);
-
-                // Update quantityOnHand
-                inventoryItem.setQuantityOnHand(qtyBefore + quantity);
-
-                // Update averageCost
-                inventoryItem.setAverageCost(avgCostAfter);
-
-                // Save inventoryItem
-                inventoryItemRepository.save(inventoryItem);
+                receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
+                receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
             }
 
             // c. Save receiptItem (for both DRAFT and CONFIRMED)
@@ -552,31 +535,16 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
                     .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
 
-            // Compute weighted average cost
-            BigDecimal avgCostBefore = inventoryItem.getAverageCost();
-            if (avgCostBefore == null) {
-                avgCostBefore = BigDecimal.ZERO;
-            }
             int qtyBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
             int quantity = receiptItem.getQuantity();
             BigDecimal unitCost = receiptItem.getUnitCost();
-
-            BigDecimal numerator = BigDecimal.valueOf(qtyBefore)
-                    .multiply(avgCostBefore)
-                    .add(BigDecimal.valueOf(quantity).multiply(unitCost));
-            BigDecimal denominator = BigDecimal.valueOf((long) qtyBefore + quantity);
-            BigDecimal avgCostAfter = numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+            CostUpdateResult costUpdate = applyReceiptCostAndQuantity(
+                    inventoryItem, productVariant, quantity, unitCost, approvedByUser);
 
             // Update receiptItem with cost tracking
-            receiptItem.setAvgCostBefore(avgCostBefore);
-            receiptItem.setAvgCostAfter(avgCostAfter);
+            receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
+            receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
             stockReceiveItemRepository.save(receiptItem);
-
-            // Update inventoryItem
-            inventoryItem.setQuantityOnHand(qtyBefore + quantity);
-            inventoryItem.setAverageCost(avgCostAfter);
-            inventoryItem.setUpdatedBy(approvedByUser);
-            inventoryItemRepository.save(inventoryItem);
 
             // CREATE NEW transaction for CONFIRMED receipt (do NOT update old DRAFT transaction)
             // The DRAFT transaction remains as audit trail
@@ -636,6 +604,52 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         int currentYear = LocalDate.now().getYear();
         long count = stockReceiveRepository.countByYear(currentYear);
         return "PN-" + currentYear + "-" + String.format("%03d", count + 1);
+    }
+
+    private CostUpdateResult applyReceiptCostAndQuantity(
+            InventoryItem inventoryItem,
+            ProductVariant productVariant,
+            int quantity,
+            BigDecimal unitCost,
+            User updatedBy) {
+        int qtyBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
+        BigDecimal avgCostBefore = inventoryItem.getAverageCost() != null
+                ? inventoryItem.getAverageCost()
+                : productVariant.getCostPrice();
+        avgCostBefore = normalizeMoney(avgCostBefore);
+        unitCost = normalizeMoney(unitCost);
+
+        int qtyAfter = qtyBefore + quantity;
+        BigDecimal existingStockValue = BigDecimal.valueOf(qtyBefore).multiply(avgCostBefore);
+        BigDecimal receivedStockValue = BigDecimal.valueOf(quantity).multiply(unitCost);
+        BigDecimal avgCostAfter = qtyAfter <= 0
+                ? unitCost
+                : existingStockValue
+                    .add(receivedStockValue)
+                    .divide(BigDecimal.valueOf(qtyAfter), 2, RoundingMode.HALF_UP);
+
+        inventoryItem.setQuantityOnHand(qtyAfter);
+        inventoryItem.setAverageCost(avgCostAfter);
+        inventoryItem.setUpdatedBy(updatedBy);
+        inventoryItemRepository.save(inventoryItem);
+
+        productVariant.setCostPrice(avgCostAfter);
+        productVariant.setPrice(avgCostAfter);
+        productVariant.setUpdatedBy(updatedBy);
+        variantRepository.save(productVariant);
+
+        return new CostUpdateResult(avgCostBefore, avgCostAfter, qtyBefore, qtyAfter);
+    }
+
+    private BigDecimal normalizeMoney(BigDecimal value) {
+        return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private record CostUpdateResult(
+            BigDecimal avgCostBefore,
+            BigDecimal avgCostAfter,
+            int qtyBefore,
+            int qtyAfter) {
     }
 
     private OffsetDateTime resolveDocumentTime(LocalDate documentDate) {

@@ -1,6 +1,7 @@
 package fu.osms.channel.repository;
 
 import fu.osms.channel.entity.ChannelProductVariant;
+import fu.osms.common.enums.PlatformType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -32,6 +33,31 @@ public interface ChannelProductVariantRepository extends JpaRepository<ChannelPr
             @Param("channelId") UUID channelId,
             @Param("externalVariantId") String externalVariantId);
 
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "LEFT JOIN FETCH v.product " +
+            "WHERE ch.id = :channelId " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND cpv.externalSku = :externalSku")
+    Optional<ChannelProductVariant> findActiveByChannelIdAndExternalSku(
+            @Param("channelId") UUID channelId,
+            @Param("externalSku") String externalSku);
+
+    @Query(value = "SELECT cpv.* FROM channel_product_variants cpv " +
+            "JOIN channel_products cp ON cp.id = cpv.channel_product_id " +
+            "JOIN channels ch ON ch.id = cp.channel_id " +
+            "WHERE ch.id = :channelId " +
+            "AND ch.deleted_at IS NULL " +
+            "AND cp.mapping_state = 'ACTIVE' " +
+            "AND cpv.metadata ->> 'inventory_item_id' = :inventoryItemId",
+            nativeQuery = true)
+    Optional<ChannelProductVariant> findActiveByChannelIdAndInventoryItemId(
+            @Param("channelId") UUID channelId,
+            @Param("inventoryItemId") String inventoryItemId);
+
     @Query("SELECT COUNT(cpv) FROM ChannelProductVariant cpv " +
             "WHERE cpv.channelProduct.channel.id = :channelId " +
             "AND cpv.channelProduct.mappingState = 'ACTIVE'")
@@ -59,6 +85,36 @@ public interface ChannelProductVariantRepository extends JpaRepository<ChannelPr
     List<ChannelProductVariant> findActiveByChannelIdAndVariantIdInWithVariant(
             @Param("channelId") UUID channelId,
             @Param("variantIds") List<UUID> variantIds);
+
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "WHERE cpv.variant.id = :variantId " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "ORDER BY cpv.updatedAt DESC")
+    List<ChannelProductVariant> findActiveByVariantIdWithChannel(@Param("variantId") UUID variantId);
+
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "WHERE cpv.variant.id IN :variantIds " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "ORDER BY cpv.updatedAt DESC")
+    List<ChannelProductVariant> findActiveByVariantIdInWithChannel(@Param("variantIds") List<UUID> variantIds);
+
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "LEFT JOIN FETCH v.product " +
+            "WHERE ch.platform = :platform " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "ORDER BY v.sku ASC")
+    List<ChannelProductVariant> findActiveByPlatformWithVariant(@Param("platform") PlatformType platform);
 
     @Query(value = "SELECT cpv.* FROM channel_product_variants cpv " +
             "JOIN channel_products cp ON cp.id = cpv.channel_product_id " +

@@ -15,7 +15,7 @@ import org.springframework.data.domain.PageRequest;
 
 public interface InventoryService {
 
-    PageResponse<InventoryItemResponse> getAllInventoryItems(PageRequest pageRequest, int page, int size);    InventoryItemResponse createItem(InventoryItemRequest request);
+    PageResponse<InventoryItemResponse> getAllInventoryItems(PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly);    InventoryItemResponse createItem(InventoryItemRequest request);
 
     InventoryItemResponse getItemById(UUID id);
 
@@ -33,7 +33,7 @@ public interface InventoryService {
 
     Map<UUID, StockSummaryDTO> getStockSummary(Collection<UUID> variantIds);
 
-    PageResponse<InventoryItemResponse> getInventoryByCategoryId(UUID categoryId,PageRequest pageRequest, int page, int size);
+    PageResponse<InventoryItemResponse> getInventoryByCategoryId(UUID categoryId, PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly);
 
     void findAllChildIds(UUID parentId, List<UUID> resultList);
 

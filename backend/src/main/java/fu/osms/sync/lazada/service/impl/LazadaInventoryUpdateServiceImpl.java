@@ -7,10 +7,10 @@ import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
-import fu.osms.inventory.entity.InventoryTransaction;
 import fu.osms.inventory.entity.Warehouse;
+import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.InventoryItemRepository;
-import fu.osms.inventory.repository.InventoryTransactionRepository;
+import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
 import fu.osms.sync.lazada.service.LazadaApiClient;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
@@ -45,12 +45,14 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
-    private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final StockReceiveRepository stockReceiveRepository;
+    private final InventoryIssueRepository inventoryIssueRepository;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public LazadaInventorySyncResult syncChangedSellableStock(UUID channelId,
                                                               OffsetDateTime changedSince,
+                                                              OffsetDateTime changedUntil,
                                                               Collection<UUID> productChangedVariantIds) {
         log.info(
                 "[LazadaStockSync] Start channelId={} api={} changedSince={} mode={} productChangedVariantIds={}",
@@ -66,7 +68,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
             throw new IllegalStateException("Kenh Lazada chua co access_token. Vui long ket noi lai bang OAuth Lazada.");
         }
 
-        ChangedScope changedScope = resolveChangedScope(changedSince, productChangedVariantIds);
+        ChangedScope changedScope = resolveChangedScope(changedSince, changedUntil, productChangedVariantIds);
         log.info(
                 "[LazadaStockSync] Resolved changed scope channelId={} variantCount={} warehouseCount={} variantIds={} warehouseIds={}",
                 channelId,
@@ -151,31 +153,31 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         );
     }
 
-    private ChangedScope resolveChangedScope(OffsetDateTime changedSince, Collection<UUID> productChangedVariantIds) {
+    private ChangedScope resolveChangedScope(OffsetDateTime changedSince,
+                                             OffsetDateTime changedUntil,
+                                             Collection<UUID> productChangedVariantIds) {
         if (changedSince == null) {
             return new ChangedScope(Set.of(), Set.of());
         }
 
-        List<InventoryTransaction> transactions = inventoryTransactionRepository.findStockDocumentChangesSince(changedSince);
         Set<UUID> variantIds = new HashSet<>();
         Set<UUID> warehouseIds = new HashSet<>();
         if (productChangedVariantIds != null) {
             variantIds.addAll(productChangedVariantIds);
         }
 
-        for (InventoryTransaction transaction : transactions) {
-            if (transaction.getVariant() != null && transaction.getVariant().getId() != null) {
-                variantIds.add(transaction.getVariant().getId());
-            }
-            if (transaction.getWarehouse() != null && transaction.getWarehouse().getId() != null) {
-                warehouseIds.add(transaction.getWarehouse().getId());
-            }
-        }
+        OffsetDateTime effectiveChangedUntil = changedUntil == null ? OffsetDateTime.now() : changedUntil;
+        variantIds.addAll(stockReceiveRepository.findChangedConfirmedVariantIdsBetween(changedSince, effectiveChangedUntil));
+        variantIds.addAll(inventoryIssueRepository.findChangedAppliedVariantIdsBetween(changedSince, effectiveChangedUntil));
+        warehouseIds.addAll(stockReceiveRepository.findChangedConfirmedWarehouseIdsBetween(changedSince, effectiveChangedUntil));
+        warehouseIds.addAll(inventoryIssueRepository.findChangedAppliedWarehouseIdsBetween(changedSince, effectiveChangedUntil));
 
         log.info(
-                "[LazadaStockSync] Found inventory transactions since={} transactionCount={}",
+                "[LazadaStockSync] Resolved stock documents changedSince={} changedUntil={} variantCount={} warehouseCount={}",
                 changedSince,
-                transactions.size()
+                effectiveChangedUntil,
+                variantIds.size(),
+                warehouseIds.size()
         );
         return new ChangedScope(variantIds, warehouseIds);
     }

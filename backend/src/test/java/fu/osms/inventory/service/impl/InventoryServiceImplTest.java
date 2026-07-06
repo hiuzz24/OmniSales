@@ -2,6 +2,7 @@ package fu.osms.inventory.service.impl;
 
 import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
@@ -59,6 +60,8 @@ class InventoryServiceImplTest {
     private AvailableVariantDTOMapper availableVariantDTOMapper;
     @Mock
     private InventoryAlertService inventoryAlertService;
+    @Mock
+    private ChannelProductVariantRepository channelProductVariantRepository;
 
     @InjectMocks
     private InventoryServiceImpl inventoryService;
@@ -110,6 +113,8 @@ class InventoryServiceImplTest {
         // Setup mappers
         lenient().when(inventoryItemMapper.toResponse(any(InventoryItem.class))).thenReturn(itemResponse);
         lenient().when(inventoryItemMapper.toResponseList(anyList())).thenReturn(List.of(itemResponse));
+        lenient().when(channelProductVariantRepository.findActiveByVariantIdInWithChannel(anyList()))
+                .thenReturn(Collections.emptyList());
     }
 
     // =========================================================
@@ -124,10 +129,10 @@ class InventoryServiceImplTest {
         @DisplayName("Should return paginated inventory items")
         void shouldReturnPaginatedInventoryItems() {
             Page<InventoryItem> page = new PageImpl<>(List.of(inventoryItem));
-            when(inventoryItemRepository.findAllWithVariantRelationships(any(PageRequest.class))).thenReturn(page);
+            when(inventoryItemRepository.findAllWithVariantRelationshipsFiltered(isNull(), eq(false), any(PageRequest.class))).thenReturn(page);
 
             PageResponse<InventoryItemResponse> result = inventoryService.getAllInventoryItems(
-                    PageRequest.of(0, 10), 0, 10);
+                    PageRequest.of(0, 10), 0, 10, null, false);
 
             assertThat(result).isNotNull();
             assertThat(result.getContent()).hasSize(1);

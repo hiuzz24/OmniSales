@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Repository
@@ -23,4 +25,18 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
     boolean existsByInvoiceNumber(String invoiceNumber);
 
     boolean existsByInvoiceNumberAndIdNot(String invoiceNumber, UUID id);
+
+    @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
+            "WHERE item.receipt.status = 'CONFIRMED' " +
+            "AND item.receipt.updatedAt >= :changedSince " +
+            "AND item.receipt.updatedAt <= :changedUntil")
+    List<UUID> findChangedConfirmedVariantIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
+                                                     @Param("changedUntil") OffsetDateTime changedUntil);
+
+    @Query("SELECT DISTINCT item.receipt.warehouse.id FROM InventoryReceiptItem item " +
+            "WHERE item.receipt.status = 'CONFIRMED' " +
+            "AND item.receipt.updatedAt >= :changedSince " +
+            "AND item.receipt.updatedAt <= :changedUntil")
+    List<UUID> findChangedConfirmedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
+                                                       @Param("changedUntil") OffsetDateTime changedUntil);
 }

@@ -104,5 +104,26 @@ public class DatabaseMigration {
             log.warn("Migration skipped or already applied for stock_transfers note: {}", e.getMessage());
         }
 
+        try {
+            jdbcTemplate.execute("""
+                UPDATE inventory_items
+                SET quantity_on_hand = GREATEST(quantity_on_hand, 0),
+                    reserved_quantity = LEAST(GREATEST(reserved_quantity, 0), GREATEST(quantity_on_hand, 0))
+                WHERE quantity_on_hand < 0
+                   OR reserved_quantity < 0
+                   OR reserved_quantity > quantity_on_hand
+            """);
+            jdbcTemplate.execute("""
+                ALTER TABLE inventory_items
+                DROP CONSTRAINT IF EXISTS chk_inventory_quantities_nonnegative,
+                DROP CONSTRAINT IF EXISTS chk_inventory_reserved_lte_onhand,
+                ADD CONSTRAINT chk_inventory_reserved_lte_onhand
+                CHECK (reserved_quantity <= quantity_on_hand)
+            """);
+            log.info("Migration: restored inventory_items reserved <= on-hand constraint");
+        } catch (Exception e) {
+            log.warn("Migration skipped or failed for inventory_items reserved constraint: {}", e.getMessage());
+        }
+
     }
 }
