@@ -21,6 +21,7 @@ import fu.osms.sync.lazada.dto.LazadaSyncTask;
 import fu.osms.sync.lazada.service.LazadaChannelSyncService;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.repository.SyncLogRepository;
+import fu.osms.sync.service.SyncAlertService;
 import fu.osms.sync.service.PlatformSyncService;
 import fu.osms.sync.service.impl.PlatformSyncServiceFactory;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,7 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
     private final ProductVariantRepository productVariantRepository;
     private final ProductImageRepository productImageRepository;
     private final PlatformSyncServiceFactory platformSyncServiceFactory;
+    private final SyncAlertService syncAlertService;
 
     @Override
     @Transactional
@@ -150,7 +152,10 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
                 syncLog.setErrorSummary("Có " + failedProductCount + " sản phẩm đồng bộ lên Lazada thất bại.");
             }
             syncLog.setCompletedAt(OffsetDateTime.now());
-            syncLogRepository.save(syncLog);
+            syncLog = syncLogRepository.save(syncLog);
+            if (syncLog.getStatus() == SyncStatus.FAILED) {
+                syncAlertService.notifySyncFailure(syncLog);
+            }
             log.info(
                     "[LazadaSync] Completed syncLogId={} channelId={} totalItems={} successCount={} failCount={}",
                     syncLog.getId(),
@@ -180,7 +185,8 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
             syncLog.setFailCount(1);
             syncLog.setErrorSummary(e.getMessage());
             syncLog.setCompletedAt(OffsetDateTime.now());
-            syncLogRepository.save(syncLog);
+            syncLog = syncLogRepository.save(syncLog);
+            syncAlertService.notifySyncFailure(syncLog);
             log.error(
                     "[LazadaSync] Failed syncLogId={} channelId={} totalItems={} successCount={} failCount={} error={}",
                     syncLog.getId(),

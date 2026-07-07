@@ -11,7 +11,13 @@ public interface NotificationService {
 
     PageResponse<NotificationResponse> getUnread(UUID userId, int page, int size);
 
+    PageResponse<NotificationResponse> getAll(int page, int size);
+
+    PageResponse<NotificationResponse> getAllUnread(int page, int size);
+
     long countUnread(UUID userId);
+
+    long countAllUnread();
 
     void markAsRead(UUID id);
 

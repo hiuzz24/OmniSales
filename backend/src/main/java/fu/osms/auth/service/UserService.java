@@ -37,5 +37,5 @@ public interface UserService {
 
     UUID findUserIdByEmail(String email);
 
-
+    void cancelInvite(UUID id);
 }

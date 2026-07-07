@@ -35,6 +35,7 @@ import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.lazada.service.LazadaApiClient;
 import fu.osms.sync.lazada.service.LazadaImportSyncService;
 import fu.osms.sync.repository.SyncLogRepository;
+import fu.osms.sync.service.SyncAlertService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -73,6 +74,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final WarehouseRepository warehouseRepository;
     private final SyncLogRepository syncLogRepository;
+    private final SyncAlertService syncAlertService;
 
     @Override
     @Transactional
@@ -156,7 +158,8 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             syncLog.setFailCount(1);
             syncLog.setErrorSummary(e.getMessage());
             syncLog.setCompletedAt(OffsetDateTime.now());
-            syncLogRepository.save(syncLog);
+            syncLog = syncLogRepository.save(syncLog);
+            syncAlertService.notifySyncFailure(syncLog);
             throw e;
         }
     }

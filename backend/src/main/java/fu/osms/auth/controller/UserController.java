@@ -91,6 +91,13 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.success("Đổi mật khẩu thành công", null));
     }
 
+    @PostMapping("/{id}/cancel-invite")
+    public ResponseEntity<ApiResponse<Void>> cancelInvite(@PathVariable UUID id) {
+        log.info("Cancelling invitation for user ID: {}", id);
+        userService.cancelInvite(id);
+        return ResponseEntity.ok(ApiResponse.success("Hủy lời mời thành công", null));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private String getCurrentEmail() {

@@ -35,12 +35,21 @@ import {
   Store,
   TrendingUp,
   Warehouse,
+  Users,
+  Shield,
+  Link,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import channelApi from '../../../api/channelApi';
 import inventoryApi from '../../../api/inventoryApi';
 import orderApi from '../../../api/orderApi';
 import productApi from '../../../api/productApi';
+import userApi from '../../../api/userApi';
+import syncApi from '../../../api/syncApi';
+import channelConnectionLogApi from '../../../api/channelConnectionLogApi';
+import notificationApi from '../../../api/notificationApi';
+import useAuth from '../../auth/hooks/useAuth';
+import { ROLES } from '../../auth/constants/roles';
 import styles from './DashboardPage.module.css';
 
 const PAGE_FETCH_SIZE = 1000;
@@ -364,6 +373,9 @@ const LoadingBlock = () => (
 );
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === ROLES.SYSTEM_ADMIN;
+
   const [period, setPeriod] = useState('30');
   const [groupBy, setGroupBy] = useState('day');
   const [channelId, setChannelId] = useState('');
@@ -373,6 +385,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+
+  // State for Admin dashboard
+  const [adminData, setAdminData] = useState({
+    users: [],
+    channels: [],
+    syncLogs: [],
+    connectionLogs: [],
+    notifications: [],
+    stats: {
+      totalUsers: 0,
+      activeUsers: 0,
+      inactiveUsers: 0,
+      lockedUsers: 0,
+      totalChannels: 0,
+      connectedChannels: 0,
+      disconnectedChannels: 0,
+      errorChannels: 0,
+      totalSyncs: 0,
+      successSyncs: 0,
+      failedSyncs: 0,
+      syncSuccessRate: 0,
+      totalAlerts: 0,
+    }
+  });
 
   const effectiveFromDate = period === 'custom' ? fromDate : getDefaultFromDate(period);
   const effectiveToDate = period === 'custom' ? toDate : toDateInput(new Date());
@@ -418,15 +454,187 @@ export default function DashboardPage() {
     }
   }, [channelId, effectiveFromDate, effectiveToDate]);
 
+  const fetchAdminDashboard = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [usersRes, channelsRes, syncLogsRes, connLogsRes, notifsRes] = await Promise.all([
+        userApi.getAllUsers(0, 100),
+        channelApi.getAll(),
+        syncApi.getLogs({ page: 0, size: 100 }),
+        channelConnectionLogApi.getAll({ page: 0, size: 10 }),
+        notificationApi.getNotifications({ page: 0, size: 20 })
+      ]);
+
+      const usersList = usersRes?.content ?? usersRes ?? [];
+      const channelsList = channelsRes?.data?.data ?? channelsRes?.data ?? channelsRes ?? [];
+      const syncLogsPage = syncLogsRes?.data?.data ?? syncLogsRes?.data ?? syncLogsRes ?? {};
+      const syncLogsList = syncLogsPage?.content ?? [];
+      const connLogsPage = connLogsRes?.data?.data ?? connLogsRes?.data ?? connLogsRes ?? {};
+      const connLogsList = connLogsPage?.content ?? [];
+      const notifsPage = notifsRes?.data?.data ?? notifsRes?.data ?? notifsRes ?? {};
+      const notifsList = notifsPage?.content ?? [];
+
+      // Calculate stats
+      const totalUsers = usersList.length;
+      const activeUsers = usersList.filter(u => u.status === 'ACTIVE').length;
+      const inactiveUsers = usersList.filter(u => u.status === 'INACTIVE').length;
+      const lockedUsers = usersList.filter(u => u.status === 'LOCKED').length;
+
+      const totalChannels = channelsList.length;
+      const connectedChannels = channelsList.filter(c => c.status === 'CONNECTED').length;
+      const disconnectedChannels = channelsList.filter(c => c.status === 'DISCONNECTED').length;
+      const errorChannels = channelsList.filter(c => c.status === 'ERROR' || c.status === 'PENDING').length;
+
+      const totalSyncs = syncLogsList.length;
+      const successSyncs = syncLogsList.filter(l => l.status === 'SYNCED').length;
+      const failedSyncs = syncLogsList.filter(l => l.status === 'FAILED').length;
+      const syncSuccessRate = totalSyncs ? Math.round((successSyncs * 100) / totalSyncs) : 0;
+
+      // Count unread system alerts in notifications list
+      const totalAlerts = notifsList.filter(n => !n.readAt).length;
+
+      setAdminData({
+        users: usersList,
+        channels: channelsList,
+        syncLogs: syncLogsList.slice(0, 10),
+        connectionLogs: connLogsList,
+        notifications: notifsList,
+        stats: {
+          totalUsers,
+          activeUsers,
+          inactiveUsers,
+          lockedUsers,
+          totalChannels,
+          connectedChannels,
+          disconnectedChannels,
+          errorChannels,
+          totalSyncs,
+          successSyncs,
+          failedSyncs,
+          syncSuccessRate,
+          totalAlerts,
+        }
+      });
+    } catch (err) {
+      console.error('Error fetching admin dashboard:', err);
+      setError('Có lỗi xảy ra khi tải dữ liệu tổng quan hệ thống.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
-      fetchDashboard();
+      if (isAdmin) {
+        fetchAdminDashboard();
+      } else {
+        fetchDashboard();
+      }
     }, 0);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [fetchDashboard, reloadKey]);
+  }, [isAdmin, fetchDashboard, fetchAdminDashboard, reloadKey]);
+
+  // Admin Dashboard Columns
+  const syncColumns = useMemo(() => [
+    {
+      accessorKey: 'jobType',
+      header: 'Kiểu đồng bộ',
+      cell: ({ row }) => {
+        const type = row.original.jobType;
+        if (type === 'PRODUCT_SYNC') return 'Đồng bộ sản phẩm';
+        if (type === 'LAZADA_IMPORT') return 'Kéo dữ liệu Lazada';
+        if (type === 'LAZADA_LOCAL_CHANGES_SYNC') return 'Đẩy thay đổi lên Lazada';
+        return type;
+      }
+    },
+    {
+      accessorKey: 'channel',
+      header: 'Kênh',
+      cell: ({ row }) => row.original.channel?.displayName || row.original.channel?.platform || 'Hệ thống'
+    },
+    {
+      accessorKey: 'status',
+      header: 'Trạng thái',
+      cell: ({ row }) => {
+        const status = row.original.status;
+        return (
+          <span className={`${styles.statusBadge} ${status === 'SYNCED' ? styles.statusSuccess : styles.statusFailed}`}>
+            {status === 'SYNCED' ? 'Thành công' : 'Thất bại'}
+          </span>
+        );
+      }
+    },
+    {
+      accessorKey: 'processed',
+      header: 'Đã xử lý (Thành công/Lỗi)',
+      cell: ({ row }) => {
+        const total = row.original.totalItems || 0;
+        const success = row.original.successCount || 0;
+        const fail = row.original.failCount || 0;
+        return `${total} (${success}/${fail})`;
+      }
+    },
+    {
+      accessorKey: 'startedAt',
+      header: 'Bắt đầu',
+      cell: ({ row }) => formatDate(row.original.startedAt)
+    },
+    {
+      accessorKey: 'errorSummary',
+      header: 'Chi tiết lỗi',
+      cell: ({ row }) => (
+        <span className={styles.errorText} title={row.original.errorSummary}>
+          {row.original.errorSummary || '-'}
+        </span>
+      )
+    }
+  ], []);
+
+  const connectionColumns = useMemo(() => [
+    {
+      accessorKey: 'displayName',
+      header: 'Tên kênh',
+      cell: ({ row }) => (
+        <strong>{row.original.displayName || row.original.name}</strong>
+      )
+    },
+    {
+      accessorKey: 'platform',
+      header: 'Nền tảng',
+      cell: ({ row }) => (
+        <span className={styles.platformLabel}>{row.original.platform}</span>
+      )
+    },
+    {
+      accessorKey: 'status',
+      header: 'Trạng thái kết nối',
+      cell: ({ row }) => {
+        const status = row.original.status;
+        let cls = styles.connDisconnected;
+        let label = 'Ngắt kết nối';
+        if (status === 'CONNECTED') {
+          cls = styles.connConnected;
+          label = 'Đang kết nối';
+        } else if (status === 'ERROR') {
+          cls = styles.connError;
+          label = 'Lỗi kết nối';
+        } else if (status === 'PENDING') {
+          cls = styles.connPending;
+          label = 'Chờ kết nối';
+        }
+        return <span className={`${styles.connStatus} ${cls}`}>{label}</span>;
+      }
+    },
+    {
+      accessorKey: 'lastSyncedAt',
+      header: 'Đồng bộ lần cuối',
+      cell: ({ row }) => formatDate(row.original.lastSyncedAt)
+    }
+  ], []);
 
   const dashboard = useMemo(
     () => buildDashboardModel(data, groupBy),
@@ -521,6 +729,137 @@ export default function DashboardPage() {
       Làm mới
     </button>
   );
+
+  if (isAdmin) {
+    return (
+      <div className={styles.page}>
+        <PageHeader
+          title="System Administration Dashboard"
+          subtitle="Giám sát trạng thái hoạt động hệ thống, người dùng, đồng bộ sàn và cảnh báo lỗi"
+          icon={<Activity size={20} />}
+          actions={actions}
+        />
+
+        <div className={styles.summaryGrid}>
+          <SummaryCard
+            label="Tổng số người dùng"
+            value={adminData.stats.totalUsers.toString()}
+            helper={`Đang hoạt động: ${adminData.stats.activeUsers} | Khóa: ${adminData.stats.lockedUsers}`}
+            icon={Users}
+            tone="blueTone"
+          />
+          <SummaryCard
+            label="Kết nối sàn"
+            value={`${adminData.stats.connectedChannels}/${adminData.stats.totalChannels}`}
+            helper={`Chưa kết nối: ${adminData.stats.disconnectedChannels} | Lỗi: ${adminData.stats.errorChannels}`}
+            icon={Link}
+            tone="greenTone"
+          />
+          <SummaryCard
+            label="Sức khỏe đồng bộ"
+            value={`${adminData.stats.syncSuccessRate}%`}
+            helper={`Thành công: ${adminData.stats.successSyncs} | Thất bại: ${adminData.stats.failedSyncs}`}
+            icon={RefreshCw}
+            tone="slateTone"
+          />
+          <SummaryCard
+            label="Cảnh báo hệ thống (Chưa đọc)"
+            value={adminData.stats.totalAlerts.toString()}
+            helper="Cần kiểm tra ngay lập tức"
+            icon={AlertTriangle}
+            tone={adminData.stats.totalAlerts > 0 ? 'redTone' : 'slateTone'}
+          />
+        </div>
+
+        {error && (
+          <div className={`${styles.alert} ${styles.alertError}`} role="alert">
+            <AlertCircle size={16} className={styles.alertIcon} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {loading ? (
+          <LoadingBlock />
+        ) : (
+          <>
+            <div className={styles.adminMainLayout}>
+              {/* Left Column: Sync Jobs & Connection status */}
+              <div className={styles.adminLeftCol}>
+                <Panel
+                  title="Tiến trình đồng bộ gần đây"
+                  subtitle="Nhật ký các lượt đồng bộ dữ liệu"
+                  action={<RefreshCw size={18} className={styles.headerIcon} />}
+                >
+                  <DataTable
+                    columns={syncColumns}
+                    data={adminData.syncLogs}
+                    emptyText="Không có dữ liệu đồng bộ gần đây"
+                  />
+                </Panel>
+
+                <Panel
+                  title="Trạng thái các kênh liên kết"
+                  subtitle="Tình trạng đồng bộ và kết nối của từng gian hàng"
+                  action={<Store size={18} className={styles.headerIcon} />}
+                >
+                  <DataTable
+                    columns={connectionColumns}
+                    data={adminData.channels}
+                    emptyText="Chưa cấu hình kênh bán hàng nào"
+                  />
+                </Panel>
+              </div>
+
+              {/* Right Column: Alerts & Users */}
+              <div className={styles.adminRightCol}>
+                <Panel
+                  title="Cảnh báo hệ thống"
+                  subtitle="Lỗi đồng bộ hoặc cảnh báo tồn kho thấp"
+                  action={<AlertTriangle size={18} className={styles.headerIcon} />}
+                >
+                  <div className={styles.alertsContainer}>
+                    {adminData.notifications.length === 0 ? (
+                      <div className={styles.emptyAlerts}>Không có cảnh báo hoạt động nào</div>
+                    ) : (
+                      adminData.notifications.slice(0, 5).map(n => (
+                        <div key={n.id} className={`${styles.alertItem} ${!n.readAt ? styles.alertUnread : ''} ${n.type === 'SYNC_FAILED' ? styles.alertTypeSync : styles.alertTypeStock}`}>
+                          <div className={styles.alertHeader}>
+                            <strong>{n.title}</strong>
+                            <span className={styles.alertTime}>{formatDate(n.createdAt)}</span>
+                          </div>
+                          <p className={styles.alertBody}>{n.body}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Panel>
+
+                <Panel
+                  title="Tài khoản người dùng"
+                  subtitle="Danh sách các thành viên truy cập hệ thống"
+                  action={<Users size={18} className={styles.headerIcon} />}
+                >
+                  <div className={styles.userList}>
+                    {adminData.users.slice(0, 6).map(u => (
+                      <div key={u.id} className={styles.userRow}>
+                        <div className={styles.userInfo}>
+                          <strong>{u.fullName || u.email}</strong>
+                          <span>{u.role || 'Nhân viên'}</span>
+                        </div>
+                        <span className={`${styles.userBadge} ${u.status === 'ACTIVE' ? styles.userActive : styles.userInactive}`}>
+                          {u.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>

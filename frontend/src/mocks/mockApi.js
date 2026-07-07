@@ -24,6 +24,7 @@ import {
   MOCK_PRODUCTS,
   MOCK_WAREHOUSES,
   MOCK_STATS,
+  MOCK_AUDIT_LOGS,
 } from './data';
 
 const MOCK_TOKEN = 'mock-jwt-token-for-development-only';
@@ -153,6 +154,76 @@ mock.onGet('/reports/inventory').reply(200, {
     outOfStock: MOCK_PRODUCTS.filter((p) => p.stock === 0).length,
     totalStock: MOCK_PRODUCTS.reduce((sum, p) => sum + p.stock, 0),
   },
+});
+
+// ── System Logs Mock ──────────────────────────────────────────────────────────
+
+mock.onGet('/system-logs').reply((config) => {
+  const { query = '', type = '', startDate = '', endDate = '', page = 0, size = 20 } = config.params || {};
+  let filtered = [...MOCK_AUDIT_LOGS];
+
+  if (type && type !== 'ALL') {
+    filtered = filtered.filter(l => l.type === type);
+  }
+
+  if (query) {
+    const q = query.toLowerCase();
+    filtered = filtered.filter(
+      l => (l.message || '').toLowerCase().includes(q) ||
+           (l.user || '').toLowerCase().includes(q) ||
+           (l.ip || '').toLowerCase().includes(q)
+    );
+  }
+
+  if (startDate) {
+    const start = new Date(startDate);
+    filtered = filtered.filter(l => new Date(l.timestamp) >= start);
+  }
+
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    filtered = filtered.filter(l => new Date(l.timestamp) <= end);
+  }
+
+  // Sắp xếp giảm dần theo thời gian
+  filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  const startIdx = page * size;
+  const paginated = filtered.slice(startIdx, startIdx + size);
+
+  return [200, {
+    data: {
+      content: paginated,
+      totalElements: filtered.length,
+      totalPages: Math.ceil(filtered.length / size) || 1,
+      number: page,
+      size: size
+    }
+  }];
+});
+
+mock.onPut(/\/system-logs\/[^/]+/).reply((config) => {
+  const rawId = config.url.split('/').pop();
+  const id = isNaN(rawId) ? rawId : parseInt(rawId);
+  const data = JSON.parse(config.data);
+  const index = MOCK_AUDIT_LOGS.findIndex((l) => String(l.id) === String(id));
+  if (index !== -1) {
+    MOCK_AUDIT_LOGS[index] = { ...MOCK_AUDIT_LOGS[index], ...data };
+    return [200, { data: MOCK_AUDIT_LOGS[index] }];
+  }
+  return [404, { message: 'Log entry not found' }];
+});
+
+mock.onDelete(/\/system-logs\/[^/]+/).reply((config) => {
+  const rawId = config.url.split('/').pop();
+  const id = isNaN(rawId) ? rawId : parseInt(rawId);
+  const index = MOCK_AUDIT_LOGS.findIndex((l) => String(l.id) === String(id));
+  if (index !== -1) {
+    MOCK_AUDIT_LOGS.splice(index, 1);
+    return [200, { data: { success: true } }];
+  }
+  return [404, { message: 'Log entry not found' }];
 });
 
 //  Catch-all cho những endpoint chưa mock 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, UserCheck, UserX, Lock, Plus, X, Mail, AlertTriangle, 
   Search, Download, Eye, Pencil, Key, ShieldAlert, Check, Copy, CheckCircle2
@@ -7,9 +8,11 @@ import { toast } from 'react-toastify';
 import PageHeader from '../../../shared/components/PageHeader';
 import userApi from '../../../api/userApi';
 import authService from '../../auth/services/authService';
+import { ROUTES } from '../../../app/router/routes';
 import styles from './UserListPage.module.css';
 
 const UserListPage = () => {
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   
@@ -102,12 +105,15 @@ const UserListPage = () => {
     return styles.roleBadge;
   };
 
-  const getStatusBadge = (status) => {
-    const s = String(status).toUpperCase();
+  const getStatusBadge = (item) => {
+    if (item.status === 'INACTIVE' && !item.deletedAt && item.fullName === 'Chờ kích hoạt') {
+      return <span className={`${styles.badge} ${styles.invited}`}>Chờ đăng ký</span>;
+    }
+    const s = String(item.status).toUpperCase();
     if (s === 'ACTIVE') return <span className={`${styles.badge} ${styles.active}`}>Hoạt động</span>;
-    if (s === 'INACTIVE') return <span className={`${styles.badge} ${styles.inactive}`}>Chờ kích hoạt</span>;
+    if (s === 'INACTIVE') return <span className={`${styles.badge} ${styles.inactive}`}>Vô hiệu hóa</span>;
     if (s === 'LOCKED') return <span className={`${styles.badge} ${styles.locked}`}>Bị khóa</span>;
-    return <span className={styles.badge}>{status}</span>;
+    return <span className={styles.badge}>{item.status}</span>;
   };
 
   const formatDate = (dateString) => {
@@ -336,6 +342,25 @@ const UserListPage = () => {
     }
   };
 
+  const handleCancelInvite = async (user) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn hủy lời mời cho email ${user.email}?`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await userApi.cancelInvite(user.id);
+      toast.success('Đã hủy lời mời thành công!');
+      fetchUsers();
+    } catch (error) {
+      console.error('Failed to cancel invite:', error);
+      const msg = error?.response?.data?.message || 'Có lỗi xảy ra khi hủy lời mời';
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Role permissions definitions
   const ROLE_PERMISSIONS = {
     OWNER: [
@@ -508,25 +533,38 @@ const UserListPage = () => {
                         {formatRole(item.role)}
                       </span>
                     </td>
-                    <td>{getStatusBadge(item.status)}</td>
+                    <td>{getStatusBadge(item)}</td>
                     <td>{formatDate(item.createdAt)}</td>
                     <td className={styles.actionsCell}>
-                      <button 
-                        className={styles.btnActionView}
-                        onClick={() => handleOpenDrawer('view', item)}
-                        title="Xem chi tiết"
-                      >
-                        <Eye size={16} />
-                        <span>View</span>
-                      </button>
-                      <button 
-                        className={styles.btnActionEdit}
-                        onClick={() => handleOpenDrawer('edit', item)}
-                        title="Chỉnh sửa"
-                      >
-                        <Pencil size={16} />
-                        <span>Edit</span>
-                      </button>
+                      {item.status === 'INACTIVE' && !item.deletedAt && item.fullName === 'Chờ kích hoạt' ? (
+                        <button 
+                          className={styles.btnActionCancelInvite}
+                          onClick={() => handleCancelInvite(item)}
+                          title="Hủy lời mời"
+                        >
+                          <UserX size={16} />
+                          <span>Hủy lời mời</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button 
+                            className={styles.btnActionView}
+                            onClick={() => navigate(ROUTES.USER_DETAIL.replace(':id', item.id))}
+                            title="Xem chi tiết"
+                          >
+                            <Eye size={16} />
+                            <span>View</span>
+                          </button>
+                          <button 
+                            className={styles.btnActionEdit}
+                            onClick={() => handleOpenDrawer('edit', item)}
+                            title="Chỉnh sửa"
+                          >
+                            <Pencil size={16} />
+                            <span>Edit</span>
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

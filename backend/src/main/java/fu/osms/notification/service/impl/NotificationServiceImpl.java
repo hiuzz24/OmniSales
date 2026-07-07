@@ -56,6 +56,28 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public PageResponse<NotificationResponse> getAll(int page, int size) {
+        Page<Notification> notifications = notificationRepository.findAllByOrderByCreatedAtDesc(
+                PageRequest.of(page, size));
+        return toPageResponse(notifications);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<NotificationResponse> getAllUnread(int page, int size) {
+        Page<Notification> notifications = notificationRepository.findByReadAtIsNullOrderByCreatedAtDesc(
+                PageRequest.of(page, size));
+        return toPageResponse(notifications);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countAllUnread() {
+        return notificationRepository.countByReadAtIsNull();
+    }
+
+    @Override
     @Transactional
     public void markAsRead(UUID id) {
         Notification notification = notificationRepository.findById(id)
