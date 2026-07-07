@@ -30,9 +30,11 @@ import InventoryExportModal from '../components/InventoryExportModal';
 import { getStatusLabel } from '../components/inventoryExcelExport';
 import MarketplaceSyncButton from '../components/MarketplaceSyncButton';
 import channelSyncService from '../../services/channelSyncService';
+import warehouseService from '../../services/warehouseService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;
+const INVENTORY_FETCH_SIZE = 500;
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Tất cả trạng thái' },
@@ -101,8 +103,6 @@ const deriveStatus = (item) => {
 };
 
 const getPlatformLabel = (platform) => PLATFORM_LABELS[platform] ?? platform ?? 'Ứng dụng';
-
-const getChannelFilterValue = (item) => item?.channelId || item?.platform || LOCAL_CHANNEL_VALUE;
 
 const getChannelLabel = (item) => {
   if (!item?.platform) return 'Ứng dụng';
@@ -221,7 +221,7 @@ const Select = ({ value, onChange, options }) => (
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const InventoryPage = () => {
   const navigate = useNavigate();
-  // ── Filter state (client-side, applied on current page)
+  // ── Filter state (sent to backend before pagination)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [warehouseFilter, setWarehouseFilter] = useState('all');
@@ -232,7 +232,7 @@ const InventoryPage = () => {
   const [nameSort, setNameSort] = useState('none');
   const [qtySort, setQtySort] = useState('none');
 
-  // ── Pagination state (0-indexed, driven by BE)
+  // ── Pagination state (0-indexed, driven by BE filtered rows)
   const [currentPage, setCurrentPage] = useState(0);
 
   // ── Data state
@@ -241,7 +241,14 @@ const InventoryPage = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [categoryTree, setCategoryTree] = useState([]);
   const [syncChannels, setSyncChannels] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
+  const [summaryStats, setSummaryStats] = useState({
+    totalSkus: 0,
+    totalQuantity: 0,
+    lowStockCount: 0,
+    negativeCount: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -261,6 +268,18 @@ const InventoryPage = () => {
       });
   }, []);
 
+  useEffect(() => {
+    warehouseService.getAll()
+      .then((response) => {
+        const data = response.data?.data ?? response.data ?? [];
+        setWarehouses(Array.isArray(data) ? data : data.content ?? []);
+      })
+      .catch((err) => {
+        console.error('Lỗi tải danh sách kho:', err);
+        setWarehouses([]);
+      });
+  }, []);
+
   const fetchLowStockItems = useCallback(async () => {
     try {
       const data = await inventoryService.getLowStockItems();
@@ -272,16 +291,27 @@ const InventoryPage = () => {
     }
   }, []);
 
-  // ── Fetch from BE whenever page changes
-  const fetchInventory = useCallback(async (page, categoryId, channelValue) => {
+  const getInventoryScope = (categoryId, channelValue) => {
+    const catIdParam = categoryId === 'all' ? null : categoryId;
+    const channelIdParam = channelValue && channelValue !== 'all' && channelValue !== LOCAL_CHANNEL_VALUE
+      ? channelValue
+      : null;
+    const localOnlyParam = channelValue === LOCAL_CHANNEL_VALUE;
+    return { catIdParam, channelIdParam, localOnlyParam };
+  };
+
+  const getInventoryFilters = useCallback(() => ({
+    keyword: search.trim() || null,
+    status: statusFilter === 'all' ? null : statusFilter,
+    warehouseId: warehouseFilter === 'all' ? null : warehouseFilter,
+  }), [search, statusFilter, warehouseFilter]);
+
+  // ── Fetch from BE whenever page/filter changes
+  const fetchInventory = useCallback(async (page, categoryId, channelValue, filters = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const catIdParam = categoryId === 'all' ? null : categoryId;
-      const channelIdParam = channelValue && channelValue !== 'all' && channelValue !== LOCAL_CHANNEL_VALUE
-        ? channelValue
-        : null;
-      const localOnlyParam = channelValue === LOCAL_CHANNEL_VALUE;
+      const { catIdParam, channelIdParam, localOnlyParam } = getInventoryScope(categoryId, channelValue);
       const data = await inventoryService.getInventoryList(
         page,
         PAGE_SIZE,
@@ -290,8 +320,8 @@ const InventoryPage = () => {
         catIdParam,
         channelIdParam,
         localOnlyParam,
+        filters,
       );
-      // BE PageResponse shape: { content, page, size, totalElements, totalPages, first, last }
       setItems(data.content ?? []);
       setTotalElements(data.totalElements ?? 0);
       setTotalPages(data.totalPages ?? 0);
@@ -303,30 +333,52 @@ const InventoryPage = () => {
     }
   }, []);
 
+  const fetchSummaryStats = useCallback(async () => {
+    try {
+      const firstPage = await inventoryService.getInventoryList(0, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc');
+      const allRows = [...(firstPage.content ?? [])];
+      const pageCount = Number(firstPage.totalPages ?? 1);
+
+      for (let page = 1; page < pageCount; page += 1) {
+        const data = await inventoryService.getInventoryList(page, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc');
+        allRows.push(...(data.content ?? []));
+      }
+
+      setSummaryStats({
+        totalSkus: firstPage.totalElements ?? allRows.length,
+        totalQuantity: allRows.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0),
+        lowStockCount: allRows.filter((item) => deriveStatus(item) === 'low-stock').length,
+        negativeCount: allRows.filter((item) => Number(item.availableQuantity ?? 0) < 0).length,
+      });
+    } catch (err) {
+      console.error('Lỗi tải thống kê tồn kho:', err);
+      setSummaryStats({ totalSkus: 0, totalQuantity: 0, lowStockCount: 0, negativeCount: 0 });
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      fetchInventory(currentPage, categoryFilter, channelFilter);
-    }, 0);
+      fetchInventory(currentPage, categoryFilter, channelFilter, getInventoryFilters());
+    }, search.trim() ? 250 : 0);
 
     return () => window.clearTimeout(timer);
-  }, [currentPage, categoryFilter, channelFilter, fetchInventory]);
+  }, [currentPage, categoryFilter, channelFilter, getInventoryFilters, fetchInventory, search]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       fetchLowStockItems();
+      fetchSummaryStats();
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, [fetchLowStockItems]);
+  }, [fetchLowStockItems, fetchSummaryStats]);
 
-  // ── Dynamic warehouse options from loaded data
   const warehouseOptions = useMemo(() => {
-    const names = [...new Set(items.map(i => i.warehouseName).filter(Boolean))];
     return [
       { value: 'all', label: 'Tất cả kho hàng' },
-      ...names.map(n => ({ value: n, label: n })),
+      ...warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })),
     ];
-  }, [items]);
+  }, [warehouses]);
 
   const channelOptions = useMemo(() => {
     return [
@@ -358,20 +410,8 @@ const InventoryPage = () => {
     });
   };
 
-  const filterInventoryRows = useCallback((source) => {
-    let result = source.filter(item => {
-      const matchSearch = !search ||
-        (item.variantSku ?? '').toLowerCase().includes(search.toLowerCase()) ||
-        (item.variantName ?? '').toLowerCase().includes(search.toLowerCase());
-      const status = deriveStatus(item);
-      const matchStatus = statusFilter === 'all' || status === statusFilter;
-      const matchWarehouse = warehouseFilter === 'all' || item.warehouseName === warehouseFilter;
-      const matchChannel = channelFilter === 'all'
-        || channelFilter === LOCAL_CHANNEL_VALUE
-        || getChannelFilterValue(item) === channelFilter;
-      return matchSearch && matchStatus && matchWarehouse && matchChannel;
-    });
-
+  const sortInventoryRows = useCallback((source) => {
+    let result = source;
     // Sort by name (takes priority over qty sort if both active)
     if (nameSort !== 'none') {
       result = [...result].sort((a, b) => {
@@ -387,24 +427,30 @@ const InventoryPage = () => {
     }
 
     return result;
-  }, [search, statusFilter, warehouseFilter, channelFilter, nameSort, qtySort]);
+  }, [nameSort, qtySort]);
 
-  // ── Client-side filter + sort on current page items
-  const filtered = useMemo(() => filterInventoryRows(items), [items, filterInventoryRows]);
-  const displayRows = useMemo(() => buildInventoryDisplayRows(filtered), [filtered]);
+  const visibleItems = useMemo(() => sortInventoryRows(items), [items, sortInventoryRows]);
+  const displayRows = useMemo(() => buildInventoryDisplayRows(visibleItems), [visibleItems]);
+
+  useEffect(() => {
+    if (currentPage > 0 && totalPages > 0 && currentPage >= totalPages) {
+      setCurrentPage(Math.max(totalPages - 1, 0));
+    }
+  }, [currentPage, totalPages]);
 
   const loadInventoryExportRows = async () => {
-    const size = Math.max(totalElements || items.length || PAGE_SIZE, items.length || PAGE_SIZE);
+    const { catIdParam, channelIdParam, localOnlyParam } = getInventoryScope(categoryFilter, channelFilter);
     const data = await inventoryService.getInventoryList(
       0,
-      size,
+      Math.max(totalElements || PAGE_SIZE, PAGE_SIZE),
       'updatedAt',
       'desc',
-      categoryFilter === 'all' ? null : categoryFilter,
-      channelFilter !== 'all' && channelFilter !== LOCAL_CHANNEL_VALUE ? channelFilter : null,
-      channelFilter === LOCAL_CHANNEL_VALUE,
+      catIdParam,
+      channelIdParam,
+      localOnlyParam,
+      getInventoryFilters(),
     );
-    return filterInventoryRows(data.content ?? []);
+    return sortInventoryRows(data.content ?? []);
   };
 
   const loadInventoryExportExtraSheets = async ({ fromDate, toDate } = {}) => {
@@ -433,12 +479,12 @@ const InventoryPage = () => {
     }];
   };
 
-  // ── Derived alert counts from current page
-  const negativeCount = items.filter(r => r.availableQuantity < 0).length;
-  const lowStockCount = items.filter(r => r.isLowStock && r.availableQuantity >= 0).length;
+  // ── Derived alert counts from the full inventory snapshot
+  const negativeCount = summaryStats.negativeCount;
+  const lowStockCount = summaryStats.lowStockCount;
   const outOfStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) <= 0);
   const lowStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) > 0);
-  const totalQuantityCurrentPage = items.reduce((acc, item) => acc + item.quantityOnHand, 0);
+  const totalQuantityAll = summaryStats.totalQuantity;
 
   const quantityColor = (v) => {
     if (v < 0) return styles.cellRed;
@@ -448,14 +494,20 @@ const InventoryPage = () => {
 
   const handleMarketplaceSynced = useCallback(async () => {
     await Promise.all([
-      fetchInventory(currentPage, categoryFilter, channelFilter),
+      fetchInventory(currentPage, categoryFilter, channelFilter, getInventoryFilters()),
+      fetchSummaryStats(),
       fetchLowStockItems(),
     ]);
-  }, [categoryFilter, channelFilter, currentPage, fetchInventory, fetchLowStockItems]);
+  }, [categoryFilter, channelFilter, currentPage, fetchInventory, fetchLowStockItems, fetchSummaryStats, getInventoryFilters]);
 
   const actions = (
     <>
-      <MarketplaceSyncButton onSynced={handleMarketplaceSynced} />
+      <MarketplaceSyncButton
+        className={styles.syncButtonWrap}
+        buttonClassName={`${styles.actionBtn} ${styles.tealBtn} ${styles.syncButton}`}
+        iconClassName={styles.tealIcon}
+        onSynced={handleMarketplaceSynced}
+      />
       <button
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         id="btn-inventory-logs"
@@ -520,7 +572,7 @@ const InventoryPage = () => {
           </div>
           <div className={styles.summaryInfo}>
             <span className={styles.summaryLabel}>Tổng sản phẩm SKUs</span>
-            <span className={styles.summaryValue}>{totalElements}</span>
+            <span className={styles.summaryValue}>{summaryStats.totalSkus}</span>
           </div>
         </div>
         <div className={styles.summaryCard}>
@@ -528,8 +580,8 @@ const InventoryPage = () => {
             <Box size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Tổng số lượng SKUs<br /><small>(Trang hiện tại)</small></span>
-            <span className={styles.summaryValue}>{totalQuantityCurrentPage}</span>
+            <span className={styles.summaryLabel}>Tổng số lượng SKUs<br /><small>(Toàn bộ)</small></span>
+            <span className={styles.summaryValue}>{totalQuantityAll}</span>
           </div>
         </div>
         <div className={styles.summaryCard}>
@@ -558,7 +610,7 @@ const InventoryPage = () => {
           <AlertCircle size={16} className={styles.alertIcon} />
           <div>
             <span className={styles.alertBold}>Cảnh báo: </span>
-            Có {negativeCount} SKU đang tồn kho âm trên trang này. Cần kiểm tra và điều chỉnh ngay.
+            Có {negativeCount} SKU đang tồn kho âm trong toàn bộ kho. Cần kiểm tra và điều chỉnh ngay.
           </div>
         </div>
       )}
@@ -567,7 +619,7 @@ const InventoryPage = () => {
         <div className={`${styles.alert} ${styles.alertWarn}`}>
           <AlertTriangle size={16} className={styles.alertIcon} />
           <div>
-            Có {lowStockCount} SKU dưới mức tồn tối thiểu trên trang này. Cần nhập hàng.
+            Có {lowStockCount} SKU dưới mức tồn tối thiểu trong toàn bộ kho. Cần nhập hàng.
           </div>
         </div>
       )}
@@ -632,7 +684,10 @@ const InventoryPage = () => {
               className={styles.searchInput}
               placeholder="Tìm theo SKU hoặc tên sản phẩm..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => {
+                setSearch(e.target.value);
+                setCurrentPage(0);
+              }}
             />
           </div>
           <div className={styles.selectWrapper}>
@@ -649,9 +704,9 @@ const InventoryPage = () => {
             </select>
             <ChevronDown className={styles.selectIcon} size={14} />
           </div>
-          <Select value={warehouseFilter} onChange={setWarehouseFilter} options={warehouseOptions} />
+          <Select value={warehouseFilter} onChange={(value) => { setWarehouseFilter(value); setCurrentPage(0); }} options={warehouseOptions} />
           <Select value={channelFilter} onChange={(value) => { setChannelFilter(value); setCurrentPage(0); }} options={channelOptions} />
-          <Select value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
+          <Select value={statusFilter} onChange={(value) => { setStatusFilter(value); setCurrentPage(0); }} options={STATUS_OPTIONS} />
         </div>
 
         {/* ── Filters row 2: Sort toggles ── */}
@@ -662,7 +717,7 @@ const InventoryPage = () => {
           <button
             id="btn-sort-name"
             className={`${styles.sortBtn} ${nameSort !== 'none' ? styles.sortBtnActive : ''}`}
-            onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); }}
+            onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
             title="Sắp xếp theo tên sản phẩm"
           >
             {nameSort === 'desc'
@@ -680,7 +735,7 @@ const InventoryPage = () => {
           <button
             id="btn-sort-qty"
             className={`${styles.sortBtn} ${qtySort !== 'none' ? styles.sortBtnActive : ''}`}
-            onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); }}
+            onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
             title="Sắp xếp theo số lượng trong kho"
           >
             {qtySort === 'desc'
@@ -742,7 +797,7 @@ const InventoryPage = () => {
                   <th className={styles.th}>SKU</th>
                   <th
                     className={`${styles.th} ${styles.thSortable}`}
-                    onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); }}
+                    onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
                     title="Click để sắp xếp theo tên"
                   >
                     Tên sản phẩm
@@ -754,7 +809,7 @@ const InventoryPage = () => {
                   <th className={styles.th}>Kênh bán</th>
                   <th
                     className={`${styles.th} ${styles.thRight} ${styles.thSortable}`}
-                    onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); }}
+                    onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
                     title="Click để sắp xếp theo số lượng"
                   >
                     Trong kho
@@ -850,7 +905,7 @@ const InventoryPage = () => {
                   );
                 })}
 
-                {!loading && filtered.length === 0 && (
+                {!loading && items.length === 0 && (
                   <tr>
                     <td colSpan={10} className={styles.emptyRow}>
                       {items.length === 0
@@ -866,13 +921,13 @@ const InventoryPage = () => {
 
         <div className={styles.tableFooter}>
           <span>
-            Đang hiển thị {filtered.length} / {totalElements} SKU
+            Đang hiển thị {visibleItems.length} / {totalElements} SKU
           </span>
           <span>
             Dòng bảng: {displayRows.length.toLocaleString('vi-VN')} gồm sản phẩm cha và sản phẩm con
           </span>
           <span>
-            Tồn trang hiện tại: {totalQuantityCurrentPage.toLocaleString('vi-VN')} đơn vị
+            Tổng tồn kho: {totalQuantityAll.toLocaleString('vi-VN')} đơn vị
           </span>
         </div>
 
@@ -883,7 +938,7 @@ const InventoryPage = () => {
             totalPages={totalPages}
             totalElements={totalElements}
             pageSize={PAGE_SIZE}
-            currentCount={filtered.length}
+            currentCount={visibleItems.length}
             itemLabel="SKU"
             onPageChange={handlePageChange}
           />
@@ -893,7 +948,7 @@ const InventoryPage = () => {
     <InventoryExportModal
       open={exportOpen}
       onClose={() => setExportOpen(false)}
-      rows={filtered}
+      rows={visibleItems}
       columns={INVENTORY_EXPORT_COLUMNS}
       getDateValue={(item) => item.updatedAt ?? item.createdAt}
       loadRows={loadInventoryExportRows}

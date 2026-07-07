@@ -13,6 +13,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
@@ -98,18 +99,41 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public Optional<Channel> resolveChannel(Map<String, String> headers, Map<String, Object> payload) {
-        Object accountId = firstPresent(payload, "seller_id");
+        Object accountId = firstPresent(payload, "seller_id", "sellerId", "account_id", "accountId");
         if (accountId == null) {
-            accountId = firstPresent(dataPayload(payload), "seller_id", "sellerId");
+            accountId = firstPresent(dataPayload(payload), "seller_id", "sellerId", "account_id", "accountId");
         }
         if (accountId == null) {
             return Optional.empty();
         }
-        String resolvedAccountId = accountId.toString();
-        return channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
-                .filter(channel -> channel.getMetadata() != null
-                        && resolvedAccountId.equals(String.valueOf(channel.getMetadata().get("accountId"))))
+        String resolvedAccountId = accountId.toString().trim();
+        List<Channel> lazadaChannels = channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA);
+        Optional<Channel> matchedChannel = lazadaChannels.stream()
+                .filter(channel -> matchesLazadaChannel(channel, resolvedAccountId))
                 .findFirst();
+        if (matchedChannel.isPresent()) {
+            return matchedChannel;
+        }
+        if (lazadaChannels.size() == 1) {
+            Channel fallbackChannel = lazadaChannels.get(0);
+            log.warn("[LazadaWebhook] Cannot match seller_id={} to channel metadata, fallback to only active Lazada channelId={}",
+                    resolvedAccountId, fallbackChannel.getId());
+            return Optional.of(fallbackChannel);
+        }
+        log.warn("[LazadaWebhook] Cannot resolve channel for seller_id={} activeLazadaChannelCount={}",
+                resolvedAccountId, lazadaChannels.size());
+        return Optional.empty();
+    }
+
+    private boolean matchesLazadaChannel(Channel channel, String resolvedAccountId) {
+        if (channel.getMetadata() == null || resolvedAccountId == null || resolvedAccountId.isBlank()) {
+            return false;
+        }
+        Object accountId = channel.getMetadata().get("accountId");
+        Object accountName = channel.getMetadata().get("accountName");
+        return resolvedAccountId.equals(String.valueOf(accountId))
+                || resolvedAccountId.equals(String.valueOf(accountName))
+                || ("Lazada-" + resolvedAccountId).equals(channel.getDisplayName());
     }
 
     @SuppressWarnings("unchecked")

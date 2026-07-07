@@ -66,6 +66,7 @@ lazada:
   app-key: ${LAZADA_APP_KEY:}
   app-secret: ${LAZADA_APP_SECRET:}
   redirect-uri: ${LAZADA_REDIRECT_URI:}
+  webhook-callback-url: ${LAZADA_WEBHOOK_CALLBACK_URL:}
   api-url: https://api.lazada.vn/rest
   auth-api-url: https://auth.lazada.com/rest
   auth-url: https://auth.lazada.com/oauth/authorize

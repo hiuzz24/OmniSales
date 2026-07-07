@@ -10,8 +10,8 @@ const inventoryService = {
    * @param {string|null} categoryId
    * @returns {Promise<PageResponse<InventoryItemResponse>>}
    */
-  getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null, channelId = null, localOnly = false) => {
-    return await inventoryApi.getInventoryList(page, size, sortBy, sortDir, categoryId, channelId, localOnly);
+  getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null, channelId = null, localOnly = false, filters = {}) => {
+    return await inventoryApi.getInventoryList(page, size, sortBy, sortDir, categoryId, channelId, localOnly, filters);
   },
 
   getLowStockItems: async () => {

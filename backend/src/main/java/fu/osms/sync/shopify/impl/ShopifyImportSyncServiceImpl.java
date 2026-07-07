@@ -2,7 +2,10 @@ package fu.osms.sync.shopify.impl;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.entity.Category;
+import fu.osms.catalog.enums.CategoryStatus;
 import fu.osms.catalog.enums.ProductStatus;
+import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
@@ -35,6 +38,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -59,6 +63,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
+    private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
     private final WarehouseRepository warehouseRepository;
@@ -194,8 +199,39 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         product.setUnit(product.getUnit() == null ? "pcs" : product.getUnit());
         product.setStatus(resolveStatus(stringValue(productNode.get("status"))));
         product.setLowStockThreshold(product.getLowStockThreshold() == null ? 5 : product.getLowStockThreshold());
-        product.setAttributes(mapOf("shopifyProductId", externalProductId));
+        Category category = resolveCategory(productNode);
+        if (category != null) {
+            product.setCategory(category);
+        }
+        Map<String, Object> attributes = mapOf("shopifyProductId", externalProductId);
+        attributes.put("productType", stringValue(productNode.get("productType")));
+        product.setAttributes(attributes);
         return productRepository.save(product);
+    }
+
+    private Category resolveCategory(Map<String, Object> productNode) {
+        String productType = firstNonBlank(
+                stringValue(productNode.get("productType")),
+                stringValue(productNode.get("product_type"))
+        );
+        if (productType == null || productType.isBlank()) {
+            return null;
+        }
+
+        String resolvedName = productType.trim();
+        String slug = "shopify-" + toSlug(resolvedName);
+        Category category = categoryRepository.findBySlug(slug)
+                .or(() -> categoryRepository.findFirstByNameIgnoreCase(resolvedName))
+                .orElseGet(Category::new);
+        category.setName(resolvedName);
+        category.setSlug(slug);
+        if (category.getSortOrder() == null) {
+            category.setSortOrder(0);
+        }
+        if (category.getStatus() == null) {
+            category.setStatus(CategoryStatus.ACTIVE);
+        }
+        return categoryRepository.save(category);
     }
 
     private ChannelProduct upsertChannelProduct(Channel channel, Product product, Map<String, Object> productNode) {
@@ -538,6 +574,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                         id
                         title
                         descriptionHtml
+                        productType
                         vendor
                         status
                         updatedAt
@@ -744,6 +781,15 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
             }
         }
         return null;
+    }
+
+    private String toSlug(String value) {
+        String normalized = Normalizer.normalize(value == null ? "category" : value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase()
+                .replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("(^-|-$)", "");
+        return normalized.isBlank() ? "category" : normalized;
     }
 
     private String truncate(String value, int maxLength) {

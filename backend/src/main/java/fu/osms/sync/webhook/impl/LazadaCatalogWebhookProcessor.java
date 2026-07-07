@@ -116,25 +116,26 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
 
     private void processSkuPayloads(WebhookEvent event, ChannelProduct channelProduct, Map<String, Object> payload) {
         boolean processedList = false;
+        int index = 0;
         for (String key : List.of("skus", "Skus", "SKUs", "sku_list", "skuList", "seller_skus", "Sku")) {
             Object value = payload.get(key);
             if (value instanceof List<?> list) {
                 for (Object skuObject : list) {
                     if (skuObject instanceof Map<?, ?> skuMap) {
-                        upsertSku(event, channelProduct, WebhookPayloadUtils.copyMap(skuMap));
+                        upsertSku(event, channelProduct, WebhookPayloadUtils.copyMap(skuMap), index++);
                         processedList = true;
                     }
                 }
             }
         }
         if (!processedList) {
-            upsertSku(event, channelProduct, payload);
+            upsertSku(event, channelProduct, payload, 0);
         }
     }
 
-    private void upsertSku(WebhookEvent event, ChannelProduct channelProduct, Map<String, Object> skuPayload) {
-        String externalVariantId = firstNonBlank(text(skuPayload, "sku_id", "SkuId", "skuId", "ShopSku"));
-        String sellerSku = firstNonBlank(text(skuPayload, "seller_sku", "SellerSku", "sellerSku", "sku"));
+    private void upsertSku(WebhookEvent event, ChannelProduct channelProduct, Map<String, Object> skuPayload, int index) {
+        String externalVariantId = resolveExternalVariantId(skuPayload, channelProduct.getExternalProductId(), index);
+        String sellerSku = resolveSellerSku(skuPayload);
         if (externalVariantId == null && sellerSku == null) {
             processInventoryIfPresent(event, null, skuPayload);
             return;
@@ -152,7 +153,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         }
         ProductVariant variant = mapping != null && shouldReuseMappedVariant(channelProduct, mapping.getVariant())
                 ? mapping.getVariant()
-                : resolveOrCreateVariant(channelProduct, firstNonBlank(externalVariantId, sellerSku), sellerSku);
+                : resolveOrCreateVariant(channelProduct, externalVariantId, sellerSku);
 
         updateVariant(variant, skuPayload);
         variant = productVariantRepository.save(variant);
@@ -171,7 +172,11 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     }
 
     private Optional<ChannelProductVariant> resolveMappedVariant(WebhookEvent event, Map<String, Object> payload) {
-        String externalVariantId = firstNonBlank(text(payload, "sku_id", "SkuId", "skuId", "ShopSku"));
+        String externalProductId = firstNonBlank(text(payload, "item_id", "itemId", "product_id", "productId"));
+        String externalVariantId = firstNonBlank(
+                directExternalVariantId(payload),
+                externalProductId == null ? null : resolveExternalVariantId(payload, externalProductId, 0)
+        );
         if (externalVariantId != null) {
             Optional<ChannelProductVariant> byId = channelProductVariantRepository
                     .findActiveByChannelIdAndExternalVariantId(event.getChannel().getId(), externalVariantId);
@@ -180,7 +185,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
             }
         }
 
-        String sellerSku = firstNonBlank(text(payload, "seller_sku", "SellerSku", "sellerSku", "sku"));
+        String sellerSku = resolveSellerSku(payload);
         if (sellerSku == null) {
             return Optional.empty();
         }
@@ -190,14 +195,61 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                 .findFirst();
     }
 
+    private String resolveExternalVariantId(Map<String, Object> payload, String externalProductId, int index) {
+        String externalVariantId = directExternalVariantId(payload);
+        if ((externalVariantId == null || externalVariantId.isBlank())
+                && externalProductId != null && !externalProductId.isBlank()) {
+            externalVariantId = externalProductId + "-SKU-" + index;
+        }
+        return externalVariantId;
+    }
+
+    private String directExternalVariantId(Map<String, Object> payload) {
+        return firstNonBlank(text(payload,
+                "SkuId",
+                "sku_id",
+                "skuId",
+                "ShopSku",
+                "shop_sku",
+                "shopSku",
+                "SellerSku",
+                "seller_sku",
+                "sellerSku",
+                "sellerSKU"));
+    }
+
+    private String resolveSellerSku(Map<String, Object> payload) {
+        return firstNonBlank(text(payload,
+                "SellerSku",
+                "seller_sku",
+                "sellerSku",
+                "sellerSKU",
+                "seller_sku_id",
+                "sku",
+                "shop_sku",
+                "ShopSku",
+                "shopSku"));
+    }
+
     private void updateProduct(Product product, Map<String, Object> payload) {
-        String name = firstNonBlank(text(payload, "name", "title", "product_name", "item_name"));
+        Map<String, Object> lazadaAttributes = mapValue(payload, "attributes");
+        String name = firstNonBlank(
+                text(payload, "name", "title", "product_name", "item_name"),
+                text(lazadaAttributes, "name", "Name")
+        );
         if (name != null) {
             product.setName(name);
         }
-        String description = firstNonBlank(text(payload, "description", "short_description", "product_description"));
+        String description = firstNonBlank(
+                text(payload, "description", "short_description", "product_description"),
+                text(lazadaAttributes, "description", "Description")
+        );
         if (description != null) {
             product.setDescription(description);
+        }
+        String brand = firstNonBlank(text(payload, "brand", "Brand"), text(lazadaAttributes, "brand", "Brand"));
+        if (brand != null) {
+            product.setBrand(brand);
         }
         String status = firstNonBlank(text(payload, "status", "item_status", "product_status"));
         if (status != null) {
@@ -206,13 +258,14 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         Map<String, Object> attributes = product.getAttributes() == null
                 ? new HashMap<>()
                 : new HashMap<>(product.getAttributes());
+        attributes.putAll(payload);
         attributes.put("lazadaWebhookUpdatedAt", OffsetDateTime.now().toString());
         product.setAttributes(attributes);
     }
 
     private ProductVariant resolveOrCreateVariant(ChannelProduct channelProduct, String externalVariantId, String sellerSku) {
         Product product = channelProduct.getProduct();
-        String sku = resolveLocalVariantSku(channelProduct, sellerSku, externalVariantId);
+        String sku = resolveLocalVariantSku(channelProduct, sellerSku, channelProduct.getExternalProductId(), externalVariantId);
         Optional<ProductVariant> existing = productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sku);
         return existing.orElseGet(() -> ProductVariant.builder()
                 .product(product)
@@ -224,14 +277,17 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                 .build());
     }
 
-    private String resolveLocalVariantSku(ChannelProduct channelProduct, String sellerSku, String externalVariantId) {
-        String fallbackSku = "LAZADA-" + firstNonBlank(externalVariantId, "SKU");
+    private String resolveLocalVariantSku(ChannelProduct channelProduct,
+                                          String sellerSku,
+                                          String externalProductId,
+                                          String externalVariantId) {
+        String fallbackSku = "LAZADA-" + firstNonBlank(externalProductId, "PRODUCT") + "-" + firstNonBlank(externalVariantId, "SKU");
         String baseSku = truncateSku(firstNonBlank(sellerSku, fallbackSku));
         if (isSkuUsableForExternalVariant(channelProduct, baseSku, externalVariantId)) {
             return baseSku;
         }
 
-        String suffixToken = skuSuffixToken(externalVariantId);
+        String suffixToken = skuSuffixToken(externalVariantId, externalProductId);
         String candidate = appendSkuSuffix(baseSku, suffixToken, 1);
         int suffix = 2;
         while (!isSkuUsableForExternalVariant(channelProduct, candidate, externalVariantId)) {
@@ -319,7 +375,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     }
 
     private void updateVariant(ProductVariant variant, Map<String, Object> payload) {
-        String sellerSku = firstNonBlank(text(payload, "seller_sku", "SellerSku", "sellerSku", "sku"));
+        String sellerSku = resolveSellerSku(payload);
         if (sellerSku != null && canUseSku(variant, sellerSku)) {
             variant.setSku(sellerSku);
         }
@@ -345,9 +401,9 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     }
 
     private void updateMapping(ChannelProductVariant mapping, Map<String, Object> payload) {
-        String externalVariantId = firstNonBlank(text(payload, "sku_id", "SkuId", "skuId", "ShopSku"), mapping.getExternalVariantId());
+        String externalVariantId = firstNonBlank(directExternalVariantId(payload), mapping.getExternalVariantId());
         mapping.setExternalVariantId(externalVariantId);
-        mapping.setExternalSku(firstNonBlank(text(payload, "seller_sku", "SellerSku", "sellerSku", "sku"), mapping.getVariant().getSku()));
+        mapping.setExternalSku(firstNonBlank(resolveSellerSku(payload), mapping.getVariant().getSku()));
         mapping.setExternalPrice(mapping.getVariant().getPrice());
         mapping.setSyncStatus(SyncStatus.SYNCED);
         mapping.setLastSyncedAt(OffsetDateTime.now());
@@ -366,7 +422,8 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         }
 
         boolean processedWarehouseList = false;
-        for (String key : List.of("multiWarehouseInventories", "warehouseInventories", "stock_list", "warehouses")) {
+        for (String key : List.of("multiWarehouseInventories", "channelInventories", "fblWarehouseInventories",
+                "warehouseInventories", "stock_list", "warehouses")) {
             Object value = payload.get(key);
             if (value instanceof List<?> list) {
                 for (Object item : list) {
@@ -417,7 +474,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                     .warehouse(warehouse)
                     .variant(variant)
                     .type(InvTxnType.ADJUSTMENT)
-                    .referenceType("WEBHOOK")
+                    .referenceType("SYNC")
                     .referenceId(event.getId())
                     .quantityChange(delta)
                     .quantityBefore(before)
@@ -470,6 +527,8 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                 "realQuantity",
                 "totalQuantity",
                 "total_quantity",
+                "quantityOnHand",
+                "quantity_on_hand",
                 "stock",
                 "Stock");
         return quantity == null ? null : WebhookPayloadUtils.integer(quantity, 0);
@@ -731,15 +790,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     private void collectSellerSku(Object value, Set<String> sellerSkus) {
         if (value instanceof Map<?, ?> map) {
             Map<String, Object> copy = WebhookPayloadUtils.copyMap(map);
-            String sellerSku = firstNonBlank(text(copy,
-                    "seller_sku",
-                    "SellerSku",
-                    "sellerSku",
-                    "sellerSKU",
-                    "sku",
-                    "shop_sku",
-                    "ShopSku",
-                    "shopSku"));
+            String sellerSku = resolveSellerSku(copy);
             if (sellerSku != null) {
                 sellerSkus.add(sellerSku);
             }
@@ -809,11 +860,16 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
 
     private Map<String, Object> eventPayload(WebhookEvent event) {
         Map<String, Object> payload = event.getRawPayload();
-        Object data = payload == null ? null : payload.get("data");
-        if (data instanceof Map<?, ?> dataMap) {
-            return WebhookPayloadUtils.copyMap(dataMap);
+        if (payload == null) {
+            return Map.of();
         }
-        return payload == null ? Map.of() : payload;
+        for (String key : List.of("data", "payload", "product", "item")) {
+            Object value = payload.get(key);
+            if (value instanceof Map<?, ?> dataMap) {
+                return WebhookPayloadUtils.copyMap(dataMap);
+            }
+        }
+        return payload;
     }
 
     private Object firstPresent(Map<String, Object> payload, String... keys) {
@@ -828,6 +884,11 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
 
     private String text(Map<String, Object> payload, String... keys) {
         return WebhookPayloadUtils.text(firstPresent(payload, keys));
+    }
+
+    private Map<String, Object> mapValue(Map<String, Object> payload, String key) {
+        Object value = payload.get(key);
+        return value instanceof Map<?, ?> map ? WebhookPayloadUtils.copyMap(map) : Map.of();
     }
 
     private Map<String, Object> optionValues(Map<String, Object> payload) {

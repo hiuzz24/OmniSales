@@ -42,17 +42,23 @@ const mainButtonStyle = {
   alignItems: 'center',
   gap: 7,
   border: 'none',
-  borderRadius: 10,
+  borderRadius: 8,
   color: '#fff',
-  fontSize: 13.5,
-  fontWeight: 700,
-  padding: '9px 16px',
+  fontSize: 14,
+  fontWeight: 600,
+  padding: '10px 20px',
   cursor: 'pointer',
   transition: 'all 0.2s ease',
   fontFamily: 'inherit',
   whiteSpace: 'nowrap',
-  background: 'linear-gradient(135deg, #0f766e 0%, #0f5f7a 100%)',
-  boxShadow: '0 4px 14px rgba(15, 118, 110, 0.28)',
+  background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+  boxShadow: '0 4px 14px 0 rgba(13, 148, 136, 0.3)',
+};
+
+const mainButtonHoverStyle = {
+  background: 'linear-gradient(135deg, #0f766e 0%, #115e59 100%)',
+  transform: 'translateY(-2px)',
+  boxShadow: '0 6px 20px rgba(13, 148, 136, 0.4)',
 };
 
 const menuStyle = {
@@ -158,6 +164,9 @@ export default function MarketplaceSyncButton({
   onSynced,
   className,
   style,
+  buttonClassName,
+  buttonStyle,
+  iconClassName,
   allowedDirections = ['from-marketplace', 'from-app'],
   getSuccessMessage,
 }) {
@@ -167,6 +176,7 @@ export default function MarketplaceSyncButton({
   const [channels, setChannels] = useState([]);
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [syncingChannelId, setSyncingChannelId] = useState(null);
+  const [buttonHovered, setButtonHovered] = useState(false);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -312,12 +322,26 @@ export default function MarketplaceSyncButton({
     <div ref={menuRef} className={className} style={{ ...shellStyle, ...style }}>
       <button
         type="button"
-        style={{ ...mainButtonStyle, opacity: syncingChannelId ? 0.72 : 1 }}
+        className={buttonClassName}
+        style={{
+          ...(buttonClassName ? {} : mainButtonStyle),
+          ...(!buttonClassName && buttonHovered && !syncingChannelId ? mainButtonHoverStyle : {}),
+          ...buttonStyle,
+          opacity: syncingChannelId ? 0.72 : 1,
+        }}
         disabled={Boolean(syncingChannelId)}
         onClick={openMenu}
+        onMouseEnter={() => setButtonHovered(true)}
+        onMouseLeave={() => setButtonHovered(false)}
+        onMouseDown={() => {
+          if (!buttonClassName && !syncingChannelId) setButtonHovered(false);
+        }}
+        onMouseUp={() => {
+          if (!buttonClassName && !syncingChannelId) setButtonHovered(true);
+        }}
         title="Chọn chiều đồng bộ Lazada/Shopify"
       >
-        <RefreshCw size={16} />
+        <RefreshCw className={iconClassName} size={16} />
         Đồng bộ
         <ChevronDown size={15} />
       </button>

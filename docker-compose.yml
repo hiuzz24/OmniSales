@@ -27,6 +27,10 @@ services:
       - DB_USERNAME=${DB_USERNAME:-postgres}
       - DB_PASSWORD=${DB_PASSWORD}
       - JWT_SECRET=${JWT_SECRET}
+      - LAZADA_APP_KEY=${LAZADA_APP_KEY}
+      - LAZADA_APP_SECRET=${LAZADA_APP_SECRET}
+      - LAZADA_REDIRECT_URI=${LAZADA_REDIRECT_URI}
+      - LAZADA_WEBHOOK_CALLBACK_URL=${LAZADA_WEBHOOK_CALLBACK_URL}
     depends_on:
       postgres_db:
         condition: service_healthy

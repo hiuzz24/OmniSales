@@ -134,6 +134,14 @@
 }
 .tealBtn:active { transform: translateY(0); }
 
+.syncButtonWrap {
+  display: inline-flex;
+}
+
+.syncButton {
+  gap: 4px;
+}
+
 /* Back button */
 .backBtn {
   display: inline-flex;
