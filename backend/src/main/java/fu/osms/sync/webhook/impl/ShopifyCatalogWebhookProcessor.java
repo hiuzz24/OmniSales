@@ -56,14 +56,14 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         String eventType = normalizedEventType(event);
         return eventType.startsWith("PRODUCTS_")
                 || eventType.startsWith("INVENTORY_LEVELS_")
-                || hasInventoryLevelPayload(event.getRawPayload());
+                || hasInventoryLevelPayload(eventPayload(event));
     }
 
     @Override
     @Transactional
     public String process(WebhookEvent event) {
         String eventType = normalizedEventType(event);
-        if (eventType.startsWith("INVENTORY_LEVELS_") || hasInventoryLevelPayload(event.getRawPayload())) {
+        if (eventType.startsWith("INVENTORY_LEVELS_") || hasInventoryLevelPayload(eventPayload(event))) {
             return processInventoryLevel(event);
         }
         if (eventType.startsWith("PRODUCTS_")) {
@@ -74,9 +74,9 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
 
     @SuppressWarnings("unchecked")
     private String processProduct(WebhookEvent event) {
-        Map<String, Object> payload = event.getRawPayload();
+        Map<String, Object> payload = eventPayload(event);
         String externalProductId = numericId(WebhookPayloadUtils.text(
-                WebhookPayloadUtils.firstPresent(payload, "id", "product_id", "admin_graphql_api_id")));
+                WebhookPayloadUtils.firstPresent(payload, "id", "product_id", "productId", "admin_graphql_api_id")));
         if (externalProductId == null || externalProductId.isBlank()) {
             return "IGNORED";
         }
@@ -110,11 +110,11 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
     }
 
     private String processInventoryLevel(WebhookEvent event) {
-        Map<String, Object> payload = event.getRawPayload();
+        Map<String, Object> payload = eventPayload(event);
         String inventoryItemId = numericId(WebhookPayloadUtils.text(
-                WebhookPayloadUtils.firstPresent(payload, "inventory_item_id", "inventoryItemId")));
+                WebhookPayloadUtils.firstPresent(payload, "inventory_item_id", "inventoryItemId", "inventory_item_gid")));
         String locationId = numericId(WebhookPayloadUtils.text(
-                WebhookPayloadUtils.firstPresent(payload, "location_id", "locationId")));
+                WebhookPayloadUtils.firstPresent(payload, "location_id", "locationId", "location_gid")));
         Integer available = WebhookPayloadUtils.integer(
                 WebhookPayloadUtils.firstPresent(payload, "available", "quantity", "available_quantity"), 0);
 
@@ -278,7 +278,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
                     .warehouse(warehouse)
                     .variant(variant)
                     .type(InvTxnType.ADJUSTMENT)
-                    .referenceType("WEBHOOK")
+                    .referenceType("SYNC")
                     .referenceId(event.getId())
                     .quantityChange(delta)
                     .quantityBefore(before)
@@ -324,8 +324,22 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
 
     private boolean hasInventoryLevelPayload(Map<String, Object> payload) {
         return payload != null
-                && payload.get("inventory_item_id") != null
-                && payload.get("location_id") != null;
+                && WebhookPayloadUtils.firstPresent(payload, "inventory_item_id", "inventoryItemId", "inventory_item_gid") != null
+                && WebhookPayloadUtils.firstPresent(payload, "location_id", "locationId", "location_gid") != null;
+    }
+
+    private Map<String, Object> eventPayload(WebhookEvent event) {
+        Map<String, Object> payload = event.getRawPayload();
+        if (payload == null) {
+            return Map.of();
+        }
+        for (String key : List.of("data", "product", "inventory_level", "payload")) {
+            Object value = payload.get(key);
+            if (value instanceof Map<?, ?> map) {
+                return WebhookPayloadUtils.copyMap(map);
+            }
+        }
+        return payload;
     }
 
     private ProductStatus toProductStatus(String status) {

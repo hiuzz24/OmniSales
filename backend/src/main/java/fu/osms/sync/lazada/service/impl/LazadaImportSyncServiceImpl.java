@@ -115,9 +115,10 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 }
             }
 
+            Map<String, String> lazadaCategoryNames = fetchCategoryNames(credential);
             List<JsonNode> products = fetchProducts(credential);
             for (JsonNode productNode : products) {
-                ImportedProduct imported = upsertProduct(channel, productNode, warehouseByCode, syncLog);
+                ImportedProduct imported = upsertProduct(channel, productNode, warehouseByCode, lazadaCategoryNames, syncLog);
                 productCount += imported.productSaved ? 1 : 0;
                 variantCount += imported.variantCount;
             }
@@ -215,9 +216,56 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         ));
     }
 
+    private Map<String, String> fetchCategoryNames(ChannelCredential credential) {
+        try {
+            String response = lazadaApiClient.executeGet(
+                    "/category/tree/get",
+                    Map.of(),
+                    credential.getAccessToken(),
+                    tokenExpiresAt(credential)
+            );
+            JsonNode root = readTree(response);
+            ensureLazadaSuccess(root, "/category/tree/get");
+            Map<String, String> categoryNames = new HashMap<>();
+            collectCategoryNames(firstExisting(root, "/data", "/result", "/categories", "/category"), categoryNames);
+            return categoryNames;
+        } catch (Exception e) {
+            log.warn("[LazadaImportSync] Cannot load Lazada category tree, category names may use fallback IDs: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private void collectCategoryNames(JsonNode node, Map<String, String> categoryNames) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return;
+        }
+        if (node.isArray()) {
+            node.forEach(child -> collectCategoryNames(child, categoryNames));
+            return;
+        }
+        if (!node.isObject()) {
+            return;
+        }
+
+        String id = firstText(node, "category_id", "categoryId", "id", "CategoryId");
+        String name = firstText(node, "name", "category_name", "categoryName", "Name");
+        if (id != null && !id.isBlank() && name != null && !name.isBlank()) {
+            categoryNames.put(id, name);
+        }
+
+        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+        while (fields.hasNext()) {
+            JsonNode value = fields.next().getValue();
+            if (value.isArray() || value.isObject()) {
+                collectCategoryNames(value, categoryNames);
+            }
+        }
+    }
+
     private ImportedProduct upsertProduct(Channel channel,
                                           JsonNode productNode,
                                           Map<String, Warehouse> warehouseByCode,
+                                          Map<String, String> lazadaCategoryNames,
                                           SyncLog syncLog) {
         String externalProductId = firstText(productNode, "item_id", "product_id", "id");
         if (externalProductId == null || externalProductId.isBlank()) {
@@ -244,7 +292,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         product.setUnit(product.getUnit() == null ? "pcs" : product.getUnit());
         product.setStatus(resolveProductStatus(firstText(productNode, "status", "seller_status")));
         product.setAttributes(toMap(productNode));
-        Category category = resolveCategory(productNode);
+        Category category = resolveCategory(productNode, lazadaCategoryNames);
         if (category != null) {
             product.setCategory(category);
         }
@@ -858,7 +906,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         );
     }
 
-    private Category resolveCategory(JsonNode productNode) {
+    private Category resolveCategory(JsonNode productNode, Map<String, String> lazadaCategoryNames) {
         String externalCategoryId = firstNonBlank(
                 firstText(productNode,
                         "PrimaryCategory",
@@ -879,9 +927,13 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                         "primary_category_name",
                         "primaryCategoryName",
                         "leaf_category_name",
-                        "leafCategoryName"),
+                        "leafCategoryName",
+                        "category_path",
+                        "categoryPath"),
                 productNode.path("attributes").path("category_name").asText(null),
-                productNode.path("attributes").path("categoryName").asText(null)
+                productNode.path("attributes").path("categoryName").asText(null),
+                productNode.path("attributes").path("primary_category_name").asText(null),
+                productNode.path("attributes").path("leaf_category_name").asText(null)
         );
 
         if ((externalCategoryId == null || externalCategoryId.isBlank())
@@ -889,12 +941,11 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             return null;
         }
 
+        String categoryTreeName = externalCategoryId == null ? null : lazadaCategoryNames.get(externalCategoryId);
         String slug = externalCategoryId != null && !externalCategoryId.isBlank()
                 ? "lazada-" + toSlug(externalCategoryId)
                 : "lazada-" + toSlug(categoryName);
-        String resolvedName = categoryName != null && !categoryName.isBlank()
-                ? categoryName
-                : "Lazada Category " + externalCategoryId;
+        String resolvedName = firstNonBlank(categoryName, categoryTreeName, "Lazada " + externalCategoryId);
 
         Category category = categoryRepository.findBySlug(slug)
                 .or(() -> categoryRepository.findFirstByNameIgnoreCase(resolvedName))

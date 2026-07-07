@@ -43,14 +43,17 @@ public class InventoryController {
             @RequestParam(defaultValue = "updatedAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) UUID channelId,
-            @RequestParam(defaultValue = "false") boolean localOnly) {
+            @RequestParam(defaultValue = "false") boolean localOnly,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size, channelId, localOnly);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId);
 
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
@@ -78,13 +81,16 @@ public class InventoryController {
             @RequestParam(defaultValue = "updatedAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) UUID channelId,
-            @RequestParam(defaultValue = "false") boolean localOnly) {
+            @RequestParam(defaultValue = "false") boolean localOnly,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size, channelId, localOnly);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId);
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
                 .message("Tải danh sách tồn kho thành công")

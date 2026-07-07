@@ -65,9 +65,15 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<InventoryItemResponse> getAllInventoryItems(PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly) {
+    public PageResponse<InventoryItemResponse> getAllInventoryItems(PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly, String keyword, String status, UUID warehouseId) {
         Page<InventoryItem> inventoryItemPage = inventoryItemRepository
-                .findAllWithVariantRelationshipsFiltered(channelId, localOnly, pageRequest);
+                .findAllWithVariantRelationshipsFiltered(
+                        channelId,
+                        localOnly,
+                        normalizeSearch(keyword),
+                        normalizeStatus(status),
+                        warehouseId,
+                        pageRequest);
 
         List<InventoryItemResponse> dtoList = inventoryItemMapper.toResponseList(inventoryItemPage.getContent());
         enrichChannelInfo(dtoList, channelId);
@@ -228,11 +234,18 @@ public class InventoryServiceImpl implements InventoryService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<InventoryItemResponse> getInventoryByCategoryId(UUID categoryId, PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly) {
+    public PageResponse<InventoryItemResponse> getInventoryByCategoryId(UUID categoryId, PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly, String keyword, String status, UUID warehouseId) {
         List<UUID> allCategoryIds = new ArrayList<>();
 
         findAllChildIds(categoryId, allCategoryIds);
-        Page<InventoryItem> inventoryPage = inventoryItemRepository.findByCategoryIdInFiltered(allCategoryIds, channelId, localOnly, pageRequest);
+        Page<InventoryItem> inventoryPage = inventoryItemRepository.findByCategoryIdInFiltered(
+                allCategoryIds,
+                channelId,
+                localOnly,
+                normalizeSearch(keyword),
+                normalizeStatus(status),
+                warehouseId,
+                pageRequest);
 
         List<InventoryItemResponse> content = inventoryItemMapper.toResponseList(inventoryPage.getContent());
         enrichChannelInfo(content, channelId);
@@ -299,6 +312,20 @@ public class InventoryServiceImpl implements InventoryService {
             response.setChannelName(mapping.getChannelProduct().getChannel().getDisplayName());
             response.setPlatform(mapping.getChannelProduct().getChannel().getPlatform());
         }
+    }
+
+    private String normalizeSearch(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+        return "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank() || "all".equalsIgnoreCase(status)) {
+            return null;
+        }
+        return status.trim().toLowerCase(Locale.ROOT);
     }
 
     private Map<UUID, PlatformType> resolveWarehousePlatforms(List<InventoryItemResponse> responses) {
