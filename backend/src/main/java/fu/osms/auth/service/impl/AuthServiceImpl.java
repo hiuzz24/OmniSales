@@ -18,6 +18,7 @@ import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.EmailService;
 import fu.osms.config.CustomUserDetailService;
+import fu.osms.system.service.SystemSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -58,8 +59,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuditLogRepository auditLogRepository;
     private final RoleRepository roleRepository;
     private final UserInviteTokenRepository userInviteTokenRepository;
-    @Value("${app.security.max-failed-attempts}")
-    private int maxFailedAttempts;
+    private final SystemSettingService systemSettingService;
 
     @Value("${app.security.lock-time-duration}")
     private int lockTimeDuration;
@@ -93,14 +93,16 @@ public class AuthServiceImpl implements AuthService {
             int attempts = user.getFailedLoginAttempts() + 1;
             user.setFailedLoginAttempts(attempts);
 
-            if(attempts >= maxFailedAttempts){
+            int maxFailed = systemSettingService.getInteger("max_failed_login_attempts", 5);
+
+            if(attempts >= maxFailed){
                 user.setLockedUntil(OffsetDateTime.now().plusMinutes(lockTimeDuration));
                 user.setStatus(UserStatus.LOCKED);
                 userRepository.save(user);
-                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Bạn đã nhập sai " + maxFailedAttempts + " lần. Tài khoản bị khóa " + lockTimeDuration + " phút.");
+                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Bạn đã nhập sai " + maxFailed + " lần. Tài khoản bị khóa " + lockTimeDuration + " phút.");
             }else{
                 userRepository.save(user);
-                throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai mật khẩu. Bạn còn " + (maxFailedAttempts - attempts) + " lần thử.");
+                throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai mật khẩu. Bạn còn " + (maxFailed - attempts) + " lần thử.");
             }
         }
 

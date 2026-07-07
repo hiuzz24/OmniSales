@@ -10,6 +10,10 @@ import ChangePasswordPage from '../../features/auth/pages/ChangePasswordPage';
 import HomePage from '../../features/auth/pages/HomePage';
 import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
+import SystemLogPage from '../../features/system/pages/SystemLogPage';
+import BackupPage from '../../features/system/pages/BackupPage';
+import ApiMonitorPage from '../../features/system/pages/ApiMonitorPage';
+import SystemSettingsPage from '../../features/system/pages/SystemSettingsPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 import ProfilePage from '../../features/user/pages/ProfilePage';
 import UserListPage from '../../features/user/pages/UserListPage';
@@ -84,6 +88,13 @@ const AppRouter = () => {
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
               <Route path={ROUTES.USERS} element={<UserListPage />} />
               <Route path={ROUTES.USER_DETAIL} element={<UserDetailPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.SYSTEM_LOGS} element={<SystemLogPage />} />
+              <Route path={ROUTES.BACKUP} element={<BackupPage />} />
+              <Route path={ROUTES.API_MONITOR} element={<ApiMonitorPage />} />
+              <Route path={ROUTES.SYSTEM_SETTINGS} element={<SystemSettingsPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>

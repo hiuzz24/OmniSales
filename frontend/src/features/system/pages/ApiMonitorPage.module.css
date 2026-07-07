@@ -1,0 +1,333 @@
+.container {
+  padding: 24px;
+  background-color: #f8fafc;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  color: #1e293b;
+}
+
+/* Header styling */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.titleArea h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titleArea p {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Time range selector tabs */
+.tabs {
+  display: flex;
+  background-color: #e2e8f0;
+  padding: 4px;
+  border-radius: 8px;
+  gap: 2px;
+}
+
+.tabBtn {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tabActive {
+  background-color: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* KPI Cards layout */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+  border-color: #cbd5e1;
+}
+
+.iconWrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cardInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cardLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.cardValue {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Metric Colors */
+.requestsIcon { background-color: #eff6ff; color: #2563eb; }
+.successIcon { background-color: #ecfdf5; color: #10b981; }
+.latencyIcon { background-color: #fffbeb; color: #f59e0b; }
+.alertsIcon { background-color: #fef2f2; color: #ef4444; }
+.alertsNormalIcon { background-color: #f0fdf4; color: #22c55e; }
+
+/* Status alerts badge */
+.alertBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.alertActive {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.alertHealthy {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+/* Charts Section */
+.chartsSection {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.chartHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chartTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.chartContainer {
+  width: 100%;
+  height: 320px;
+}
+
+/* Table Section */
+.tableSection {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.tableHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.tableTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.searchWrapper {
+  position: relative;
+  width: 300px;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.searchInput:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 20px;
+}
+
+/* Data Table Grid */
+.tableResponsive {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.endpointTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.endpointTable th {
+  background-color: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.endpointTable td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.endpointTable tr:last-child td {
+  border-bottom: none;
+}
+
+.endpointTable tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Badges and tags */
+.methodBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 54px;
+  text-align: center;
+}
+
+.methodGet { background-color: #eff6ff; color: #1d4ed8; }
+.methodPost { background-color: #ecfdf5; color: #047857; }
+.methodPut { background-color: #fffbeb; color: #b45309; }
+.methodDelete { background-color: #fef2f2; color: #b91c1c; }
+.methodDefault { background-color: #f1f5f9; color: #475569; }
+
+.endpointText {
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* Quota Progress Meter */
+.quotaWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 150px;
+}
+
+.quotaLabel {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  justify-content: space-between;
+}
+
+.progressContainer {
+  background-color: #e2e8f0;
+  border-radius: 9999px;
+  height: 6px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.progressOk { background-color: #10b981; }
+.progressWarn { background-color: #f59e0b; }
+.progressDanger { background-color: #ef4444; }
+
+.successOk { color: #10b981; font-weight: 600; }
+.successWarn { color: #f59e0b; font-weight: 600; }
+.successDanger { color: #ef4444; font-weight: 600; }
+
+.emptyState {
+  padding: 40px;
+  text-align: center;
+  color: #64748b;
+}
+
+.emptyStateIcon {
+  font-size: 48px;
+  color: #cbd5e1;
+  margin-bottom: 12px;
+}

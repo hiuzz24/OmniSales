@@ -49,4 +49,8 @@ export const ROUTES = {
   USERS: '/users',
   USER_DETAIL: '/users/:id',
   INVITE_USER: '/inviteUser',
+  SYSTEM_LOGS: '/system-logs',
+  BACKUP: '/backups',
+  API_MONITOR: '/admin/api-monitor',
+  SYSTEM_SETTINGS: '/admin/settings',
 };

@@ -44,6 +44,9 @@ DROP TABLE IF EXISTS daily_sales_summary          CASCADE;
 DROP TABLE IF EXISTS audit_logs                   CASCADE;
 DROP TABLE IF EXISTS notifications                CASCADE;
 DROP TABLE IF EXISTS system_logs                  CASCADE;
+DROP TABLE IF EXISTS api_metrics_daily              CASCADE;
+DROP TABLE IF EXISTS api_endpoint_limits            CASCADE;
+DROP TABLE IF EXISTS system_settings                CASCADE;
 DROP TABLE IF EXISTS sync_tasks                   CASCADE;
 DROP TABLE IF EXISTS sync_logs                    CASCADE;
 DROP TABLE IF EXISTS webhook_events               CASCADE;
@@ -81,6 +84,8 @@ DROP TABLE IF EXISTS refresh_tokens               CASCADE;
 DROP TABLE IF EXISTS user_roles                   CASCADE;
 DROP TABLE IF EXISTS roles                        CASCADE;
 DROP TABLE IF EXISTS users                        CASCADE;
+DROP TABLE IF EXISTS backup_files                 CASCADE;
+
 
 -- ─── 4. DROP ENUM TYPES ─────────────────────────────────────
 DROP TYPE IF EXISTS user_status        CASCADE;
@@ -652,6 +657,34 @@ CREATE TABLE system_logs (
                              logged_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE api_metrics_daily (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    endpoint VARCHAR(255) NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    request_count BIGINT NOT NULL DEFAULT 0,
+    success_count BIGINT NOT NULL DEFAULT 0,
+    fail_count BIGINT NOT NULL DEFAULT 0,
+    avg_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    recorded_date DATE NOT NULL,
+    recorded_hour INT NOT NULL,
+    CONSTRAINT uq_api_metric_endpoint_hour UNIQUE (endpoint, method, recorded_date, recorded_hour)
+);
+
+CREATE TABLE api_endpoint_limits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    endpoint VARCHAR(255) NOT NULL UNIQUE,
+    rate_limit_per_min INT NOT NULL DEFAULT 100,
+    daily_quota INT NOT NULL DEFAULT 50000
+);
+
+CREATE TABLE system_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(50) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
@@ -1128,4 +1161,24 @@ ALTER TABLE suppliers
 
 ALTER TABLE suppliers
     ADD CONSTRAINT uq_suppliers_supplier_code UNIQUE (supplier_code);
+
+CREATE TABLE backup_files (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    filename    VARCHAR(255) NOT NULL,
+    filepath    VARCHAR(500) NOT NULL,
+    file_size   BIGINT       NOT NULL,
+    type        VARCHAR(20)  NOT NULL CHECK (type IN ('MANUAL', 'SCHEDULED')),
+    status      VARCHAR(20)  NOT NULL CHECK (status IN ('SUCCESS', 'FAILED')),
+    created_by  VARCHAR(255),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO system_settings (key, value, description, category) VALUES
+    ('default_reorder_level', '10', 'Mức cảnh báo tồn kho tối thiểu mặc định cho sản phẩm', 'INVENTORY'),
+    ('reserved_timeout_minutes', '30', 'Thời gian giữ chỗ hàng (phút) trước khi tự động hoàn trả', 'INVENTORY'),
+    ('low_stock_repeat_hours', '12', 'Khoảng thời gian nhắc nhở (giờ) giữa các lần gửi cảnh báo tồn kho', 'NOTIFICATION'),
+    ('timezone', 'Asia/Ho_Chi_Minh', 'Timezone hoạt động chính thức của hệ thống', 'SYSTEM'),
+    ('max_failed_login_attempts', '5', 'Số lần đăng nhập sai tối đa trước khi khóa tài khoản', 'SECURITY')
+ON CONFLICT (key) DO NOTHING;
+
 
