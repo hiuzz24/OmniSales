@@ -2,6 +2,7 @@ package fu.osms.sync.service.impl;
 
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.entity.WebhookEvent;
+import fu.osms.sync.service.PlatformCatalogWebhookProcessor;
 import fu.osms.sync.service.PlatformOrderWebhookProcessor;
 import fu.osms.sync.service.WebhookBusinessProcessor;
 import lombok.RequiredArgsConstructor;
@@ -19,16 +20,29 @@ import java.util.stream.Collectors;
 public class WebhookBusinessProcessorImpl implements WebhookBusinessProcessor {
 
     private final List<PlatformOrderWebhookProcessor> orderWebhookProcessors;
+    private final List<PlatformCatalogWebhookProcessor> catalogWebhookProcessors;
 
     @Override
     public String process(WebhookEvent event) {
         log.info("[processor webhook]");
         String eventType = event.getEventType() != null ? event.getEventType().toUpperCase() : "";
         if (!eventType.contains("ORDER")) {
-            return "IGNORED";
+            return processCatalogEvent(event);
         }
 
         PlatformOrderWebhookProcessor processor = processorMap().get(event.getPlatform());
+        if (processor == null) {
+            return "IGNORED";
+        }
+        return processor.process(event);
+    }
+
+    private String processCatalogEvent(WebhookEvent event) {
+        PlatformCatalogWebhookProcessor processor = catalogWebhookProcessors.stream()
+                .filter(candidate -> candidate.getPlatform() == event.getPlatform())
+                .filter(candidate -> candidate.supports(event))
+                .findFirst()
+                .orElse(null);
         if (processor == null) {
             return "IGNORED";
         }

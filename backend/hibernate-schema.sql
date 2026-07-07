@@ -441,6 +441,7 @@ CREATE TABLE suppliers (
                            phone        VARCHAR(50),
                            email        VARCHAR(255),
                            address      TEXT,
+                           supplier_code VARCHAR(255),
                            is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
                            created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                            updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()

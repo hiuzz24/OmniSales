@@ -3,9 +3,12 @@
  * Uses the same credentials as auth.spec.js
  */
 
-const API_BASE = process.env.API_BASE || 'http://localhost:8080/api';
-const TEST_EMAIL = 'manager@osms.vn';
-const TEST_PASSWORD = 'Duy16042004%';
+const {
+  TEST_EMAIL,
+  TEST_PASSWORD,
+  API_BASE: ENV_API_BASE,
+} = require('./env-config');
+const API_BASE = process.env.API_BASE || ENV_API_BASE;
 
 /**
  * Login as manager via UI (for E2E tests)
@@ -135,6 +138,27 @@ async function getFirstCategoryId(request, token) {
 }
 
 /**
+ * Return the first available category name (so tests can fill it into
+ * the import template's "Danh mục" column).
+ */
+async function getFirstCategoryName(request, token) {
+  try {
+    const response = await request.get(`${API_BASE}/categories`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status() === 200) {
+      const body = await response.json();
+      if (body.data && body.data.length > 0) {
+        return body.data[0].name;
+      }
+    }
+  } catch (e) {
+    // Fall through
+  }
+  return null;
+}
+
+/**
  * Generate a unique SKU for test isolation
  */
 function uniqueSku(prefix = 'TEST') {
@@ -151,6 +175,7 @@ module.exports = {
   createTestProduct,
   deleteTestProduct,
   getFirstCategoryId,
+  getFirstCategoryName,
   uniqueSku,
   TEST_EMAIL,
   TEST_PASSWORD,

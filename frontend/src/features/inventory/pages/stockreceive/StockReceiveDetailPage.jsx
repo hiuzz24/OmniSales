@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import stockReceiveService from '../../services/stockReceiveService';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
+import { printStockReceiveReceipt } from './stockReceivePrintTemplate';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
@@ -33,6 +34,11 @@ const formatDateOnly = (s) => {
     year: 'numeric',
   });
 };
+
+const getItemProductName = (item) =>
+  item?.productName ?? item?.productVariantName ?? item?.variantProductName ?? item?.variantName ?? item?.variantSku ?? item?.sku ?? '—';
+
+const getItemSku = (item) => item?.sku ?? item?.variantSku ?? '—';
 
 // Status config
 const STATUS_CFG = {
@@ -173,13 +179,13 @@ export default function StockReceiveDetailPage() {
     // Check items quantity and unitCost
     const invalidQty = items.find(item => !item.quantity || item.quantity <= 0);
     if (invalidQty) {
-      toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0. Vui lòng chỉnh sửa phiếu.`);
+      toast.error(`Sản phẩm "${getItemProductName(invalidQty)}" phải có số lượng lớn hơn 0. Vui lòng chỉnh sửa phiếu.`);
       return;
     }
     
     const invalidPrice = items.find(item => !item.unitCost || item.unitCost <= 0);
     if (invalidPrice) {
-      toast.error(`Sản phẩm "${invalidPrice.productName}" phải có đơn giá lớn hơn 0. Vui lòng chỉnh sửa phiếu.`);
+      toast.error(`Sản phẩm "${getItemProductName(invalidPrice)}" phải có đơn giá lớn hơn 0. Vui lòng chỉnh sửa phiếu.`);
       return;
     }
     
@@ -205,6 +211,14 @@ export default function StockReceiveDetailPage() {
       toast.error(errorMessage);
     } finally {
       setCompleting(false);
+    }
+  };
+
+  const handlePrint = () => {
+    try {
+      printStockReceiveReceipt(receipt);
+    } catch (error) {
+      toast.error(error?.message || 'Không thể in phiếu nhập.');
     }
   };
 
@@ -398,7 +412,7 @@ export default function StockReceiveDetailPage() {
             </>
           )}
           <button
-            onClick={() => toast.info('In phiếu đang được phát triển')}
+            onClick={handlePrint}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -618,7 +632,7 @@ export default function StockReceiveDetailPage() {
                                 fontSize: 12,
                               }}
                             >
-                              {item.productName ?? '—'}
+                              {getItemProductName(item)}
                             </div>
                             {item.variantName && (
                               <div style={{ fontSize: 10, color: '#94a3b8' }}>
@@ -637,7 +651,7 @@ export default function StockReceiveDetailPage() {
                                 borderRadius: 4,
                               }}
                             >
-                              {item.sku ?? '—'}
+                              {getItemSku(item)}
                             </span>
                           </td>
                           <td

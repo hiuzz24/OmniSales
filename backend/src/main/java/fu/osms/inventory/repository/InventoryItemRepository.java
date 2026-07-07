@@ -1,5 +1,6 @@
 package fu.osms.inventory.repository;
 
+import fu.osms.common.enums.PlatformType;
 import fu.osms.inventory.entity.InventoryItem;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
@@ -22,6 +23,22 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
 
     List<InventoryItem> findByWarehouseId(UUID warehouseId);
 
+    @Query("SELECT DISTINCT i FROM InventoryItem i " +
+            "JOIN FETCH i.variant v " +
+            "LEFT JOIN FETCH v.product " +
+            "WHERE i.warehouse.id = :warehouseId " +
+            "AND EXISTS (" +
+            "    SELECT 1 FROM ChannelProductVariant cpv " +
+            "    WHERE cpv.variant = v " +
+            "    AND cpv.channelProduct.channel.platform = :platform " +
+            "    AND cpv.channelProduct.channel.deletedAt IS NULL " +
+            "    AND cpv.channelProduct.mappingState = 'ACTIVE'" +
+            ") " +
+            "ORDER BY v.sku ASC")
+    List<InventoryItem> findByWarehouseIdAndMappedPlatform(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("platform") PlatformType platform);
+
     Optional<InventoryItem> findByWarehouseIdAndVariantId(UUID warehouseId, UUID variantId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -29,10 +46,23 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
     Optional<InventoryItem> findByWarehouseIdAndVariantIdWithLock(@Param("warehouseId") UUID warehouseId,
                                                                    @Param("variantId") UUID variantId);
 
-    @Query("SELECT i FROM InventoryItem i WHERE i.availableQuantity <= i.lowStockThreshold")
+    @Query("SELECT DISTINCT i FROM InventoryItem i " +
+            "JOIN FETCH i.warehouse " +
+            "JOIN FETCH i.variant v " +
+            "LEFT JOIN FETCH v.product " +
+            "WHERE i.availableQuantity <= i.lowStockThreshold " +
+            "ORDER BY i.availableQuantity ASC, i.updatedAt DESC")
     List<InventoryItem> findLowStockItems();
 
     List<InventoryItem> findByVariantIdIn(Collection<UUID> variantIds);
+
+    @Query("SELECT i FROM InventoryItem i " +
+            "JOIN FETCH i.variant v " +
+            "WHERE i.warehouse.id = :warehouseId " +
+            "AND v.id IN :variantIds")
+    List<InventoryItem> findByWarehouseIdAndVariantIdIn(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("variantIds") Collection<UUID> variantIds);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT i FROM InventoryItem i " +
@@ -49,18 +79,132 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
             countQuery = "SELECT COUNT(i) FROM InventoryItem i")
     Page<InventoryItem> findAllWithVariantRelationships(Pageable pageable);
 
+    @Query(value = "SELECT DISTINCT i FROM InventoryItem i " +
+            "LEFT JOIN FETCH i.warehouse " +
+            "LEFT JOIN FETCH i.variant v " +
+            "LEFT JOIN FETCH v.product p " +
+            "WHERE (:channelId IS NULL OR EXISTS (" +
+            "    SELECT 1 FROM ChannelProductVariant cpv " +
+            "    WHERE cpv.variant = v " +
+            "    AND cpv.channelProduct.channel.id = :channelId " +
+            "    AND cpv.channelProduct.channel.deletedAt IS NULL " +
+            "    AND cpv.channelProduct.mappingState = 'ACTIVE'" +
+            ")) " +
+            "AND (:localOnly = false OR NOT EXISTS (" +
+            "    SELECT 1 FROM ChannelProductVariant cpvLocal " +
+            "    WHERE cpvLocal.variant = v " +
+            "    AND cpvLocal.channelProduct.channel.deletedAt IS NULL " +
+            "    AND cpvLocal.channelProduct.mappingState = 'ACTIVE'" +
+            ")) " +
+            "AND (:warehouseId IS NULL OR i.warehouse.id = :warehouseId) " +
+            "AND (:keyword IS NULL OR LOWER(v.sku) LIKE :keyword OR LOWER(v.name) LIKE :keyword OR LOWER(p.name) LIKE :keyword) " +
+            "AND (:status IS NULL " +
+            "    OR (:status = 'negative' AND COALESCE(i.availableQuantity, 0) < 0) " +
+            "    OR (:status = 'out-of-stock' AND COALESCE(i.availableQuantity, 0) = 0) " +
+            "    OR (:status = 'low-stock' AND COALESCE(i.availableQuantity, 0) > 0 AND COALESCE(i.availableQuantity, 0) <= i.lowStockThreshold) " +
+            "    OR (:status = 'in-stock' AND COALESCE(i.availableQuantity, 0) > i.lowStockThreshold)" +
+            ")",
+            countQuery = "SELECT COUNT(DISTINCT i) FROM InventoryItem i " +
+                    "LEFT JOIN i.variant v " +
+                    "LEFT JOIN v.product p " +
+                    "WHERE (:channelId IS NULL OR EXISTS (" +
+                    "    SELECT 1 FROM ChannelProductVariant cpv " +
+                    "    WHERE cpv.variant = v " +
+                    "    AND cpv.channelProduct.channel.id = :channelId " +
+                    "    AND cpv.channelProduct.channel.deletedAt IS NULL " +
+                    "    AND cpv.channelProduct.mappingState = 'ACTIVE'" +
+                    ")) " +
+                    "AND (:localOnly = false OR NOT EXISTS (" +
+                    "    SELECT 1 FROM ChannelProductVariant cpvLocal " +
+                    "    WHERE cpvLocal.variant = v " +
+                    "    AND cpvLocal.channelProduct.channel.deletedAt IS NULL " +
+                    "    AND cpvLocal.channelProduct.mappingState = 'ACTIVE'" +
+                    ")) " +
+                    "AND (:warehouseId IS NULL OR i.warehouse.id = :warehouseId) " +
+                    "AND (:keyword IS NULL OR LOWER(v.sku) LIKE :keyword OR LOWER(v.name) LIKE :keyword OR LOWER(p.name) LIKE :keyword) " +
+                    "AND (:status IS NULL " +
+                    "    OR (:status = 'negative' AND COALESCE(i.availableQuantity, 0) < 0) " +
+                    "    OR (:status = 'out-of-stock' AND COALESCE(i.availableQuantity, 0) = 0) " +
+                    "    OR (:status = 'low-stock' AND COALESCE(i.availableQuantity, 0) > 0 AND COALESCE(i.availableQuantity, 0) <= i.lowStockThreshold) " +
+                    "    OR (:status = 'in-stock' AND COALESCE(i.availableQuantity, 0) > i.lowStockThreshold)" +
+                    ")")
+    Page<InventoryItem> findAllWithVariantRelationshipsFiltered(@Param("channelId") UUID channelId,
+                                                                 @Param("localOnly") boolean localOnly,
+                                                                 @Param("keyword") String keyword,
+                                                                 @Param("status") String status,
+                                                                 @Param("warehouseId") UUID warehouseId,
+                                                                 Pageable pageable);
+
     @Query("SELECT i FROM InventoryItem i " +
             "JOIN i.variant v " +
             "JOIN v.product p " +
             "WHERE p.category.id IN :categoryIds")
     Page<InventoryItem> findByCategoryIdIn(@Param("categoryIds") List<UUID> categoryIds, Pageable pageable);
 
+    @Query(value = "SELECT DISTINCT i FROM InventoryItem i " +
+            "JOIN FETCH i.variant v " +
+            "LEFT JOIN FETCH i.warehouse " +
+            "JOIN FETCH v.product p " +
+            "WHERE p.category.id IN :categoryIds " +
+            "AND (:channelId IS NULL OR EXISTS (" +
+            "    SELECT 1 FROM ChannelProductVariant cpv " +
+            "    WHERE cpv.variant = v " +
+            "    AND cpv.channelProduct.channel.id = :channelId " +
+            "    AND cpv.channelProduct.channel.deletedAt IS NULL " +
+            "    AND cpv.channelProduct.mappingState = 'ACTIVE'" +
+            ")) " +
+            "AND (:localOnly = false OR NOT EXISTS (" +
+            "    SELECT 1 FROM ChannelProductVariant cpvLocal " +
+            "    WHERE cpvLocal.variant = v " +
+            "    AND cpvLocal.channelProduct.channel.deletedAt IS NULL " +
+            "    AND cpvLocal.channelProduct.mappingState = 'ACTIVE'" +
+            ")) " +
+            "AND (:warehouseId IS NULL OR i.warehouse.id = :warehouseId) " +
+            "AND (:keyword IS NULL OR LOWER(v.sku) LIKE :keyword OR LOWER(v.name) LIKE :keyword OR LOWER(p.name) LIKE :keyword) " +
+            "AND (:status IS NULL " +
+            "    OR (:status = 'negative' AND COALESCE(i.availableQuantity, 0) < 0) " +
+            "    OR (:status = 'out-of-stock' AND COALESCE(i.availableQuantity, 0) = 0) " +
+            "    OR (:status = 'low-stock' AND COALESCE(i.availableQuantity, 0) > 0 AND COALESCE(i.availableQuantity, 0) <= i.lowStockThreshold) " +
+            "    OR (:status = 'in-stock' AND COALESCE(i.availableQuantity, 0) > i.lowStockThreshold)" +
+            ")",
+            countQuery = "SELECT COUNT(DISTINCT i) FROM InventoryItem i " +
+                    "JOIN i.variant v " +
+                    "JOIN v.product p " +
+                    "WHERE p.category.id IN :categoryIds " +
+                    "AND (:channelId IS NULL OR EXISTS (" +
+                    "    SELECT 1 FROM ChannelProductVariant cpv " +
+                    "    WHERE cpv.variant = v " +
+                    "    AND cpv.channelProduct.channel.id = :channelId " +
+                    "    AND cpv.channelProduct.channel.deletedAt IS NULL " +
+                    "    AND cpv.channelProduct.mappingState = 'ACTIVE'" +
+                    ")) " +
+                    "AND (:localOnly = false OR NOT EXISTS (" +
+                    "    SELECT 1 FROM ChannelProductVariant cpvLocal " +
+                    "    WHERE cpvLocal.variant = v " +
+                    "    AND cpvLocal.channelProduct.channel.deletedAt IS NULL " +
+                    "    AND cpvLocal.channelProduct.mappingState = 'ACTIVE'" +
+                    ")) " +
+                    "AND (:warehouseId IS NULL OR i.warehouse.id = :warehouseId) " +
+                    "AND (:keyword IS NULL OR LOWER(v.sku) LIKE :keyword OR LOWER(v.name) LIKE :keyword OR LOWER(p.name) LIKE :keyword) " +
+                    "AND (:status IS NULL " +
+                    "    OR (:status = 'negative' AND COALESCE(i.availableQuantity, 0) < 0) " +
+                    "    OR (:status = 'out-of-stock' AND COALESCE(i.availableQuantity, 0) = 0) " +
+                    "    OR (:status = 'low-stock' AND COALESCE(i.availableQuantity, 0) > 0 AND COALESCE(i.availableQuantity, 0) <= i.lowStockThreshold) " +
+                    "    OR (:status = 'in-stock' AND COALESCE(i.availableQuantity, 0) > i.lowStockThreshold)" +
+                    ")")
+    Page<InventoryItem> findByCategoryIdInFiltered(@Param("categoryIds") List<UUID> categoryIds,
+                                                   @Param("channelId") UUID channelId,
+                                                   @Param("localOnly") boolean localOnly,
+                                                   @Param("keyword") String keyword,
+                                                   @Param("status") String status,
+                                                   @Param("warehouseId") UUID warehouseId,
+                                                   Pageable pageable);
+
     @Query("SELECT i FROM InventoryItem i " +
             "JOIN FETCH i.warehouse w " +
             "JOIN FETCH i.variant v " +
             "JOIN FETCH v.product p " +
-            "JOIN FETCH p.category c " +
+            "LEFT JOIN FETCH p.category c " +
             "WHERE i.id = :id")
     Optional<InventoryItem> findDetailById(@Param("id") UUID id);
 }
-

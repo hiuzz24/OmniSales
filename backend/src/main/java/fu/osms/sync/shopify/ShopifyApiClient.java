@@ -5,6 +5,7 @@ import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyWebhookResponse;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ShopifyApiClient {
     ShopifyProductResponse createProduct(String shopDomain, String accessToken, ShopifyProductPayload payload);
@@ -15,4 +16,8 @@ public interface ShopifyApiClient {
     List<ShopifyWebhookResponse> listWebhooks(String shopDomain, String accessToken);
 
     void deleteWebhook(String shopDomain, String accessToken, Long webhookId);
+
+    List<String> listAccessScopes(String shopDomain, String accessToken);
+
+    Map<String, Object> executeGraphQl(String shopDomain, String accessToken, String query, Map<String, Object> variables);
 }

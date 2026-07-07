@@ -8,8 +8,18 @@ const inventoryApi = {
         return response;
     },
 
-  getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null) => {
+    getAvailableVariantsByWarehouse: async (warehouseId) => {
+        const response = await axiosClient.get(`/inventory/warehouses/${warehouseId}/available-variants`);
+        return response;
+    },
+
+  getInventoryList: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null, channelId = null, localOnly = false, filters = {}) => {
     const params = { page, size, sortBy, sortDir };
+    if (channelId) params.channelId = channelId;
+    if (localOnly) params.localOnly = true;
+    if (filters.keyword) params.keyword = filters.keyword;
+    if (filters.status && filters.status !== 'all') params.status = filters.status;
+    if (filters.warehouseId && filters.warehouseId !== 'all') params.warehouseId = filters.warehouseId;
     const res = categoryId
       ? await axiosClient.get(`/inventory/category/${categoryId}`, { params })
       : await axiosClient.get('/inventory', { params });

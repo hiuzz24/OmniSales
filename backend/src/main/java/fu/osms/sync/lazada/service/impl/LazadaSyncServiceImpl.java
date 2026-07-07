@@ -23,7 +23,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -41,15 +45,6 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
     @Override
     public boolean syncProduct(Product product, List<ProductVariant> variants, List<ProductImage> images, Channel channel, ChannelProduct channelProduct) {
         try {
-            List<ChannelProductVariant> channelProductVariants = channelProductVariantRepository.findByChannelProductId(channelProduct.getId());
-            Map<String,String> mapExternalSkuId = new HashMap<>();
-            for(ChannelProductVariant channelProductVariant : channelProductVariants){
-                ProductVariant variant = channelProductVariant.getVariant();
-                if(variant != null && variant.getSku() != null && channelProductVariant.getExternalVariantId() != null){
-                    mapExternalSkuId.put(variant.getSku(),channelProductVariant.getExternalVariantId());
-                }
-            }
-
             ChannelCredential credential = channelCredentialRepository
                     .findByChannelIdAndConnectionState(channel.getId(), "CONNECTED")
                     .orElse(null);
@@ -66,11 +61,13 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
             List<String> migratedImageUrls = lazadaImageService.migrateImages(images, credential.getAccessToken(), tokenExpiresAt);
 
             boolean isNew = (channelProduct.getExternalProductId() == null);
+            Map<String, String> externalSkuIdBySku = isNew ? Map.of() : resolveExternalSkuIds(channelProduct);
             String xmlPayload = lazadaPayloadBuilder.buildPayload(
                     product,
                     variants,
                     migratedImageUrls,
-                    isNew ? Map.of() : mapExternalSkuId
+                    externalSkuIdBySku,
+                    isNew
             );
 
             Map<String, String> params = new HashMap<>();
@@ -145,7 +142,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
             } else {
                 log.error("[LazadaSync] Lazada create/update failed. apiPath={}, payload={}, response={}",
                         apiPath, xmlPayload, responseStr);
-                String errorMsg = root.has("message") ? root.get("message").asText() : "Unknown API error";
+                String errorMsg = resolveLazadaErrorMessage(root);
                 throw new RuntimeException("Lazada API returned error: " + errorMsg);
             }
 
@@ -157,7 +154,34 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
             channelProduct.setSyncStatus(SyncStatus.FAILED);
             channelProduct.setLastSyncError(e.getMessage());
             channelProductRepository.save(channelProduct);
-            return false;
+            throw new RuntimeException(e.getMessage(), e);
         }
+    }
+
+    private Map<String, String> resolveExternalSkuIds(ChannelProduct channelProduct) {
+        return channelProductVariantRepository.findByChannelProductId(channelProduct.getId()).stream()
+                .filter(mapping -> mapping.getVariant() != null)
+                .filter(mapping -> mapping.getVariant().getSku() != null && !mapping.getVariant().getSku().isBlank())
+                .filter(mapping -> mapping.getExternalVariantId() != null && !mapping.getExternalVariantId().isBlank())
+                .collect(Collectors.toMap(
+                        mapping -> mapping.getVariant().getSku(),
+                        ChannelProductVariant::getExternalVariantId,
+                        (first, ignored) -> first
+                ));
+    }
+
+    private String resolveLazadaErrorMessage(JsonNode root) {
+        String message = root.path("message").asText("Unknown API error");
+        JsonNode details = root.path("detail");
+        if (details.isArray() && !details.isEmpty()) {
+            String detailMessage = details.get(0).path("message").asText(null);
+            String field = details.get(0).path("field").asText(null);
+            if (detailMessage != null && !detailMessage.isBlank()) {
+                return field == null || field.isBlank()
+                        ? message + " - " + detailMessage
+                        : message + " - " + field + ": " + detailMessage;
+            }
+        }
+        return message;
     }
 }
