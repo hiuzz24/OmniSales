@@ -14,6 +14,7 @@ import fu.osms.auth.service.EmailService;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.config.CustomUserDetailService;
+import fu.osms.system.service.SystemSettingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -54,7 +55,7 @@ class AuthServiceImplTest {
     @Mock private AuditLogRepository auditLogRepository;
     @Mock private RoleRepository roleRepository;
     @Mock private UserInviteTokenRepository userInviteTokenRepository;
-
+    @Mock private SystemSettingService systemSettingService;
     private AuthServiceImpl authService;
 
     private User testUser;
@@ -79,7 +80,7 @@ class AuthServiceImplTest {
                 authenticationManager, userRepository, userRoleRepository,
                 refreshTokenRepository, userDetailsService, jwtService,
                 userMapper, tokenRepository, emailService, passwordEncoder,
-                auditLogRepository, roleRepository, userInviteTokenRepository);
+                auditLogRepository, roleRepository, userInviteTokenRepository, systemSettingService);
         injectFields();
 
         testUser = User.builder()
