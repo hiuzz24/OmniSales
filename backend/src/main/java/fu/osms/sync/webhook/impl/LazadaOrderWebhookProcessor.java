@@ -93,7 +93,7 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
                 event.getChannel().getDisplayName(),
                 externalOrderId
         );
-        return orderRepository.findByChannel_IdAndExternalOrderId(event.getChannel().getId(), externalOrderId)
+        return orderRepository.findForUpdateByChannelIdAndExternalOrderId(event.getChannel().getId(), externalOrderId)
                 .orElseThrow(() -> new IllegalStateException("Cannot create or load Lazada order"));
     }
 
@@ -193,10 +193,10 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
             return OrderStatus.DELIVERED;
         }
         if (normalized.contains("SHIP") && !normalized.contains("READY_TO_SHIP")) {
-            return OrderStatus.SHIPPED;
+            return OrderStatus.IN_TRANSIT;
         }
         if (normalized.contains("PACK") || normalized.contains("READY_TO_SHIP") || normalized.contains("PROCESS")) {
-            return OrderStatus.PROCESSING;
+            return normalized.contains("READY_TO_SHIP") ? OrderStatus.SHIPPED : OrderStatus.PROCESSING;
         }
         return OrderStatus.PENDING;
     }

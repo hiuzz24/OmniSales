@@ -5,6 +5,8 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.order.entity.Order;
 import fu.osms.order.enums.OrderStatus;
+import fu.osms.order.enums.ShopifyCancelReason;
+import fu.osms.sync.order.OrderStatusPushContext;
 import fu.osms.sync.order.OrderStatusPushResult;
 import fu.osms.sync.order.PlatformOrderStatusPusher;
 import fu.osms.sync.shopify.ShopifyApiClient;
@@ -29,10 +31,10 @@ public class ShopifyOrderStatusPusher implements PlatformOrderStatusPusher {
     }
 
     @Override
-    public OrderStatusPushResult push(Order order, OrderStatus targetStatus, String cancelReason) {
+    public OrderStatusPushResult push(Order order, OrderStatus targetStatus, OrderStatusPushContext context) {
         return switch (targetStatus) {
             case SHIPPED -> fulfill(order);
-            case CANCELLED -> cancel(order, cancelReason);
+            case CANCELLED -> cancel(order, context);
             default -> OrderStatusPushResult.skipped("Shopify does not support pushing " + targetStatus);
         };
     }
@@ -46,7 +48,17 @@ public class ShopifyOrderStatusPusher implements PlatformOrderStatusPusher {
             return OrderStatusPushResult.failed("No Shopify fulfillment order found");
         }
 
-        String fulfillmentOrderId = String.valueOf(fulfillmentOrders.get(0).get("id"));
+        Map<String, Object> fulfillmentOrder = selectFulfillableOrder(fulfillmentOrders);
+        if (fulfillmentOrder == null) {
+            return OrderStatusPushResult.failed("No open Shopify fulfillment order found");
+        }
+
+        Object id = fulfillmentOrder.get("id");
+        if (id == null || id.toString().isBlank()) {
+            return OrderStatusPushResult.failed("Shopify fulfillment order id is missing");
+        }
+
+        String fulfillmentOrderId = String.valueOf(id);
         Map<String, Object> fulfillment =
                 shopifyApiClient.createFulfillment(shopDomain, credential.getAccessToken(), fulfillmentOrderId, order.getTrackingNumber());
 
@@ -59,13 +71,53 @@ public class ShopifyOrderStatusPusher implements PlatformOrderStatusPusher {
         return OrderStatusPushResult.success("Shopify fulfillment created", metadata);
     }
 
-    private OrderStatusPushResult cancel(Order order, String cancelReason) {
+    private Map<String, Object> selectFulfillableOrder(List<Map<String, Object>> fulfillmentOrders) {
+        return fulfillmentOrders.stream()
+                .filter(this::isOpenFulfillmentOrder)
+                .filter(this::supportsCreateFulfillment)
+                .findFirst()
+                .orElseGet(() -> fulfillmentOrders.stream()
+                        .filter(this::isOpenFulfillmentOrder)
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private boolean isOpenFulfillmentOrder(Map<String, Object> fulfillmentOrder) {
+        Object status = fulfillmentOrder.get("status");
+        return status != null && "open".equalsIgnoreCase(status.toString());
+    }
+
+    private boolean supportsCreateFulfillment(Map<String, Object> fulfillmentOrder) {
+        Object actions = fulfillmentOrder.get("supported_actions");
+        if (!(actions instanceof List<?> supportedActions)) {
+            return false;
+        }
+        return supportedActions.stream()
+                .filter(action -> action != null)
+                .map(action -> action.toString().toLowerCase())
+                .anyMatch(action -> action.contains("fulfill"));
+    }
+
+    private OrderStatusPushResult cancel(Order order, OrderStatusPushContext context) {
         ChannelCredential credential = connectedCredential(order);
         String shopDomain = shopDomain(order);
+        ShopifyCancelReason reason = context.getShopifyReason() != null
+                ? context.getShopifyReason()
+                : ShopifyCancelReason.OTHER;
+        boolean email = context.getEmail() == null || context.getEmail();
+        boolean restock = context.getRestock() == null || context.getRestock();
+        boolean refund = context.getRefund() == null || context.getRefund();
+
         Map<String, Object> cancelled =
-                shopifyApiClient.cancelOrder(shopDomain, credential.getAccessToken(), order.getExternalOrderId(), cancelReason);
+                shopifyApiClient.cancelOrder(shopDomain, credential.getAccessToken(),
+                        order.getExternalOrderId(), reason, email, restock, refund);
 
         Map<String, Object> metadata = new HashMap<>();
+        metadata.put("shopifyReason", reason.name());
+        metadata.put("reason", reason.getShopifyValue());
+        metadata.put("email", email);
+        metadata.put("restock", restock);
+        metadata.put("refund", refund);
         if (cancelled.get("id") != null) {
             metadata.put("cancelledOrderId", String.valueOf(cancelled.get("id")));
         }

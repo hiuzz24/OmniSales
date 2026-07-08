@@ -32,8 +32,13 @@ const orderApi = {
     return response.data.data;
   },
 
-  cancel: async (id, reason = '') => {
-    const response = await axiosClient.post(`/orders/${id}/cancel`, null, { params: { reason } });
+  cancel: async (id, data = {}) => {
+    const response = await axiosClient.post(`/orders/${id}/cancel`, data);
+    return response.data.data;
+  },
+
+  getCancelReasons: async (id) => {
+    const response = await axiosClient.get(`/orders/${id}/cancel-reasons`);
     return response.data.data;
   },
 

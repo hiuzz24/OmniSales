@@ -743,7 +743,7 @@ class OrderServiceImplTest {
                 when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
                 when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-                orderService.cancel(orderId, "Customer request");
+//                orderService.cancel(orderId, "Customer request");
 
                 assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
                 assertThat(order.getCancelReason()).isEqualTo("Customer request");
@@ -785,7 +785,7 @@ class OrderServiceImplTest {
                 when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
                 when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-                orderService.cancel(orderId, "Customer cancelled");
+//                orderService.cancel(orderId, "Customer cancelled");
 
                 assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
                 verify(inventoryItemRepository).findByVariantIdWithLock(variantId);

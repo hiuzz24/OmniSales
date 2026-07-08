@@ -50,6 +50,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
     @Transactional
     public WebhookReceiveResult receive(PlatformType platform, Map<String, String> headers, String rawBody) {
         log.info("[receive webhook]");
+        log.info("[receive webhook rawBody] {}",rawBody);
         PlatformWebhookHandler handler = handlerMap().get(platform);
         if (handler == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported webhook platform");

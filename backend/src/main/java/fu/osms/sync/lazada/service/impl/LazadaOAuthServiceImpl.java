@@ -45,14 +45,18 @@ public class LazadaOAuthServiceImpl implements LazadaOAuthService {
             throw new IllegalStateException("Thiếu cấu hình Lazada OAuth: LAZADA_APP_KEY hoặc LAZADA_REDIRECT_URI.");
         }
 
-        return UriComponentsBuilder.fromUriString(authUrl)
+        String url = UriComponentsBuilder.fromUriString(authUrl)
                 .queryParam("response_type", "code")
                 .queryParam("force_auth", "true")
                 .queryParam("redirect_uri", redirectUri)
                 .queryParam("client_id", appKey)
+//                .queryParam("scope", "email")
                 .build()
                 .encode()
                 .toUriString();
+        log.info("[LazadaOAuth] authorize url={}", url);
+
+        return url;
     }
 
     @Override
@@ -63,6 +67,7 @@ public class LazadaOAuthServiceImpl implements LazadaOAuthService {
 
         try {
             String responseStr = lazadaApiClient.executePost("/auth/token/create", params, null, null, apiUrl);
+            log.info("[laz token response] {}", responseStr);
             Map<String, Object> responseMap = objectMapper.readValue(responseStr, new TypeReference<>() {});
             validateTokenResponse(responseMap);
 

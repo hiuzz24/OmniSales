@@ -1,19 +1,24 @@
 package fu.osms.sync.shopify.impl;
 
 import fu.osms.sync.shopify.ShopifyOAuthService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
 
     @Value("${shopify.api-key}")
@@ -30,19 +35,21 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
 
     private final RestTemplate restTemplate;
 
-    public ShopifyOAuthServiceImpl(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
-    }
-
     @Override
     public String buildAuthorizationUrl(String shop) {
+        validateOAuthConfig();
         String normalizedShop = normalizeShop(shop);
         String state = UUID.randomUUID().toString();
 
-        String authUrl = String.format(
-                "https://%s.myshopify.com/admin/oauth/authorize?client_id=%s&scope=%s&redirect_uri=%s&state=%s",
-                normalizedShop, apiKey, scopes, redirectUri, state
-        );
+        String authUrl = UriComponentsBuilder
+                .fromHttpUrl("https://" + normalizedShop + ".myshopify.com/admin/oauth/authorize")
+                .queryParam("client_id", apiKey)
+                .queryParam("scope", scopes)
+                .queryParam("redirect_uri", redirectUri)
+                .queryParam("state", state)
+                .build()
+                .encode()
+                .toUriString();
 
         log.info("[ShopifyOAuth] buildAuthorizationUrl — shop={}, redirectUri={}", normalizedShop, redirectUri);
         return authUrl;
@@ -50,6 +57,7 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
 
     @Override
     public String exchangeCodeForToken(String shop, String code) {
+        validateOAuthConfig();
         String normalizedShop = normalizeShop(shop);
         String tokenUrl = String.format("https://%s.myshopify.com/admin/oauth/access_token", normalizedShop);
 
@@ -83,11 +91,28 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
     }
 
     private String normalizeShop(String shop) {
-        if (shop == null || shop.isBlank()) {
+        if (!StringUtils.hasText(shop)) {
             throw new IllegalArgumentException("Shop domain must not be blank");
         }
-        return shop.endsWith(".myshopify.com")
-                ? shop.substring(0, shop.length() - ".myshopify.com".length())
-                : shop;
+        String normalized = shop.trim().toLowerCase(Locale.ROOT)
+                .replaceFirst("^https?://", "");
+        int pathStart = normalized.indexOf('/');
+        if (pathStart >= 0) {
+            normalized = normalized.substring(0, pathStart);
+        }
+        if (normalized.endsWith(".myshopify.com")) {
+            normalized = normalized.substring(0, normalized.length() - ".myshopify.com".length());
+        }
+        if (!StringUtils.hasText(normalized)) {
+            throw new IllegalArgumentException("Shop domain must not be blank");
+        }
+        return normalized;
+    }
+
+    private void validateOAuthConfig() {
+        if (!StringUtils.hasText(apiKey) || !StringUtils.hasText(apiSecret)
+                || !StringUtils.hasText(redirectUri) || !StringUtils.hasText(scopes)) {
+            throw new IllegalStateException("Missing Shopify OAuth configuration");
+        }
     }
 }

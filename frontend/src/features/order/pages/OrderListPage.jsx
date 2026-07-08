@@ -20,7 +20,8 @@ const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',  icon: Clock,       color: 'orange'    },
   CONFIRMED:  { label: 'Đã xác nhận', icon: CheckCircle, color: 'blue'     },
   PROCESSING: { label: 'Đang xử lý',  icon: Package,     color: 'amber'    },
-  SHIPPED:    { label: 'Đang giao',    icon: Truck,       color: 'teal'    },
+  SHIPPED:    { label: 'Sẵn sàng giao', icon: Truck,       color: 'teal'    },
+  IN_TRANSIT: { label: 'Đang vận chuyển', icon: Truck,    color: 'sky'     },
   DELIVERED:  { label: 'Đã giao',      icon: CheckCircle, color: 'green'    },
   CANCELLED:  { label: 'Đã hủy',       icon: XCircle,     color: 'red'      },
 };
@@ -143,6 +144,10 @@ const OrderListPage = () => {
   };
 
   const getStatusConfig = (status) => STATUS_CONFIG[status] || { label: status, color: 'slate' };
+  const getStatusClassName = (status) => {
+    if (status === 'IN_TRANSIT') return 'statusInTransit';
+    return `status${status.charAt(0) + status.slice(1).toLowerCase()}`;
+  };
   const getPaymentConfig = (status) => PAYMENT_CONFIG[status] || { label: status, className: 'payUnpaid' };
 
   const getItemsSummary = (items) => {
@@ -224,7 +229,9 @@ const OrderListPage = () => {
           <select className={styles.select} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
             <option value="">Tất cả kênh</option>
             {channels.map((ch) => (
-              <option key={ch.id} value={ch.id}>{ch.name}</option>
+              <option key={ch.id} value={ch.id}>
+                {ch.name || ch.displayName || ch.platform || 'Kênh không tên'}
+              </option>
             ))}
           </select>
           <input
@@ -333,7 +340,7 @@ const OrderListPage = () => {
                       {formatCurrency(order.totalAmount)}
                     </td>
                     <td>
-                      <span className={`${styles.statusBadge} ${styles[`status${order.status.charAt(0) + order.status.slice(1).toLowerCase()}`]}`}>
+                      <span className={`${styles.statusBadge} ${styles[getStatusClassName(order.status)]}`}>
                         <StatusIcon size={11} />
                         {sc.label}
                       </span>

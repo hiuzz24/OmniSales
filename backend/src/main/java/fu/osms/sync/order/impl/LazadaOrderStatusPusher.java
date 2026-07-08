@@ -4,13 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.entity.Order;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.order.OrderStatusPushContext;
 import fu.osms.sync.order.OrderStatusPushResult;
 import fu.osms.sync.order.PlatformOrderStatusPusher;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
@@ -33,22 +37,48 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
     @Value("${lazada.order.shipping-allocate-type:TFS}")
     private String shippingAllocateType;
 
-    @Value("${lazada.order.cancel-reason-id:}")
-    private String defaultCancelReasonId;
-
     @Override
     public PlatformType getPlatform() {
         return PlatformType.LAZADA;
     }
 
     @Override
-    public OrderStatusPushResult push(Order order, OrderStatus targetStatus, String cancelReason) {
+    public OrderStatusPushResult push(Order order, OrderStatus targetStatus, OrderStatusPushContext context) {
         return switch (targetStatus) {
             case PROCESSING -> pack(order);
             case SHIPPED -> readyToShip(order);
-            case CANCELLED -> cancel(order, cancelReason);
+            case CANCELLED -> cancel(order, context.getCancelReasonId());
             default -> OrderStatusPushResult.skipped("Lazada does not support pushing " + targetStatus);
         };
+    }
+
+    @Override
+    public List<CancelReasonResponse> getCancelReasons(Order order) {
+        ChannelCredential credential = connectedCredential(order);
+        Long tokenExpiresAt = tokenExpiresAt(credential);
+        List<String> orderItemIds = orderItemIds(fetchOrderItems(order, credential, tokenExpiresAt));
+        if (orderItemIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, Object> body = validateCancel(order, orderItemIds, credential, tokenExpiresAt);
+        Map<String, Object> data = WebhookPayloadUtils.copyMap(body.get("data"));
+        String warningMessage = WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(data, "tip_content", "tipContent"));
+        Object reasonOptions = WebhookPayloadUtils.firstPresent(data, "reason_options", "reasonOptions");
+        if (!(reasonOptions instanceof List<?> list)) {
+            return List.of();
+        }
+
+        return list.stream()
+                .filter(item -> item instanceof Map<?, ?>)
+                .map(WebhookPayloadUtils::copyMap)
+                .map(item -> CancelReasonResponse.builder()
+                        .id(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(item, "reason_id", "reasonId", "id")))
+                        .name(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(item, "reason_name", "reasonName", "name")))
+                        .warningMessage(warningMessage)
+                        .build())
+                .filter(reason -> reason.getId() != null && !reason.getId().isBlank())
+                .toList();
     }
 
     private OrderStatusPushResult pack(Order order) {
@@ -61,12 +91,14 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
         }
 
         Map<String, String> params = new HashMap<>();
-        params.put("delivery_type", deliveryType);
-        params.put("shipping_allocate_type", shippingAllocateType);
-        params.put("pack_order_list", toJson(List.of(Map.of(
-                "order_id", order.getExternalOrderId(),
-                "order_item_list", orderItemIds
-        ))));
+        params.put("packReq", toJson(Map.of(
+                "delivery_type", deliveryType,
+                "shipping_allocate_type", shippingAllocateType,
+                "pack_order_list", List.of(Map.of(
+                        "order_id", order.getExternalOrderId(),
+                        "order_item_list", orderItemIds
+                ))
+        )));
 
         Map<String, Object> body = executePost("/order/fulfill/pack", params, credential, tokenExpiresAt,
                 "Lazada pack order API returned error");
@@ -101,8 +133,9 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
         }
 
         Map<String, String> params = new HashMap<>();
-        params.put("package_id", packageId);
-        params.put("delivery_type", deliveryType);
+        params.put("readyToShipReq", toJson(Map.of(
+                "packages", List.of(Map.of("package_id", packageId))
+        )));
         executePost("/order/package/rts", params, credential, tokenExpiresAt,
                 "Lazada ready to ship API returned error");
 
@@ -111,7 +144,7 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
         return OrderStatusPushResult.success("Lazada order marked ready to ship", metadata);
     }
 
-    private OrderStatusPushResult cancel(Order order, String cancelReason) {
+    private OrderStatusPushResult cancel(Order order, String reasonId) {
         ChannelCredential credential = connectedCredential(order);
         Long tokenExpiresAt = tokenExpiresAt(credential);
         List<Map<String, Object>> items = fetchOrderItems(order, credential, tokenExpiresAt);
@@ -120,18 +153,15 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
             return OrderStatusPushResult.failed("No Lazada order item id found");
         }
 
-        String reasonId = resolveCancelReasonId(orderItemIds, cancelReason, credential, tokenExpiresAt);
         if (reasonId == null || reasonId.isBlank()) {
             return OrderStatusPushResult.failed("Missing Lazada cancel reason id");
         }
 
         Map<String, String> params = new HashMap<>();
-        params.put("order_item_ids", toJson(orderItemIds));
+        params.put("order_id", order.getExternalOrderId());
+        params.put("order_item_id_list", toJson(orderItemIds));
         params.put("reason_id", reasonId);
-        if (cancelReason != null && !cancelReason.isBlank()) {
-            params.put("reason_detail", cancelReason);
-        }
-        executePost("/order/reverse/cancel", params, credential, tokenExpiresAt,
+        executeGet("/order/reverse/cancel/create", params, credential, tokenExpiresAt,
                 "Lazada cancel order API returned error");
 
         Map<String, Object> metadata = new HashMap<>();
@@ -160,25 +190,29 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
                 .toList();
     }
 
-    private String resolveCancelReasonId(List<String> orderItemIds, String cancelReason,
-                                         ChannelCredential credential, Long tokenExpiresAt) {
-        if (defaultCancelReasonId != null && !defaultCancelReasonId.isBlank()) {
-            return defaultCancelReasonId;
-        }
-
+    private Map<String, Object> validateCancel(Order order, List<String> orderItemIds,
+                                               ChannelCredential credential, Long tokenExpiresAt) {
         Map<String, String> params = new HashMap<>();
-        params.put("order_item_ids", toJson(orderItemIds));
-        if (cancelReason != null && !cancelReason.isBlank()) {
-            params.put("reason_detail", cancelReason);
-        }
-        Map<String, Object> body = executePost("/order/reverse/cancel/validate", params, credential, tokenExpiresAt,
+        params.put("order_id", order.getExternalOrderId());
+        params.put("order_item_id_list", toJson(orderItemIds));
+        log.info("[Laz params] {}",params);
+        return executeGet("/order/reverse/cancel/validate", params, credential, tokenExpiresAt,
                 "Lazada cancel validate API returned error");
-        return findReasonId(body);
+    }
+
+    private Map<String, Object> executeGet(String apiPath, Map<String, String> params, ChannelCredential credential,
+                                           Long tokenExpiresAt, String errorMessage) {
+        String response = lazadaApiClient.executeGet(apiPath, params, credential.getAccessToken(), tokenExpiresAt);
+        log.info("[LazadaOrderStatusPush] Raw response for {}: {}", apiPath, response);
+        Map<String, Object> body = WebhookPayloadUtils.parseObject(response, errorMessage);
+        assertLazadaSuccess(body, errorMessage);
+        return body;
     }
 
     private Map<String, Object> executePost(String apiPath, Map<String, String> params, ChannelCredential credential,
                                             Long tokenExpiresAt, String errorMessage) {
         String response = lazadaApiClient.executePost(apiPath, params, credential.getAccessToken(), tokenExpiresAt);
+        log.info("[LazadaOrderStatusPush] Raw response for {}: {}", apiPath, response);
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, errorMessage);
         assertLazadaSuccess(body, errorMessage);
         return body;
@@ -200,15 +234,42 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
     }
 
     private String extractPackageId(Map<String, Object> body) {
-        Map<String, Object> data = WebhookPayloadUtils.copyMap(body.get("data"));
-        String direct = WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(data, "package_id", "packageId"));
-        if (direct != null && !direct.isBlank()) {
-            return direct;
+        Map<String, Object> result = WebhookPayloadUtils.copyMap(body.get("result"));
+        Map<String, Object> data = WebhookPayloadUtils.copyMap(result.get("data"));
+        String packageId = firstPackageIdFromPackOrderList(data.get("pack_order_list"));
+        if (packageId != null && !packageId.isBlank()) {
+            return packageId;
         }
+
         Object packages = data.get("packages");
-        if (packages instanceof List<?> list && !list.isEmpty()) {
-            Map<String, Object> first = WebhookPayloadUtils.copyMap(list.get(0));
-            return WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(first, "package_id", "packageId"));
+        if (!(packages instanceof List<?> list) || list.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Object> firstPackage = WebhookPayloadUtils.copyMap(list.get(0));
+        return WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(firstPackage, "package_id"));
+    }
+
+    private String firstPackageIdFromPackOrderList(Object value) {
+        if (!(value instanceof List<?> packOrderList)) {
+            return null;
+        }
+
+        for (Object packOrder : packOrderList) {
+            Map<String, Object> packOrderMap = WebhookPayloadUtils.copyMap(packOrder);
+            Object orderItems = packOrderMap.get("order_item_list");
+            if (!(orderItems instanceof List<?> orderItemList)) {
+                continue;
+            }
+
+            for (Object orderItem : orderItemList) {
+                Map<String, Object> orderItemMap = WebhookPayloadUtils.copyMap(orderItem);
+                String packageId = WebhookPayloadUtils.text(
+                        WebhookPayloadUtils.firstPresent(orderItemMap, "package_id", "packageId"));
+                if (packageId != null && !packageId.isBlank()) {
+                    return packageId;
+                }
+            }
         }
         return null;
     }
@@ -226,7 +287,7 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
             if (fromData != null && !fromData.isBlank()) {
                 return fromData;
             }
-            Object reasons = WebhookPayloadUtils.firstPresent(dataMap, "reasons", "reason_list", "reasonList");
+            Object reasons = WebhookPayloadUtils.firstPresent(dataMap, "reason_options", "reasons", "reason_list", "reasonList");
             return firstReasonIdFromList(reasons);
         }
         return firstReasonIdFromList(data);

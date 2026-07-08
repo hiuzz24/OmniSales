@@ -80,7 +80,8 @@ const OrderLogPage = () => {
     PENDING:       { bg: '#fef9c3', color: '#854d0e', label: 'Chờ xử lý' },
     CONFIRMED:     { bg: '#dbeafe', color: '#1e40af', label: 'Đã xác nhận' },
     PROCESSING:    { bg: '#ede9fe', color: '#6d28d9', label: 'Đang xử lý' },
-    SHIPPED:       { bg: '#e0f2fe', color: '#075985', label: 'Đã giao VC' },
+    SHIPPED:       { bg: '#e0f2fe', color: '#075985', label: 'Sẵn sàng giao' },
+    IN_TRANSIT:    { bg: '#e0f2fe', color: '#0369a1', label: 'Đang vận chuyển' },
     DELIVERED:     { bg: '#dcfce7', color: '#166534', label: 'Đã giao hàng' },
     CANCELLED:     { bg: '#fee2e2', color: '#b91c1c', label: 'Đã hủy' },
   };

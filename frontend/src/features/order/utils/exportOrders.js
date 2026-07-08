@@ -63,7 +63,7 @@ export const ORDER_EXPORT_COLUMNS = [
   {
     key: 'status', label: 'Trạng thái', width: 14, defaultChecked: true,
     getValue: (o) => {
-      const map = { PENDING: 'Chờ xử lý', CONFIRMED: 'Đã xác nhận', PROCESSING: 'Đang xử lý', SHIPPED: 'Đang giao', DELIVERED: 'Đã giao', CANCELLED: 'Đã hủy' };
+      const map = { PENDING: 'Chờ xử lý', CONFIRMED: 'Đã xác nhận', PROCESSING: 'Đang xử lý', SHIPPED: 'Sẵn sàng giao', IN_TRANSIT: 'Đang vận chuyển', DELIVERED: 'Đã giao', CANCELLED: 'Đã hủy' };
       return map[o.status] || o.status || '';
     },
   },

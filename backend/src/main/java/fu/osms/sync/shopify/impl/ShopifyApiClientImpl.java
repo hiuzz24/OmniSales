@@ -2,6 +2,7 @@ package fu.osms.sync.shopify.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import fu.osms.order.enums.ShopifyCancelReason;
 import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
 import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyProductRootResponse;
@@ -166,11 +167,14 @@ public class ShopifyApiClientImpl implements ShopifyApiClient {
     }
 
     @Override
-    public Map<String, Object> cancelOrder(String shopDomain, String accessToken, String orderId, String reason) {
+    public Map<String, Object> cancelOrder(String shopDomain, String accessToken, String orderId,
+                                           ShopifyCancelReason reason, boolean email, boolean restock, boolean refund) {
         String url = buildUrl(shopDomain, "/orders/" + orderId + "/cancel.json");
         Map<String, Object> body = new HashMap<>();
-        body.put("email", false);
-        body.put("reason", reason != null && !reason.isBlank() ? reason : "other");
+        body.put("email", email);
+        body.put("restock", restock);
+        body.put("refund", refund);
+        body.put("reason", reason != null ? reason.getShopifyValue() : ShopifyCancelReason.OTHER.getShopifyValue());
         Map<String, Object> response = executeRaw(url, accessToken, HttpMethod.POST, body, "cancel Shopify order");
         Object order = response.get("order");
         return order != null ? objectMapper.convertValue(order, new TypeReference<Map<String, Object>>() {
