@@ -67,7 +67,6 @@ public class LazadaOAuthServiceImpl implements LazadaOAuthService {
 
         try {
             String responseStr = lazadaApiClient.executePost("/auth/token/create", params, null, null, apiUrl);
-            log.info("[laz token response] {}", responseStr);
             Map<String, Object> responseMap = objectMapper.readValue(responseStr, new TypeReference<>() {});
             validateTokenResponse(responseMap);
 

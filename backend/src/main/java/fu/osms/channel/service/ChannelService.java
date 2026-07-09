@@ -41,5 +41,7 @@ public interface ChannelService {
 
     ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName);
 
+    ChannelResponse connectTikTok(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName, Map<String, Object> metadata);
+
     void updateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result);
 }
