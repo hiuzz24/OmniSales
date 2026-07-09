@@ -47,10 +47,26 @@ async function getAdminAuthHeaders(request) {
   return { Authorization: `Bearer ${token}` };
 }
 
+// Cache admin token per worker (process) so we don't hammer the login
+// endpoint and trip the API rate limiter (100 req/min).
+let _adminTokenCache = null;
+let _adminTokenCacheAt = 0;
+const ADMIN_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+async function getAdminAuthHeadersCached(request) {
+  const now = Date.now();
+  if (!_adminTokenCache || (now - _adminTokenCacheAt) > ADMIN_TOKEN_TTL_MS) {
+    _adminTokenCache = await getAdminAuthToken(request);
+    _adminTokenCacheAt = now;
+  }
+  return { Authorization: `Bearer ${_adminTokenCache}` };
+}
+
 module.exports = {
   ADMIN_EMAIL,
   ADMIN_PASSWORD,
   API_BASE,
   getAdminAuthToken,
   getAdminAuthHeaders,
+  getAdminAuthHeadersCached,
 };

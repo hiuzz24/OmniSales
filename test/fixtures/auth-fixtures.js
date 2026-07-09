@@ -27,7 +27,7 @@
 const base = require('@playwright/test');
 const { loginAsManager } = require('../utils/product-helpers');
 const { getAuthHeaders } = require('../utils/warehouse-helpers');
-const { getAdminAuthHeaders } = require('../utils/admin-helpers');
+const { getAdminAuthHeadersCached } = require('../utils/admin-helpers');
 
 exports.test = base.test.extend({
   managerPage: async ({ page }, use) => {
@@ -41,7 +41,7 @@ exports.test = base.test.extend({
   },
 
   adminHeaders: async ({ request }, use) => {
-    const headers = await getAdminAuthHeaders(request);
+    const headers = await getAdminAuthHeadersCached(request);
     await use(headers);
   },
 

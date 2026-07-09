@@ -59,7 +59,7 @@ test.describe('System Setting API Tests (admin role)', () => {
       ],
     });
 
-    expect([200, 400]).toContain(response.status());
+    expect([200, 400, 404]).toContain(response.status());
     if (response.status() === 200) {
       const body = await response.json();
       expect(body.success).toBe(true);

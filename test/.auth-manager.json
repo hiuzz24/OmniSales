@@ -1,0 +1,15 @@
+{
+  "cookies": [
+    {
+      "name": "refreshToken",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJqdGkiOiIzYjc2N2Q5Ny02NWU0LTQ0YjYtODdlYS04MjdiYzAwNThkM2YiLCJzdWIiOiJtYW5hZ2VyQG9zbXMudm4iLCJpYXQiOjE3ODM2MDI1NDQsImV4cCI6MTc4NDIwNzM0NH0.Zb01lcnV-_qZfM9Bz4D7g1hwb1OgMHdK6kUT2x-BU_I",
+      "domain": "localhost",
+      "path": "/api/auth",
+      "expires": 1784207344.401477,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": []
+}

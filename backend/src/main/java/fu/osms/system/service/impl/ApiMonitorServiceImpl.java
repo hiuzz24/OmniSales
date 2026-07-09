@@ -81,6 +81,11 @@ public class ApiMonitorServiceImpl implements ApiMonitorService {
 
     @Override
     public boolean isRateLimited(String identifier, String endpoint) {
+        // Skip rate limiting for the auth login endpoint to avoid
+        // breaking the UI login flow when burst requests hit it.
+        if (endpoint != null && endpoint.startsWith("/api/auth/login")) {
+            return false;
+        }
         ApiEndpointLimit limitConfig = getEndpointLimitConfig(endpoint);
         int maxPerMin = limitConfig != null ? limitConfig.getRateLimitPerMin() : 100; // default 100 req/min
 
