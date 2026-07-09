@@ -1,22 +1,12 @@
-const { test, expect } = require('@playwright/test');
-const {
-  getAuthToken,
-  API_BASE,
-} = require('../../utils/inventory-helpers');
+const { test, expect } = require('../../fixtures/auth-fixtures');
+const { API_BASE } = require('../../utils/inventory-helpers');
 
 test.describe('Product Variant API Tests', () => {
 
-  let authToken;
-
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-  });
-
   // GET /api/catalog/variants
-  test('PV-1 - GET /api/catalog/variants - List all returns 200', async ({ request }) => {
+  test('PV-1 - GET /api/catalog/variants - List all returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/catalog/variants?page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -26,10 +16,10 @@ test.describe('Product Variant API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  test('PV-2 - GET /api/catalog/variants - Filter by search keyword', async ({ request }) => {
+  test('PV-2 - GET /api/catalog/variants - Filter by search keyword', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/catalog/variants?search=TEST&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
 
     expect(response.status()).toBe(200);
@@ -38,17 +28,17 @@ test.describe('Product Variant API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  test('PV-3 - GET /api/catalog/variants - Default page returns 200', async ({ request }) => {
+  test('PV-3 - GET /api/catalog/variants - Default page returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/catalog/variants`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
   });
 
-  test('PV-4 - GET /api/catalog/variants - Pagination with size 5', async ({ request }) => {
+  test('PV-4 - GET /api/catalog/variants - Pagination with size 5', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/catalog/variants?page=0&size=5`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -57,17 +47,17 @@ test.describe('Product Variant API Tests', () => {
     expect(body.data.content.length).toBeLessThanOrEqual(5);
   });
 
-  test('PV-5 - GET /api/catalog/variants - Empty search returns full list', async ({ request }) => {
+  test('PV-5 - GET /api/catalog/variants - Empty search returns full list', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/catalog/variants?search=&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('PV-6 - GET /api/catalog/variants - Returns correct fields for variants', async ({ request }) => {
+  test('PV-6 - GET /api/catalog/variants - Returns correct fields for variants', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/catalog/variants?page=0&size=5`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -79,12 +69,11 @@ test.describe('Product Variant API Tests', () => {
     }
   });
 
-  test('PV-7 - GET /api/catalog/variants - Search returns correct filtered list', async ({ request }) => {
-    // Create a unique variant to search for
+  test('PV-7 - GET /api/catalog/variants - Search returns correct filtered list', async ({ request, managerHeaders }) => {
     const ts = Date.now();
     const create = await request.post(`${API_BASE}/products`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -108,17 +97,15 @@ test.describe('Product Variant API Tests', () => {
     try {
       const response = await request.get(
         `${API_BASE}/catalog/variants?search=SEARCH-V-${ts}&page=0&size=10`,
-        { headers: { Authorization: `Bearer ${authToken}` } }
+        { headers: managerHeaders }
       );
       expect(response.status()).toBe(200);
       const body = await response.json();
       expect(body.success).toBe(true);
-      // Variant may or may not be searchable depending on backend impl; just verify structure
       expect(body.data).toHaveProperty('totalElements');
     } finally {
-      // Cleanup
       await request.delete(`${API_BASE}/products/${newProduct.id}/delete`, {
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: managerHeaders,
       });
     }
   });

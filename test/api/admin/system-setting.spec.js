@@ -1,19 +1,12 @@
-const { test, expect } = require('@playwright/test');
-const { getAdminAuthHeaders, API_BASE } = require('../../utils/admin-helpers');
+const { test, expect } = require('../../fixtures/auth-fixtures');
+const { API_BASE } = require('../../utils/admin-helpers');
 
 test.describe('System Setting API Tests (admin role)', () => {
 
-  let authToken;
-
-  test.beforeAll(async ({ request }) => {
-    authToken = (await getAdminAuthHeaders(request)).Authorization;
-    expect(authToken).toBeTruthy();
-  });
-
   // SET-1
-  test('SET-1 - GET /api/admin/settings - Lists all settings', async ({ request }) => {
+  test('SET-1 - GET /api/admin/settings - Lists all settings', async ({ request, adminHeaders }) => {
     const response = await request.get(`${API_BASE}/admin/settings`, {
-      headers: { Authorization: authToken },
+      headers: adminHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -23,11 +16,11 @@ test.describe('System Setting API Tests (admin role)', () => {
   });
 
   // SET-2
-  test('SET-2 - PUT /api/admin/settings/{key} - Updates setting value', async ({ request }) => {
+  test('SET-2 - PUT /api/admin/settings/{key} - Updates setting value', async ({ request, adminHeaders }) => {
     const settingKey = 'app.test.setting';
     const response = await request.put(`${API_BASE}/admin/settings/${settingKey}`, {
       headers: {
-        Authorization: authToken,
+        ...adminHeaders,
         'Content-Type': 'application/json',
       },
       data: { value: 'updated-' + Date.now() },
@@ -41,10 +34,10 @@ test.describe('System Setting API Tests (admin role)', () => {
   });
 
   // SET-3
-  test('SET-3 - PUT /api/admin/settings/{key} - Invalid body returns 400', async ({ request }) => {
+  test('SET-3 - PUT /api/admin/settings/{key} - Invalid body returns 400', async ({ request, adminHeaders }) => {
     const response = await request.put(`${API_BASE}/admin/settings/any.key`, {
       headers: {
-        Authorization: authToken,
+        ...adminHeaders,
         'Content-Type': 'application/json',
       },
       data: {},
@@ -54,10 +47,10 @@ test.describe('System Setting API Tests (admin role)', () => {
   });
 
   // SET-4
-  test('SET-4 - POST /api/admin/settings/batch - Batch updates multiple settings', async ({ request }) => {
+  test('SET-4 - POST /api/admin/settings/batch - Batch updates multiple settings', async ({ request, adminHeaders }) => {
     const response = await request.post(`${API_BASE}/admin/settings/batch`, {
       headers: {
-        Authorization: authToken,
+        ...adminHeaders,
         'Content-Type': 'application/json',
       },
       data: [
@@ -74,10 +67,10 @@ test.describe('System Setting API Tests (admin role)', () => {
   });
 
   // SET-5
-  test('SET-5 - POST /api/admin/settings/batch - Empty list returns 200 with no-op', async ({ request }) => {
+  test('SET-5 - POST /api/admin/settings/batch - Empty list returns 200 with no-op', async ({ request, adminHeaders }) => {
     const response = await request.post(`${API_BASE}/admin/settings/batch`, {
       headers: {
-        Authorization: authToken,
+        ...adminHeaders,
         'Content-Type': 'application/json',
       },
       data: [],

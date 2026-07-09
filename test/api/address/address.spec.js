@@ -1,19 +1,12 @@
-const { test, expect } = require('@playwright/test');
-const { getAuthToken, API_BASE } = require('../../utils/inventory-helpers');
+const { test, expect } = require('../../fixtures/auth-fixtures');
+const { API_BASE } = require('../../utils/inventory-helpers');
 
 test.describe('Address API Tests', () => {
 
-  let authToken;
-
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-  });
-
   // ADDR-1
-  test('ADDR-1 - GET /api/address/countries - Returns list of countries', async ({ request }) => {
+  test('ADDR-1 - GET /api/address/countries - Returns list of countries', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/address/countries`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -24,9 +17,9 @@ test.describe('Address API Tests', () => {
   });
 
   // ADDR-2
-  test('ADDR-2 - GET /api/address/countries - Each country has code and name', async ({ request }) => {
+  test('ADDR-2 - GET /api/address/countries - Each country has code and name', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/address/countries`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -40,9 +33,9 @@ test.describe('Address API Tests', () => {
   });
 
   // ADDR-3
-  test('ADDR-3 - GET /api/address/divisions?country=VN&level=1 - Get provinces', async ({ request }) => {
+  test('ADDR-3 - GET /api/address/divisions?country=VN&level=1 - Get provinces', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/address/divisions?country=VN&level=1`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -52,10 +45,10 @@ test.describe('Address API Tests', () => {
   });
 
   // ADDR-4
-  test('ADDR-4 - GET /api/address/divisions?country=VN&level=2&parent=... - Get districts', async ({ request }) => {
+  test('ADDR-4 - GET /api/address/divisions?country=VN&level=2&parent=... - Get districts', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/address/divisions?country=VN&level=2&parent=HN`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
 
     expect(response.status()).toBe(200);
@@ -65,10 +58,10 @@ test.describe('Address API Tests', () => {
   });
 
   // ADDR-5
-  test('ADDR-5 - GET /api/address/divisions?country=INVALID&level=1 - Returns empty or error', async ({ request }) => {
+  test('ADDR-5 - GET /api/address/divisions?country=INVALID&level=1 - Returns empty or error', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/address/divisions?country=ZZINVALID&level=1`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
 
     expect(response.status()).toBe(200);
@@ -78,9 +71,9 @@ test.describe('Address API Tests', () => {
   });
 
   // ADDR-6
-  test('ADDR-6 - GET /api/address/divisions - Missing required params returns 4xx/5xx', async ({ request }) => {
+  test('ADDR-6 - GET /api/address/divisions - Missing required params returns 4xx/5xx', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/address/divisions`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBeGreaterThanOrEqual(400);

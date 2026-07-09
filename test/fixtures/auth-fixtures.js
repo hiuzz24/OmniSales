@@ -4,31 +4,30 @@
  * Use this module's `test` instead of `@playwright/test` to get
  * pre-authenticated page and request fixtures:
  *
+ * E2E Tests (page-based):
  *   const { test, expect } = require('../fixtures/auth-fixtures');
- *
  *   test('product list renders', async ({ managerPage }) => {
  *     await managerPage.goto('/products');
  *   });
  *
+ * API Tests (request-based):
+ *   const { test, expect } = require('../fixtures/auth-fixtures');
+ *   test('GET /api/products', async ({ request, adminHeaders }) => {
+ *     const response = await request.get(`${API_BASE}/products`, {
+ *       headers: adminHeaders,
+ *     });
+ *   });
+ *
  * Fixtures:
  *   - managerPage   : page already logged in as the test manager account
- *   - managerRequest: APIRequestContext with Authorization header attached
- *   - adminPage     : page already logged in as the SYSTEM_ADMIN account
- *   - adminRequest  : APIRequestContext with admin Authorization header
+ *   - managerHeaders: object with Authorization header for manager user
+ *   - adminHeaders  : object with Authorization header for admin user
  */
 
 const base = require('@playwright/test');
 const { loginAsManager } = require('../utils/product-helpers');
 const { getAuthHeaders } = require('../utils/warehouse-helpers');
 const { getAdminAuthHeaders } = require('../utils/admin-helpers');
-
-/**
- * Wrap a request context with the given headers so all subsequent
- * requests carry the bearer token.
- */
-function authorizedRequest(request, headers) {
-  return request; // headers applied per-call (Playwright's APIRequestContext is immutable here)
-}
 
 exports.test = base.test.extend({
   managerPage: async ({ page }, use) => {
@@ -41,19 +40,9 @@ exports.test = base.test.extend({
     await use(headers);
   },
 
-  managerRequest: async ({ request }, use) => {
-    const headers = await getAuthHeaders(request);
-    await use(authorizedRequest(request, headers));
-  },
-
   adminHeaders: async ({ request }, use) => {
     const headers = await getAdminAuthHeaders(request);
     await use(headers);
-  },
-
-  adminRequest: async ({ request }, use) => {
-    const headers = await getAdminAuthHeaders(request);
-    await use(authorizedRequest(request, headers));
   },
 
   // adminPage is intentionally not provided: there is no dedicated

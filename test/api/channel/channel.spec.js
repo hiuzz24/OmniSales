@@ -1,24 +1,14 @@
-const { test, expect } = require('@playwright/test');
-const { getAuthToken } = require('../../utils/customer-helpers');
-const { API_BASE: ENV_API_BASE } = require('../../utils/env-config');
-
-const API_BASE = process.env.API_BASE || ENV_API_BASE;
+const { test, expect } = require('../../fixtures/auth-fixtures');
+const { API_BASE } = require('../../utils/env-config');
 
 test.describe('Channel API Tests', () => {
 
-  let authToken;
   let createdChannelId;
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-  });
-
   // GET /api/channels
-
-  test('CH1 - GET /api/channels - List channels returns 200', async ({ request }) => {
+  test('CH1 - GET /api/channels - List channels returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/channels`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -33,8 +23,7 @@ test.describe('Channel API Tests', () => {
   });
 
   // POST /api/channels
-
-  test('CH3 - POST /api/channels - Create manual channel returns 201', async ({ request }) => {
+  test('CH3 - POST /api/channels - Create manual channel returns 201', async ({ request, managerHeaders }) => {
     const timestamp = Date.now();
     const payload = {
       platform: 'MANUAL',
@@ -47,7 +36,7 @@ test.describe('Channel API Tests', () => {
 
     const response = await request.post(`${API_BASE}/channels`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: payload,
@@ -64,10 +53,10 @@ test.describe('Channel API Tests', () => {
     createdChannelId = body.data.id;
   });
 
-  test('CH4 - POST /api/channels - Empty displayName returns 400', async ({ request }) => {
+  test('CH4 - POST /api/channels - Empty displayName returns 400', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/channels`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -80,10 +69,10 @@ test.describe('Channel API Tests', () => {
     expect(response.status()).toBe(400);
   });
 
-  test('CH5 - POST /api/channels - Missing platform returns 400', async ({ request }) => {
+  test('CH5 - POST /api/channels - Missing platform returns 400', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/channels`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -95,10 +84,10 @@ test.describe('Channel API Tests', () => {
     expect(response.status()).toBe(400);
   });
 
-  test('CH6 - POST /api/channels - Commission > 100 rejected (400)', async ({ request }) => {
+  test('CH6 - POST /api/channels - Commission > 100 rejected (400)', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/channels`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -112,11 +101,10 @@ test.describe('Channel API Tests', () => {
   });
 
   // GET /api/channels/{id}
-
-  test('CH7 - GET /api/channels/{id} - Get by id returns 200', async ({ request }) => {
+  test('CH7 - GET /api/channels/{id} - Get by id returns 200', async ({ request, managerHeaders }) => {
     test.skip(!createdChannelId, 'No channel created yet');
     const response = await request.get(`${API_BASE}/channels/${createdChannelId}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -126,22 +114,21 @@ test.describe('Channel API Tests', () => {
     expect(body.data.metadata).toHaveProperty('productCount');
   });
 
-  test('CH8 - GET /api/channels/{id} - Not found returns 404', async ({ request }) => {
+  test('CH8 - GET /api/channels/{id} - Not found returns 404', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/channels/00000000-0000-0000-0000-000000000000`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([404, 500]).toContain(response.status());
   });
 
   // PUT /api/channels/{id}
-
-  test('CH9 - PUT /api/channels/{id} - Update returns 200', async ({ request }) => {
+  test('CH9 - PUT /api/channels/{id} - Update returns 200', async ({ request, managerHeaders }) => {
     test.skip(!createdChannelId, 'No channel created yet');
     const newName = `Updated Manual Channel ${Date.now()}`;
     const response = await request.put(`${API_BASE}/channels/${createdChannelId}`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -161,13 +148,11 @@ test.describe('Channel API Tests', () => {
   });
 
   // DELETE /api/channels/{id} (soft delete)
-
-  test('CH10 - DELETE /api/channels/{id} - Soft delete returns 200', async ({ request }) => {
-    // create fresh channel to delete (independent of CH3)
+  test('CH10 - DELETE /api/channels/{id} - Soft delete returns 200', async ({ request, managerHeaders }) => {
     const ts = Date.now();
     const create = await request.post(`${API_BASE}/channels`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: { platform: 'MANUAL', displayName: `ToDelete_${ts}_${Math.random().toString(36).slice(2,8)}`, region: 'VN', metadata: {} },
@@ -176,37 +161,34 @@ test.describe('Channel API Tests', () => {
     const id = (await create.json()).data.id;
 
     const del = await request.delete(`${API_BASE}/channels/${id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(del.status()).toBe(200);
 
-    // subsequent fetch should fail (404/500)
     const after = await request.get(`${API_BASE}/channels/${id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect([404, 500]).toContain(after.status());
   });
 
   // GET /api/channels/{id}/products - currently throws NotImplemented
-
-  test('CH11 - GET /api/channels/{id}/products - Not implemented (500)', async ({ request }) => {
+  test('CH11 - GET /api/channels/{id}/products - Not implemented (500)', async ({ request, managerHeaders }) => {
     test.skip(!createdChannelId, 'No channel created yet');
     const response = await request.get(`${API_BASE}/channels/${createdChannelId}/products`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([200, 500]).toContain(response.status());
   });
 
   // POST duplicate (platform, displayName)
-
-  test('CH12 - POST /api/channels - Duplicate (platform, displayName) rejected', async ({ request }) => {
+  test('CH12 - POST /api/channels - Duplicate (platform, displayName) rejected', async ({ request, managerHeaders }) => {
     const ts = Date.now();
     const name = `DupCh_${ts}_${Math.random().toString(36).slice(2,8)}`;
     const first = await request.post(`${API_BASE}/channels`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: { platform: 'MANUAL', displayName: name, region: 'VN', metadata: {} },
@@ -216,7 +198,7 @@ test.describe('Channel API Tests', () => {
 
     const dup = await request.post(`${API_BASE}/channels`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: { platform: 'MANUAL', displayName: name, region: 'VN', metadata: {} },
@@ -224,18 +206,16 @@ test.describe('Channel API Tests', () => {
 
     expect([409, 500]).toContain(dup.status());
 
-    // cleanup
     await request.delete(`${API_BASE}/channels/${id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
   });
 
   // Cleanup
-
-  test.afterAll(async ({ request }) => {
+  test.afterAll(async ({ request, managerHeaders }) => {
     if (createdChannelId) {
       await request.delete(`${API_BASE}/channels/${createdChannelId}`, {
-        headers: { Authorization: `Bearer ${authToken}` },
+        headers: managerHeaders,
       });
     }
   });

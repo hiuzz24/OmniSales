@@ -1,6 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
   getWarehouseId,
   getFirstWarehouseVariantId,
   recordTransaction,
@@ -10,13 +9,11 @@ const {
 
 test.describe('Inventory Transactions API Tests', () => {
 
-  let authToken;
   let warehouseId;
   let variantId;
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
+  test.beforeAll(async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     warehouseId = await getWarehouseId(request, authToken);
     if (warehouseId) {
       variantId = await getFirstWarehouseVariantId(request, authToken, warehouseId);
@@ -24,8 +21,9 @@ test.describe('Inventory Transactions API Tests', () => {
   });
 
   // POST /api/inventory/transactions
-  test('INV-11 - POST /api/inventory/transactions - Record ADJUSTMENT transaction', async ({ request }) => {
+  test('INV-11 - POST /api/inventory/transactions - Record ADJUSTMENT transaction', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing data');
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const txn = await recordTransaction(request, authToken, {
       warehouseId,
       variantId,
@@ -40,11 +38,11 @@ test.describe('Inventory Transactions API Tests', () => {
     }
   });
 
-  test('INV-12 - POST /api/inventory/transactions - Missing variantId returns 400', async ({ request }) => {
+  test('INV-12 - POST /api/inventory/transactions - Missing variantId returns 400', async ({ request, managerHeaders }) => {
     test.skip(!warehouseId, 'No warehouse available');
     const response = await request.post(`${API_BASE}/inventory/transactions`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -66,10 +64,10 @@ test.describe('Inventory Transactions API Tests', () => {
   });
 
   // GET /api/inventory/detail/transactions
-  test('INV-13 - GET /api/inventory/detail/transactions - All transactions', async ({ request }) => {
+  test('INV-13 - GET /api/inventory/detail/transactions - All transactions', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/inventory/detail/transactions?page=0&size=10`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
 
     expect(response.status()).toBe(200);
@@ -78,8 +76,9 @@ test.describe('Inventory Transactions API Tests', () => {
     expect(body.data).toHaveProperty('content');
   });
 
-  test('INV-14 - GET /api/inventory/detail/transactions - Filter by variantId', async ({ request }) => {
+  test('INV-14 - GET /api/inventory/detail/transactions - Filter by variantId', async ({ request, managerHeaders }) => {
     test.skip(!variantId, 'No variant available');
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const data = await getInventoryTransactions(request, authToken, variantId);
     expect(data).toHaveProperty('content');
   });

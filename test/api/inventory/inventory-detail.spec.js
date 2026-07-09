@@ -1,6 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
   getWarehouseId,
   getFirstWarehouseVariantId,
   API_BASE,
@@ -8,13 +7,11 @@ const {
 
 test.describe('Inventory Detail API Tests', () => {
 
-  let authToken;
   let warehouseId;
   let variantId;
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
+  test.beforeAll(async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     warehouseId = await getWarehouseId(request, authToken);
     if (warehouseId) {
       variantId = await getFirstWarehouseVariantId(request, authToken, warehouseId);
@@ -22,11 +19,11 @@ test.describe('Inventory Detail API Tests', () => {
   });
 
   // GET /api/inventory/detail/{id}
-  test('INV-15 - GET /api/inventory/detail/{id} - Get item detail', async ({ request }) => {
+  test('INV-15 - GET /api/inventory/detail/{id} - Get item detail', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'No data');
     const listing = await request.get(
       `${API_BASE}/inventory/items?warehouseId=${warehouseId}&page=0&size=1`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     if (listing.status() !== 200) test.skip(true, 'cannot list');
 
@@ -35,7 +32,7 @@ test.describe('Inventory Detail API Tests', () => {
     test.skip(!firstItem, 'No inventory item');
 
     const response = await request.get(`${API_BASE}/inventory/detail/${firstItem.id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -44,10 +41,10 @@ test.describe('Inventory Detail API Tests', () => {
     expect(body.data).toHaveProperty('variantId');
   });
 
-  test('INV-16 - GET /api/inventory/detail/{id} - Not found returns 404/500', async ({ request }) => {
+  test('INV-16 - GET /api/inventory/detail/{id} - Not found returns 404/500', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/inventory/detail/00000000-0000-0000-0000-000000000000`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect([404, 500]).toContain(response.status());
   });
@@ -58,11 +55,11 @@ test.describe('Inventory Detail API Tests', () => {
   });
 
   // PUT /api/inventory/detail/{id}
-  test('INV-17 - PUT /api/inventory/detail/{id} - Update item detail', async ({ request }) => {
+  test('INV-17 - PUT /api/inventory/detail/{id} - Update item detail', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'No data');
     const listing = await request.get(
       `${API_BASE}/inventory/items?warehouseId=${warehouseId}&page=0&size=1`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     if (listing.status() !== 200) test.skip(true, 'cannot list');
 
@@ -72,7 +69,7 @@ test.describe('Inventory Detail API Tests', () => {
 
     const response = await request.put(`${API_BASE}/inventory/detail/${firstItem.id}`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {

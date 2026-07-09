@@ -1,6 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
   API_BASE,
   uniqueSku,
 } = require('../../utils/inventory-helpers');
@@ -8,19 +7,16 @@ const { getFirstCategoryId, deleteTestProduct } = require('../../utils/product-h
 
 test.describe('Product Log API Tests', () => {
 
-  let authToken;
   let categoryId;
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-    categoryId = await getFirstCategoryId(request, authToken);
+  test.beforeAll(async ({ request, managerHeaders }) => {
+    categoryId = await getFirstCategoryId(request, managerHeaders.Authorization.replace('Bearer ', ''));
   });
 
   // GET /api/product-logs
-  test('PL-1 - GET /api/product-logs - List all logs returns 200', async ({ request }) => {
+  test('PL-1 - GET /api/product-logs - List all logs returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/product-logs?page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -35,14 +31,13 @@ test.describe('Product Log API Tests', () => {
     expect([401, 403]).toContain(response.status());
   });
 
-  test('PL-3 - GET /api/product-logs - Default sort performedAt,desc', async ({ request }) => {
+  test('PL-3 - GET /api/product-logs - Default sort performedAt,desc', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/product-logs?page=0&size=5`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    // Verify the sort order if content is present
     if (body.data.content.length > 1) {
       const first = new Date(body.data.content[0].performedAt || body.data.content[0].createdAt);
       const second = new Date(body.data.content[1].performedAt || body.data.content[1].createdAt);
@@ -50,18 +45,18 @@ test.describe('Product Log API Tests', () => {
     }
   });
 
-  test('PL-4 - GET /api/product-logs?sort=performedAt,asc - Ascending order', async ({ request }) => {
+  test('PL-4 - GET /api/product-logs?sort=performedAt,asc - Ascending order', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/product-logs?sort=performedAt,asc&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('PL-5 - GET /api/product-logs?productId={nonexistent} - Empty list', async ({ request }) => {
+  test('PL-5 - GET /api/product-logs?productId={nonexistent} - Empty list', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/product-logs?productId=00000000-0000-0000-0000-000000000000&page=0&size=10`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
     const body = await response.json();
@@ -69,12 +64,12 @@ test.describe('Product Log API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  test('PL-6 - GET /api/product-logs - Filter by existing productId', async ({ request }) => {
-    // Create a fresh product and read its logs
+  test('PL-6 - GET /api/product-logs - Filter by existing productId', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const ts = Date.now();
     const create = await request.post(`${API_BASE}/products`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -99,12 +94,11 @@ test.describe('Product Log API Tests', () => {
     try {
       const response = await request.get(
         `${API_BASE}/product-logs?productId=${product.id}&page=0&size=10`,
-        { headers: { Authorization: `Bearer ${authToken}` } }
+        { headers: managerHeaders }
       );
       expect(response.status()).toBe(200);
       const body = await response.json();
       expect(body.success).toBe(true);
-      // Backend may not log CREATE event in same transaction; just check structure
       expect(body.data).toHaveProperty('content');
       expect(Array.isArray(body.data.content)).toBe(true);
     } finally {
@@ -112,18 +106,18 @@ test.describe('Product Log API Tests', () => {
     }
   });
 
-  test('PL-7 - GET /api/product-logs - Pagination with custom size', async ({ request }) => {
+  test('PL-7 - GET /api/product-logs - Pagination with custom size', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/product-logs?page=0&size=3`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.data.content.length).toBeLessThanOrEqual(3);
   });
 
-  test('PL-8 - GET /api/product-logs - Page beyond range returns empty', async ({ request }) => {
+  test('PL-8 - GET /api/product-logs - Page beyond range returns empty', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/product-logs?page=9999&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const body = await response.json();

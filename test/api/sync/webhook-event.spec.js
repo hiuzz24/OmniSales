@@ -1,19 +1,12 @@
-const { test, expect } = require('@playwright/test');
-const { getAuthToken, API_BASE } = require('../../utils/inventory-helpers');
+const { test, expect } = require('../../fixtures/auth-fixtures');
+const { API_BASE } = require('../../utils/inventory-helpers');
 
 test.describe('Webhook Event API Tests', () => {
 
-  let authToken;
-
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-  });
-
   // WHK-1
-  test('WHK-1 - GET /api/webhook-events - List webhook events paginated', async ({ request }) => {
+  test('WHK-1 - GET /api/webhook-events - List webhook events paginated', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/webhook-events?page=0&size=20`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -24,10 +17,10 @@ test.describe('Webhook Event API Tests', () => {
   });
 
   // WHK-2
-  test('WHK-2 - GET /api/webhook-events?platform=SHOPIFY - Filter by platform', async ({ request }) => {
+  test('WHK-2 - GET /api/webhook-events?platform=SHOPIFY - Filter by platform', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/webhook-events?platform=SHOPIFY&page=0&size=20`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
 
     expect(response.status()).toBe(200);
@@ -37,10 +30,10 @@ test.describe('Webhook Event API Tests', () => {
   });
 
   // WHK-3
-  test('WHK-3 - GET /api/webhook-events?status=SUCCESS&eventType=order_created - Filter status + type', async ({ request }) => {
+  test('WHK-3 - GET /api/webhook-events?status=SUCCESS&eventType=order_created - Filter status + type', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/webhook-events?status=SUCCESS&eventType=order_created&page=0&size=20`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
 
     expect(response.status()).toBe(200);
@@ -50,11 +43,11 @@ test.describe('Webhook Event API Tests', () => {
   });
 
   // WHK-4
-  test('WHK-4 - GET /api/webhook-events?channelId={uuid} - Filter by channel', async ({ request }) => {
+  test('WHK-4 - GET /api/webhook-events?channelId={uuid} - Filter by channel', async ({ request, managerHeaders }) => {
     const channelId = '00000000-0000-0000-0000-000000000001';
     const response = await request.get(
       `${API_BASE}/webhook-events?channelId=${channelId}&page=0&size=20`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
 
     expect(response.status()).toBe(200);

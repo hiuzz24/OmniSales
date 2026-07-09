@@ -1,25 +1,14 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
   createTestUser,
   cleanupTestUser,
-  uniqueCode,
   API_BASE,
-  TEST_EMAIL,
-  TEST_PASSWORD,
 } = require('../../utils/user-helpers');
 
 test.describe('User API Tests', () => {
 
-  let authToken;
-
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-  });
-
   // POST /users
-  test('USR-API-1 - POST /users - Create user returns 201', async ({ request }) => {
+  test('USR-API-1 - POST /users - Create user returns 201', async ({ request, managerHeaders }) => {
     const userData = {
       email: `newuser_${Date.now()}@test.com`,
       password: 'NewPass123@',
@@ -28,7 +17,7 @@ test.describe('User API Tests', () => {
     };
 
     const response = await request.post(`${API_BASE}/users`, {
-      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
       data: userData,
     });
 
@@ -40,11 +29,12 @@ test.describe('User API Tests', () => {
     expect(body.data.fullName).toBe(userData.fullName);
 
     if (body.data.id) {
+      const authToken = managerHeaders.Authorization.replace('Bearer ', '');
       await cleanupTestUser(request, authToken, body.data.id);
     }
   });
 
-  test('USR-API-2 - POST /users - Duplicate email returns 400/409', async ({ request }) => {
+  test('USR-API-2 - POST /users - Duplicate email returns 400/409', async ({ request, managerHeaders }) => {
     const email = `dup_${Date.now()}@test.com`;
     const userData = {
       email: email,
@@ -54,12 +44,12 @@ test.describe('User API Tests', () => {
     };
 
     const createResponse = await request.post(`${API_BASE}/users`, {
-      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
       data: userData,
     });
 
     const dupResponse = await request.post(`${API_BASE}/users`, {
-      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
       data: userData,
     });
 
@@ -68,6 +58,7 @@ test.describe('User API Tests', () => {
     if (createResponse.ok()) {
       const body = await createResponse.json();
       if (body.data?.id) {
+        const authToken = managerHeaders.Authorization.replace('Bearer ', '');
         await cleanupTestUser(request, authToken, body.data.id);
       }
     }
@@ -87,9 +78,9 @@ test.describe('User API Tests', () => {
   });
 
   // GET /users
-  test('USR-API-4 - GET /users - List paginated returns 200', async ({ request }) => {
+  test('USR-API-4 - GET /users - List paginated returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/users?page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -105,7 +96,8 @@ test.describe('User API Tests', () => {
   });
 
   // GET /users/{id}
-  test('USR-API-6 - GET /users/{id} - Get user by valid ID returns 200', async ({ request }) => {
+  test('USR-API-6 - GET /users/{id} - Get user by valid ID returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const user = await createTestUser(request, authToken, {
       email: `getbyid_${Date.now()}@test.com`,
       fullName: 'Get By ID Test',
@@ -114,7 +106,7 @@ test.describe('User API Tests', () => {
     test.skip(!user?.id, 'Cannot create test user');
 
     const response = await request.get(`${API_BASE}/users/${user.id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -125,18 +117,19 @@ test.describe('User API Tests', () => {
     await cleanupTestUser(request, authToken, user.id);
   });
 
-  test('USR-API-7 - GET /users/{id} - Non-existent ID returns 404', async ({ request }) => {
+  test('USR-API-7 - GET /users/{id} - Non-existent ID returns 404', async ({ request, managerHeaders }) => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
 
     const response = await request.get(`${API_BASE}/users/${fakeId}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([404]).toContain(response.status());
   });
 
   // PUT /users/{id}
-  test('USR-API-8 - PUT /users/{id} - Update user returns 200', async ({ request }) => {
+  test('USR-API-8 - PUT /users/{id} - Update user returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const user = await createTestUser(request, authToken, {
       email: `update_${Date.now()}@test.com`,
       fullName: 'Before Update',
@@ -151,7 +144,7 @@ test.describe('User API Tests', () => {
     };
 
     const updateResponse = await request.put(`${API_BASE}/users/${user.id}`, {
-      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
       data: updateData,
     });
 
@@ -163,7 +156,8 @@ test.describe('User API Tests', () => {
   });
 
   // DELETE /users/{id}
-  test('USR-API-9 - DELETE /users/{id} - Soft delete returns 200', async ({ request }) => {
+  test('USR-API-9 - DELETE /users/{id} - Soft delete returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const user = await createTestUser(request, authToken, {
       email: `delete_${Date.now()}@test.com`,
       fullName: 'Delete Me',
@@ -172,16 +166,16 @@ test.describe('User API Tests', () => {
     test.skip(!user?.id, 'Cannot create test user');
 
     const deleteResponse = await request.delete(`${API_BASE}/users/${user.id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([200, 204]).toContain(deleteResponse.status());
   });
 
   // GET /users/me
-  test('USR-API-10 - GET /users/me - Get current profile returns 200', async ({ request }) => {
+  test('USR-API-10 - GET /users/me - Get current profile returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/users/me`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -192,9 +186,9 @@ test.describe('User API Tests', () => {
   });
 
   // PUT /users/me
-  test('USR-API-11 - PUT /users/me - Update own profile returns 200', async ({ request }) => {
+  test('USR-API-11 - PUT /users/me - Update own profile returns 200', async ({ request, managerHeaders }) => {
     const originalResponse = await request.get(`${API_BASE}/users/me`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     const originalBody = await originalResponse.json();
     const originalName = originalBody.data?.fullName || 'Original';
@@ -202,7 +196,7 @@ test.describe('User API Tests', () => {
     const updateData = { fullName: `Updated ${Date.now()}` };
 
     const response = await request.put(`${API_BASE}/users/me`, {
-      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
       data: updateData,
     });
 
@@ -211,7 +205,7 @@ test.describe('User API Tests', () => {
     expect(body.data.fullName).toBe(updateData.fullName);
 
     await request.put(`${API_BASE}/users/me`, {
-      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
       data: { fullName: originalName },
     });
   });
