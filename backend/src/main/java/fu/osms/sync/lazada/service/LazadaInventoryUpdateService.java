@@ -10,5 +10,6 @@ public interface LazadaInventoryUpdateService {
 
     LazadaInventorySyncResult syncChangedSellableStock(UUID channelId,
                                                        OffsetDateTime changedSince,
+                                                       OffsetDateTime changedUntil,
                                                        Collection<UUID> productChangedVariantIds);
 }

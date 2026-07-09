@@ -218,6 +218,71 @@ public class ShopifyApiClientImpl implements ShopifyApiClient {
         }
     }
 
+    @Override
+    public List<String> listAccessScopes(String shopDomain, String accessToken) {
+        String url = buildAdminUrl(shopDomain, "/oauth/access_scopes.json");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Shopify-Access-Token", accessToken);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            Map<String, Object> responseBody = objectMapper.readValue(response.getBody(), new TypeReference<>() {
+            });
+            Object accessScopes = responseBody.get("access_scopes");
+            if (!(accessScopes instanceof List<?> scopes)) {
+                return List.of();
+            }
+            return scopes.stream()
+                    .filter(scope -> scope instanceof Map<?, ?>)
+                    .map(scope -> ((Map<?, ?>) scope).get("handle"))
+                    .filter(handle -> handle != null && !handle.toString().isBlank())
+                    .map(Object::toString)
+                    .toList();
+        } catch (RestClientResponseException e) {
+            log.error("Shopify listAccessScopes error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Shopify access scope check failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to list Shopify access scopes", e);
+        }
+    }
+
+    @Override
+    public Map<String, Object> executeGraphQl(String shopDomain,
+                                              String accessToken,
+                                              String query,
+                                              Map<String, Object> variables) {
+        String url = buildUrl(shopDomain, "/graphql.json");
+
+        Map<String, Object> root = new HashMap<>();
+        root.put("query", query);
+        root.put("variables", variables == null ? Map.of() : variables);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Shopify-Access-Token", accessToken);
+
+        HttpEntity<String> entity;
+        try {
+            entity = new HttpEntity<>(objectMapper.writeValueAsString(root), headers);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize Shopify GraphQL request", e);
+        }
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            return objectMapper.readValue(response.getBody(), new TypeReference<>() {
+            });
+        } catch (RestClientResponseException e) {
+            log.error("Shopify GraphQL error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Shopify GraphQL error: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to execute Shopify GraphQL request", e);
+        }
+    }
+
     private ShopifyProductResponse executeRequest(String url, String accessToken, HttpMethod method, Object body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -253,5 +318,11 @@ public class ShopifyApiClientImpl implements ShopifyApiClient {
         String domain = shopDomain.endsWith(".myshopify.com") ? shopDomain
                 : shopDomain + ".myshopify.com";
         return "https://" + domain + "/admin/api/" + API_VERSION + path;
+    }
+
+    private String buildAdminUrl(String shopDomain, String path) {
+        String domain = shopDomain.endsWith(".myshopify.com") ? shopDomain
+                : shopDomain + ".myshopify.com";
+        return "https://" + domain + "/admin" + path;
     }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
@@ -9,7 +9,7 @@ import * as XLSX from 'xlsx';
 import warehouseService from '../../services/warehouseService';
 import supplierService from '../../services/supplierService';
 import stockReceiveService from '../../services/stockReceiveService';
-import axiosClient from '../../../../api/axiosClient';
+import inventoryApi from '../../../../api/inventoryApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
@@ -17,6 +17,38 @@ import styles from '../CreatePage.module.css';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v ?? 0);
+const getResponseData = (response) => response?.data?.data ?? response?.data ?? response ?? {};
+const PLATFORM_LABELS = {
+  LAZADA: 'Lazada',
+  SHOPIFY: 'Shopify',
+};
+
+const resolveWarehousePlatform = (warehouse) => {
+  const name = String(warehouse?.name ?? '').toLowerCase();
+  const address = String(warehouse?.address ?? '').toLowerCase();
+  if (address.includes('shopify_location_id=') || name.startsWith('shopify')) return 'SHOPIFY';
+  if (address.includes('lazada_warehouse_code=') || name.startsWith('lazada')) return 'LAZADA';
+  return null;
+};
+
+const normalizeWarehouseVariant = (item) => {
+  const variantId = item.variantId ?? item.id;
+  const sku = item.sku ?? item.variantSku ?? '';
+  const salePrice = item.salePrice ?? item.price ?? item.currentSalePrice ?? item.unitPrice ?? 0;
+  return {
+    id: variantId,
+    variantId,
+    sku,
+    productName: item.productName ?? item.product?.name ?? item.variantName ?? sku,
+    name: item.variantName ?? item.name ?? '',
+    unitPrice: item.averageCost ?? item.costPrice ?? item.unitPrice ?? item.price ?? 0,
+    salePrice,
+    availableQuantity: item.availableQuantity ?? item.quantityOnHand ?? 0,
+    channelId: item.channelId ?? null,
+    channelName: item.channelName ?? '',
+    platform: item.platform ?? null,
+  };
+};
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
@@ -31,33 +63,28 @@ const schema = z.object({
 });
 
 // ── Add Product Modal ─────────────────────────────────────────────────────────
-function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [] }) {
+function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], products = [], loading = false, selectedPlatform = null }) {
   const [keyword, setKeyword] = useState('');
-  const [results, setResults] = useState([]);
   const [selected, setSelected] = useState({});
-  const [loading, setLoading] = useState(false);
-  const timerRef = useRef(null);
 
   useEffect(() => {
-    if (!isOpen) { setKeyword(''); setResults([]); setSelected({}); }
+    if (isOpen) return undefined;
+    const timer = window.setTimeout(() => {
+      setKeyword('');
+      setSelected({});
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [isOpen]);
 
-  useEffect(() => {
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const params = { page: 0, size: 50 };
-        if (keyword.trim()) params.search = keyword.trim();
-        const res = await axiosClient.get('/catalog/variants', { params });
-        const paged = res.data?.data ?? res.data ?? {};
-        const items = paged.content ?? (Array.isArray(paged) ? paged : []);
-        setResults(items);
-      } catch { setResults([]); }
-      finally { setLoading(false); }
-    }, keyword.trim() ? 300 : 0);
-    return () => clearTimeout(timerRef.current);
-  }, [keyword, isOpen]);
+  const results = useMemo(() => {
+    const keywordText = keyword.trim().toLowerCase();
+    if (!keywordText) return products;
+    return products.filter((item) => [
+      item.productName,
+      item.name,
+      item.sku,
+    ].some((value) => String(value ?? '').toLowerCase().includes(keywordText)));
+  }, [keyword, products]);
 
   const toggle = (item) => {
     if (existingVariantIds.includes(item.id)) return;
@@ -78,6 +105,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [] }
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div>
             <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Chọn sản phẩm</span>
+            {selectedPlatform && <span style={{ marginLeft: 8, fontSize: 12, color: '#2563eb', backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: 999 }}>{PLATFORM_LABELS[selectedPlatform] ?? selectedPlatform}</span>}
             {results.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{results.length} sản phẩm</span>}
           </div>
           <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
@@ -118,8 +146,15 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [] }
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center' }}>
                     <span style={{ fontSize: 11, fontFamily: 'monospace', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 4 }}>{item.sku}</span>
+                    {item.platform && <span style={{ fontSize: 11, backgroundColor: '#eef2ff', color: '#3730a3', padding: '1px 6px', borderRadius: 4 }}>{PLATFORM_LABELS[item.platform] ?? item.platform}</span>}
+                    {item.channelName && <span style={{ fontSize: 11, backgroundColor: '#f8fafc', color: '#475569', padding: '1px 6px', borderRadius: 4 }}>{item.channelName}</span>}
                     {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
                   </div>
+                  {Number(item.salePrice) > 0 && (
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#64748b' }}>
+                      Giá bán hiện tại: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.salePrice))}</strong>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -129,7 +164,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [] }
           <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}>Hủy</button>
-            <button onClick={() => { onConfirm(Object.values(selected).map((i) => ({ variantId: i.id, sku: i.sku, productName: i.productName, variantName: i.name, quantity: 1, unitPrice: 0 }))); }} disabled={count === 0}
+            <button onClick={() => { onConfirm(Object.values(selected).map((i) => ({ variantId: i.id, sku: i.sku, productName: i.productName, variantName: i.name, quantity: 1, unitPrice: i.unitPrice ?? 0, salePrice: i.salePrice ?? 0 }))); }} disabled={count === 0}
               style={{ padding: '7px 16px', borderRadius: 8, border: 'none', backgroundColor: count === 0 ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: 13, fontWeight: 500, cursor: count === 0 ? 'not-allowed' : 'pointer' }}>
               Thêm ({count})
             </button>
@@ -152,11 +187,20 @@ export default function StockReceiveCreatePage() {
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [nextReceiptCode, setNextReceiptCode] = useState('');
+  const [warehouseVariants, setWarehouseVariants] = useState([]);
+  const [loadingWarehouseVariants, setLoadingWarehouseVariants] = useState(false);
+  const previousWarehouseIdRef = useRef('');
 
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting, isDirty } } = useForm({
+  const { register, handleSubmit, setValue, control, formState: { errors, isSubmitting, isDirty } } = useForm({
     resolver: zodResolver(schema),
     defaultValues: { warehouseId: '', supplierId: '', invoiceNumber: '', receivedAt: new Date().toISOString().split('T')[0], notes: '' },
   });
+  const selectedWarehouseId = useWatch({ control, name: 'warehouseId' });
+  const selectedWarehouse = useMemo(
+    () => warehouses.find((warehouse) => String(warehouse.id) === String(selectedWarehouseId)) || null,
+    [warehouses, selectedWarehouseId]
+  );
+  const selectedWarehousePlatform = useMemo(() => resolveWarehousePlatform(selectedWarehouse), [selectedWarehouse]);
 
   const totalAmount = useMemo(() => items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0), [items]);
   const totalQty = useMemo(() => items.reduce((s, i) => s + (Number(i.quantity) || 0), 0), [items]);
@@ -175,6 +219,51 @@ export default function StockReceiveCreatePage() {
   }, []);
 
   useEffect(() => {
+    const warehouseId = selectedWarehouseId || '';
+    if (previousWarehouseIdRef.current && previousWarehouseIdRef.current !== warehouseId) {
+      setItems([]);
+      setModalOpen(false);
+    }
+    previousWarehouseIdRef.current = warehouseId;
+
+    if (!warehouseId) {
+      const timer = window.setTimeout(() => {
+        setWarehouseVariants([]);
+        setLoadingWarehouseVariants(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    let ignore = false;
+    const timer = window.setTimeout(() => {
+      setLoadingWarehouseVariants(true);
+      inventoryApi.getAvailableVariantsByWarehouse(warehouseId)
+        .then((response) => {
+          if (ignore) return;
+          const data = getResponseData(response);
+          const variants = Array.isArray(data) ? data : [];
+          const normalizedVariants = variants
+            .map(normalizeWarehouseVariant)
+            .filter((item) => item.id)
+            .filter((item) => !selectedWarehousePlatform || !item.platform || item.platform === selectedWarehousePlatform);
+          setWarehouseVariants(normalizedVariants);
+        })
+        .catch(() => {
+          if (!ignore) {
+            setWarehouseVariants([]);
+            toast.error('Không thể tải sản phẩm thuộc kho đã chọn.');
+          }
+        })
+        .finally(() => { if (!ignore) setLoadingWarehouseVariants(false); });
+    }, 0);
+
+    return () => {
+      ignore = true;
+      window.clearTimeout(timer);
+    };
+  }, [selectedWarehouseId, selectedWarehousePlatform]);
+
+  useEffect(() => {
     if (prefillAppliedRef.current) return;
 
     const warehouseId = searchParams.get('warehouseId');
@@ -187,18 +276,35 @@ export default function StockReceiveCreatePage() {
     }
 
     if (variantId) {
-      setItems([{
-        variantId,
-        sku: searchParams.get('sku') || '',
-        productName: searchParams.get('productName') || searchParams.get('sku') || 'Sản phẩm',
-        variantName: '',
-        quantity: 1,
-        unitPrice: searchParams.get('unitCost') || 0,
-      }]);
+      const timer = window.setTimeout(() => {
+        setItems([{
+          variantId,
+          sku: searchParams.get('sku') || '',
+          productName: searchParams.get('productName') || searchParams.get('sku') || 'Sản phẩm',
+          variantName: '',
+          quantity: 1,
+          unitPrice: searchParams.get('unitCost') || 0,
+          salePrice: searchParams.get('salePrice') || searchParams.get('price') || 0,
+        }]);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
+    return undefined;
   }, [searchParams, setValue]);
 
   // ── Item handlers ─────────────────────────────────────────────────────────
+  const openAddProducts = () => {
+    if (!selectedWarehouseId) {
+      toast.error('Vui lòng chọn kho nhập trước khi thêm sản phẩm.');
+      return;
+    }
+    if (loadingWarehouseVariants) {
+      toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.');
+      return;
+    }
+    setModalOpen(true);
+  };
+
   const onQtyChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
   const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
@@ -212,6 +318,15 @@ export default function StockReceiveCreatePage() {
     const file = e.target.files?.[0];
     if (fileRef.current) fileRef.current.value = '';
     if (!file) return;
+    if (!selectedWarehouseId) {
+      toast.error('Vui lòng chọn kho nhập trước khi import Excel.');
+      return;
+    }
+    if (loadingWarehouseVariants) {
+      toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.');
+      return;
+    }
+    const variantBySku = new Map(warehouseVariants.map((item) => [String(item.sku ?? '').trim().toLowerCase(), item]));
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
@@ -225,11 +340,13 @@ export default function StockReceiveCreatePage() {
           let ok = true;
           const sku = rawSku ? String(rawSku).trim() : '';
           if (!sku) { errs.push(`Dòng ${rn}: SKU không hợp lệ.`); ok = false; }
+          const variant = variantBySku.get(sku.toLowerCase());
+          if (sku && !variant) { errs.push(`Dòng ${rn}: SKU không thuộc kho đã chọn.`); ok = false; }
           const qty = Number(rawQty);
           if (!rawQty || isNaN(qty) || qty <= 0) { errs.push(`Dòng ${rn}: Số lượng phải lớn hơn 0.`); ok = false; }
           const price = Number(rawPrice);
           if (rawPrice === undefined || isNaN(price) || price < 0) { errs.push(`Dòng ${rn}: Đơn giá không hợp lệ.`); ok = false; }
-          if (ok) valid.push({ sku, quantity: qty, unitPrice: price });
+          if (ok) valid.push({ ...variant, quantity: qty, unitPrice: price });
         });
         if (valid.length === 0) { toast.error('Không có dòng hợp lệ nào trong file.'); return; }
         if (errs.length > 0) toast.warn(`Có ${errs.length} dòng lỗi. Chỉ nhập ${valid.length} dòng hợp lệ.`);
@@ -239,7 +356,7 @@ export default function StockReceiveCreatePage() {
           valid.forEach((p) => {
             const idx2 = updated.findIndex((it) => it.sku === p.sku);
             if (idx2 >= 0) { updated[idx2] = { ...updated[idx2], quantity: p.quantity, unitPrice: p.unitPrice }; }
-            else updated.push({ variantId: `excel-${p.sku}`, sku: p.sku, productName: p.sku, variantName: '', quantity: p.quantity, unitPrice: p.unitPrice });
+            else updated.push({ variantId: p.id, sku: p.sku, productName: p.productName, variantName: p.name, quantity: p.quantity, unitPrice: p.unitPrice, salePrice: p.salePrice ?? 0 });
           });
           return updated;
         });
@@ -361,15 +478,17 @@ export default function StockReceiveCreatePage() {
             <div className={styles.tableCardHeader}>
               <div>
                 <div className={styles.tableCardTitle}>Danh sách sản phẩm nhập</div>
-                <div className={styles.tableCardSubtitle}>Thêm sản phẩm và điền số lượng, đơn giá</div>
+                <div className={styles.tableCardSubtitle}>
+                  Chọn kho trước, sau đó thêm sản phẩm thuộc kho{selectedWarehousePlatform ? ` ${PLATFORM_LABELS[selectedWarehousePlatform] ?? selectedWarehousePlatform}` : ''} và điền số lượng, đơn giá
+                </div>
               </div>
               <div className={styles.tableCardActions}>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()}>
+                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!selectedWarehouseId || loadingWarehouseVariants}>
                   <FileSpreadsheet className={styles.importIcon} /> Import Excel
                 </button>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcel} />
-                <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={() => setModalOpen(true)}>
-                  <Plus className={styles.primaryIcon} /> Thêm sản phẩm
+                <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!selectedWarehouseId || loadingWarehouseVariants}>
+                  {loadingWarehouseVariants ? <Loader2 className={styles.primaryIcon} /> : <Plus className={styles.primaryIcon} />} Thêm sản phẩm
                 </button>
               </div>
             </div>
@@ -378,7 +497,11 @@ export default function StockReceiveCreatePage() {
               <div className={styles.emptyState}>
                 <div className={styles.emptyIcon}><Package size={22} /></div>
                 <p className={styles.emptyTitle}>Chưa có sản phẩm nào</p>
-                <p className={styles.emptySubtitle}>Nhấn "Thêm sản phẩm" hoặc Import từ Excel</p>
+                <p className={styles.emptySubtitle}>
+                  {selectedWarehouseId
+                    ? `Nhấn "Thêm sản phẩm" hoặc Import từ Excel${selectedWarehousePlatform ? ` cho ${PLATFORM_LABELS[selectedWarehousePlatform] ?? selectedWarehousePlatform}` : ''}`
+                    : 'Vui lòng chọn kho nhập trước khi thêm sản phẩm'}
+                </p>
               </div>
             ) : (
               <div className={styles.tableWrapper}>
@@ -410,6 +533,11 @@ export default function StockReceiveCreatePage() {
                           <td>
                             <input type="number" min="0" step="1000" value={item.unitPrice} onChange={(e) => onPriceChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${priceBad ? styles.inputError : ''}`} />
+                            {Number(item.salePrice) > 0 && (
+                              <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
+                                Giá bán: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.salePrice))}</strong>
+                              </div>
+                            )}
                           </td>
                           <td className={styles.tdRight} style={{ fontWeight: 700, color: line > 0 ? '#2563eb' : '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
                             {line > 0 ? formatVND(line) : '—'}
@@ -504,7 +632,15 @@ export default function StockReceiveCreatePage() {
         </div>
       </div>
 
-      <AddProductModal isOpen={modalOpen} onClose={() => setModalOpen(false)} onConfirm={onAddProducts} existingVariantIds={items.map((i) => i.variantId)} />
+      <AddProductModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onConfirm={onAddProducts}
+        existingVariantIds={items.map((i) => i.variantId)}
+        products={warehouseVariants}
+        loading={loadingWarehouseVariants}
+        selectedPlatform={selectedWarehousePlatform}
+      />
       {ConfirmDialog}
     </div>
   );

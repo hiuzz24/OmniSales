@@ -5,6 +5,8 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+
+import fu.osms.common.enums.PlatformType;
 @Getter
 @Setter
 @NoArgsConstructor
@@ -13,6 +15,8 @@ import java.util.UUID;
 public class InventoryDetailDTO {
     private UUID warehouseId;
     private UUID variantId;
+    private UUID channelId;
+    private PlatformType platform;
     private Integer quantityOnHand;      // quantity_on_hand
     private BigDecimal averageCost;      // average_cost
     private BigDecimal totalInventoryValue; // quantity_on_hand * average_cost

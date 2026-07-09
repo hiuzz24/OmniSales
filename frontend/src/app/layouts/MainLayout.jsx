@@ -5,7 +5,7 @@ import {
   BarChart3, Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User, Tag,
+  ChevronRight, User, Tag, Database,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -46,7 +46,11 @@ const NAV_ITEMS = [
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
   { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
-  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER] },
+  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },
+  { name: 'Logs hệ thống',  href: ROUTES.SYSTEM_LOGS, icon: ClipboardList, roles: [ROLES.SYSTEM_ADMIN] },
+  { name: 'Sao lưu dữ liệu', href: ROUTES.BACKUP,      icon: Database,      roles: [ROLES.SYSTEM_ADMIN] },
+  { name: 'Giám sát API',    href: ROUTES.API_MONITOR, icon: Shield,        roles: [ROLES.SYSTEM_ADMIN] },
+  { name: 'Cấu hình hệ thống', href: ROUTES.SYSTEM_SETTINGS, icon: Settings,  roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
 ];
 
@@ -54,7 +58,7 @@ const ROLE_HIDDEN = {
   [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
   [ROLES.OPERATIONS]: ['Phân tích', 'Nhân sự'],
   [ROLES.OWNER]: [],
-  [ROLES.SYSTEM_ADMIN]: [],
+  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Bán hàng (POS)', 'Đơn hàng', 'Kênh bán hàng', 'Phân tích', 'Cài đặt'],
 };
 
 const isVisible = (item, role) => {
@@ -102,6 +106,15 @@ const formatNotificationTime = (value) => {
 
 const pathMatches = (pathname, href, exact = false) =>
   exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+
+const notificationKey = (notification, index) => [
+  notification?.id,
+  notification?.type,
+  notification?.entityType,
+  notification?.entityId,
+  notification?.createdAt,
+  index,
+].filter((part) => part != null && part !== '').join('-');
 
 // ── Sidebar widths ────────────────────────────────────────────────────────────
 const SIDEBAR_OPEN = 256; // px — 16rem / w-64
@@ -223,7 +236,7 @@ export default function MainLayout() {
             const isExp = expanded.includes(item.name);
 
             return (
-              <div key={item.name} style={{ marginBottom: 2 }}>
+              <div key={`${item.href}-${item.name}`} style={{ marginBottom: 2 }}>
                 {hasChildren ? (
                   <button
                     onClick={() => toggleMenu(item.name)}
@@ -274,7 +287,7 @@ export default function MainLayout() {
                       const active = isActive(child.href, child.exact);
                       return (
                         <NavLink
-                          key={child.href}
+                          key={`${item.href}-${child.href}`}
                           to={child.href}
                           end={child.exact}
                           style={() => ({
@@ -376,12 +389,12 @@ export default function MainLayout() {
                         Chưa có thông báo mới
                       </div>
                     )}
-                    {notifications.map((n) => {
+                    {notifications.map((n, index) => {
                       const meta = NOTIF_META[n.type] ?? NOTIF_META.SYSTEM;
                       const NIcon = meta.icon;
                       const isUnread = !n.readAt;
                       return (
-                        <div key={n.id}
+                        <div key={notificationKey(n, index)}
                           onClick={async () => {
                             if (isUnread) {
                               await notificationApi.markAsRead(n.id);
@@ -397,6 +410,10 @@ export default function MainLayout() {
                               } else {
                                 navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
                               }
+                              setNotifOpen(false);
+                            }
+                            if (n.entityType === 'SYNC') {
+                              navigate(ROUTES.SYNC_HISTORY);
                               setNotifOpen(false);
                             }
                           }}

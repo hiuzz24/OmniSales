@@ -10,7 +10,6 @@ import fu.osms.sync.dto.WebhookReceiveResult;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.mapper.WebhookEventMapper;
 import fu.osms.sync.repository.WebhookEventRepository;
-import fu.osms.sync.service.WebhookBusinessProcessor;
 import fu.osms.sync.service.WebhookReceiverService;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
 import jakarta.persistence.criteria.Predicate;
@@ -25,6 +24,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
@@ -43,7 +44,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
     private final List<PlatformWebhookHandler> handlers;
     private final WebhookEventRepository webhookEventRepository;
     private final WebhookEventMapper webhookEventMapper;
-    private final WebhookBusinessProcessor webhookBusinessProcessor;
+    private final WebhookEventProcessingService webhookEventProcessingService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -104,27 +105,34 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                     .build();
         }
 
-        try {
-            String resultStatus = webhookBusinessProcessor.process(event);
-            event.setStatus(resultStatus);
-            event.setProcessedAt(OffsetDateTime.now());
-            webhookEventRepository.save(event);
+        if (platform == PlatformType.LAZADA) {
+            processAsyncAfterCommit(event.getId());
             return WebhookReceiveResult.builder()
                     .webhookEventId(event.getId())
                     .status(event.getStatus())
-                    .message("Webhook processed")
-                    .build();
-        } catch (Exception e) {
-            event.setStatus("FAILED");
-            event.setErrorMessage(e.getMessage());
-            event.setProcessedAt(OffsetDateTime.now());
-            webhookEventRepository.save(event);
-            return WebhookReceiveResult.builder()
-                    .webhookEventId(event.getId())
-                    .status(event.getStatus())
-                    .message(e.getMessage())
+                    .message("Webhook queued")
                     .build();
         }
+
+        WebhookEvent processedEvent = webhookEventProcessingService.processSavedEvent(event.getId());
+        return WebhookReceiveResult.builder()
+                .webhookEventId(processedEvent.getId())
+                .status(processedEvent.getStatus())
+                .message("Webhook processed")
+                .build();
+    }
+
+    private void processAsyncAfterCommit(UUID eventId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            webhookEventProcessingService.processAsync(eventId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                webhookEventProcessingService.processAsync(eventId);
+            }
+        });
     }
 
     @Override

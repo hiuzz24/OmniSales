@@ -30,6 +30,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ApiUsageFilter apiUsageFilter;
     private final UserDetailsService userDetailsService;
 
     @Bean
@@ -49,6 +50,7 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(apiUsageFilter, JwtAuthenticationFilter.class)
                 .authenticationProvider(authenticationProvider());
 
 

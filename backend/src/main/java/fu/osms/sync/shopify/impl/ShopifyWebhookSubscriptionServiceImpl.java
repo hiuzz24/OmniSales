@@ -25,7 +25,9 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
     private static final List<String> WEBHOOK_TOPICS = List.of(
             "orders/create",
             "orders/updated",
-            "orders/cancelled"
+            "orders/cancelled",
+            "products/update",
+            "inventory_levels/update"
     );
 
     private final ShopifyApiClient shopifyApiClient;

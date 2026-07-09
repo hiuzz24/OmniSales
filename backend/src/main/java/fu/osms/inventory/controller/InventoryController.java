@@ -9,6 +9,7 @@ import fu.osms.inventory.dto.response.InventoryDetailDTO;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionDTO;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
+import fu.osms.inventory.dto.response.AvailableVariantDTO;
 import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.InventoryTransactionService;
@@ -40,14 +41,19 @@ public class InventoryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "updatedAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) UUID channelId,
+            @RequestParam(defaultValue = "false") boolean localOnly,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId);
 
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
@@ -73,13 +79,18 @@ public class InventoryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "updatedAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) UUID channelId,
+            @RequestParam(defaultValue = "false") boolean localOnly,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId);
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
                 .message("Tải danh sách tồn kho thành công")
@@ -161,6 +172,13 @@ public class InventoryController {
             @RequestParam(defaultValue = "10") int size) {
         PageResponse<InventoryItemResponse> response = inventoryService.getItems(warehouseId, page, size);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/warehouses/{warehouseId}/available-variants")
+    public ResponseEntity<ApiResponse<List<AvailableVariantDTO>>> getAvailableVariantsByWarehouse(
+            @PathVariable UUID warehouseId) {
+        List<AvailableVariantDTO> response = inventoryService.getAvailableVariantsByWarehouse(warehouseId);
+        return ResponseEntity.ok(ApiResponse.success("Tải sản phẩm thuộc kho thành công", response));
     }
 
     @GetMapping("/warehouses/{warehouseId}/variants/{variantId}")

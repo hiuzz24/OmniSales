@@ -27,6 +27,7 @@ import fu.osms.sync.dto.shopify.WebhookRegistrationResult;
 import fu.osms.sync.shopify.ShopifyWebhookSubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +53,9 @@ public class ChannelServiceImpl implements ChannelService {
     private final ChannelProductMapper channelProductMapper;
     private final ChannelConnectionLogService channelConnectionLogService;
     private final ShopifyWebhookSubscriptionService shopifyWebhookSubscriptionService;
+
+    @Value("${lazada.webhook-callback-url:}")
+    private String lazadaWebhookCallbackUrl;
 
     @Override
     @Transactional
@@ -245,7 +249,12 @@ public class ChannelServiceImpl implements ChannelService {
                 : new HashMap<>(channel.getMetadata());
         metadata.put("shopDomain", normalizedShop);
 
+        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
         channel.setStatus("CONNECTED");
+        channel.setDeletedAt(null);
+        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
+            channel.setSyncEnabled(true);
+        }
         channel.setMetadata(metadata);
         channelRepository.save(channel);
 
@@ -296,6 +305,7 @@ public class ChannelServiceImpl implements ChannelService {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("accountId", resolvedAccountId);
         metadata.put("accountName", resolvedAccountName);
+        applyLazadaWebhookMetadata(metadata);
 
         String displayName = "Lazada-" + resolvedAccountName;
 
@@ -317,7 +327,12 @@ public class ChannelServiceImpl implements ChannelService {
                 ? ChannelConnectionAction.CONNECT
                 : ChannelConnectionAction.RECONNECT;
 
+        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
         channel.setStatus("CONNECTED");
+        channel.setDeletedAt(null);
+        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
+            channel.setSyncEnabled(true);
+        }
         channel.setMetadata(metadata);
         if (channel.getDisplayName() == null || channel.getDisplayName().startsWith("Lazada-")) {
             channel.setDisplayName(displayName);
@@ -336,15 +351,21 @@ public class ChannelServiceImpl implements ChannelService {
         credential.setTokenExpiresAt(tokenExpiresAt);
 
         credentialRepository.save(credential);
+        Map<String, Object> connectionMetadata = new HashMap<>();
+        connectionMetadata.put("accountId", accountId != null ? accountId : "");
+        connectionMetadata.put("accountName", accountName != null ? accountName : "");
+        connectionMetadata.put("webhookCallbackUrl", configuredLazadaWebhookCallbackUrl());
+        connectionMetadata.put("webhookRegistrationStatus", "MANUAL_CONFIGURATION_REQUIRED");
         channelConnectionLogService.logSuccess(
                 channel,
                 action,
                 "Connected Lazada channel " + displayName,
-                Map.of(
-                        "accountId", accountId != null ? accountId : "",
-                        "accountName", accountName != null ? accountName : ""
-                )
+                connectionMetadata
         );
+
+        if (configuredLazadaWebhookCallbackUrl().isBlank()) {
+            log.warn("[ChannelService] Lazada webhook callback URL is not configured. Set LAZADA_WEBHOOK_CALLBACK_URL to receive Lazada push events.");
+        }
 
         log.info("[ChannelService] connectLazada success — channelId={}, expiresAt={}", channel.getId(), tokenExpiresAt);
         return channelMapper.toResponse(channel);
@@ -471,7 +492,24 @@ public class ChannelServiceImpl implements ChannelService {
         metadata.put("productCount", channelProductRepository.countByChannelIdAndMappingState(channel.getId(), "ACTIVE"));
         metadata.put("skuVariantCount", channelProductVariantRepository.countActiveByChannelId(channel.getId()));
         metadata.putIfAbsent("warehouseCount", 0);
+        if (channel.getPlatform() == PlatformType.LAZADA) {
+            applyLazadaWebhookMetadata(metadata);
+        }
         channel.setMetadata(metadata);
+    }
+
+    private void applyLazadaWebhookMetadata(Map<String, Object> metadata) {
+        String callbackUrl = configuredLazadaWebhookCallbackUrl();
+        metadata.put("webhookCallbackUrl", callbackUrl);
+        metadata.put("webhookRegistrationStatus", callbackUrl.isBlank()
+                ? "MISSING_CALLBACK_URL"
+                : "MANUAL_CONFIGURATION_REQUIRED");
+        metadata.put("webhookRegistrationNote",
+                "Configure this URL in Lazada Open Platform Push Mechanism and subscribe product/stock messages.");
+    }
+
+    private String configuredLazadaWebhookCallbackUrl() {
+        return lazadaWebhookCallbackUrl == null ? "" : lazadaWebhookCallbackUrl.trim();
     }
 
     private String firstNonBlank(String... values) {

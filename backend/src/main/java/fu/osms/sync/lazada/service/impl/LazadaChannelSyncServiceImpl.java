@@ -21,6 +21,7 @@ import fu.osms.sync.lazada.dto.LazadaSyncTask;
 import fu.osms.sync.lazada.service.LazadaChannelSyncService;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.repository.SyncLogRepository;
+import fu.osms.sync.service.SyncAlertService;
 import fu.osms.sync.service.PlatformSyncService;
 import fu.osms.sync.service.impl.PlatformSyncServiceFactory;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,7 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
     private final ProductVariantRepository productVariantRepository;
     private final ProductImageRepository productImageRepository;
     private final PlatformSyncServiceFactory platformSyncServiceFactory;
+    private final SyncAlertService syncAlertService;
 
     @Override
     @Transactional
@@ -59,7 +61,7 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
                 .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
 
         if (channel.getPlatform() != PlatformType.LAZADA) {
-            throw new IllegalArgumentException("Chi ho tro dong bo local changes cho kenh Lazada.");
+            throw new IllegalArgumentException("Chỉ hỗ trợ đồng bộ cho kênh Lazada.");
         }
 
         SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
@@ -84,6 +86,7 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
         int changedWarehouseCount = 0;
 
         try {
+            OffsetDateTime syncStartedAt = OffsetDateTime.now();
             OffsetDateTime changedSince = channel.getLastSyncedAt();
             log.info(
                     "[LazadaSync] Step 1/4 resolve incremental scope channelId={} changedSince={} mode={}",
@@ -109,6 +112,7 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
                     lazadaInventoryUpdateService.syncChangedSellableStock(
                             task.channelId(),
                             changedSince,
+                            syncStartedAt,
                             productSummary.changedVariantIds()
                     );
             pushedVariantCount = inventoryResult.pushedVariantCount();
@@ -130,7 +134,7 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
             metadata.put("lastChangedWarehouseCount", changedWarehouseCount);
             metadata.put("lastPushedSkuVariantCount", pushedVariantCount);
             channel.setMetadata(metadata);
-            channel.setLastSyncedAt(OffsetDateTime.now());
+            channel.setLastSyncedAt(syncStartedAt);
             channelRepository.save(channel);
             log.info(
                     "[LazadaSync] Step 4/4 updated channel metadata channelId={} lastSyncedAt={} metadata={}",
@@ -145,10 +149,13 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
             syncLog.setSuccessCount(syncedProductCount + changedWarehouseCount + pushedVariantCount);
             syncLog.setFailCount(failedProductCount);
             if (failedProductCount > 0) {
-                syncLog.setErrorSummary("Co " + failedProductCount + " san pham dong bo len Lazada that bai.");
+                syncLog.setErrorSummary("Có " + failedProductCount + " sản phẩm đồng bộ lên Lazada thất bại.");
             }
             syncLog.setCompletedAt(OffsetDateTime.now());
-            syncLogRepository.save(syncLog);
+            syncLog = syncLogRepository.save(syncLog);
+            if (syncLog.getStatus() == SyncStatus.FAILED) {
+                syncAlertService.notifySyncFailure(syncLog);
+            }
             log.info(
                     "[LazadaSync] Completed syncLogId={} channelId={} totalItems={} successCount={} failCount={}",
                     syncLog.getId(),
@@ -167,8 +174,8 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
                     .pushedVariantCount(pushedVariantCount)
                     .status(syncLog.getStatus().name())
                     .message(failedProductCount == 0
-                            ? "Da dong bo thay doi local len Lazada."
-                            : "Dong bo hoan tat mot phan, co san pham bi loi.")
+                            ? "Đã đồng bộ thay đổi lên Lazada."
+                            : "Đồng bộ hoàn tất 1 phần, có sản phẩm bị lỗi.")
                     .build();
         } catch (Exception e) {
             log.error("[LazadaChannelSync] Failed to sync local changes for channel {}", task.channelId(), e);
@@ -178,7 +185,8 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
             syncLog.setFailCount(1);
             syncLog.setErrorSummary(e.getMessage());
             syncLog.setCompletedAt(OffsetDateTime.now());
-            syncLogRepository.save(syncLog);
+            syncLog = syncLogRepository.save(syncLog);
+            syncAlertService.notifySyncFailure(syncLog);
             log.error(
                     "[LazadaSync] Failed syncLogId={} channelId={} totalItems={} successCount={} failCount={} error={}",
                     syncLog.getId(),
@@ -244,6 +252,10 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
                         channel.getId(),
                         product.getId(),
                         product.getName(),
+                        e
+                );
+                throw new RuntimeException(
+                        "Đồng bộ sản phẩm '" + product.getName() + "' lên Lazada thất bại: " + e.getMessage(),
                         e
                 );
             }

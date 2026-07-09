@@ -2,8 +2,6 @@
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
-  Download,
-  Upload,
   ClipboardList,
   Eye,
   AlertTriangle,
@@ -30,9 +28,13 @@ import categoryApi from '../../../../api/categoryApi';
 import inventoryService from '../../services/inventoryService';
 import InventoryExportModal from '../components/InventoryExportModal';
 import { getStatusLabel } from '../components/inventoryExcelExport';
+import MarketplaceSyncButton from '../components/MarketplaceSyncButton';
+import channelSyncService from '../../services/channelSyncService';
+import warehouseService from '../../services/warehouseService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PAGE_SIZE = 10;
+const INVENTORY_FETCH_SIZE = 500;
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Tất cả trạng thái' },
@@ -42,11 +44,24 @@ const STATUS_OPTIONS = [
   { value: 'negative', label: 'Tồn âm' },
 ];
 
+const LOCAL_CHANNEL_VALUE = '__LOCAL__';
+
+const PLATFORM_LABELS = {
+  LAZADA: 'Lazada',
+  SHOPIFY: 'Shopify',
+};
+
+const PLATFORM_BADGE_CLASSES = {
+  LAZADA: styles.channelLazada,
+  SHOPIFY: styles.channelShopify,
+};
+
 const INVENTORY_EXPORT_COLUMNS = [
   { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
   { key: 'variantSku', label: 'Mã SKU', width: 18, defaultChecked: true, getValue: (item) => item.variantSku ?? '' },
   { key: 'variantName', label: 'Tên sản phẩm', width: 34, defaultChecked: true, getValue: (item) => item.variantName ?? '' },
   { key: 'warehouseName', label: 'Kho hàng', width: 24, defaultChecked: true, getValue: (item) => item.warehouseName ?? '' },
+  { key: 'channel', label: 'Kênh bán', width: 18, defaultChecked: true, getValue: (item) => getChannelLabel(item) },
   { key: 'quantityOnHand', label: 'Trong kho', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.quantityOnHand ?? 0 },
   { key: 'reservedQuantity', label: 'Giữ hàng', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.reservedQuantity ?? 0 },
   { key: 'availableQuantity', label: 'Có thể bán', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.availableQuantity ?? 0 },
@@ -87,6 +102,65 @@ const deriveStatus = (item) => {
   return 'in-stock';
 };
 
+const getPlatformLabel = (platform) => PLATFORM_LABELS[platform] ?? platform ?? 'Ứng dụng';
+
+const getChannelLabel = (item) => {
+  if (!item?.platform) return 'Ứng dụng';
+  return item.channelName
+    ? `${getPlatformLabel(item.platform)} - ${item.channelName}`
+    : getPlatformLabel(item.platform);
+};
+
+const getProductDisplayName = (item) => item?.productName || item?.variantName || 'Sản phẩm chưa đặt tên';
+
+const buildInventoryDisplayRows = (rows) => {
+  const groups = new Map();
+  rows.forEach((item) => {
+    const key = [
+      getProductDisplayName(item),
+      item.platform || 'LOCAL',
+      item.channelId || item.channelName || '',
+    ].join('|');
+    if (!groups.has(key)) {
+      groups.set(key, {
+        type: 'product',
+        id: `product-${key}`,
+        productName: getProductDisplayName(item),
+        platform: item.platform,
+        channelName: item.channelName,
+        channelId: item.channelId,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(item);
+  });
+
+  return [...groups.values()].flatMap((group) => {
+    const quantityOnHand = group.items.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0);
+    const reservedQuantity = group.items.reduce((sum, item) => sum + Number(item.reservedQuantity ?? 0), 0);
+    const availableQuantity = group.items.reduce((sum, item) => sum + Number(item.availableQuantity ?? 0), 0);
+    const lowStockThreshold = group.items.reduce((sum, item) => sum + Number(item.lowStockThreshold ?? 0), 0);
+    const parentRow = {
+      ...group,
+      quantityOnHand,
+      reservedQuantity,
+      availableQuantity,
+      lowStockThreshold,
+      isLowStock: group.items.some((item) => item.isLowStock),
+      warehouseName: group.items.length === 1 ? group.items[0].warehouseName : `${group.items.length} SKU`,
+    };
+    return [
+      parentRow,
+      ...group.items.map((item) => ({
+        ...item,
+        type: 'variant',
+        inventoryItemId: item.id,
+        id: `variant-${item.id}`,
+      })),
+    ];
+  });
+};
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const StatusBadge = ({ status, item }) => {
   const map = {
@@ -117,6 +191,22 @@ const StatusBadge = ({ status, item }) => {
   );
 };
 
+const ChannelBadge = ({ item }) => {
+  const platform = item?.platform;
+  const badgeClass = PLATFORM_BADGE_CLASSES[platform] ?? styles.channelLocal;
+
+  return (
+    <div className={styles.channelCell}>
+      <span className={`${styles.channelBadge} ${badgeClass}`}>
+        {getPlatformLabel(platform)}
+      </span>
+      {item?.channelName && (
+        <span className={styles.channelSub}>{item.channelName}</span>
+      )}
+    </div>
+  );
+};
+
 const Select = ({ value, onChange, options }) => (
   <div className={styles.selectWrapper}>
     <select className={styles.select} value={value} onChange={e => onChange(e.target.value)}>
@@ -131,17 +221,18 @@ const Select = ({ value, onChange, options }) => (
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const InventoryPage = () => {
   const navigate = useNavigate();
-  // ── Filter state (client-side, applied on current page)
+  // ── Filter state (sent to backend before pagination)
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [warehouseFilter, setWarehouseFilter] = useState('all');
+  const [channelFilter, setChannelFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   // 'none' | 'asc' | 'desc'
   const [nameSort, setNameSort] = useState('none');
   const [qtySort, setQtySort] = useState('none');
 
-  // ── Pagination state (0-indexed, driven by BE)
+  // ── Pagination state (0-indexed, driven by BE filtered rows)
   const [currentPage, setCurrentPage] = useState(0);
 
   // ── Data state
@@ -149,7 +240,15 @@ const InventoryPage = () => {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [categoryTree, setCategoryTree] = useState([]);
+  const [syncChannels, setSyncChannels] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
+  const [summaryStats, setSummaryStats] = useState({
+    totalSkus: 0,
+    totalQuantity: 0,
+    lowStockCount: 0,
+    negativeCount: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -158,6 +257,27 @@ const InventoryPage = () => {
     categoryApi.getTree()
       .then(res => setCategoryTree(res || []))
       .catch(err => console.error('Lỗi tải danh mục:', err));
+  }, []);
+
+  useEffect(() => {
+    channelSyncService.getSyncableChannels()
+      .then((channels) => setSyncChannels(Array.isArray(channels) ? channels : []))
+      .catch((err) => {
+        console.error('Lỗi tải danh sách kênh bán:', err);
+        setSyncChannels([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    warehouseService.getAll()
+      .then((response) => {
+        const data = response.data?.data ?? response.data ?? [];
+        setWarehouses(Array.isArray(data) ? data : data.content ?? []);
+      })
+      .catch((err) => {
+        console.error('Lỗi tải danh sách kho:', err);
+        setWarehouses([]);
+      });
   }, []);
 
   const fetchLowStockItems = useCallback(async () => {
@@ -171,14 +291,37 @@ const InventoryPage = () => {
     }
   }, []);
 
-  // ── Fetch from BE whenever page changes
-  const fetchInventory = useCallback(async (page, categoryId) => {
+  const getInventoryScope = (categoryId, channelValue) => {
+    const catIdParam = categoryId === 'all' ? null : categoryId;
+    const channelIdParam = channelValue && channelValue !== 'all' && channelValue !== LOCAL_CHANNEL_VALUE
+      ? channelValue
+      : null;
+    const localOnlyParam = channelValue === LOCAL_CHANNEL_VALUE;
+    return { catIdParam, channelIdParam, localOnlyParam };
+  };
+
+  const getInventoryFilters = useCallback(() => ({
+    keyword: search.trim() || null,
+    status: statusFilter === 'all' ? null : statusFilter,
+    warehouseId: warehouseFilter === 'all' ? null : warehouseFilter,
+  }), [search, statusFilter, warehouseFilter]);
+
+  // ── Fetch from BE whenever page/filter changes
+  const fetchInventory = useCallback(async (page, categoryId, channelValue, filters = {}) => {
     setLoading(true);
     setError(null);
     try {
-      const catIdParam = categoryId === 'all' ? null : categoryId;
-      const data = await inventoryService.getInventoryList(page, PAGE_SIZE, 'updatedAt', 'desc', catIdParam);
-      // BE PageResponse shape: { content, page, size, totalElements, totalPages, first, last }
+      const { catIdParam, channelIdParam, localOnlyParam } = getInventoryScope(categoryId, channelValue);
+      const data = await inventoryService.getInventoryList(
+        page,
+        PAGE_SIZE,
+        'updatedAt',
+        'desc',
+        catIdParam,
+        channelIdParam,
+        localOnlyParam,
+        filters,
+      );
       setItems(data.content ?? []);
       setTotalElements(data.totalElements ?? 0);
       setTotalPages(data.totalPages ?? 0);
@@ -190,31 +333,68 @@ const InventoryPage = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchInventory(currentPage, categoryFilter);
-  }, [currentPage, categoryFilter, fetchInventory]);
+  const fetchSummaryStats = useCallback(async () => {
+    try {
+      const firstPage = await inventoryService.getInventoryList(0, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc');
+      const allRows = [...(firstPage.content ?? [])];
+      const pageCount = Number(firstPage.totalPages ?? 1);
+
+      for (let page = 1; page < pageCount; page += 1) {
+        const data = await inventoryService.getInventoryList(page, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc');
+        allRows.push(...(data.content ?? []));
+      }
+
+      setSummaryStats({
+        totalSkus: firstPage.totalElements ?? allRows.length,
+        totalQuantity: allRows.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0),
+        lowStockCount: allRows.filter((item) => deriveStatus(item) === 'low-stock').length,
+        negativeCount: allRows.filter((item) => Number(item.availableQuantity ?? 0) < 0).length,
+      });
+    } catch (err) {
+      console.error('Lỗi tải thống kê tồn kho:', err);
+      setSummaryStats({ totalSkus: 0, totalQuantity: 0, lowStockCount: 0, negativeCount: 0 });
+    }
+  }, []);
 
   useEffect(() => {
-    fetchLowStockItems();
-  }, [fetchLowStockItems]);
+    const timer = window.setTimeout(() => {
+      fetchInventory(currentPage, categoryFilter, channelFilter, getInventoryFilters());
+    }, search.trim() ? 250 : 0);
 
-  // ── Dynamic warehouse options from loaded data
+    return () => window.clearTimeout(timer);
+  }, [currentPage, categoryFilter, channelFilter, getInventoryFilters, fetchInventory, search]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      fetchLowStockItems();
+      fetchSummaryStats();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [fetchLowStockItems, fetchSummaryStats]);
+
   const warehouseOptions = useMemo(() => {
-    const names = [...new Set(items.map(i => i.warehouseName).filter(Boolean))];
     return [
       { value: 'all', label: 'Tất cả kho hàng' },
-      ...names.map(n => ({ value: n, label: n })),
+      ...warehouses.map((warehouse) => ({ value: warehouse.id, label: warehouse.name })),
     ];
-  }, [items]);
+  }, [warehouses]);
+
+  const channelOptions = useMemo(() => {
+    return [
+      { value: 'all', label: 'Tất cả kênh bán' },
+      ...syncChannels.map((channel) => ({
+        value: channel.id,
+        label: channel.displayName
+          ? `${getPlatformLabel(channel.platform)} - ${channel.displayName}`
+          : getPlatformLabel(channel.platform),
+      })),
+      { value: LOCAL_CHANNEL_VALUE, label: 'Ứng dụng' },
+    ];
+  }, [syncChannels]);
 
   const handlePageChange = (page) => {
     setCurrentPage(page);
-    // reset client-side filters khi đổi trang
-    setSearch('');
-    setStatusFilter('all');
-    setWarehouseFilter('all');
-    setNameSort('none');
-    setQtySort('none');
   };
 
   const renderCategoryOptions = (nodes, level = 0) => {
@@ -230,17 +410,8 @@ const InventoryPage = () => {
     });
   };
 
-  const filterInventoryRows = useCallback((source) => {
-    let result = source.filter(item => {
-      const matchSearch = !search ||
-        (item.variantSku ?? '').toLowerCase().includes(search.toLowerCase()) ||
-        (item.variantName ?? '').toLowerCase().includes(search.toLowerCase());
-      const status = deriveStatus(item);
-      const matchStatus = statusFilter === 'all' || status === statusFilter;
-      const matchWarehouse = warehouseFilter === 'all' || item.warehouseName === warehouseFilter;
-      return matchSearch && matchStatus && matchWarehouse;
-    });
-
+  const sortInventoryRows = useCallback((source) => {
+    let result = source;
     // Sort by name (takes priority over qty sort if both active)
     if (nameSort !== 'none') {
       result = [...result].sort((a, b) => {
@@ -256,21 +427,30 @@ const InventoryPage = () => {
     }
 
     return result;
-  }, [search, statusFilter, warehouseFilter, nameSort, qtySort]);
+  }, [nameSort, qtySort]);
 
-  // ── Client-side filter + sort on current page items
-  const filtered = useMemo(() => filterInventoryRows(items), [items, filterInventoryRows]);
+  const visibleItems = useMemo(() => sortInventoryRows(items), [items, sortInventoryRows]);
+  const displayRows = useMemo(() => buildInventoryDisplayRows(visibleItems), [visibleItems]);
+
+  useEffect(() => {
+    if (currentPage > 0 && totalPages > 0 && currentPage >= totalPages) {
+      setCurrentPage(Math.max(totalPages - 1, 0));
+    }
+  }, [currentPage, totalPages]);
 
   const loadInventoryExportRows = async () => {
-    const size = Math.max(totalElements || items.length || PAGE_SIZE, items.length || PAGE_SIZE);
+    const { catIdParam, channelIdParam, localOnlyParam } = getInventoryScope(categoryFilter, channelFilter);
     const data = await inventoryService.getInventoryList(
       0,
-      size,
+      Math.max(totalElements || PAGE_SIZE, PAGE_SIZE),
       'updatedAt',
       'desc',
-      categoryFilter === 'all' ? null : categoryFilter,
+      catIdParam,
+      channelIdParam,
+      localOnlyParam,
+      getInventoryFilters(),
     );
-    return filterInventoryRows(data.content ?? []);
+    return sortInventoryRows(data.content ?? []);
   };
 
   const loadInventoryExportExtraSheets = async ({ fromDate, toDate } = {}) => {
@@ -299,12 +479,12 @@ const InventoryPage = () => {
     }];
   };
 
-  // ── Derived alert counts from current page
-  const negativeCount = items.filter(r => r.availableQuantity < 0).length;
-  const lowStockCount = items.filter(r => r.isLowStock && r.availableQuantity >= 0).length;
+  // ── Derived alert counts from the full inventory snapshot
+  const negativeCount = summaryStats.negativeCount;
+  const lowStockCount = summaryStats.lowStockCount;
   const outOfStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) <= 0);
   const lowStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) > 0);
-  const totalQuantityCurrentPage = items.reduce((acc, item) => acc + item.quantityOnHand, 0);
+  const totalQuantityAll = summaryStats.totalQuantity;
 
   const quantityColor = (v) => {
     if (v < 0) return styles.cellRed;
@@ -312,8 +492,22 @@ const InventoryPage = () => {
     return styles.cellDefault;
   };
 
+  const handleMarketplaceSynced = useCallback(async () => {
+    await Promise.all([
+      fetchInventory(currentPage, categoryFilter, channelFilter, getInventoryFilters()),
+      fetchSummaryStats(),
+      fetchLowStockItems(),
+    ]);
+  }, [categoryFilter, channelFilter, currentPage, fetchInventory, fetchLowStockItems, fetchSummaryStats, getInventoryFilters]);
+
   const actions = (
     <>
+      <MarketplaceSyncButton
+        className={styles.syncButtonWrap}
+        buttonClassName={`${styles.actionBtn} ${styles.tealBtn} ${styles.syncButton}`}
+        iconClassName={styles.tealIcon}
+        onSynced={handleMarketplaceSynced}
+      />
       <button
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         id="btn-inventory-logs"
@@ -378,7 +572,7 @@ const InventoryPage = () => {
           </div>
           <div className={styles.summaryInfo}>
             <span className={styles.summaryLabel}>Tổng sản phẩm SKUs</span>
-            <span className={styles.summaryValue}>{totalElements}</span>
+            <span className={styles.summaryValue}>{summaryStats.totalSkus}</span>
           </div>
         </div>
         <div className={styles.summaryCard}>
@@ -386,8 +580,8 @@ const InventoryPage = () => {
             <Box size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Tổng số lượng SKUs<br /><small>(Trang hiện tại)</small></span>
-            <span className={styles.summaryValue}>{totalQuantityCurrentPage}</span>
+            <span className={styles.summaryLabel}>Tổng số lượng SKUs<br /><small>(Toàn bộ)</small></span>
+            <span className={styles.summaryValue}>{totalQuantityAll}</span>
           </div>
         </div>
         <div className={styles.summaryCard}>
@@ -416,7 +610,7 @@ const InventoryPage = () => {
           <AlertCircle size={16} className={styles.alertIcon} />
           <div>
             <span className={styles.alertBold}>Cảnh báo: </span>
-            Có {negativeCount} SKU đang tồn kho âm trên trang này. Cần kiểm tra và điều chỉnh ngay.
+            Có {negativeCount} SKU đang tồn kho âm trong toàn bộ kho. Cần kiểm tra và điều chỉnh ngay.
           </div>
         </div>
       )}
@@ -425,7 +619,7 @@ const InventoryPage = () => {
         <div className={`${styles.alert} ${styles.alertWarn}`}>
           <AlertTriangle size={16} className={styles.alertIcon} />
           <div>
-            Có {lowStockCount} SKU dưới mức tồn tối thiểu trên trang này. Cần nhập hàng.
+            Có {lowStockCount} SKU dưới mức tồn tối thiểu trong toàn bộ kho. Cần nhập hàng.
           </div>
         </div>
       )}
@@ -490,7 +684,10 @@ const InventoryPage = () => {
               className={styles.searchInput}
               placeholder="Tìm theo SKU hoặc tên sản phẩm..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => {
+                setSearch(e.target.value);
+                setCurrentPage(0);
+              }}
             />
           </div>
           <div className={styles.selectWrapper}>
@@ -507,8 +704,9 @@ const InventoryPage = () => {
             </select>
             <ChevronDown className={styles.selectIcon} size={14} />
           </div>
-          <Select value={warehouseFilter} onChange={setWarehouseFilter} options={warehouseOptions} />
-          <Select value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
+          <Select value={warehouseFilter} onChange={(value) => { setWarehouseFilter(value); setCurrentPage(0); }} options={warehouseOptions} />
+          <Select value={channelFilter} onChange={(value) => { setChannelFilter(value); setCurrentPage(0); }} options={channelOptions} />
+          <Select value={statusFilter} onChange={(value) => { setStatusFilter(value); setCurrentPage(0); }} options={STATUS_OPTIONS} />
         </div>
 
         {/* ── Filters row 2: Sort toggles ── */}
@@ -519,7 +717,7 @@ const InventoryPage = () => {
           <button
             id="btn-sort-name"
             className={`${styles.sortBtn} ${nameSort !== 'none' ? styles.sortBtnActive : ''}`}
-            onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); }}
+            onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
             title="Sắp xếp theo tên sản phẩm"
           >
             {nameSort === 'desc'
@@ -537,7 +735,7 @@ const InventoryPage = () => {
           <button
             id="btn-sort-qty"
             className={`${styles.sortBtn} ${qtySort !== 'none' ? styles.sortBtnActive : ''}`}
-            onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); }}
+            onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
             title="Sắp xếp theo số lượng trong kho"
           >
             {qtySort === 'desc'
@@ -552,7 +750,7 @@ const InventoryPage = () => {
           </button>
 
           {/* Reset filters */}
-          {(categoryFilter !== 'all' || warehouseFilter !== 'all' || statusFilter !== 'all' || nameSort !== 'none' || qtySort !== 'none' || search) && (
+          {(categoryFilter !== 'all' || warehouseFilter !== 'all' || channelFilter !== 'all' || statusFilter !== 'all' || nameSort !== 'none' || qtySort !== 'none' || search) && (
             <button
               id="btn-reset-filters"
               className={styles.resetBtn}
@@ -560,6 +758,7 @@ const InventoryPage = () => {
                 setSearch('');
                 setStatusFilter('all');
                 setWarehouseFilter('all');
+                setChannelFilter('all');
                 setCategoryFilter('all');
                 setNameSort('none');
                 setQtySort('none');
@@ -598,7 +797,7 @@ const InventoryPage = () => {
                   <th className={styles.th}>SKU</th>
                   <th
                     className={`${styles.th} ${styles.thSortable}`}
-                    onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); }}
+                    onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
                     title="Click để sắp xếp theo tên"
                   >
                     Tên sản phẩm
@@ -607,9 +806,10 @@ const InventoryPage = () => {
                     {nameSort === 'none' && <ArrowUpAZ size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
                   </th>
                   <th className={styles.th}>Kho hàng</th>
+                  <th className={styles.th}>Kênh bán</th>
                   <th
                     className={`${styles.th} ${styles.thRight} ${styles.thSortable}`}
-                    onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); }}
+                    onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
                     title="Click để sắp xếp theo số lượng"
                   >
                     Trong kho
@@ -625,19 +825,44 @@ const InventoryPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row, idx) => {
+                {displayRows.map((row, idx) => {
                   const status = deriveStatus(row);
+                  const isProductRow = row.type === 'product';
                   return (
                     <tr
                       key={row.id}
-                      className={`${styles.tr} ${idx % 2 === 1 ? styles.trAlt : ''}`}
+                      className={`${styles.tr} ${idx % 2 === 1 ? styles.trAlt : ''} ${isProductRow ? styles.productRow : styles.variantRow}`}
                     >
                       <td className={styles.td}>
-                        <span className={styles.skuChip}>{row.variantSku}</span>
+                        {isProductRow ? (
+                          <span className={styles.productSkuSummary}>{row.items.length} SKU</span>
+                        ) : (
+                          <span className={styles.skuChip}>{row.variantSku}</span>
+                        )}
                       </td>
-                      <td className={styles.td}>{row.variantName}</td>
+                      <td className={styles.td}>
+                        {isProductRow ? (
+                          <div className={styles.productInfo}>
+                            <span className={styles.productName}>{row.productName}</span>
+                            <span className={styles.productMeta}>{row.items.length} sản phẩm con</span>
+                          </div>
+                        ) : (
+                          <div className={styles.variantInfo}>
+                            <span className={styles.variantIndent} />
+                            <div>
+                              <div className={styles.variantName}>{row.variantName || row.productName}</div>
+                              {row.productName && row.productName !== row.variantName && (
+                                <div className={styles.variantMeta}>{row.productName}</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </td>
                       <td className={styles.td}>
                         <span className={styles.warehouseLink}>{row.warehouseName}</span>
+                      </td>
+                      <td className={styles.td}>
+                        <ChannelBadge item={row} />
                       </td>
                       <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.quantityOnHand)}`}>
                         {row.quantityOnHand}
@@ -663,22 +888,26 @@ const InventoryPage = () => {
                         </div>
                       </td>
                       <td className={styles.td}>
-                        <button
-                          id={`btn-view-${row.variantSku}`}
-                          className={styles.viewBtn}
-                          onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', row.id)}?variantId=${row.variantId}`)}
-                        >
-                          <Eye size={14} />
-                          View
-                        </button>
+                        {isProductRow ? (
+                          <span className={styles.productActionHint}>Nhóm sản phẩm</span>
+                        ) : (
+                          <button
+                            id={`btn-view-${row.variantSku}`}
+                            className={styles.viewBtn}
+                            onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', row.inventoryItemId)}?variantId=${row.variantId}`)}
+                          >
+                            <Eye size={14} />
+                            View
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
 
-                {!loading && filtered.length === 0 && (
+                {!loading && items.length === 0 && (
                   <tr>
-                    <td colSpan={9} className={styles.emptyRow}>
+                    <td colSpan={10} className={styles.emptyRow}>
                       {items.length === 0
                         ? 'Không có dữ liệu tồn kho.'
                         : 'Không tìm thấy kết quả phù hợp với bộ lọc.'}
@@ -692,10 +921,13 @@ const InventoryPage = () => {
 
         <div className={styles.tableFooter}>
           <span>
-            Đang hiển thị {filtered.length} / {totalElements} SKU
+            Đang hiển thị {visibleItems.length} / {totalElements} SKU
           </span>
           <span>
-            Tồn trang hiện tại: {totalQuantityCurrentPage.toLocaleString('vi-VN')} đơn vị
+            Dòng bảng: {displayRows.length.toLocaleString('vi-VN')} gồm sản phẩm cha và sản phẩm con
+          </span>
+          <span>
+            Tổng tồn kho: {totalQuantityAll.toLocaleString('vi-VN')} đơn vị
           </span>
         </div>
 
@@ -706,7 +938,7 @@ const InventoryPage = () => {
             totalPages={totalPages}
             totalElements={totalElements}
             pageSize={PAGE_SIZE}
-            currentCount={filtered.length}
+            currentCount={visibleItems.length}
             itemLabel="SKU"
             onPageChange={handlePageChange}
           />
@@ -716,7 +948,7 @@ const InventoryPage = () => {
     <InventoryExportModal
       open={exportOpen}
       onClose={() => setExportOpen(false)}
-      rows={filtered}
+      rows={visibleItems}
       columns={INVENTORY_EXPORT_COLUMNS}
       getDateValue={(item) => item.updatedAt ?? item.createdAt}
       loadRows={loadInventoryExportRows}

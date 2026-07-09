@@ -10,6 +10,8 @@ import java.math.RoundingMode;
 public interface InventoryDetailMapper {
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "variantId", source = "variant.id")
+    @Mapping(target = "channelId", ignore = true)
+    @Mapping(target = "platform", ignore = true)
     @Mapping(target = "quantityOnHand", source = "quantityOnHand")
     @Mapping(target = "averageCost", source = "averageCost")
     @Mapping(target = "variantSku", source = "variant.sku")

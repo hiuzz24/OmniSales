@@ -14,6 +14,8 @@ public class StockReceiveItemResponse {
 
     private UUID id;
     private UUID variantId;
+    private String productName;
+    private String sku;
     private String variantSku;
     private String variantName;
     private Integer quantity;

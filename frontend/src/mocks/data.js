@@ -176,3 +176,78 @@ export const MOCK_STATS = {
     { platform: 'Lazada', revenue: 7430000, percentage: 30 },
   ],
 };
+
+export let MOCK_AUDIT_LOGS = [
+  {
+    id: 1,
+    timestamp: '2026-07-03T09:15:00Z',
+    type: 'LOGIN',
+    message: 'Đăng nhập thành công bởi admin@osms.com',
+    user: 'admin@osms.com',
+    ip: '192.168.1.10',
+    details: 'Browser: Chrome 126.0.0, OS: Windows 11. Đăng nhập thành công từ địa chỉ IP quen thuộc.'
+  },
+  {
+    id: 2,
+    timestamp: '2026-07-03T09:12:30Z',
+    type: 'ERROR',
+    message: 'Lỗi đồng bộ dữ liệu với Shopee (Lỗi kết nối API)',
+    user: 'SYSTEM',
+    ip: '10.0.0.5',
+    details: 'Error: Request timed out after 10000ms at ShopeeConnector.fetchOrders (shopee.js:145)\n  at SyncManager.runTask (sync.js:82)\n  at processTicksAndRejections (node:internal/process/task_queues:95)'
+  },
+  {
+    id: 3,
+    timestamp: '2026-07-03T09:05:12Z',
+    type: 'WARNING',
+    message: 'Cảnh báo: Sản phẩm SKU ATN-BASIC-001 sắp hết hàng (còn 2)',
+    user: 'SYSTEM',
+    ip: '127.0.0.1',
+    details: 'Sản phẩm "Áo thun nam basic" đã đạt ngưỡng cảnh báo tồn kho tối thiểu (ngưỡng: 5, hiện tại: 2).'
+  },
+  {
+    id: 4,
+    timestamp: '2026-07-03T08:50:00Z',
+    type: 'LOGIN',
+    message: 'Đăng nhập thất bại: Sai mật khẩu cho tài khoản staff@osms.com',
+    user: 'staff@osms.com',
+    ip: '113.161.44.82',
+    details: 'Browser: Firefox 127.0, OS: macOS. Đăng nhập thất bại lần 1.'
+  },
+  {
+    id: 5,
+    timestamp: '2026-07-03T08:22:15Z',
+    type: 'WARNING',
+    message: 'Cập nhật phân quyền người dùng id=3 bởi admin@osms.com',
+    user: 'admin@osms.com',
+    ip: '192.168.1.10',
+    details: 'Thay đổi role từ SALES thành OPERATIONS cho nhân sự Trần Văn Staff.'
+  },
+  {
+    id: 6,
+    timestamp: '2026-07-03T08:00:10Z',
+    type: 'ERROR',
+    message: 'Không thể kết nối đến máy chủ gửi Email SMTP',
+    user: 'SYSTEM',
+    ip: '10.0.0.1',
+    details: 'Connection refused: connect to smtp.gmail.com:587. Vui lòng kiểm tra lại cấu hình thông tin Email trong cài đặt hệ thống.'
+  },
+  {
+    id: 7,
+    timestamp: '2026-07-02T23:59:00Z',
+    type: 'LOGIN',
+    message: 'Đăng nhập thành công bởi owner@osms.com',
+    user: 'owner@osms.com',
+    ip: '192.168.1.20',
+    details: 'Browser: Safari 17.5, OS: iOS 17.5. Thiết bị di động.'
+  },
+  {
+    id: 8,
+    timestamp: '2026-07-02T15:30:45Z',
+    type: 'INFO',
+    message: 'Đã sao lưu cơ sở dữ liệu tự động hàng ngày',
+    user: 'SYSTEM',
+    ip: '127.0.0.1',
+    details: 'Backup file: backup_2026_07_02_153000.sql.gz (dung lượng: 48.5 MB), lưu trữ thành công trên S3 Storage.'
+  }
+];

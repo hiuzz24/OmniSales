@@ -86,6 +86,7 @@ export default function InventoryDocumentListPage({
   createLabel,
   onCreate,
   onExport,
+  extraActions,
   statUnit = 'phiếu',
   stats = [],
   filters,
@@ -115,6 +116,7 @@ export default function InventoryDocumentListPage({
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {extraActions}
           {onExport && (
             <button type="button" onClick={onExport} style={secondaryButtonStyle}
               onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)'; }}

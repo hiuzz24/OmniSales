@@ -40,18 +40,20 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
         validateOAuthConfig();
         String normalizedShop = normalizeShop(shop);
         String state = UUID.randomUUID().toString();
+        String requestedScopes = normalizeScopes(scopes);
 
         String authUrl = UriComponentsBuilder
-                .fromHttpUrl("https://" + normalizedShop + ".myshopify.com/admin/oauth/authorize")
+                .fromUriString("https://" + normalizedShop + ".myshopify.com/admin/oauth/authorize")
                 .queryParam("client_id", apiKey)
-                .queryParam("scope", scopes)
+                .queryParam("scope", requestedScopes)
                 .queryParam("redirect_uri", redirectUri)
                 .queryParam("state", state)
                 .build()
                 .encode()
                 .toUriString();
 
-        log.info("[ShopifyOAuth] buildAuthorizationUrl — shop={}, redirectUri={}", normalizedShop, redirectUri);
+        log.info("[ShopifyOAuth] buildAuthorizationUrl - shop={}, redirectUri={}, scopes={}",
+                normalizedShop, redirectUri, requestedScopes);
         return authUrl;
     }
 
@@ -82,12 +84,24 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
             }
 
             String accessToken = (String) response.get("access_token");
-            log.info("[ShopifyOAuth] Token exchange successful — shop={}", normalizedShop);
+            log.info("[ShopifyOAuth] Token exchange successful - shop={}, grantedScopes={}",
+                    normalizedShop, response.get("scope"));
             return accessToken;
         } catch (Exception e) {
-            log.error("[ShopifyOAuth] Token exchange failed — shop={}, error={}", normalizedShop, e.getMessage());
+            log.error("[ShopifyOAuth] Token exchange failed - shop={}, error={}", normalizedShop, e.getMessage());
             throw new RuntimeException("Failed to exchange Shopify authorization code: " + e.getMessage(), e);
         }
+    }
+
+    private String normalizeScopes(String scopes) {
+        if (scopes == null || scopes.isBlank()) {
+            return "";
+        }
+        return String.join(",",
+                java.util.Arrays.stream(scopes.split(","))
+                        .map(String::trim)
+                        .filter(scope -> !scope.isBlank())
+                        .toList());
     }
 
     private String normalizeShop(String shop) {

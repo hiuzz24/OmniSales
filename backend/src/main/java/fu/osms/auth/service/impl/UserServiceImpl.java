@@ -13,6 +13,8 @@ import fu.osms.auth.entity.Role;
 import fu.osms.auth.repository.RoleRepository;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.auth.repository.UserRoleRepository;
+import fu.osms.auth.repository.UserInviteTokenRepository;
+import fu.osms.auth.entity.UserInviteToken;
 import fu.osms.auth.service.UserService;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
@@ -40,6 +42,7 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roleRepository;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final UserInviteTokenRepository userInviteTokenRepository;
 
     // ════════════════════════════════════════════════════════════════════════
     // CRUD
@@ -299,5 +302,29 @@ public class UserServiceImpl implements UserService {
                 .build();
     }
 
+    @Override
+    @Transactional
+    public void cancelInvite(UUID id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
+        if (user.getStatus() != UserStatus.INACTIVE || user.getDeletedAt() != null) {
+            throw new IllegalArgumentException("Chỉ có thể hủy lời mời đối với tài khoản chưa kích hoạt");
+        }
+
+        // Delete invite tokens associated with this email
+        List<UserInviteToken> tokens = userInviteTokenRepository.findAll().stream()
+                .filter(t -> t.getEmail().equalsIgnoreCase(user.getEmail()))
+                .toList();
+        userInviteTokenRepository.deleteAll(tokens);
+
+        // Delete user roles
+        List<UserRole> roles = userRoleRepository.findByUserId(user.getId());
+        userRoleRepository.deleteAll(roles);
+
+        // Delete the user record completely
+        userRepository.delete(user);
+
+        log.info("Invitation cancelled and user deleted for email: {}", user.getEmail());
+    }
 }

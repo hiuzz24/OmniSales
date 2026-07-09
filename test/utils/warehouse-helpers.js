@@ -1,6 +1,9 @@
-const API_BASE = process.env.API_BASE || 'http://localhost:8080/api';
-const TEST_EMAIL = 'manager@osms.vn';
-const TEST_PASSWORD = 'Duy16042004%';
+const {
+  TEST_EMAIL,
+  TEST_PASSWORD,
+  API_BASE: ENV_API_BASE,
+} = require('./env-config');
+const API_BASE = process.env.API_BASE || ENV_API_BASE;
 const { expect } = require('@playwright/test');
 
 async function loginAsOwner(page) {

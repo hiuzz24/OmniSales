@@ -1,4 +1,5 @@
 const { defineConfig, devices } = require('@playwright/test');
+const { FRONTEND_URL: DEFAULT_FRONTEND_URL } = require('./utils/env-config');
 
 module.exports = defineConfig({
   testDir: './',
@@ -15,7 +16,7 @@ module.exports = defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.FRONTEND_URL || 'http://localhost:5174',
+        baseURL: process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL,
       },
       testMatch: /e2e\/.+\.spec\.js/,
     },

@@ -180,6 +180,19 @@
   max-width: 300px;
 }
 
+.changeList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 520px;
+}
+
+.changeItem {
+  color: #166534;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .pagination {
   display: flex;
   align-items: center;

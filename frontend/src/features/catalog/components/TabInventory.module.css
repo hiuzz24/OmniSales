@@ -152,6 +152,28 @@
 .textBlue { color: #2563eb; font-weight: 500; }
 .textGray { color: #6b7280; }
 
+.productName {
+  font-weight: 600;
+  color: var(--catalog-ink, #101828);
+}
+
+.productSku {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.emptyState,
+.errorState {
+  text-align: center;
+  color: #667085;
+  padding: 28px 16px !important;
+}
+
+.errorState {
+  color: #dc2626;
+}
+
 @media (max-width: 760px) {
   .statsGrid {
     grid-template-columns: 1fr;

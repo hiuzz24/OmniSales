@@ -17,6 +17,7 @@ import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.PlatformSyncService;
 import fu.osms.sync.service.ProductSyncOrchestratorService;
+import fu.osms.sync.service.SyncAlertService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,7 @@ public class ProductSyncOrchestratorServiceImpl implements ProductSyncOrchestrat
     private final ChannelProductRepository channelProductRepository;
     private final PlatformSyncServiceFactory platformSyncServiceFactory;
     private final SyncLogRepository syncLogRepository;
+    private final SyncAlertService syncAlertService;
 
     @Override
     @Transactional
@@ -105,7 +107,10 @@ public class ProductSyncOrchestratorServiceImpl implements ProductSyncOrchestrat
                 syncLog.setCompletedAt(OffsetDateTime.now());
             }
 
-            syncLogRepository.save(syncLog);
+            syncLog = syncLogRepository.save(syncLog);
+            if (syncLog.getStatus() == SyncStatus.FAILED) {
+                syncAlertService.notifySyncFailure(syncLog);
+            }
             result.getDetails().add(detail);
         }
 

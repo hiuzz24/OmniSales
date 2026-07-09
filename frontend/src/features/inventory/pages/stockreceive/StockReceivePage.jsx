@@ -32,6 +32,8 @@ import {
 } from '../components/inventoryDocumentListUtils';
 import InventoryExportModal from '../components/InventoryExportModal';
 import { formatExportDateTime, getStatusLabel } from '../components/inventoryExcelExport';
+import MarketplaceSyncButton from '../components/MarketplaceSyncButton';
+import { printStockReceiveReceipt } from './stockReceivePrintTemplate';
 
 const STATUS_CONFIG = {
   CONFIRMED: { label: 'Hoàn thành', icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
@@ -119,7 +121,7 @@ const StatusBadge = ({ status }) => {
   return <Badge {...config} />;
 };
 
-const ActionMenu = ({ receipt, onComplete, onRefresh, confirm }) => {
+const ActionMenu = ({ receipt, onComplete, onRefresh, confirm, onPrint }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -167,7 +169,7 @@ const ActionMenu = ({ receipt, onComplete, onRefresh, confirm }) => {
           </ActionMenuItem>
         </>
       )}
-      <ActionMenuItem onClick={() => { setOpen(false); toast.info('In phiếu đang được phát triển'); }}>
+      <ActionMenuItem onClick={() => { setOpen(false); onPrint(receipt); }}>
         <Printer size={14} /> In phiếu
       </ActionMenuItem>
     </ActionMenuShell>
@@ -247,6 +249,23 @@ export default function StockReceivePage() {
     return filterReceiptRows(Array.isArray(data.content) ? data.content : []);
   };
 
+  const handlePrintReceipt = async (receipt) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Không thể mở cửa sổ in. Vui lòng cho phép popup cho trang này.');
+      return;
+    }
+
+    printWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 24px;">Đang tải dữ liệu phiếu nhập...</p>');
+    try {
+      const response = await stockReceiveService.getReceiptById(receipt.id);
+      printStockReceiveReceipt(getResponseData(response), printWindow);
+    } catch (error) {
+      printWindow?.close();
+      toast.error(error?.response?.data?.message || error?.message || 'Không thể tải dữ liệu in phiếu nhập.');
+    }
+  };
+
   const stats = [
     { key: 'total', label: 'Tổng phiếu', value: statistics.totalCount, icon: FileText, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
     { key: 'confirmed', label: 'Hoàn thành', value: statistics.confirmedCount, icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
@@ -266,7 +285,7 @@ export default function StockReceivePage() {
       <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
       <td style={tableCellStyle}>{formatDate(receipt.createdAt)}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right' }}>
-        <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} />
+        <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} onPrint={handlePrintReceipt} />
       </td>
     </tr>
   ));
@@ -286,6 +305,7 @@ export default function StockReceivePage() {
         createLabel="Tạo phiếu nhập"
         onCreate={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
         onExport={() => setExportOpen(true)}
+        extraActions={<MarketplaceSyncButton allowedDirections={['from-app']} onSynced={refreshData} />}
         stats={stats}
         filters={(
           <>

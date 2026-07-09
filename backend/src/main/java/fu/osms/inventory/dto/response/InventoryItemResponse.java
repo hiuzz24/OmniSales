@@ -6,6 +6,8 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import fu.osms.common.enums.PlatformType;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -17,7 +19,11 @@ public class InventoryItemResponse {
     private String warehouseName;
     private UUID variantId;
     private String variantSku;
+    private String productName;
     private String variantName;
+    private UUID channelId;
+    private String channelName;
+    private PlatformType platform;
     private Integer quantityOnHand;
     private Integer reservedQuantity;
     private Integer availableQuantity;
