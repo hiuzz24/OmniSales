@@ -1,6 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
   createTestCustomer,
   deleteTestCustomer,
   getCustomerById,
@@ -11,18 +10,10 @@ const {
 
 test.describe('Customer API Tests', () => {
 
-  let authToken;
-
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-  });
-
   // GET /api/customers - List Customers
-
-  test('C1 - GET /api/customers - List customers with pagination returns 200', async ({ request }) => {
+  test('C1 - GET /api/customers - List customers with pagination returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/customers?page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -34,9 +25,9 @@ test.describe('Customer API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  test('C2 - GET /api/customers - Search by keyword', async ({ request }) => {
+  test('C2 - GET /api/customers - Search by keyword', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/customers?search=test&page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -45,9 +36,9 @@ test.describe('Customer API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  test('C3 - GET /api/customers - Filter by status ACTIVE', async ({ request }) => {
+  test('C3 - GET /api/customers - Filter by status ACTIVE', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/customers?status=ACTIVE&page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -55,9 +46,9 @@ test.describe('Customer API Tests', () => {
     expect(body.success).toBe(true);
   });
 
-  test('C4 - GET /api/customers - Filter by gender Nam', async ({ request }) => {
+  test('C4 - GET /api/customers - Filter by gender Nam', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/customers?gender=Nam&page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -65,9 +56,9 @@ test.describe('Customer API Tests', () => {
     expect(body.success).toBe(true);
   });
 
-  test('C5 - GET /api/customers - Filter by gender Nu', async ({ request }) => {
+  test('C5 - GET /api/customers - Filter by gender Nu', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/customers?gender=Nu&page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -76,7 +67,6 @@ test.describe('Customer API Tests', () => {
   });
 
   // POST /api/customers - Create Customer
-
   test('C6 - POST /api/customers - Create customer without auth returns 401 or 403', async ({ request }) => {
     const timestamp = Date.now();
     const response = await request.post(`${API_BASE}/customers`, {
@@ -87,24 +77,22 @@ test.describe('Customer API Tests', () => {
       },
     });
 
-    // Spring Security may return 401 or 403 depending on configuration
     expect([401, 403]).toContain(response.status());
   });
 
-  test('C7 - POST /api/customers - Create customer with missing required fields returns 400', async ({ request }) => {
+  test('C7 - POST /api/customers - Create customer with missing required fields returns 400', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/customers`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
       data: {},
     });
 
-    // API may return 400 (validation), 201 (success with defaults), or 500 (error)
     expect([200, 201, 400, 500]).toContain(response.status());
   });
 
-  test('C8 - POST /api/customers - Create customer successfully', async ({ request }) => {
+  test('C8 - POST /api/customers - Create customer successfully', async ({ request, managerHeaders }) => {
     const timestamp = Date.now();
     const response = await request.post(`${API_BASE}/customers`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
       data: {
         fullName: `Test Customer ${timestamp}`,
         email: `test${timestamp}@example.com`,
@@ -113,7 +101,6 @@ test.describe('Customer API Tests', () => {
       },
     });
 
-    // If API returns 500, skip this test (API may have issues)
     if (response.status() === 500) {
       test.skip();
       return;
@@ -125,16 +112,16 @@ test.describe('Customer API Tests', () => {
     expect(body.data).toHaveProperty('id');
     expect(body.data).toHaveProperty('fullName');
 
-    // Cleanup
     if (body.data && body.data.id) {
+      const authToken = managerHeaders.Authorization.replace('Bearer ', '');
       await deleteTestCustomer(request, authToken, body.data.id);
     }
   });
 
-  test('C9 - POST /api/customers - Create customer with invalid phone format', async ({ request }) => {
+  test('C9 - POST /api/customers - Create customer with invalid phone format', async ({ request, managerHeaders }) => {
     const timestamp = Date.now();
     const response = await request.post(`${API_BASE}/customers`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
       data: {
         fullName: `Test Customer ${timestamp}`,
         email: `test${timestamp}@example.com`,
@@ -142,14 +129,13 @@ test.describe('Customer API Tests', () => {
       },
     });
 
-    // API may accept invalid phone or return error
     expect([200, 201, 400, 409, 500]).toContain(response.status());
   });
 
-  test('C10 - POST /api/customers - Create customer with invalid email format', async ({ request }) => {
+  test('C10 - POST /api/customers - Create customer with invalid email format', async ({ request, managerHeaders }) => {
     const timestamp = Date.now();
     const response = await request.post(`${API_BASE}/customers`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
       data: {
         fullName: `Test Customer ${timestamp}`,
         email: 'invalid-email',
@@ -161,11 +147,10 @@ test.describe('Customer API Tests', () => {
   });
 
   // GET /api/customers/{id} - Get Customer By ID
-
-  test('C11 - GET /api/customers/{id} - Get customer by ID returns 200', async ({ request }) => {
-    // First get an existing customer from the list
+  test('C11 - GET /api/customers/{id} - Get customer by ID returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const listResponse = await request.get(`${API_BASE}/customers?page=0&size=1`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     if (listResponse.status() !== 200) {
@@ -175,7 +160,6 @@ test.describe('Customer API Tests', () => {
 
     const listBody = await listResponse.json();
     if (!listBody.data.content || listBody.data.content.length === 0) {
-      // No customers exist, skip test
       test.skip();
       return;
     }
@@ -193,21 +177,20 @@ test.describe('Customer API Tests', () => {
     expect(customer).toHaveProperty('fullName');
   });
 
-  test('C12 - GET /api/customers/{id} - Get non-existent customer returns 404', async ({ request }) => {
+  test('C12 - GET /api/customers/{id} - Get non-existent customer returns 404', async ({ request, managerHeaders }) => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const response = await request.get(`${API_BASE}/customers/${fakeId}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([404, 500]).toContain(response.status());
   });
 
   // PUT /api/customers/{id} - Update Customer
-
-  test('C13 - PUT /api/customers/{id} - Update customer successfully', async ({ request }) => {
-    // First get an existing customer
+  test('C13 - PUT /api/customers/{id} - Update customer successfully', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const listResponse = await request.get(`${API_BASE}/customers?page=0&size=1`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     if (listResponse.status() !== 200) {
@@ -231,11 +214,11 @@ test.describe('Customer API Tests', () => {
     expect(updated).toBeTruthy();
   });
 
-  test('C14 - PUT /api/customers/{id} - Update non-existent customer returns 404', async ({ request }) => {
+  test('C14 - PUT /api/customers/{id} - Update non-existent customer returns 404', async ({ request, managerHeaders }) => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const response = await request.put(`${API_BASE}/customers/${fakeId}`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: { fullName: 'Updated Name' },
@@ -245,19 +228,18 @@ test.describe('Customer API Tests', () => {
   });
 
   // DELETE /api/customers/{id} - Delete Customer
-
-  test('C15 - DELETE /api/customers/{id} - Delete non-existent customer returns 404', async ({ request }) => {
+  test('C15 - DELETE /api/customers/{id} - Delete non-existent customer returns 404', async ({ request, managerHeaders }) => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const response = await request.delete(`${API_BASE}/customers/${fakeId}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([404, 500]).toContain(response.status());
   });
 
   // GET /api/customers/stats - Get Customer Stats
-
-  test('C16 - GET /api/customers/stats - Get customer stats returns 200', async ({ request }) => {
+  test('C16 - GET /api/customers/stats - Get customer stats returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const stats = await getCustomerStats(request, authToken);
 
     expect(stats).toBeTruthy();
@@ -268,30 +250,28 @@ test.describe('Customer API Tests', () => {
   });
 
   // Edge Cases
-
-  test('C17 - POST /api/customers - Create customer without fullName returns 400', async ({ request }) => {
+  test('C17 - POST /api/customers - Create customer without fullName returns 400', async ({ request, managerHeaders }) => {
     const timestamp = Date.now();
     const response = await request.post(`${API_BASE}/customers`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
       data: {
         email: `noname${timestamp}@example.com`,
         phone: `09${String(timestamp).slice(-8)}`,
       },
     });
 
-    // API may accept or reject missing fullName
     expect([200, 201, 400, 500]).toContain(response.status());
   });
 
-  test('C18 - GET /api/customers - Pagination works correctly', async ({ request }) => {
+  test('C18 - GET /api/customers - Pagination works correctly', async ({ request, managerHeaders }) => {
     const page0 = await request.get(`${API_BASE}/customers?page=0&size=5`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(page0.status()).toBe(200);
 
     const page1 = await request.get(`${API_BASE}/customers?page=1&size=5`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(page1.status()).toBe(200);

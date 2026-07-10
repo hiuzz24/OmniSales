@@ -7,6 +7,8 @@ module.exports = defineConfig({
   retries: 0,
   reporter: [['list']],
   use: { trace: 'on-first-retry' },
+  globalSetup: require.resolve('./global-setup.js'),
+  globalTeardown: require.resolve('./global-teardown.js'),
   projects: [
     {
       name: 'api',

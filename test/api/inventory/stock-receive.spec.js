@@ -1,10 +1,9 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
-  getAuthHeaders,
   getWarehouseId,
   getVariantIdFromCatalog,
   getVariantsFromCatalog,
+  cleanupTestData,
   API_BASE,
 } = require('../../utils/inventory-helpers');
 
@@ -14,15 +13,13 @@ function todayIso() {
 
 test.describe('Stock Receive API Tests', () => {
 
-  let authToken;
   let warehouseId;
-  let supplierId = 'b0b1c2d3-0001-0000-0000-000000000002'; // existing supplier from seed
+  let supplierId = 'b0b1c2d3-0001-0000-0000-000000000002';
   let variantId;
   let createdReceipts = [];
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
+  test.beforeAll(async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     warehouseId = await getWarehouseId(request, authToken);
     const variants = await getVariantsFromCatalog(request, authToken);
     if (variants.length > 0) {
@@ -30,18 +27,17 @@ test.describe('Stock Receive API Tests', () => {
     }
   });
 
-  test.afterAll(async ({ request }) => {
-    // Best-effort cleanup for any DRAFT/UNCONFIRMED receipts created.
-    const { cleanupTestData } = require('../../utils/inventory-helpers');
+  test.afterAll(async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     for (const id of createdReceipts) {
       await cleanupTestData(request, authToken, 'receipt', id);
     }
   });
 
   // GET /api/receipts
-  test('R-1 - GET /api/receipts - List with pagination returns 200', async ({ request }) => {
+  test('R-1 - GET /api/receipts - List with pagination returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/receipts?page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -56,18 +52,18 @@ test.describe('Stock Receive API Tests', () => {
     expect([401, 403]).toContain(response.status());
   });
 
-  test('R-3 - GET /api/receipts - Filter by CONFIRMED status (if supported)', async ({ request }) => {
+  test('R-3 - GET /api/receipts - Filter by CONFIRMED status (if supported)', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/receipts?status=CONFIRMED&page=0&size=5`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([200, 400]).toContain(response.status());
   });
 
   // GET /api/receipts/statistics
-  test('R-4 - GET /api/receipts/statistics - Returns aggregates', async ({ request }) => {
+  test('R-4 - GET /api/receipts/statistics - Returns aggregates', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/receipts/statistics`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -83,9 +79,9 @@ test.describe('Stock Receive API Tests', () => {
   });
 
   // GET /api/receipts/next-code
-  test('R-6 - GET /api/receipts/next-code - Returns code', async ({ request }) => {
+  test('R-6 - GET /api/receipts/next-code - Returns code', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/receipts/next-code`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -96,11 +92,11 @@ test.describe('Stock Receive API Tests', () => {
   });
 
   // POST /api/receipts
-  test('R-7 - POST /api/receipts - Create DRAFT receipt', async ({ request }) => {
+  test('R-7 - POST /api/receipts - Create DRAFT receipt', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const response = await request.post(`${API_BASE}/receipts`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -120,11 +116,11 @@ test.describe('Stock Receive API Tests', () => {
     createdReceipts.push(body.data.id);
   });
 
-  test('R-8 - POST /api/receipts - Create CONFIRMED receipt (isDraft=false)', async ({ request }) => {
+  test('R-8 - POST /api/receipts - Create CONFIRMED receipt (isDraft=false)', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const response = await request.post(`${API_BASE}/receipts`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -143,10 +139,10 @@ test.describe('Stock Receive API Tests', () => {
     createdReceipts.push(body.data.id);
   });
 
-  test('R-9 - POST /api/receipts - Missing warehouseId returns 400/500', async ({ request }) => {
+  test('R-9 - POST /api/receipts - Missing warehouseId returns 400/500', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/receipts`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -158,11 +154,11 @@ test.describe('Stock Receive API Tests', () => {
     expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('R-10 - POST /api/receipts - Empty items returns 400', async ({ request }) => {
+  test('R-10 - POST /api/receipts - Empty items returns 400', async ({ request, managerHeaders }) => {
     test.skip(!warehouseId, 'No warehouse');
     const response = await request.post(`${API_BASE}/receipts`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -188,10 +184,9 @@ test.describe('Stock Receive API Tests', () => {
   });
 
   // GET /api/receipts/{id}
-  test('R-12 - GET /api/receipts/{id} - Get existing receipt by id', async ({ request }) => {
-    // Use list to grab any id
+  test('R-12 - GET /api/receipts/{id} - Get existing receipt by id', async ({ request, managerHeaders }) => {
     const list = await request.get(`${API_BASE}/receipts?page=0&size=1`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     if (list.status() !== 200) test.skip(true, 'Cannot list receipts');
     const listBody = await list.json();
@@ -199,7 +194,7 @@ test.describe('Stock Receive API Tests', () => {
     test.skip(!first, 'No receipts in DB');
 
     const response = await request.get(`${API_BASE}/receipts/${first.id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const body = await response.json();
@@ -207,21 +202,20 @@ test.describe('Stock Receive API Tests', () => {
     expect(body.data).toHaveProperty('receiptCode');
   });
 
-  test('R-13 - GET /api/receipts/{id} - Not found returns 404/500', async ({ request }) => {
+  test('R-13 - GET /api/receipts/{id} - Not found returns 404/500', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/receipts/00000000-0000-0000-0000-000000000000`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect([404, 500]).toContain(response.status());
   });
 
   // PUT /api/receipts/{id}
-  test('R-14 - PUT /api/receipts/{id} - Update DRAFT receipt', async ({ request }) => {
+  test('R-14 - PUT /api/receipts/{id} - Update DRAFT receipt', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
-    // Create DRAFT
     const create = await request.post(`${API_BASE}/receipts`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -238,7 +232,7 @@ test.describe('Stock Receive API Tests', () => {
 
     const response = await request.put(`${API_BASE}/receipts/${created.id}`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -256,13 +250,13 @@ test.describe('Stock Receive API Tests', () => {
     expect(body.success).toBe(true);
   });
 
-  test('R-15 - PUT /api/receipts/{id} - Not found returns 404/500', async ({ request }) => {
+  test('R-15 - PUT /api/receipts/{id} - Not found returns 404/500', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const response = await request.put(
       `${API_BASE}/receipts/00000000-0000-0000-0000-000000000000`,
       {
         headers: {
-          Authorization: `Bearer ${authToken}`,
+          ...managerHeaders,
           'Content-Type': 'application/json',
         },
         data: {
@@ -278,12 +272,11 @@ test.describe('Stock Receive API Tests', () => {
   });
 
   // PATCH /api/receipts/{id}/complete
-  test('R-16 - PATCH /api/receipts/{id}/complete - Complete DRAFT receipt', async ({ request }) => {
+  test('R-16 - PATCH /api/receipts/{id}/complete - Complete DRAFT receipt', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
-    // Create DRAFT first
     const create = await request.post(`${API_BASE}/receipts`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -299,15 +292,15 @@ test.describe('Stock Receive API Tests', () => {
     createdReceipts.push(created.id);
 
     const response = await request.patch(`${API_BASE}/receipts/${created.id}/complete`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect([200, 201]).toContain(response.status());
   });
 
-  test('R-17 - PATCH /api/receipts/{id}/complete - Non-existent returns error', async ({ request }) => {
+  test('R-17 - PATCH /api/receipts/{id}/complete - Non-existent returns error', async ({ request, managerHeaders }) => {
     const response = await request.patch(
       `${API_BASE}/receipts/00000000-0000-0000-0000-000000000000/complete`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect([400, 404, 500]).toContain(response.status());
   });

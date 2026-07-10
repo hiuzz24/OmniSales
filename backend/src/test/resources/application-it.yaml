@@ -1,0 +1,92 @@
+# =============================================================
+# Integration Testing profile
+#
+# Activated by @ActiveProfiles("it") on IT test classes.
+# Points at the isolated PostgreSQL database `osms_it` seeded
+# from backend/hibernate-schema.sql.
+#
+# To re-seed:   bash backend/src/test/resources/db-init.sh
+# Or from psql: psql -U postgres -c "DROP DATABASE osms_it; CREATE DATABASE osms_it;"
+#               psql -U postgres -d osms_it -f backend/hibernate-schema.sql
+# =============================================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/osms_it
+    username: postgres
+    password: "123"
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+  # Disable spring-dotenv for tests so it doesn't clobber application-it.yaml
+  dotenv:
+    enabled: false
+  mail:
+    host: localhost
+    port: 25
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+  task:
+    scheduling:
+      pool:
+        size: 1
+
+server:
+  port: 0  # random port (assigned by Spring at boot)
+
+app:
+  security:
+    max-failed-attempts: 5
+    lock-time-duration: 5
+    jwt:
+      secret: testSecretKeyForTestingPurposesOnlyMustBeAtLeast256BitsLongForHS256Algorithm
+  frontend-url: https://test.example.com
+  notifications:
+    email-enabled: false
+    low-stock-repeat-hours: 12
+    low-stock-reminder-ms: 43200000
+    low-stock-reminder-initial-delay-ms: 43200000
+  backup:
+    custom-pg-dump-path: ""
+    custom-pg-restore-path: ""
+    directory: /tmp/test-backups
+
+rest-countries:
+  api-key: test-api-key-for-it
+
+lazada:
+  app-key: test-lazada-app-key
+  app-secret: test-lazada-app-secret
+  api-url: https://api.lazada.com/rest
+  auth-url: https://auth.lazada.com/rest
+  auth-api-url: https://auth.lazada.com/rest
+  redirect-uri: https://test.example.com/api/channels/lazada/callback
+  webhook-callback-url: https://test.example.com/api/webhooks/lazada
+  default-category-id: 7932
+  default-package-weight: 0.5
+  default-package-length: 20
+  default-package-width: 15
+  default-package-height: 5
+
+shopify:
+  api-key: test-shopify-api-key
+  api-secret: test-shopify-api-secret
+  api-url: https://test-shopify.myshopify.com/admin/api
+  redirect-uri: https://test.example.com/api/channels/shopify/callback
+  scopes: write_products,read_products
+  webhook-callback-url: https://test.example.com/api/webhooks/shopify
+
+logging:
+  level:
+    root: WARN
+    fu.osms: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
