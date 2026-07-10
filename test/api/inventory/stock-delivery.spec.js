@@ -1,6 +1,5 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
   getWarehouseId,
   getFirstWarehouseVariantId,
   API_BASE,
@@ -13,30 +12,29 @@ function todayIso() {
 
 test.describe('Stock Delivery API Tests', () => {
 
-  let authToken;
   let warehouseId;
   let variantId;
   let createdIds = [];
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
+  test.beforeAll(async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     warehouseId = await getWarehouseId(request, authToken);
     if (warehouseId) {
       variantId = await getFirstWarehouseVariantId(request, authToken, warehouseId);
     }
   });
 
-  test.afterAll(async ({ request }) => {
+  test.afterAll(async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     for (const id of createdIds) {
       await cleanupTestData(request, authToken, 'delivery', id);
     }
   });
 
   // GET /api/stock-deliveries
-  test('D-1 - GET /api/stock-deliveries - List paginated returns 200', async ({ request }) => {
+  test('D-1 - GET /api/stock-deliveries - List paginated returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stock-deliveries?page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -51,69 +49,69 @@ test.describe('Stock Delivery API Tests', () => {
     expect([401, 403]).toContain(response.status());
   });
 
-  test('D-3 - GET /api/stock-deliveries - Filter by warehouseId', async ({ request }) => {
+  test('D-3 - GET /api/stock-deliveries - Filter by warehouseId', async ({ request, managerHeaders }) => {
     test.skip(!warehouseId, 'No warehouse');
     const response = await request.get(
       `${API_BASE}/stock-deliveries?warehouseId=${warehouseId}&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('D-4 - GET /api/stock-deliveries - Filter by status', async ({ request }) => {
+  test('D-4 - GET /api/stock-deliveries - Filter by status', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/stock-deliveries?status=DRAFT&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('D-5 - GET /api/stock-deliveries - Filter by deliveryType=ORDER', async ({ request }) => {
+  test('D-5 - GET /api/stock-deliveries - Filter by deliveryType=ORDER', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/stock-deliveries?deliveryType=ORDER&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('D-6 - GET /api/stock-deliveries - Filter by deliveryType=ADJUSTMENT', async ({ request }) => {
+  test('D-6 - GET /api/stock-deliveries - Filter by deliveryType=ADJUSTMENT', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/stock-deliveries?deliveryType=ADJUSTMENT&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('D-7 - GET /api/stock-deliveries - Date range filter', async ({ request }) => {
+  test('D-7 - GET /api/stock-deliveries - Date range filter', async ({ request, managerHeaders }) => {
     const start = '2026-06-01';
     const end = '2026-07-31';
     const response = await request.get(
       `${API_BASE}/stock-deliveries?startDate=${start}&endDate=${end}&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('D-8 - GET /api/stock-deliveries - Keyword search', async ({ request }) => {
+  test('D-8 - GET /api/stock-deliveries - Keyword search', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/stock-deliveries?keyword=PX&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
-  test('D-9 - GET /api/stock-deliveries - Sort by createdAt ASC', async ({ request }) => {
+  test('D-9 - GET /api/stock-deliveries - Sort by createdAt ASC', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/stock-deliveries?sortBy=createdAt&sortDirection=ASC&page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
   });
 
   // GET /api/stock-deliveries/statistics
-  test('D-10 - GET /api/stock-deliveries/statistics - Returns aggregates', async ({ request }) => {
+  test('D-10 - GET /api/stock-deliveries/statistics - Returns aggregates', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stock-deliveries/statistics`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const body = await response.json();
@@ -121,11 +119,11 @@ test.describe('Stock Delivery API Tests', () => {
   });
 
   // POST /api/stock-deliveries
-  test('D-11 - POST /api/stock-deliveries - Create ADJUSTMENT delivery', async ({ request }) => {
+  test('D-11 - POST /api/stock-deliveries - Create ADJUSTMENT delivery', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const response = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -143,11 +141,11 @@ test.describe('Stock Delivery API Tests', () => {
     createdIds.push(body.data.id);
   });
 
-  test('D-12 - POST /api/stock-deliveries - Create DISPOSAL delivery', async ({ request }) => {
+  test('D-12 - POST /api/stock-deliveries - Create DISPOSAL delivery', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const response = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -164,10 +162,10 @@ test.describe('Stock Delivery API Tests', () => {
     createdIds.push(body.data.id);
   });
 
-  test('D-13 - POST /api/stock-deliveries - Missing warehouseId returns 400/500', async ({ request }) => {
+  test('D-13 - POST /api/stock-deliveries - Missing warehouseId returns 400/500', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -180,11 +178,11 @@ test.describe('Stock Delivery API Tests', () => {
     expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('D-14 - POST /api/stock-deliveries - Empty items returns 400', async ({ request }) => {
+  test('D-14 - POST /api/stock-deliveries - Empty items returns 400', async ({ request, managerHeaders }) => {
     test.skip(!warehouseId, 'No warehouse');
     const response = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -197,11 +195,11 @@ test.describe('Stock Delivery API Tests', () => {
     expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 
-  test('D-15 - POST /api/stock-deliveries - Invalid deliveryType returns 400', async ({ request }) => {
+  test('D-15 - POST /api/stock-deliveries - Invalid deliveryType returns 400', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const response = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -227,9 +225,9 @@ test.describe('Stock Delivery API Tests', () => {
   });
 
   // GET /api/stock-deliveries/{id}
-  test('D-17 - GET /api/stock-deliveries/{id} - Get existing', async ({ request }) => {
+  test('D-17 - GET /api/stock-deliveries/{id} - Get existing', async ({ request, managerHeaders }) => {
     const list = await request.get(`${API_BASE}/stock-deliveries?page=0&size=1`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     if (list.status() !== 200) test.skip(true, 'Cannot list');
     const body = await list.json();
@@ -237,7 +235,7 @@ test.describe('Stock Delivery API Tests', () => {
     test.skip(!first, 'No deliveries');
 
     const response = await request.get(`${API_BASE}/stock-deliveries/${first.id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const j = await response.json();
@@ -245,20 +243,20 @@ test.describe('Stock Delivery API Tests', () => {
     expect(j.data).toHaveProperty('issueCode');
   });
 
-  test('D-18 - GET /api/stock-deliveries/{id} - Not found returns 404/500', async ({ request }) => {
+  test('D-18 - GET /api/stock-deliveries/{id} - Not found returns 404/500', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/stock-deliveries/00000000-0000-0000-0000-000000000000`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect([404, 500]).toContain(response.status());
   });
 
   // PUT /api/stock-deliveries/{id} - Update draft
-  test('D-19 - PUT /api/stock-deliveries/{id} - Update DRAFT delivery', async ({ request }) => {
+  test('D-19 - PUT /api/stock-deliveries/{id} - Update DRAFT delivery', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const create = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -274,7 +272,7 @@ test.describe('Stock Delivery API Tests', () => {
 
     const response = await request.put(`${API_BASE}/stock-deliveries/${created.id}`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -289,11 +287,11 @@ test.describe('Stock Delivery API Tests', () => {
   });
 
   // PUT /api/stock-deliveries/{id}/confirm
-  test('D-20 - PUT /api/stock-deliveries/{id}/confirm - Confirm DRAFT', async ({ request }) => {
+  test('D-20 - PUT /api/stock-deliveries/{id}/confirm - Confirm DRAFT', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const create = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -308,27 +306,27 @@ test.describe('Stock Delivery API Tests', () => {
     createdIds.push(created.id);
 
     const response = await request.put(`${API_BASE}/stock-deliveries/${created.id}/confirm`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const j = await response.json();
     expect(j.data.status).toBe('CONFIRMED');
   });
 
-  test('D-21 - PUT /api/stock-deliveries/{id}/confirm - Non-existent returns error', async ({ request }) => {
+  test('D-21 - PUT /api/stock-deliveries/{id}/confirm - Non-existent returns error', async ({ request, managerHeaders }) => {
     const response = await request.put(
       `${API_BASE}/stock-deliveries/00000000-0000-0000-0000-000000000000/confirm`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect([400, 404, 500]).toContain(response.status());
   });
 
   // PUT /api/stock-deliveries/{id}/cancel
-  test('D-22 - PUT /api/stock-deliveries/{id}/cancel - Cancel DRAFT', async ({ request }) => {
+  test('D-22 - PUT /api/stock-deliveries/{id}/cancel - Cancel DRAFT', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const create = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -343,7 +341,7 @@ test.describe('Stock Delivery API Tests', () => {
     createdIds.push(created.id);
 
     const response = await request.put(`${API_BASE}/stock-deliveries/${created.id}/cancel`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     expect(response.status()).toBe(200);
     const j = await response.json();

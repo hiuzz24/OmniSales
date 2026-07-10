@@ -81,7 +81,15 @@ public class SecurityConfig {
         corsConfiguration.setAllowCredentials(true);
         corsConfiguration.setAllowedHeaders(List.of("*"));
         corsConfiguration.setAllowedMethods(List.of("GET","PATCH","DELETE","PUT","POST","OPTIONS"));
-        corsConfiguration.setAllowedOriginPatterns(List.of("http://localhost:517*", "http://localhost:300*"));
+        // Allow both localhost and 127.0.0.1 on the standard dev ports.
+        // Vite, browsers and proxies all treat these as different origins
+        // even though they point to the same machine, so we need both.
+        corsConfiguration.setAllowedOriginPatterns(List.of(
+                "http://localhost:517*",
+                "http://localhost:300*",
+                "http://127.0.0.1:517*",
+                "http://127.0.0.1:300*"
+        ));
         corsConfiguration.addExposedHeader("Authorization");
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -192,6 +192,7 @@ class AuthServiceImplTest {
         @DisplayName("Should increment failed login attempts and lock after max attempts")
         void login_MaxFailedAttempts_LocksAccount() {
             testUser.setFailedLoginAttempts(4);
+            when(systemSettingService.getInteger("max_failed_login_attempts", 5)).thenReturn(5);
 
             when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(testUser));
             when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
@@ -215,6 +216,7 @@ class AuthServiceImplTest {
         @DisplayName("Should show remaining attempts on failed login")
         void login_ShowRemainingAttempts() {
             testUser.setFailedLoginAttempts(2);
+            when(systemSettingService.getInteger("max_failed_login_attempts", 5)).thenReturn(5);
 
             when(userRepository.findByEmail(loginRequest.getEmail())).thenReturn(Optional.of(testUser));
             when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))

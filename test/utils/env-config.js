@@ -25,10 +25,14 @@ const TEST_EMAIL = readEnv('TEST_EMAIL', 'manager@osms.vn');
 const TEST_PASSWORD = readEnv('TEST_PASSWORD', 'Duy16042004%');
 const API_BASE = readEnv('API_BASE', 'http://localhost:8080/api');
 const FRONTEND_URL = readEnv('FRONTEND_URL', 'http://localhost:5174');
+const ADMIN_EMAIL = readEnv('ADMIN_EMAIL', 'admin@osms.vn');
+const ADMIN_PASSWORD = readEnv('ADMIN_PASSWORD', '11111111');
 
 module.exports = {
   TEST_EMAIL,
   TEST_PASSWORD,
   API_BASE,
   FRONTEND_URL,
+  ADMIN_EMAIL,
+  ADMIN_PASSWORD,
 };

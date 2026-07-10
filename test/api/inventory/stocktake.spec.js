@@ -1,21 +1,13 @@
-const { test, expect } = require('@playwright/test');
-const { getAuthToken } = require('../../utils/customer-helpers');
-const { API_BASE: ENV_API_BASE } = require('../../utils/env-config');
-
-const API_BASE = process.env.API_BASE || ENV_API_BASE;
+const { test, expect } = require('../../fixtures/auth-fixtures');
+const { API_BASE } = require('../../utils/env-config');
 
 test.describe('Stocktake API Tests', () => {
 
-  let authToken;
   let warehouseId;
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-
-    // fetch first warehouse
+  test.beforeAll(async ({ request, managerHeaders }) => {
     const wh = await request.get(`${API_BASE}/warehouses`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
     if (wh.status() === 200) {
       const list = await wh.json();
@@ -27,10 +19,9 @@ test.describe('Stocktake API Tests', () => {
   });
 
   // GET /api/stocktakes/statistics
-
-  test('ST0 - GET /api/stocktakes/statistics - Returns aggregates', async ({ request }) => {
+  test('ST0 - GET /api/stocktakes/statistics - Returns aggregates', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stocktakes/statistics`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -41,9 +32,9 @@ test.describe('Stocktake API Tests', () => {
     expect(body.data).toHaveProperty('completedCount');
   });
 
-  test('ST1 - GET /api/stocktakes - List with pagination returns 200', async ({ request }) => {
+  test('ST1 - GET /api/stocktakes - List with pagination returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stocktakes?page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -53,9 +44,9 @@ test.describe('Stocktake API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  test('ST2 - GET /api/stocktakes - Filter by status=DRAFT', async ({ request }) => {
+  test('ST2 - GET /api/stocktakes - Filter by status=DRAFT', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stocktakes?status=DRAFT&page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -64,28 +55,28 @@ test.describe('Stocktake API Tests', () => {
     expect(Array.isArray(body.data.content)).toBe(true);
   });
 
-  test('ST3 - GET /api/stocktakes - Search by keyword', async ({ request }) => {
+  test('ST3 - GET /api/stocktakes - Search by keyword', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stocktakes?keyword=KK&page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
     expect((await response.json()).success).toBe(true);
   });
 
-  test('ST4 - GET /api/stocktakes - Filter by warehouseId', async ({ request }) => {
+  test('ST4 - GET /api/stocktakes - Filter by warehouseId', async ({ request, managerHeaders }) => {
     test.skip(!warehouseId, 'No warehouse available');
     const response = await request.get(`${API_BASE}/stocktakes?warehouseId=${warehouseId}&page=0&size=10`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
     expect((await response.json()).success).toBe(true);
   });
 
-  test('ST5 - GET /api/stocktakes - Sort by createdAt ASC', async ({ request }) => {
+  test('ST5 - GET /api/stocktakes - Sort by createdAt ASC', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stocktakes?page=0&size=10&sortBy=createdAt&sortDirection=ASC`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -97,21 +88,19 @@ test.describe('Stocktake API Tests', () => {
   });
 
   // GET /api/stocktakes/{nonexistent}
-
-  test('ST7 - GET /api/stocktakes/{id} - Not found returns 404/500', async ({ request }) => {
+  test('ST7 - GET /api/stocktakes/{id} - Not found returns 404/500', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/stocktakes/00000000-0000-0000-0000-000000000000`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect([404, 500]).toContain(response.status());
   });
 
   // POST /api/stocktakes - missing warehouse should error
-
-  test('ST8 - POST /api/stocktakes - Missing warehouse returns 400/404/500', async ({ request }) => {
+  test('ST8 - POST /api/stocktakes - Missing warehouse returns 400/404/500', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/stocktakes?complete=false`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -124,17 +113,15 @@ test.describe('Stocktake API Tests', () => {
   });
 
   // PUT /api/stocktakes/{id}/status - bad status returns 500
-
-  test('ST9 - PUT /api/stocktakes/{id}/status - Invalid status may error', async ({ request }) => {
+  test('ST9 - PUT /api/stocktakes/{id}/status - Invalid status may error', async ({ request, managerHeaders }) => {
     const response = await request.put(`${API_BASE}/stocktakes/00000000-0000-0000-0000-000000000000/status`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: { status: 'INVALID_STATUS' },
     });
 
-    // not found at first, or 400 for invalid status - accept any error code
     expect([400, 404, 500]).toContain(response.status());
   });
 });

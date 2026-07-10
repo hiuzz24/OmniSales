@@ -1,32 +1,26 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('../../fixtures/auth-fixtures');
 const {
-  getAuthToken,
   createTestCategory,
   deleteTestCategory,
   uniqueSlug,
+  getFirstCategoryId,
   API_BASE,
 } = require('../../utils/inventory-helpers');
 
 test.describe('Category API Tests', () => {
 
-  let authToken;
   let createdIds = [];
 
-  test.beforeAll(async ({ request }) => {
-    authToken = await getAuthToken(request);
-    expect(authToken).toBeTruthy();
-  });
-
-  test.afterAll(async ({ request }) => {
+  test.afterAll(async ({ request, managerHeaders }) => {
     for (const id of createdIds) {
-      await deleteTestCategory(request, authToken, id);
+      await deleteTestCategory(request, managerHeaders.Authorization.replace('Bearer ', ''), id);
     }
   });
 
   // GET /api/categories
-  test('CAT-1 - GET /api/categories - Returns list', async ({ request }) => {
+  test('CAT-1 - GET /api/categories - Returns list', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/categories`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -41,9 +35,9 @@ test.describe('Category API Tests', () => {
   });
 
   // GET /api/categories/tree
-  test('CAT-3 - GET /api/categories/tree - Returns tree', async ({ request }) => {
+  test('CAT-3 - GET /api/categories/tree - Returns tree', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/categories/tree`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
@@ -58,10 +52,10 @@ test.describe('Category API Tests', () => {
   });
 
   // GET /api/categories/dashboard
-  test('CAT-5 - GET /api/categories/dashboard - Returns dashboard data', async ({ request }) => {
+  test('CAT-5 - GET /api/categories/dashboard - Returns dashboard data', async ({ request, managerHeaders }) => {
     const response = await request.get(
       `${API_BASE}/categories/dashboard?page=0&size=5`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect(response.status()).toBe(200);
     const body = await response.json();
@@ -70,7 +64,8 @@ test.describe('Category API Tests', () => {
   });
 
   // POST /api/categories
-  test('CAT-6 - POST /api/categories - Create new category', async ({ request }) => {
+  test('CAT-6 - POST /api/categories - Create new category', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const category = await createTestCategory(request, authToken, {
       name: 'API Test Category 6',
       slug: uniqueSlug('cat6'),
@@ -82,7 +77,8 @@ test.describe('Category API Tests', () => {
     createdIds.push(category.id);
   });
 
-  test('CAT-7 - POST /api/categories - Create root category with parentId=null', async ({ request }) => {
+  test('CAT-7 - POST /api/categories - Create root category with parentId=null', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const category = await createTestCategory(request, authToken, {
       name: 'API Test Root Category',
       slug: uniqueSlug('rootcat'),
@@ -95,8 +91,8 @@ test.describe('Category API Tests', () => {
     createdIds.push(category.id);
   });
 
-  test('CAT-8 - POST /api/categories - Create root category succeeds', async ({ request }) => {
-    // Sub-category creation may fail in current backend; validate root category works
+  test('CAT-8 - POST /api/categories - Create root category succeeds', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const category = await createTestCategory(request, authToken, {
       name: 'API Sub Category Attempt',
       slug: uniqueSlug('subcat'),
@@ -106,15 +102,14 @@ test.describe('Category API Tests', () => {
       expect(category.id).toBeTruthy();
       createdIds.push(category.id);
     } else {
-      // Backend rejected (e.g. 500 on parent linkage); accept that as observable
       test.skip(true, 'Backend rejected POST; observed as JSON failure');
     }
   });
 
-  test('CAT-9 - POST /api/categories - Missing name returns 400/500', async ({ request }) => {
+  test('CAT-9 - POST /api/categories - Missing name returns 400/500', async ({ request, managerHeaders }) => {
     const response = await request.post(`${API_BASE}/categories`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -125,7 +120,6 @@ test.describe('Category API Tests', () => {
   });
 
   test('CAT-10 - POST /api/categories - Without auth may be permitted (returns any)', async ({ request }) => {
-    // Backend may permit POST without auth; just verify the endpoint responds.
     const response = await request.post(`${API_BASE}/categories`, {
       data: { name: 'X', slug: uniqueSlug('unauth-') },
     });
@@ -133,7 +127,8 @@ test.describe('Category API Tests', () => {
   });
 
   // PUT /api/categories/{id}
-  test('CAT-11 - PUT /api/categories/{id} - Update endpoint responds', async ({ request }) => {
+  test('CAT-11 - PUT /api/categories/{id} - Update endpoint responds', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const category = await createTestCategory(request, authToken);
     expect(category).toBeTruthy();
     createdIds.push(category.id);
@@ -141,7 +136,7 @@ test.describe('Category API Tests', () => {
     const newName = 'Updated API Category';
     const response = await request.put(`${API_BASE}/categories/${category.id}`, {
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
@@ -150,16 +145,15 @@ test.describe('Category API Tests', () => {
       },
     });
 
-    // Backend may have bug returning 500; accept any HTTP status that indicates the endpoint is reachable
     expect([200, 201, 500]).toContain(response.status());
   });
 
-  test('CAT-12 - PUT /api/categories/{id} - Non-existent returns 404/500', async ({ request }) => {
+  test('CAT-12 - PUT /api/categories/{id} - Non-existent returns 404/500', async ({ request, managerHeaders }) => {
     const response = await request.put(
       `${API_BASE}/categories/00000000-0000-0000-0000-000000000000`,
       {
         headers: {
-          Authorization: `Bearer ${authToken}`,
+          ...managerHeaders,
           'Content-Type': 'application/json',
         },
         data: { name: 'No Update', slug: 'no-update' },
@@ -169,22 +163,22 @@ test.describe('Category API Tests', () => {
   });
 
   // DELETE /api/categories/{id}
-  test('CAT-13 - DELETE /api/categories/{id} - Delete category responds 200/500', async ({ request }) => {
+  test('CAT-13 - DELETE /api/categories/{id} - Delete category responds 200/500', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const category = await createTestCategory(request, authToken);
     test.skip(!category, 'Cannot create category');
 
     const response = await request.delete(`${API_BASE}/categories/${category.id}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
+      headers: managerHeaders,
     });
 
-    // Backend may return 200 or 500; assert endpoint is reachable
     expect([200, 500]).toContain(response.status());
   });
 
-  test('CAT-14 - DELETE /api/categories/{id} - Non-existent returns 404/500', async ({ request }) => {
+  test('CAT-14 - DELETE /api/categories/{id} - Non-existent returns 404/500', async ({ request, managerHeaders }) => {
     const response = await request.delete(
       `${API_BASE}/categories/00000000-0000-0000-0000-000000000000`,
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: managerHeaders }
     );
     expect([404, 500]).toContain(response.status());
   });
