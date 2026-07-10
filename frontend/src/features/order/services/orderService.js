@@ -21,8 +21,12 @@ const orderService = {
     return await orderApi.updateStatus(id, status);
   },
 
-  cancel: async (id, reason) => {
-    return await orderApi.cancel(id, reason);
+  cancel: async (id, data) => {
+    return await orderApi.cancel(id, data);
+  },
+
+  getCancelReasons: async (id) => {
+    return await orderApi.getCancelReasons(id);
   },
 
   getHistory: async (id, page, size) => {

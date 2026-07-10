@@ -1,0 +1,148 @@
+package fu.osms.sync.tiktok.impl;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import fu.osms.sync.tiktok.TikTokOAuthService;
+import fu.osms.sync.tiktok.dto.TikTokTokenData;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import java.time.OffsetDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class TikTokOAuthServiceImpl implements TikTokOAuthService {
+
+    @Value("${tiktok.app-key}")
+    private String appKey;
+
+    @Value("${tiktok.app-secret}")
+    private String appSecret;
+
+    @Value("${tiktok.token-url}")
+    private String tokenUrl;
+
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Override
+    public TikTokTokenData exchangeToken(String code) {
+        validateConfig();
+
+        String fullUrl = UriComponentsBuilder.fromHttpUrl(tokenUrl)
+                .queryParam("app_key", appKey)
+                .queryParam("app_secret", appSecret)
+                .queryParam("auth_code", code)
+                .queryParam("grant_type", "authorized_code")
+                .build()
+                .encode()
+                .toUriString();
+
+        try {
+            log.info("[TikTokOAuth] Exchanging authorization code for token");
+            String responseStr = restTemplate.getForObject(fullUrl, String.class);
+            Map<String, Object> response = objectMapper.readValue(responseStr, new TypeReference<>() {});
+            return normalizeTokenResponse(response);
+        } catch (RestClientResponseException e) {
+            log.error("[TikTokOAuth] Token exchange error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new IllegalStateException("TikTok token API returned error: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            log.error("[TikTokOAuth] Failed to exchange token", e);
+            throw new IllegalStateException("Failed to exchange TikTok token: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private TikTokTokenData normalizeTokenResponse(Map<String, Object> response) {
+        Object code = response.get("code");
+        if (code != null && !"0".equals(String.valueOf(code))) {
+            Object message = firstNonNull(response.get("message"), response.get("msg"), response.get("error_msg"));
+            throw new IllegalStateException("TikTok did not return access_token. code=" + code + ", message=" + message);
+        }
+
+        Object dataValue = response.get("data");
+        if (!(dataValue instanceof Map<?, ?>)) {
+            throw new IllegalStateException("TikTok token response is missing data");
+        }
+
+        Map<String, Object> data = new HashMap<>((Map<String, Object>) dataValue);
+        Object accessToken = data.get("access_token");
+        if (accessToken == null || String.valueOf(accessToken).isBlank()) {
+            throw new IllegalStateException("TikTok token response is missing access_token");
+        }
+
+        String accountId = stringValue(firstNonNull(data.get("open_id")));
+        String accountName = stringValue(firstNonNull(data.get("seller_name"), accountId));
+
+        Map<String, Object> metadata = new HashMap<>();
+        putIfPresent(metadata, "openId", data.get("open_id"));
+        putIfPresent(metadata, "accountId", accountId);
+        putIfPresent(metadata, "accountName", accountName);
+        putIfPresent(metadata, "region", data.get("seller_base_region"));
+        putIfPresent(metadata, "sellerBaseRegion", data.get("seller_base_region"));
+        putIfPresent(metadata, "refreshTokenExpireIn", data.get("refresh_token_expire_in"));
+        putIfPresent(metadata, "userType", data.get("user_type"));
+        putIfPresent(metadata, "grantedScopes", data.get("granted_scopes"));
+
+        return TikTokTokenData.builder()
+                .accessToken(stringValue(accessToken))
+                .refreshToken(stringValue(data.get("refresh_token")))
+                .expiresInSeconds(secondsUntilEpoch(data.get("access_token_expire_in")))
+                .accountId(accountId)
+                .accountName(accountName)
+                .metadata(metadata)
+                .build();
+    }
+
+    private void validateConfig() {
+        if (!StringUtils.hasText(appKey) || !StringUtils.hasText(appSecret) || !StringUtils.hasText(tokenUrl)) {
+            throw new IllegalStateException("Missing TikTok OAuth configuration");
+        }
+    }
+
+    private Object firstNonNull(Object... values) {
+        for (Object value : values) {
+            if (value != null && !String.valueOf(value).isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private void putIfPresent(Map<String, Object> metadata, String key, Object value) {
+        if (value != null && !String.valueOf(value).isBlank()) {
+            metadata.put(key, value);
+        }
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private int secondsUntilEpoch(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        try {
+            long expiresAtEpochSecond = value instanceof Number number
+                    ? number.longValue()
+                    : Long.parseLong(String.valueOf(value));
+            long seconds = expiresAtEpochSecond - OffsetDateTime.now().toEpochSecond();
+            if (seconds <= 0) {
+                return 0;
+            }
+            return seconds > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) seconds;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+}

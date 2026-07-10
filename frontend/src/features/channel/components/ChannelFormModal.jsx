@@ -35,6 +35,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
 
   const isShopify = form.platform === 'SHOPIFY';
   const isLazada = form.platform === 'LAZADA';
+  const isTikTok = form.platform === 'TIKTOK';
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -52,7 +53,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if ((isShopify || isLazada) && !isEdit) return;
+    if ((isShopify || isLazada || isTikTok) && !isEdit) return;
 
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
@@ -114,6 +115,16 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
       const msg = err.response?.data?.message || err.message || 'Không thể kết nối với Lazada.';
       toast.error(msg);
     }
+  };
+
+  const handleTikTokConnect = () => {
+    const url = import.meta.env.VITE_TIKTOK_AUTHORIZE_URL;
+    if (!url) {
+      toast.error('Thiếu cấu hình VITE_TIKTOK_AUTHORIZE_URL.');
+      return;
+    }
+    setIsRedirecting(true);
+    window.location.href = url;
   };
 
   const getSubmitButtonText = () => {
@@ -224,6 +235,30 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
                   {isRedirecting
                     ? <><Loader2 size={16} className={styles.spinIcon} /> Đang chuyển hướng...</>
                     : <><ExternalLink size={16} /> Kết nối với Lazada</>
+                  }
+                </button>
+              </div>
+            </div>
+          ) : isTikTok && !isEdit ? (
+            <div className={styles.shopifyOAuthBox}>
+              <div className={styles.shopifyOAuthInfo}>
+                <span className={styles.shopifyBadge} style={{ background: '#010101', color: '#fff' }}>OAuth 2.0</span>
+                <p>Bạn sẽ được chuyển đến TikTok Shop để cấp quyền. Sau khi đồng ý, hệ thống sẽ tự động kết nối.</p>
+              </div>
+              <div className={styles.actions}>
+                <button type="button" className={styles.cancelBtn} onClick={onClose} disabled={isRedirecting}>
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  className={styles.shopifyConnectBtn}
+                  style={{ background: '#010101', color: '#fff', borderColor: '#010101' }}
+                  onClick={handleTikTokConnect}
+                  disabled={isRedirecting}
+                >
+                  {isRedirecting
+                    ? <><Loader2 size={16} className={styles.spinIcon} /> Đang chuyển hướng...</>
+                    : <><ExternalLink size={16} /> Kết nối với TikTok Shop</>
                   }
                 </button>
               </div>

@@ -413,6 +413,7 @@
 .statusConfirmed  { background: #eff6ff; color: #1d4ed8; }
 .statusProcessing { background: #f5f3ff; color: #7c3aed; }
 .statusShipped    { background: #f0fdfa; color: #0d9488; }
+.statusInTransit  { background: #f0f9ff; color: #0284c7; }
 .statusDelivered  { background: #f0fdf4; color: #16a34a; }
 .statusCancelled  { background: #fef2f2; color: #dc2626; }
 

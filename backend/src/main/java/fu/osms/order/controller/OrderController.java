@@ -4,7 +4,9 @@ import fu.osms.audit.dto.response.AuditLogResponse;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderRequest;
+import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderStats;
 import fu.osms.order.enums.OrderStatus;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -98,8 +101,18 @@ public class OrderController {
 
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id,
+                                                    @RequestBody(required = false) CancelOrderRequest request,
                                                     @RequestParam(required = false) String reason) {
-        orderService.cancel(id, reason);
+        CancelOrderRequest cancelRequest = request != null ? request : new CancelOrderRequest();
+        if ((cancelRequest.getReason() == null || cancelRequest.getReason().isBlank()) && reason != null) {
+            cancelRequest.setReason(reason);
+        }
+        orderService.cancel(id, cancelRequest);
         return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công", null));
+    }
+
+    @GetMapping("/{id}/cancel-reasons")
+    public ResponseEntity<ApiResponse<List<CancelReasonResponse>>> getCancelReasons(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(orderService.getCancelReasons(id)));
     }
 }

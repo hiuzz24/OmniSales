@@ -6,11 +6,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -26,6 +28,11 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     Optional<Order> findByExternalOrderId(String externalOrderId);
 
     Optional<Order> findByChannel_IdAndExternalOrderId(UUID channelId, String externalOrderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.channel.id = :channelId AND o.externalOrderId = :externalOrderId")
+    Optional<Order> findForUpdateByChannelIdAndExternalOrderId(@Param("channelId") UUID channelId,
+                                                               @Param("externalOrderId") String externalOrderId);
 
     @Modifying
     @Query(value = """

@@ -102,7 +102,7 @@ DROP TYPE IF EXISTS category_status CASCADE;
 CREATE TYPE user_status        AS ENUM ('ACTIVE', 'INACTIVE', 'LOCKED');
 CREATE TYPE platform_type      AS ENUM ('SHOPEE', 'TIKTOK', 'LAZADA', 'SHOPIFY', 'MANUAL');
 CREATE TYPE product_status     AS ENUM ('ACTIVE', 'INACTIVE', 'DRAFT');
-CREATE TYPE order_status       AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+CREATE TYPE order_status       AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED');
 CREATE TYPE inv_txn_type       AS ENUM ('IMPORT', 'EXPORT', 'TRANSFER_OUT', 'TRANSFER_IN','ADJUSTMENT', 'ORDER_DEDUCT', 'ORDER_CANCEL', 'OUTBOUND');
 CREATE TYPE sync_status        AS ENUM ('PENDING', 'SYNCED', 'FAILED', 'OUT_OF_SYNC');
 CREATE TYPE product_log_action AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'SYNC', 'MAPPING');
@@ -409,6 +409,7 @@ CREATE TABLE orders (
                         note              TEXT,
                         tracking_number   VARCHAR(200),
                         cancel_reason     VARCHAR(255),
+                        platform_metadata JSONB,
                         cancelled_by      UUID          REFERENCES users(id) ON DELETE SET NULL,
                         version           BIGINT        NOT NULL DEFAULT 0,
                         created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),

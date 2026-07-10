@@ -48,7 +48,6 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
 
         Order order = ensureOrder(event, externalOrderId);
         assertOrderBelongsToEvent(order, event);
-
         order.setPlatform(event.getPlatform());
         order.setChannel(event.getChannel());
         order.setChannelName(event.getChannel().getDisplayName());
@@ -80,7 +79,7 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
                 event.getChannel().getDisplayName(),
                 externalOrderId
         );
-        return orderRepository.findByChannel_IdAndExternalOrderId(event.getChannel().getId(), externalOrderId)
+        return orderRepository.findForUpdateByChannelIdAndExternalOrderId(event.getChannel().getId(), externalOrderId)
                 .orElseThrow(() -> new IllegalStateException("Cannot create or load Shopify order"));
     }
 
@@ -133,13 +132,19 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
             return OrderStatus.CANCELLED;
         }
 
+        if (hasDeliveredFulfillment(payload)) {
+            return OrderStatus.DELIVERED;
+        }
+
         String fulfillmentStatus = WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(payload, "fulfillment_status"));
         if (fulfillmentStatus != null) {
             String normalizedFulfillment = fulfillmentStatus.toUpperCase();
-            if (normalizedFulfillment.contains("FULFILLED") || normalizedFulfillment.contains("DELIVER")) {
+            if (normalizedFulfillment.contains("DELIVER")) {
                 return OrderStatus.DELIVERED;
             }
-            if (normalizedFulfillment.contains("SHIP") || normalizedFulfillment.contains("PARTIAL")) {
+            if (normalizedFulfillment.contains("FULFILLED")
+                    || normalizedFulfillment.contains("SHIP")
+                    || normalizedFulfillment.contains("PARTIAL")) {
                 return OrderStatus.SHIPPED;
             }
         }
@@ -150,6 +155,21 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
         }
 
         return OrderStatus.PENDING;
+    }
+
+    private boolean hasDeliveredFulfillment(Map<String, Object> payload) {
+        Object fulfillments = payload.get("fulfillments");
+        if (!(fulfillments instanceof List<?> fulfillmentList)) {
+            return false;
+        }
+
+        return fulfillmentList.stream()
+                .filter(fulfillment -> fulfillment instanceof Map<?, ?>)
+                .map(WebhookPayloadUtils::copyMap)
+                .map(fulfillment -> WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(fulfillment, "shipment_status")))
+                .filter(status -> status != null && !status.isBlank())
+                .map(String::toUpperCase)
+                .anyMatch(status -> status.contains("DELIVER"));
     }
 
     private String resolvePaymentStatus(Map<String, Object> payload) {

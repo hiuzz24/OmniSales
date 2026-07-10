@@ -16,12 +16,22 @@ const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',   icon: Clock,       color: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
   CONFIRMED:  { label: 'Đã xác nhận', icon: CheckCircle, color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
   PROCESSING: { label: 'Đang xử lý',  icon: Package,     color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
-  SHIPPED:    { label: 'Đang giao',    icon: Truck,       color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4' },
+  SHIPPED:    { label: 'Sẵn sàng giao', icon: Truck,       color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4' },
+  IN_TRANSIT: { label: 'Đang vận chuyển', icon: Truck,    color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd' },
   DELIVERED:  { label: 'Đã giao',      icon: CheckCircle, color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
   CANCELLED:  { label: 'Đã hủy',       icon: XCircle,     color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
 };
 
-const STATUS_FLOW = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED'];
+const STATUS_FLOW = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED'];
+
+const SHOPIFY_CANCEL_REASONS = [
+  { value: 'CUSTOMER', label: 'Khách hàng yêu cầu hủy' },
+  { value: 'FRAUD', label: 'Nghi ngờ gian lận' },
+  { value: 'INVENTORY', label: 'Hết hàng / tồn kho không đủ' },
+  { value: 'STAFF', label: 'Nhân viên hủy đơn' },
+  { value: 'DECLINED', label: 'Thanh toán bị từ chối' },
+  { value: 'OTHER', label: 'Khác' },
+];
 
 const CHANNEL_CONFIG = {
   Shopee:  { icon: ShoppingBag, bg: '#fff5f5', color: '#e11d48', border: '#fecdd3' },
@@ -56,6 +66,11 @@ const OrderDetailPage = () => {
   const [showPaymentMenu, setShowPaymentMenu] = useState(false);
   const [confirmPayment, setConfirmPayment] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonId, setCancelReasonId] = useState('');
+  const [shopifyReason, setShopifyReason] = useState('');
+  const [cancelReasons, setCancelReasons] = useState([]);
+  const [cancelReasonsLoading, setCancelReasonsLoading] = useState(false);
+  const [cancelReasonsError, setCancelReasonsError] = useState(null);
 
   const fetchOrder = async () => {
     setLoading(true);
@@ -126,17 +141,65 @@ const OrderDetailPage = () => {
     }
   };
 
+  const isLazadaOrder = (value) => value?.platform === 'LAZADA';
+  const isShopifyOrder = (value) => value?.platform === 'SHOPIFY';
+
+  const handleOpenCancelModal = async () => {
+    setShowCancelModal(true);
+    setCancelReasonId('');
+    setShopifyReason('');
+    setCancelReasons([]);
+    setCancelReasonsError(null);
+
+    if (!isLazadaOrder(order)) {
+      return;
+    }
+
+    setCancelReasonsLoading(true);
+    try {
+      const reasons = await orderService.getCancelReasons(id);
+      setCancelReasons(reasons || []);
+      if (!reasons || reasons.length === 0) {
+        setCancelReasonsError('Không có lý do hủy hợp lệ từ Lazada cho đơn hàng này.');
+        toast.error('Không có lý do hủy hợp lệ từ Lazada');
+      }
+    } catch {
+      setCancelReasonsError('Không thể tải lý do hủy từ Lazada.');
+      toast.error('Không thể tải lý do hủy từ Lazada');
+    } finally {
+      setCancelReasonsLoading(false);
+    }
+  };
+
   const handleCancel = async () => {
-    if (!cancelReason.trim()) {
+    if (!isLazadaOrder(order) && !isShopifyOrder(order) && !cancelReason.trim()) {
       toast.error('Vui lòng nhập lý do hủy');
+      return;
+    }
+    if (isLazadaOrder(order) && !cancelReasonId) {
+      toast.error('Vui lòng chọn lý do hủy Lazada');
+      return;
+    }
+    if (isShopifyOrder(order) && !shopifyReason) {
+      toast.error('Vui lòng chọn lý do hủy Shopify');
       return;
     }
     setUpdating(true);
     try {
-      await orderService.cancel(id, cancelReason);
+      await orderService.cancel(id, {
+        reason: cancelReason,
+        reasonId: cancelReasonId,
+        shopifyReason: isShopifyOrder(order) ? shopifyReason : undefined,
+        email: isShopifyOrder(order) ? true : undefined,
+        restock: isShopifyOrder(order) ? true : undefined,
+        refund: isShopifyOrder(order) ? true : undefined,
+      });
       toast.success('Hủy đơn hàng thành công');
       setShowCancelModal(false);
       setCancelReason('');
+      setCancelReasonId('');
+      setShopifyReason('');
+      setCancelReasons([]);
       fetchOrder();
       fetchHistory();
     } catch {
@@ -162,6 +225,50 @@ const OrderDetailPage = () => {
   };
 
   const compact = (parts) => parts.filter(Boolean).join(', ');
+
+  const toNumber = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  };
+
+  const itemLineTotal = (item) => {
+    if (item?.totalPrice != null) {
+      return toNumber(item.totalPrice);
+    }
+    return toNumber(item?.unitPrice) * toNumber(item?.quantity || 1) - toNumber(item?.discountAmount);
+  };
+
+  const groupOrderItems = (items = []) => {
+    const grouped = new Map();
+
+    items.forEach((item) => {
+      const quantity = toNumber(item.quantity || 1);
+      const key = [
+        item.channelVariantId || item.variantId || '',
+        item.sku || '',
+        item.name || '',
+        item.unitPrice ?? '',
+      ].join('|');
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          ...item,
+          quantity: 0,
+          discountAmount: 0,
+          totalPrice: 0,
+          sourceIds: [],
+        });
+      }
+
+      const current = grouped.get(key);
+      current.quantity += quantity;
+      current.discountAmount += toNumber(item.discountAmount);
+      current.totalPrice += itemLineTotal(item);
+      current.sourceIds.push(item.id);
+    });
+
+    return Array.from(grouped.values());
+  };
 
   const fullNameFromAddress = (address) => {
     if (!address || typeof address === 'string') return null;
@@ -195,6 +302,24 @@ const OrderDetailPage = () => {
     return idx >= 0 ? idx : -1;
   };
 
+  const isPlatformOrder = (value) => value?.platform && value.platform !== 'MANUAL';
+
+  const getAvailableStatusOptions = () => {
+    if (!order) {
+      return [];
+    }
+    if (!isPlatformOrder(order)) {
+      return STATUS_FLOW.filter((status) => status !== order.status);
+    }
+
+    const platformFlow = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'];
+    const currentIndex = platformFlow.indexOf(order.status);
+    if (currentIndex < 0 || currentIndex >= platformFlow.length - 1) {
+      return [];
+    }
+    return [platformFlow[currentIndex + 1]];
+  };
+
   if (loading) {
     return (
       <div className={styles.loadingWrap}>
@@ -219,8 +344,7 @@ const OrderDetailPage = () => {
   const sc = STATUS_CONFIG[order.status] || { label: order.status, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' };
   const StatusIcon = sc.icon;
   const canChangeStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
-  const isCancellable = !['DELIVERED', 'CANCELLED'].includes(order.status);
-  const isStatusChangeable = !['DELIVERED', 'CANCELLED'].includes(order.status);
+  const isCancellable = !['IN_TRANSIT', 'DELIVERED', 'CANCELLED'].includes(order.status);
   const currentStep = getCurrentStep();
   const chStyle = getChannelStyle(order.channelName);
   const ChIcon = chStyle?.icon;
@@ -231,6 +355,9 @@ const OrderDetailPage = () => {
     REFUNDED:  { label: 'Đã hoàn tiền',    color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
   };
   const pc = paymentLabels[order.paymentStatus] || paymentLabels.UNPAID;
+  const availableStatusOptions = getAvailableStatusOptions();
+  const groupedItems = groupOrderItems(order.items || []);
+  const totalItemQuantity = groupedItems.reduce((sum, item) => sum + toNumber(item.quantity), 0);
 
   return (
     <div className={styles.page}>
@@ -263,7 +390,7 @@ const OrderDetailPage = () => {
         </div>
 
         <div className={styles.headerActions}>
-          {canChangeStatus && (
+          {canChangeStatus && availableStatusOptions.length > 0 && (
             <div className={styles.statusDropdown}>
               <button
                 className={styles.updateStatusBtn}
@@ -276,8 +403,7 @@ const OrderDetailPage = () => {
               </button>
               {showStatusMenu && (
                 <div className={styles.dropdownMenu}>
-                  {STATUS_FLOW.map((s) => {
-                    if (s === order.status) return null;
+                  {availableStatusOptions.map((s) => {
                     const cfg = STATUS_CONFIG[s];
                     const Icon = cfg.icon;
                     return (
@@ -330,7 +456,7 @@ const OrderDetailPage = () => {
           {isCancellable && (
             <button
               className={styles.cancelBtn}
-              onClick={() => setShowCancelModal(true)}
+              onClick={handleOpenCancelModal}
               disabled={updating}
             >
               Hủy đơn
@@ -423,11 +549,11 @@ const OrderDetailPage = () => {
                 <Package size={16} />
                 Sản phẩm
               </h3>
-              <span className={styles.itemCount}>{order.items?.length || 0} sản phẩm</span>
+              <span className={styles.itemCount}>{totalItemQuantity} sản phẩm</span>
             </div>
             <div className={styles.itemsList}>
-              {(order.items || []).map((item, idx) => (
-                <div key={item.id} className={styles.itemRow}>
+              {groupedItems.map((item, idx) => (
+                <div key={item.sourceIds?.join('-') || item.id || `${item.sku}-${idx}`} className={styles.itemRow}>
                   <div className={styles.itemIndex}>{idx + 1}</div>
                   <div className={styles.itemInfo}>
                     <span className={styles.itemName}>{item.name}</span>
@@ -605,6 +731,14 @@ const OrderDetailPage = () => {
                 </span>
               </div>
               <p className={styles.confirmSubtext}>Hành động này sẽ được ghi nhận trong lịch sử thay đổi.</p>
+              {isPlatformOrder(order) && (
+                <p className={styles.confirmSubtext}>
+                  Hệ thống sẽ đồng bộ trạng thái phù hợp về sàn nếu được hỗ trợ.
+                  {confirmStatus === 'SHIPPED' && order.platform === 'LAZADA'
+                    ? ' Với Lazada, trạng thái này tương ứng sẵn sàng giao/Ready To Ship.'
+                    : ''}
+                </p>
+              )}
               <div className={styles.confirmActions}>
                 <button className={styles.btnGhost} onClick={() => setConfirmStatus(null)} disabled={updating}>
                   Hủy
@@ -669,19 +803,98 @@ const OrderDetailPage = () => {
               </div>
             </div>
             <p className={styles.modalDesc}>Vui lòng nhập lý do hủy đơn hàng. Hành động này không thể hoàn tác.</p>
+            {isLazadaOrder(order) && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Lý do hủy Lazada
+                </label>
+                {cancelReasonsLoading ? (
+                  <div style={{ padding: '10px 12px', fontSize: 13, color: '#64748b' }}>
+                    Đang tải lý do hủy từ Lazada...
+                  </div>
+                ) : (
+                  <select
+                    className={styles.cancelInput}
+                    value={cancelReasonId}
+                    onChange={(e) => setCancelReasonId(e.target.value)}
+                    disabled={updating || !!cancelReasonsError || cancelReasons.length === 0}
+                    style={{ minHeight: 42, resize: 'none' }}
+                  >
+                    <option value="">Chọn lý do hủy</option>
+                    {cancelReasons.map((reason) => (
+                      <option key={reason.id} value={reason.id}>
+                        {reason.name || reason.id}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {cancelReasonsError && (
+                  <p style={{ marginTop: 6, fontSize: 12, color: '#dc2626' }}>{cancelReasonsError}</p>
+                )}
+                {!cancelReasonsError && cancelReasons[0]?.warningMessage && (
+                  <p style={{ marginTop: 6, fontSize: 12, color: '#b45309', lineHeight: 1.45 }}>
+                    {cancelReasons[0].warningMessage}
+                  </p>
+                )}
+              </div>
+            )}
+            {isShopifyOrder(order) && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Lý do hủy Shopify
+                </label>
+                <select
+                  className={styles.cancelInput}
+                  value={shopifyReason}
+                  onChange={(e) => setShopifyReason(e.target.value)}
+                  disabled={updating}
+                  style={{ minHeight: 42, resize: 'none' }}
+                >
+                  <option value="">Chọn lý do hủy</option>
+                  {SHOPIFY_CANCEL_REASONS.map((reason) => (
+                    <option key={reason.value} value={reason.value}>
+                      {reason.label}
+                    </option>
+                  ))}
+                </select>
+                <div style={{
+                  display: 'flex',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: '#475569',
+                }}>
+                  <span>Gửi email: Có</span>
+                  <span>Hoàn kho: Có</span>
+                  <span>Refund: Có</span>
+                </div>
+              </div>
+            )}
             <textarea
               className={styles.cancelInput}
               rows={3}
-              placeholder="VD: Khách hàng yêu cầu hủy, hết hàng..."
+              placeholder={isLazadaOrder(order) || isShopifyOrder(order) ? 'Ghi chú nội bộ OSMS...' : 'VD: Khách hàng yêu cầu hủy, hết hàng...'}
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
-              autoFocus
+              autoFocus={!isLazadaOrder(order) && !isShopifyOrder(order)}
             />
             <div className={styles.modalActions}>
               <button className={styles.btnGhost} onClick={() => setShowCancelModal(false)} disabled={updating}>
                 Đóng
               </button>
-              <button className={styles.btnDanger} onClick={handleCancel} disabled={updating || !cancelReason.trim()}>
+              <button
+                className={styles.btnDanger}
+                onClick={handleCancel}
+                disabled={updating
+                  || cancelReasonsLoading
+                  || !!cancelReasonsError
+                  || (isLazadaOrder(order)
+                    ? !cancelReasonId
+                    : isShopifyOrder(order)
+                      ? !shopifyReason
+                      : !cancelReason.trim())}
+              >
                 {updating ? 'Đang xử lý...' : 'Xác nhận hủy'}
               </button>
             </div>

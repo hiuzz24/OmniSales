@@ -18,6 +18,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -79,7 +80,9 @@ public class LazadaApiClientImpl implements LazadaApiClient {
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(apiUrl + apiPath);
         allParams.forEach(builder::queryParam);
-        String fullUrl = builder.toUriString();
+//        String fullUrl = builder.build().encode().toUriString();
+        URI fullUrl = builder.build().encode().toUri();
+        log.info("[LazadaApiClient] fullUrl={}", fullUrl);
 
         try {
             log.info("[LazadaApiClient] Calling GET {}, params: {}", apiUrl + apiPath, allParams.keySet());
@@ -112,7 +115,11 @@ public class LazadaApiClientImpl implements LazadaApiClient {
             allParams.put("access_token", accessToken);
         }
 
+        log.info("[LazadaApiClient] sign apiPath={}", apiPath);
+        log.info("[LazadaApiClient] params before sign={}",allParams);
+
         String signature = LazadaSignatureUtil.generateSignature(apiPath, allParams, appSecret);
+        log.info("[LazadaApiClient] generated sign={}", signature);
         allParams.put("sign", signature);
         return allParams;
     }

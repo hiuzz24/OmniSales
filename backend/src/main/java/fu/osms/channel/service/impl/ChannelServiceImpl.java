@@ -373,6 +373,68 @@ public class ChannelServiceImpl implements ChannelService {
 
     @Override
     @Transactional
+    public ChannelResponse connectTikTok(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName, Map<String, Object> metadata) {
+        log.info("[ChannelService] connectTikTok - accountId={}, accountName={}", accountId, accountName);
+
+        String resolvedAccountName = firstNonBlank(accountName, accountId, "Connected");
+        String resolvedAccountId = firstNonBlank(accountId, resolvedAccountName);
+        String displayName = "TikTok-" + resolvedAccountName;
+
+        Map<String, Object> resolvedMetadata = metadata == null
+                ? new HashMap<>()
+                : new HashMap<>(metadata);
+        resolvedMetadata.put("accountId", resolvedAccountId);
+        resolvedMetadata.put("accountName", resolvedAccountName);
+
+        Channel channel = channelRepository
+                .findByPlatformAndDeletedAtIsNull(PlatformType.TIKTOK).stream()
+                .filter(c -> c.getMetadata() != null
+                        && (java.util.Objects.equals(resolvedAccountId, c.getMetadata().get("accountId"))
+                        || java.util.Objects.equals(resolvedAccountId, c.getMetadata().get("openId"))))
+                .findFirst()
+                .orElseGet(() -> Channel.builder()
+                        .platform(PlatformType.TIKTOK)
+                        .displayName(displayName)
+                        .build());
+        ChannelConnectionAction action = channel.getId() == null
+                ? ChannelConnectionAction.CONNECT
+                : ChannelConnectionAction.RECONNECT;
+
+        channel.setStatus("CONNECTED");
+        channel.setMetadata(resolvedMetadata);
+        if (channel.getDisplayName() == null || channel.getDisplayName().startsWith("TikTok-")) {
+            channel.setDisplayName(displayName);
+        }
+        channelRepository.save(channel);
+
+        ChannelCredential credential = credentialRepository
+                .findByChannelId(channel.getId())
+                .orElseGet(() -> ChannelCredential.builder().channel(channel).build());
+
+        credential.setAccessToken(accessToken);
+        credential.setRefreshToken(refreshToken);
+        credential.setConnectionState("CONNECTED");
+        if (expiresIn > 0) {
+            credential.setTokenExpiresAt(OffsetDateTime.now().plusSeconds(expiresIn));
+        }
+        credentialRepository.save(credential);
+
+        channelConnectionLogService.logSuccess(
+                channel,
+                action,
+                "Connected TikTok channel " + displayName,
+                Map.of(
+                        "accountId", resolvedAccountId,
+                        "accountName", resolvedAccountName
+                )
+        );
+
+        log.info("[ChannelService] connectTikTok success - channelId={}", channel.getId());
+        return channelMapper.toResponse(channel);
+    }
+
+    @Override
+    @Transactional
     public void updateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result) {
         Channel channel = channelRepository.findById(channelId)
                 .filter(c -> c.getDeletedAt() == null)

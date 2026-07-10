@@ -1,6 +1,8 @@
 package fu.osms.channel.controller;
 
 import fu.osms.channel.dto.response.ChannelResponse;
+import fu.osms.channel.enums.ChannelConnectionAction;
+import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.enums.ChannelConnectionAction;
@@ -11,8 +13,12 @@ import fu.osms.sync.shopify.ShopifyOAuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -36,9 +42,16 @@ public class ShopifyOAuthController {
 
     @GetMapping("/authorize")
     public ResponseEntity<ApiResponse<Map<String, String>>> authorize(@RequestParam String shop) {
-        log.info("[ShopifyOAuth] authorize — shop={}", shop);
-        String authUrl = shopifyOAuthService.buildAuthorizationUrl(shop);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("url", authUrl)));
+        try {
+            log.info("[ShopifyOAuth] authorize - shop={}", shop);
+            String authUrl = shopifyOAuthService.buildAuthorizationUrl(shop);
+            return ResponseEntity.ok(ApiResponse.success(Map.of("url", authUrl)));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            log.warn("[ShopifyOAuth] authorize failed - shop={}, error={}", shop, e.getMessage());
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), e.getMessage()));
+        }
     }
 
     @GetMapping("/callback")
@@ -47,19 +60,19 @@ public class ShopifyOAuthController {
             @RequestParam String shop,
             @RequestParam(required = false) String state) {
 
-        log.info("[ShopifyOAuth] callback received — shop={}", shop);
+        log.info("[ShopifyOAuth] callback received - shop={}", shop);
 
         try {
             String accessToken = shopifyOAuthService.exchangeCodeForToken(shop, code);
             ensureReadLocationsScope(shop, accessToken);
             ChannelResponse channel = channelService.connectShopify(shop, accessToken);
             channelService.registerShopifyWebhooks(shop, accessToken, channel.getId());
-            log.info("[ShopifyOAuth] callback success — shop={}", shop);
+            log.info("[ShopifyOAuth] callback success - shop={}", shop);
             return ResponseEntity.status(302)
                     .location(URI.create(frontendUrl + "/channels?success=true"))
                     .build();
         } catch (Exception e) {
-            log.error("[ShopifyOAuth] callback failed — shop={}, error={}", shop, e.getMessage());
+            log.error("[ShopifyOAuth] callback failed - shop={}, error={}", shop, e.getMessage());
             channelConnectionLogService.logFailure(
                     PlatformType.SHOPIFY,
                     ChannelConnectionAction.CONNECT,

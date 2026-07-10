@@ -40,9 +40,7 @@ const ChannelConnectionPage = () => {
     }
   }, []);
 
-  useEffect(() => {
-    void Promise.resolve().then(loadChannels);
-  }, [loadChannels]);
+  useEffect(() => { loadChannels(); }, [loadChannels]);
 
   useEffect(() => {
     const success = searchParams.get('success');
@@ -51,17 +49,23 @@ const ChannelConnectionPage = () => {
     if (success === 'true') {
       toast.success('🎉 Kết nối Shopify thành công! Kênh đã được thêm vào hệ thống.');
       navigate('/channels', { replace: true });
-      void Promise.resolve().then(loadChannels);
+      loadChannels();
     } else if (success === 'lazada_connected') {
       toast.success('🎉 Kết nối Lazada thành công! Kênh đã được thêm vào hệ thống.');
       navigate('/channels', { replace: true });
-      void Promise.resolve().then(loadChannels);
+      loadChannels();
+    } else if (success === 'tiktok_connected') {
+      toast.success('Kết nối TikTok Shop thành công! Kênh đã được thêm vào hệ thống.');
+      navigate('/channels', { replace: true });
+      loadChannels();
     } else if (error) {
-      const msg = error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : error;
+      const msg = error === 'tiktok_oauth_failed'
+        ? 'Kết nối TikTok Shop thất bại.'
+        : error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : 'Kết nối kênh thất bại. Vui lòng thử lại.';
       toast.error(msg);
       navigate('/channels', { replace: true });
     }
-  }, [loadChannels, navigate, searchParams]);
+  }, []);
 
   const openCreate = () => { setModalMode('create'); setSelectedChannel(null); setIsModalOpen(true); };
   const openEdit = (ch) => { setModalMode('edit'); setSelectedChannel(ch); setIsModalOpen(true); };

@@ -2,6 +2,7 @@ package fu.osms.sync.shopify.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import fu.osms.order.enums.ShopifyCancelReason;
 import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
 import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyProductRootResponse;
@@ -28,7 +29,7 @@ import fu.osms.sync.shopify.ShopifyApiClient;
 @RequiredArgsConstructor
 public class ShopifyApiClientImpl implements ShopifyApiClient {
 
-    private static final String API_VERSION = "2026-07";
+    private static final String API_VERSION = "2026-04";
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
@@ -129,6 +130,91 @@ public class ShopifyApiClientImpl implements ShopifyApiClient {
             throw new RuntimeException("Shopify webhook deletion failed: " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             throw new RuntimeException("Failed to delete Shopify webhook", e);
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> getFulfillmentOrders(String shopDomain, String accessToken, String orderId) {
+        String url = buildUrl(shopDomain, "/orders/" + orderId + "/fulfillment_orders.json");
+        Map<String, Object> response = executeRaw(url, accessToken, HttpMethod.GET, null, "get Shopify fulfillment orders");
+        Object fulfillmentOrders = response.get("fulfillment_orders");
+        if (fulfillmentOrders == null) {
+            return List.of();
+        }
+        return objectMapper.convertValue(fulfillmentOrders, new TypeReference<List<Map<String, Object>>>() {
+        });
+    }
+
+    @Override
+    public Map<String, Object> createFulfillment(String shopDomain, String accessToken, String fulfillmentOrderId, String trackingNumber) {
+        String url = buildUrl(shopDomain, "/fulfillments.json");
+
+        Map<String, Object> fulfillmentOrder = new HashMap<>();
+        fulfillmentOrder.put("fulfillment_order_id", numericIfPossible(fulfillmentOrderId));
+
+        Map<String, Object> fulfillment = new HashMap<>();
+        fulfillment.put("notify_customer", true);
+        fulfillment.put("line_items_by_fulfillment_order", List.of(fulfillmentOrder));
+        if (trackingNumber != null && !trackingNumber.isBlank()) {
+            fulfillment.put("tracking_info", Map.of("number", trackingNumber));
+        }
+
+        Map<String, Object> root = Map.of("fulfillment", fulfillment);
+        Map<String, Object> response = executeRaw(url, accessToken, HttpMethod.POST, root, "create Shopify fulfillment");
+        Object created = response.get("fulfillment");
+        return created != null ? objectMapper.convertValue(created, new TypeReference<Map<String, Object>>() {
+        }) : response;
+    }
+
+    @Override
+    public Map<String, Object> cancelOrder(String shopDomain, String accessToken, String orderId,
+                                           ShopifyCancelReason reason, boolean email, boolean restock, boolean refund) {
+        String url = buildUrl(shopDomain, "/orders/" + orderId + "/cancel.json");
+        Map<String, Object> body = new HashMap<>();
+        body.put("email", email);
+        body.put("restock", restock);
+        body.put("refund", refund);
+        body.put("reason", reason != null ? reason.getShopifyValue() : ShopifyCancelReason.OTHER.getShopifyValue());
+        Map<String, Object> response = executeRaw(url, accessToken, HttpMethod.POST, body, "cancel Shopify order");
+        Object order = response.get("order");
+        return order != null ? objectMapper.convertValue(order, new TypeReference<Map<String, Object>>() {
+        }) : response;
+    }
+
+    private Map<String, Object> executeRaw(String url, String accessToken, HttpMethod method, Object body, String action) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Shopify-Access-Token", accessToken);
+        if (body != null) {
+            headers.setContentType(MediaType.APPLICATION_JSON);
+        }
+
+        HttpEntity<String> entity;
+        try {
+            entity = new HttpEntity<>(body != null ? objectMapper.writeValueAsString(body) : null, headers);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize Shopify request for " + action, e);
+        }
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(url, method, entity, String.class);
+            return objectMapper.readValue(response.getBody(), new TypeReference<>() {
+            });
+        } catch (RestClientResponseException e) {
+            log.error("Shopify {} error: {} - {}", action, e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Shopify " + action + " failed: " + e.getResponseBodyAsString(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to " + action, e);
+        }
+    }
+
+    private Object numericIfPossible(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException e) {
+            return value;
         }
     }
 

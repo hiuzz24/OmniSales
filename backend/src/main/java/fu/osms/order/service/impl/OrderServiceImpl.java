@@ -9,6 +9,7 @@ import fu.osms.auth.entity.User;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.customer.entity.Customer;
@@ -18,8 +19,10 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
 import fu.osms.order.dto.request.OrderRequest;
+import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderItemResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderStats;
@@ -27,12 +30,16 @@ import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.enums.PaymentStatus;
+import fu.osms.order.enums.ShopifyCancelReason;
 import fu.osms.order.mapper.OrderItemMapper;
 import fu.osms.order.mapper.OrderMapper;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
 import fu.osms.order.service.OrderService;
 import fu.osms.order.spec.OrderSpec;
+import fu.osms.sync.order.OrderStatusPushContext;
+import fu.osms.sync.order.OrderStatusPushResult;
+import fu.osms.sync.order.OrderStatusPushService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -67,6 +74,7 @@ public class OrderServiceImpl implements OrderService {
     private final ProductVariantRepository productVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryAlertService inventoryAlertService;
+    private final OrderStatusPushService orderStatusPushService;
 
     @Override
     @Transactional
@@ -152,6 +160,11 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
         }
 
+        OrderStatusPushResult pushResult = orderStatusPushService.push(order, status, OrderStatusPushContext.empty());
+        if (shouldBlockLocalUpdate(order, status, pushResult)) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
+        }
+
         if (status == OrderStatus.CANCELLED) {
             order.setStatus(OrderStatus.CANCELLED);
             releaseReservedInventory(order);
@@ -159,7 +172,8 @@ public class OrderServiceImpl implements OrderService {
             order.setStatus(status);
         }
 
-        if (status == OrderStatus.DELIVERED && "UNPAID".equals(order.getPaymentStatus())) {
+        boolean shouldAutoMarkPaid = shouldAutoMarkPaid(order, status);
+        if (shouldAutoMarkPaid) {
             order.setPaymentStatus("PAID");
         }
 
@@ -171,14 +185,16 @@ public class OrderServiceImpl implements OrderService {
         UUID actorId = userOpt.map(User::getId).orElse(null);
         String actorEmail = userOpt.map(User::getEmail).orElse("system");
 
-        boolean autoPaid = status == OrderStatus.DELIVERED && "PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus);
+        boolean autoPaid = shouldAutoMarkPaid && "PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus);
+        Map<String, Object> auditChanges = new java.util.HashMap<>();
+        auditChanges.put("oldStatus", oldStatus.name());
+        auditChanges.put("newStatus", status.name());
+        auditChanges.put("platformPushStatus", pushResult.getStatus().name());
+        auditChanges.put("platformPushMessage", pushResult.getMessage());
         if (autoPaid) {
-            auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id,
-                    id.toString(), java.util.Map.of("oldStatus", oldStatus.name(), "newStatus", status.name(), "autoPaymentStatus", "PAID"));
-        } else {
-            auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id,
-                    id.toString(), java.util.Map.of("oldStatus", oldStatus.name(), "newStatus", status.name()));
+            auditChanges.put("autoPaymentStatus", "PAID");
         }
+        auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id, id.toString(), auditChanges);
 
         return toResponseWithItems(savedOrder);
     }
@@ -235,13 +251,41 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public void cancel(UUID id, String reason) {
+    public void cancel(UUID id, CancelOrderRequest request) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
 
+        CancelOrderRequest cancelRequest = request != null ? request : new CancelOrderRequest();
+        String reason = cancelRequest.getReason();
+        String reasonId = cancelRequest.getReasonId();
+        ShopifyCancelReason shopifyReason = cancelRequest.getShopifyReason() != null
+                ? cancelRequest.getShopifyReason()
+                : ShopifyCancelReason.OTHER;
         OrderStatus oldStatus = order.getStatus();
+        if (requiresTextCancelReason(order) && (reason == null || reason.isBlank())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+        if (order.getPlatform() == PlatformType.LAZADA && (reasonId == null || reasonId.isBlank())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
         if (oldStatus == OrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
+        }
+        if (oldStatus == OrderStatus.IN_TRANSIT || oldStatus == OrderStatus.DELIVERED) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
+        }
+
+        OrderStatusPushResult pushResult = orderStatusPushService.push(order, OrderStatus.CANCELLED,
+                OrderStatusPushContext.builder()
+                        .cancelReason(reason)
+                        .cancelReasonId(reasonId)
+                        .shopifyReason(shopifyReason)
+                        .email(cancelRequest.getEmail())
+                        .restock(cancelRequest.getRestock())
+                        .refund(cancelRequest.getRefund())
+                        .build());
+        if (shouldBlockLocalUpdate(order, OrderStatus.CANCELLED, pushResult)) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
         }
 
         releaseReservedInventory(order);
@@ -253,8 +297,80 @@ public class OrderServiceImpl implements OrderService {
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
         String actorEmail = userOpt.map(User::getEmail).orElse("system");
+        Map<String, Object> auditChanges = new java.util.HashMap<>();
+        auditChanges.put("oldStatus", oldStatus.name());
+        auditChanges.put("newStatus", "CANCELLED");
+        auditChanges.put("reason", reason != null ? reason : "");
+        if (reasonId != null && !reasonId.isBlank()) {
+            auditChanges.put("reasonId", reasonId);
+        }
+        if (order.getPlatform() == PlatformType.SHOPIFY) {
+            auditChanges.put("shopifyReason", shopifyReason.name());
+            auditChanges.put("email", cancelRequest.getEmail() == null || cancelRequest.getEmail());
+            auditChanges.put("restock", cancelRequest.getRestock() == null || cancelRequest.getRestock());
+            auditChanges.put("refund", cancelRequest.getRefund() == null || cancelRequest.getRefund());
+        }
+        auditChanges.put("platformPushStatus", pushResult.getStatus().name());
+        auditChanges.put("platformPushMessage", pushResult.getMessage());
         auditService.record(actorId, actorEmail, "ORDER_CANCEL", "ORDER", id,
-                order.getId().toString(), java.util.Map.of("oldStatus", oldStatus.name(), "newStatus", "CANCELLED", "reason", reason != null ? reason : ""));
+                order.getId().toString(), auditChanges);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CancelReasonResponse> getCancelReasons(UUID id) {
+        Order order = orderRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
+        if (order.getStatus() == OrderStatus.CANCELLED
+                || order.getStatus() == OrderStatus.IN_TRANSIT
+                || order.getStatus() == OrderStatus.DELIVERED) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
+        }
+        return orderStatusPushService.getCancelReasons(order);
+    }
+
+    private boolean isPlatformOrder(Order order) {
+        return order.getChannel() != null
+                && order.getPlatform() != null
+                && order.getPlatform() != PlatformType.MANUAL;
+    }
+
+    private boolean shouldAutoMarkPaid(Order order, OrderStatus status) {
+        return !isPlatformOrder(order)
+                && status == OrderStatus.DELIVERED
+                && "UNPAID".equals(order.getPaymentStatus());
+    }
+
+    private boolean isStrictPlatformOrder(Order order) {
+        return order.getPlatform() == PlatformType.LAZADA || order.getPlatform() == PlatformType.SHOPIFY;
+    }
+
+    private boolean requiresTextCancelReason(Order order) {
+        return order.getPlatform() != PlatformType.LAZADA
+                && order.getPlatform() != PlatformType.SHOPIFY;
+    }
+
+    private boolean shouldBlockLocalUpdate(Order order, OrderStatus status, OrderStatusPushResult pushResult) {
+        if (!isPlatformOrder(order) || !requiresPlatformPush(order, status)) {
+            return false;
+        }
+        if (isStrictPlatformOrder(order)) {
+            return !pushResult.isSuccess();
+        }
+        return !pushResult.isSuccess() && !pushResult.isSkipped();
+    }
+
+    private boolean requiresPlatformPush(Order order, OrderStatus status) {
+        if (order.getPlatform() == PlatformType.LAZADA) {
+            return status == OrderStatus.PROCESSING
+                    || status == OrderStatus.SHIPPED
+                    || status == OrderStatus.CANCELLED;
+        }
+        if (order.getPlatform() == PlatformType.SHOPIFY) {
+            return status == OrderStatus.SHIPPED
+                    || status == OrderStatus.CANCELLED;
+        }
+        return status == OrderStatus.CANCELLED;
     }
 
     @Override

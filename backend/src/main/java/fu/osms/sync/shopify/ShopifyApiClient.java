@@ -1,5 +1,6 @@
 package fu.osms.sync.shopify;
 
+import fu.osms.order.enums.ShopifyCancelReason;
 import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
 import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyWebhookResponse;
@@ -16,6 +17,13 @@ public interface ShopifyApiClient {
     List<ShopifyWebhookResponse> listWebhooks(String shopDomain, String accessToken);
 
     void deleteWebhook(String shopDomain, String accessToken, Long webhookId);
+
+    List<Map<String, Object>> getFulfillmentOrders(String shopDomain, String accessToken, String orderId);
+
+    Map<String, Object> createFulfillment(String shopDomain, String accessToken, String fulfillmentOrderId, String trackingNumber);
+
+    Map<String, Object> cancelOrder(String shopDomain, String accessToken, String orderId,
+                                    ShopifyCancelReason reason, boolean email, boolean restock, boolean refund);
 
     List<String> listAccessScopes(String shopDomain, String accessToken);
 
