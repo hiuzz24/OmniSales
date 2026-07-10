@@ -1,10 +1,12 @@
 package fu.osms.sync.shopify;
 
+import fu.osms.order.enums.ShopifyCancelReason;
 import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
 import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyWebhookResponse;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ShopifyApiClient {
     ShopifyProductResponse createProduct(String shopDomain, String accessToken, ShopifyProductPayload payload);
