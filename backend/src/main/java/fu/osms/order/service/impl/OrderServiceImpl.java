@@ -48,6 +48,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import fu.osms.order.event.OrderCreatedEvent;
+import fu.osms.order.event.OrderCancelledEvent;
+import fu.osms.order.event.OrderPaidEvent;
 
 import fu.osms.common.utils.SecurityUtils;
 import java.math.BigDecimal;
@@ -75,6 +79,7 @@ public class OrderServiceImpl implements OrderService {
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryAlertService inventoryAlertService;
     private final OrderStatusPushService orderStatusPushService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -119,6 +124,8 @@ public class OrderServiceImpl implements OrderService {
         String actorEmail = userOpt.map(User::getEmail).orElse("system");
         auditService.record(actorId, actorEmail, "CREATE", "ORDER", savedOrder.getId(),
                 savedOrder.getId().toString(), java.util.Map.of("status", savedOrder.getStatus().name()));
+
+        eventPublisher.publishEvent(new OrderCreatedEvent(savedOrder));
 
         return toResponseWithItems(savedOrder);
     }
@@ -196,6 +203,13 @@ public class OrderServiceImpl implements OrderService {
         }
         auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id, id.toString(), auditChanges);
 
+        if (savedOrder.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED) {
+            eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
+        }
+        if ("PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus)) {
+            eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
+        }
+
         return toResponseWithItems(savedOrder);
     }
 
@@ -214,6 +228,10 @@ public class OrderServiceImpl implements OrderService {
         String actorEmail = userOpt.map(User::getEmail).orElse("system");
         auditService.record(actorId, actorEmail, "PAYMENT_STATUS_CHANGE", "ORDER", id,
                 id.toString(), java.util.Map.of("oldPaymentStatus", oldStatus, "newPaymentStatus", paymentStatus.name()));
+
+        if ("PAID".equals(savedOrder.getPaymentStatus()) && !"PAID".equals(oldStatus)) {
+            eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
+        }
 
         return toResponseWithItems(savedOrder);
     }
@@ -292,7 +310,7 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
         order.setStatusChangedAt(OffsetDateTime.now());
-        orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
 
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
@@ -314,6 +332,8 @@ public class OrderServiceImpl implements OrderService {
         auditChanges.put("platformPushMessage", pushResult.getMessage());
         auditService.record(actorId, actorEmail, "ORDER_CANCEL", "ORDER", id,
                 order.getId().toString(), auditChanges);
+
+        eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
     }
 
     @Override

@@ -19,6 +19,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import fu.osms.order.event.OrderCreatedEvent;
+import fu.osms.order.event.OrderCancelledEvent;
+import fu.osms.order.event.OrderPaidEvent;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -41,6 +45,7 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final LazadaApiClient lazadaApiClient;
     private final PlatformOrderInventoryService platformOrderInventoryService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PlatformType getPlatform() {
@@ -55,6 +60,11 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         if (externalOrderId == null || externalOrderId.isBlank()) {
             throw new IllegalArgumentException("Lazada webhook payload is missing data.trade_order_id");
         }
+
+        Optional<Order> oldOrderOpt = orderRepository.findByChannel_IdAndExternalOrderId(event.getChannel().getId(), externalOrderId);
+        boolean isNew = !oldOrderOpt.isPresent();
+        OrderStatus oldStatus = oldOrderOpt.map(Order::getStatus).orElse(null);
+        String oldPaymentStatus = oldOrderOpt.map(Order::getPaymentStatus).orElse(null);
 
         ChannelCredential credential = resolveCredential(event);
         Long tokenExpiresAt = credential.getTokenExpiresAt() != null
@@ -85,6 +95,17 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         Order savedOrder = orderRepository.save(order);
         syncOrderItems(savedOrder, orderItemsData);
         platformOrderInventoryService.syncReservations(savedOrder);
+
+        if (isNew) {
+            eventPublisher.publishEvent(new OrderCreatedEvent(savedOrder));
+        }
+        if (savedOrder.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED) {
+            eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
+        }
+        if ("PAID".equals(savedOrder.getPaymentStatus()) && !"PAID".equals(oldPaymentStatus)) {
+            eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
+        }
+
         return "PROCESSED";
     }
 
