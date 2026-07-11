@@ -23,6 +23,8 @@ import inventoryApi from '../../../../api/inventoryApi';
 import warehouseService from '../../services/warehouseService';
 import { ROUTES } from '../../../../app/router/routes';
 import Pagination from '../../../../shared/components/Pagination';
+import useAuth from '../../../auth/hooks/useAuth';
+import { ROLES } from '../../../auth/constants/roles';
 
 const PAGE_SIZE = 10;
 
@@ -31,6 +33,9 @@ const InventoryDetailPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const variantId = searchParams.get('variantId') || id;
+
+  const { user } = useAuth();
+  const canEdit = user?.role === ROLES.OWNER || user?.role === ROLES.OPERATIONS;
 
   const [detail, setDetail] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(true);
@@ -217,15 +222,19 @@ const InventoryDetailPage = () => {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <button className={styles.btnOutline} onClick={handleReceiveStock}>
-            <Download size={16} /> Nhập kho
-          </button>
+          {canEdit && (
+            <button className={styles.btnOutline} onClick={handleReceiveStock}>
+              <Download size={16} /> Nhập kho
+            </button>
+          )}
           <button className={styles.btnOutline}>
             <ArrowRightLeft size={16} /> Chuyển kho
           </button>
-          <button className={styles.btnOutline} onClick={handleOpenEditModal}>
-            <Edit2 size={16} /> Sửa
-          </button>
+          {canEdit && (
+            <button className={styles.btnOutline} onClick={handleOpenEditModal}>
+              <Edit2 size={16} /> Sửa
+            </button>
+          )}
         </div>
       </div>
 

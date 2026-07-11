@@ -17,6 +17,7 @@ import SystemSettingsPage from '../../features/system/pages/SystemSettingsPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 import ProfilePage from '../../features/user/pages/ProfilePage';
 import UserListPage from '../../features/user/pages/UserListPage';
+import UserInviteListPage from '../../features/user/pages/UserInviteListPage';
 import UserDetailPage from '../../features/user/pages/UserDetailPage';
 import InviteRegisterPage from '../../features/auth/pages/InviteRegisterPage';
 import ProductManagementPage from '../../features/catalog/pages/ProductManagementPage';
@@ -56,6 +57,7 @@ import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
+import NotificationListPage from '../../features/user/pages/NotificationListPage';
 
 const AppRouter = () => {
   return (
@@ -87,6 +89,7 @@ const AppRouter = () => {
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
               <Route path={ROUTES.USERS} element={<UserListPage />} />
+              <Route path={ROUTES.USER_INVITATIONS} element={<UserInviteListPage />} />
               <Route path={ROUTES.USER_DETAIL} element={<UserDetailPage />} />
             </Route>
 
@@ -138,6 +141,7 @@ const AppRouter = () => {
               <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
               <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
               <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
+              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationListPage />} />
             </Route>
           </Route>
         </Route>

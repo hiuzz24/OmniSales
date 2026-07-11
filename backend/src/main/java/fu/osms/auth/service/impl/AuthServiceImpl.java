@@ -215,6 +215,21 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalArgumentException("Vai trò mời không hợp lệ. Chỉ có thể mời vai trò Sales Staff hoặc Operations Staff");
         }
 
+        // Validate based on invitation status history
+        List<UserInviteToken> tokens = userInviteTokenRepository.findByEmailIgnoreCase(email);
+        for (UserInviteToken t : tokens) {
+            String status = t.getStatus();
+            boolean isAccepted = "ACCEPTED".equalsIgnoreCase(status) || t.getUsedAt() != null;
+            boolean isPending = !"CANCELLED".equalsIgnoreCase(status) && t.getUsedAt() == null && t.getExpiresAt().isAfter(OffsetDateTime.now());
+
+            if (isAccepted) {
+                throw new IllegalArgumentException("Email này đã được mời và đã chấp nhận lời mời (Accepted)");
+            }
+            if (isPending) {
+                throw new IllegalArgumentException("Email này đang có một lời mời chưa xác nhận (Pending)");
+            }
+        }
+
         Optional<User> existingUser = userRepository.findByEmail(email);
         User user;
         if (existingUser.isPresent()) {
@@ -225,12 +240,6 @@ public class AuthServiceImpl implements AuthService {
             user.setFullName("Chờ kích hoạt");
             user.setDeletedAt(null);
             userRepository.save(user);
-
-            // Clean up old invite tokens
-            List<UserInviteToken> oldTokens = userInviteTokenRepository.findAll().stream()
-                    .filter(t -> t.getEmail().equalsIgnoreCase(email))
-                    .toList();
-            userInviteTokenRepository.deleteAll(oldTokens);
         } else {
             user = User.builder()
                     .email(email)
@@ -267,6 +276,7 @@ public class AuthServiceImpl implements AuthService {
                 .roleName(normRole)
                 .token(tokenStr)
                 .expiresAt(OffsetDateTime.now().plusMinutes(15))
+                .status("PENDING")
                 .build();
         userInviteTokenRepository.save(inviteToken);
         
@@ -283,6 +293,10 @@ public class AuthServiceImpl implements AuthService {
 
         if (inviteToken.getUsedAt() != null) {
             throw new IllegalArgumentException("Liên kết đã được sử dụng");
+        }
+
+        if ("CANCELLED".equalsIgnoreCase(inviteToken.getStatus())) {
+            throw new IllegalArgumentException("Liên kết mời này đã bị hủy bởi quản trị viên");
         }
 
         if (inviteToken.getExpiresAt().isBefore(OffsetDateTime.now())) {
@@ -345,6 +359,7 @@ public class AuthServiceImpl implements AuthService {
         userRoleRepository.save(userRole);
 
         inviteToken.setUsedAt(OffsetDateTime.now());
+        inviteToken.setStatus("ACCEPTED");
         userInviteTokenRepository.save(inviteToken);
 
         AuditLog auditLog = new AuditLog();

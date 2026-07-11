@@ -24,6 +24,8 @@ import fu.osms.inventory.repository.StocktakeSessionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.inventory.service.StocktakeService;
+import fu.osms.auth.repository.UserRoleRepository;
+import fu.osms.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -53,8 +55,10 @@ public class StocktakeServiceImpl implements StocktakeService {
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository transactionRepository;
     private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
     private final StocktakeMapper mapper;
     private final InventoryAlertService inventoryAlertService;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -74,6 +78,9 @@ public class StocktakeServiceImpl implements StocktakeService {
 
         if (complete) {
             applyStocktakeAdjustments(session, user);
+            notifyStocktakeStatusChange(session, "DRAFT", "COMPLETED");
+        } else {
+            notifyStocktakeStatusChange(session, null, "DRAFT");
         }
         return toResponse(session);
     }
@@ -138,11 +145,14 @@ public class StocktakeServiceImpl implements StocktakeService {
         }
 
         User user = getCurrentUser();
+        String oldStatus = session.getStatus();
         if ("COMPLETED".equals(nextStatus)) {
             applyStocktakeAdjustments(session, user);
         }
         session.setStatus(nextStatus);
-        return toResponse(sessionRepository.save(session));
+        StocktakeSession savedSession = sessionRepository.save(session);
+        notifyStocktakeStatusChange(savedSession, oldStatus, nextStatus);
+        return toResponse(savedSession);
     }
 
     @Override
@@ -268,5 +278,56 @@ public class StocktakeServiceImpl implements StocktakeService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private void notifyStocktakeStatusChange(StocktakeSession session, String oldStatus, String newStatus) {
+        try {
+            if ("IN_PROGRESS".equals(newStatus) || ("DRAFT".equals(newStatus) && oldStatus == null)) {
+                List<User> staffList = userRepository.findByWarehouseId(session.getWarehouse().getId());
+                if (staffList != null) {
+                    String title = "Yêu cầu kiểm kho mới";
+                    String body = "Phiếu kiểm kho " + session.getSessionCode() + " đã được tạo tại kho " + session.getWarehouse().getName() + ". Vui lòng thực hiện kiểm kho.";
+                    for (User staff : staffList) {
+                        notificationService.createNotification(
+                            staff.getId(),
+                            "STOCKTAKE",
+                            title,
+                            body,
+                            "INVENTORY",
+                            session.getId()
+                        );
+                    }
+                }
+            } else if ("COMPLETED".equals(newStatus)) {
+                List<StocktakeItem> items = itemRepository.findBySession_Id(session.getId());
+                long diffCount = items.stream()
+                        .filter(item -> item.getActualQuantity() != null && !item.getActualQuantity().equals(item.getSystemQuantity()))
+                        .count();
+
+                String title = "Hoàn tất kiểm kho";
+                String body = "Phiếu kiểm kho " + session.getSessionCode() + " tại " + session.getWarehouse().getName() + " đã hoàn tất. " +
+                        (diffCount > 0 ? "Phát hiện " + diffCount + " mặt hàng có chênh lệch tồn kho." : "Không có chênh lệch tồn kho.");
+
+                userRoleRepository.findByRoleNameIn(List.of("OWNER", "OPERATIONS")).stream()
+                        .map(userRole -> userRole.getUser().getId())
+                        .distinct()
+                        .forEach(userId -> {
+                            try {
+                                notificationService.createNotification(
+                                        userId,
+                                        "STOCKTAKE",
+                                        title,
+                                        body,
+                                        "INVENTORY",
+                                        session.getId()
+                                );
+                            } catch (Exception ex) {
+                                System.err.println("Lỗi gửi thông báo kiểm kho cho quản lý: " + ex.getMessage());
+                            }
+                        });
+            }
+        } catch (Exception e) {
+            System.err.println("Lỗi xử lý gửi thông báo kiểm kho: " + e.getMessage());
+        }
     }
 }

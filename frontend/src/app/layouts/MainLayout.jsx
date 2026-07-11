@@ -46,7 +46,16 @@ const NAV_ITEMS = [
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
   { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
-  { name: 'Nhân sự',        href: '/users',    icon: Users,    roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },
+  {
+    name: 'Nhân sự',
+    href: '/users',
+    icon: Users,
+    roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN],
+    children: [
+      { name: 'Danh sách nhân sự', href: ROUTES.USERS, icon: Users, exact: true, roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },
+      { name: 'Lịch sử lời mời', href: ROUTES.USER_INVITATIONS, icon: ClipboardList, roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },
+    ],
+  },
   { name: 'Logs hệ thống',  href: ROUTES.SYSTEM_LOGS, icon: ClipboardList, roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Sao lưu dữ liệu', href: ROUTES.BACKUP,      icon: Database,      roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Giám sát API',    href: ROUTES.API_MONITOR, icon: Shield,        roles: [ROLES.SYSTEM_ADMIN] },
@@ -77,6 +86,7 @@ const NOTIF_META = {
   SYNC_FAILED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
   INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
   STOCK_TRANSFER: { icon: ArrowRightLeft, color: '#7c3aed', bg: '#f5f3ff' },
+  STOCKTAKE: { icon: ClipboardList, color: '#0f766e', bg: '#f0fdfa' },
   SYSTEM: { icon: Info, color: '#475569', bg: '#f8fafc' },
 };
 
@@ -179,6 +189,10 @@ export default function MainLayout() {
 
   useEffect(() => {
     loadNotifications();
+    const interval = setInterval(() => {
+      loadNotifications();
+    }, 10000);
+    return () => clearInterval(interval);
   }, [user?.id]);
 
   useEffect(() => {
@@ -407,6 +421,8 @@ export default function MainLayout() {
                             if (n.entityType === 'INVENTORY' && n.entityId) {
                               if (n.type === 'STOCK_TRANSFER') {
                                 navigate(ROUTES.STOCK_TRANSFER, { state: { openTransferId: n.entityId } });
+                              } else if (n.type === 'STOCKTAKE') {
+                                navigate(ROUTES.STOCKTAKES);
                               } else {
                                 navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
                               }
@@ -442,7 +458,7 @@ export default function MainLayout() {
                   </div>
 
                   <div style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', backgroundColor: 'rgba(248,250,252,0.5)' }}>
-                    <button onClick={() => { setNotifOpen(false); loadNotifications(); }}
+                    <button onClick={() => { setNotifOpen(false); navigate(ROUTES.NOTIFICATIONS); }}
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontSize: 13, color: '#2563eb', fontWeight: 500, border: 'none', background: 'none', cursor: 'pointer' }}>
                       Xem tất cả thông báo <ChevronRight size={14} />
                     </button>

@@ -22,6 +22,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -142,6 +143,7 @@ public class InventoryController {
     }
 
     @PutMapping("/detail/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<InventoryDetailDTO>> updateInventoryItemDetail(
             @PathVariable UUID id,
             @Valid @RequestBody InventoryItemUpdateRequest request) {

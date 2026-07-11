@@ -10,4 +10,6 @@ import java.util.UUID;
 @Repository
 public interface UserInviteTokenRepository extends JpaRepository<UserInviteToken, UUID> {
     Optional<UserInviteToken> findByToken(String token);
+    java.util.List<UserInviteToken> findByEmailIgnoreCase(String email);
+    java.util.List<UserInviteToken> findAllByOrderByCreatedAtDesc();
 }
