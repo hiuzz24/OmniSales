@@ -20,6 +20,7 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
 import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.OrderItemResponse;
@@ -33,6 +34,10 @@ import fu.osms.order.mapper.OrderItemMapper;
 import fu.osms.order.mapper.OrderMapper;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.sync.order.OrderStatusPushContext;
+import fu.osms.sync.order.OrderStatusPushResult;
+import fu.osms.sync.order.OrderStatusPushService;
+import fu.osms.sync.order.OrderStatusPushStatus;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,6 +51,7 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -88,6 +94,10 @@ class OrderServiceImplTest {
     private InventoryItemRepository inventoryItemRepository;
     @Mock
     private InventoryAlertService inventoryAlertService;
+    @Mock
+    private OrderStatusPushService orderStatusPushService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -215,6 +225,18 @@ class OrderServiceImplTest {
                 .subtotal(new BigDecimal("300000"))
                 .items(new ArrayList<>())
                 .build();
+
+        // Default stubs so tests that don't explicitly care about push still get a
+        // benign "no-op success" result instead of an NPE on the collaborator.
+        OrderStatusPushResult defaultPushResult = OrderStatusPushResult.builder()
+                .status(OrderStatusPushStatus.SUCCESS)
+                .message("noop")
+                .build();
+        lenient().when(orderStatusPushService.push(any(Order.class), any(OrderStatus.class), any()))
+                .thenReturn(defaultPushResult);
+        lenient().when(orderStatusPushService.push(any(Order.class), any(OrderStatus.class), any(OrderStatusPushContext.class)))
+                .thenReturn(defaultPushResult);
+        lenient().doNothing().when(eventPublisher).publishEvent(any());
     }
 
     private MockedStatic<SecurityUtils> mockSecurityUtils() {
@@ -450,13 +472,17 @@ class OrderServiceImplTest {
         @DisplayName("Should update status from SHIPPED to DELIVERED and auto-set PAID when UNPAID")
         void shouldUpdateStatusToDeliveredAndAutoSetPaid() {
             try (MockedStatic<SecurityUtils> mocked = mockSecurityUtils()) {
+                // Manual (non-platform) order: no channel, MANUAL platform.
+                // Auto-mark-paid only triggers for non-platform orders.
+                order.setPlatform(PlatformType.MANUAL);
+                order.setChannel(null);
                 order.setStatus(OrderStatus.SHIPPED);
                 order.setPaymentStatus("UNPAID");
 
                 Order deliveredOrder = Order.builder()
                         .id(orderId)
-                        .platform(PlatformType.SHOPEE)
-                        .channelName("Shopee Store")
+                        .platform(PlatformType.MANUAL)
+                        .channelName(null)
                         .externalOrderId("EXT-001")
                         .status(OrderStatus.DELIVERED)
                         .paymentStatus("PAID")
@@ -475,7 +501,6 @@ class OrderServiceImplTest {
 
                 assertThat(result).isNotNull();
 
-                // Verify the order was saved with updated payment status
                 ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
                 verify(orderRepository).save(orderCaptor.capture());
                 assertThat(orderCaptor.getValue().getPaymentStatus()).isEqualTo("PAID");
@@ -743,7 +768,7 @@ class OrderServiceImplTest {
                 when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
                 when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-//                orderService.cancel(orderId, "Customer request");
+                orderService.cancel(orderId, makeCancelRequest("Customer request"));
 
                 assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
                 assertThat(order.getCancelReason()).isEqualTo("Customer request");
@@ -764,7 +789,7 @@ class OrderServiceImplTest {
                 when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
                 when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-                //orderService.cancel(orderId, "Out of stock");
+                orderService.cancel(orderId, makeCancelRequest("Out of stock"));
 
                 assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
                 assertThat(order.getCancelReason()).isEqualTo("Out of stock");
@@ -785,7 +810,7 @@ class OrderServiceImplTest {
                 when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
                 when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-//                orderService.cancel(orderId, "Customer cancelled");
+                orderService.cancel(orderId, makeCancelRequest("Customer cancelled"));
 
                 assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
                 verify(inventoryItemRepository).findByVariantIdWithLock(variantId);
@@ -793,20 +818,18 @@ class OrderServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should cancel order with null reason")
+        @DisplayName("Should throw INVALID_REQUEST when cancelling SHOPEE order with null reason")
         void shouldCancelOrderWithNullReason() {
             try (MockedStatic<SecurityUtils> mocked = mockSecurityUtils()) {
                 order.setStatus(OrderStatus.PENDING);
                 when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-                when(orderItemRepository.findByOrderId(orderId)).thenReturn(List.of(orderItem));
-                when(productVariantRepository.findBySkuAndDeletedAtIsNull("TEST-001")).thenReturn(Optional.of(variant));
-                when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
-                when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-                orderService.cancel(orderId, null);
-
-                assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-                verify(orderRepository).save(any(Order.class));
+                // SHOPEE orders require a non-blank text reason, so passing null
+                // (or a blank reason) is rejected with INVALID_REQUEST up-front.
+                assertThatThrownBy(() -> orderService.cancel(orderId, null))
+                        .isInstanceOf(AppException.class)
+                        .satisfies(e -> assertThat(((AppException) e).getErrorCode())
+                                .isEqualTo(ErrorCode.INVALID_REQUEST));
             }
         }
 
@@ -816,7 +839,7 @@ class OrderServiceImplTest {
             order.setStatus(OrderStatus.CANCELLED);
             when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
 
-            assertThatThrownBy(() -> orderService.cancel(orderId, "reason"))
+            assertThatThrownBy(() -> orderService.cancel(orderId, makeCancelRequest("reason")))
                     .isInstanceOf(AppException.class)
                     .satisfies(e -> assertThat(((AppException) e).getErrorCode())
                             .isEqualTo(ErrorCode.ORDER_ALREADY_CANCELLED));
@@ -827,7 +850,7 @@ class OrderServiceImplTest {
         void shouldThrowWhenOrderNotFoundForCancel() {
             when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.cancel(orderId, "reason"))
+            assertThatThrownBy(() -> orderService.cancel(orderId, makeCancelRequest("reason")))
                     .isInstanceOf(EntityNotFoundException.class)
                     .hasMessageContaining("Order not found");
         }
@@ -843,7 +866,7 @@ class OrderServiceImplTest {
                 when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
                 when(orderRepository.save(any(Order.class))).thenReturn(order);
 
-                orderService.cancel(orderId, "Customer request");
+                orderService.cancel(orderId, makeCancelRequest("Customer request"));
 
                 verify(auditService).record(
                         any(),
@@ -864,6 +887,12 @@ class OrderServiceImplTest {
                 );
             }
         }
+    }
+
+    private static CancelOrderRequest makeCancelRequest(String reason) {
+        CancelOrderRequest req = new CancelOrderRequest();
+        req.setReason(reason);
+        return req;
     }
 
     // =========================================================
