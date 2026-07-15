@@ -6,11 +6,13 @@ import channelSyncService from '../../services/channelSyncService';
 const PLATFORM_LABELS = {
   LAZADA: 'Lazada',
   SHOPIFY: 'Shopify',
+  TIKTOK: 'TikTok Shop',
 };
 
 const PLATFORM_COLORS = {
   LAZADA: { color: '#1d2b8f', bg: '#eef2ff', border: '#c7d2fe' },
   SHOPIFY: { color: '#3f6212', bg: '#f0fdf4', border: '#bbf7d0' },
+  TIKTOK: { color: '#010101', bg: '#f8fafc', border: '#cbd5e1' },
 };
 
 const DIRECTION_OPTIONS = {
@@ -301,7 +303,7 @@ export default function MarketplaceSyncButton({
                   onClick={() => syncChannel(channel)}
                 >
                   <span style={{ ...iconWrapStyle, color: platformStyle.color, background: platformStyle.bg, border: `1px solid ${platformStyle.border}` }}>
-                    {syncing ? <RefreshCw size={15} /> : (channel.platform === 'SHOPIFY' ? 'S' : 'L')}
+                    {syncing ? <RefreshCw size={15} /> : ({ SHOPIFY: 'S', LAZADA: 'L', TIKTOK: 'T' }[channel.platform] ?? '?')}
                   </span>
                   <span style={{ minWidth: 0 }}>
                     <span style={optionTitleStyle}>{PLATFORM_LABELS[channel.platform] ?? channel.platform}</span>

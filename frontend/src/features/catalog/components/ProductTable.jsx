@@ -82,10 +82,6 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
     fetchProducts();
   }, [page, size, keyword, statusFilter, platformFilter]);
 
-  useEffect(() => {
-    setPage(0);
-  }, [keyword, statusFilter, platformFilter]);
-
   const getStockClass = (totalStock) => {
     if (totalStock === 0) return styles.stockEmpty;
     if (totalStock <= 5) return styles.stockLow;
@@ -121,6 +117,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
               <th scope="col" className={styles.th}>SKU</th>
               <th scope="col" className={styles.th}>Danh mục</th>
               <th scope="col" className={styles.th}>Kênh bán</th>
+              <th scope="col" className={styles.th}>Liên kết sàn</th>
               <th scope="col" className={styles.th}>Giá bán</th>
               <th scope="col" className={`${styles.th} ${styles.thCenter}`}>Tồn kho</th>
               <th scope="col" className={styles.th}>Trạng thái</th>
@@ -130,7 +127,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
           <tbody className={styles.tbody}>
             {loading ? (
               <tr>
-                <td colSpan="8" className={styles.loadingCell}>
+                <td colSpan="9" className={styles.loadingCell}>
                   <div className={styles.loadingDots}>
                     <span/><span/><span/>
                   </div>
@@ -138,7 +135,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan="8" className={styles.emptyCell}>
+                <td colSpan="9" className={styles.emptyCell}>
                   <div className={styles.emptyIcon}>
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -149,10 +146,10 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                 </td>
               </tr>
             ) : (
-              products.map((product) => {
+              products.map((product, index) => {
                 const totalStock = product.variants?.reduce((sum, v) => sum + (v.availableQuantity || v.quantityOnHand || 0), 0) || 0;
                 return (
-                  <tr key={product.id || Math.random()} className={styles.tr}>
+                  <tr key={product.id || product.sku || `product-${page}-${index}`} className={styles.tr}>
                     <td className={styles.td}>
                       <div className={styles.productCell}>
                         <div className={styles.productImage}>
@@ -198,6 +195,11 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                           ? product.channels.map(channel => <span key={channel}>{getChannelBadge(channel)}</span>)
                           : <span className={styles.noChannel}>—</span>}
                       </div>
+                    </td>
+                    <td className={styles.td}>
+                      {product.channels?.length > 0
+                        ? <Badge variant="success">Đã liên kết</Badge>
+                        : <Badge variant="default">Chưa liên kết</Badge>}
                     </td>
                     <td className={styles.td}>
                       <div className={styles.price}>

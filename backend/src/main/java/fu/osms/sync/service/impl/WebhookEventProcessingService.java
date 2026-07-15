@@ -20,7 +20,7 @@ public class WebhookEventProcessingService {
     private final WebhookEventRepository webhookEventRepository;
     private final WebhookBusinessProcessor webhookBusinessProcessor;
 
-    @Async("taskExecutor")
+    @Async("webhookExecutor")
     @Transactional
     public void processAsync(UUID eventId) {
         try {

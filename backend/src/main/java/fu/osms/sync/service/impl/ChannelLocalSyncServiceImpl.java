@@ -24,6 +24,7 @@ import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.ChannelLocalSyncService;
 import fu.osms.sync.service.PlatformSyncService;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
+import fu.osms.sync.tiktok.TikTokInventoryUpdateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -53,6 +54,7 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
     private final SyncLogRepository syncLogRepository;
     private final LazadaSyncTaskDispatcher lazadaSyncTaskDispatcher;
     private final ShopifyInventoryUpdateService shopifyInventoryUpdateService;
+    private final TikTokInventoryUpdateService tikTokInventoryUpdateService;
     private final StockReceiveRepository stockReceiveRepository;
     private final InventoryIssueRepository inventoryIssueRepository;
 
@@ -70,11 +72,52 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
         if (channel.getPlatform() == PlatformType.LAZADA) {
             return lazadaSyncTaskDispatcher.dispatch(LazadaSyncTask.localChanges(channelId));
         }
+        if (channel.getPlatform() == PlatformType.TIKTOK) {
+            return syncTikTokInventory(channel);
+        }
         if (channel.getPlatform() != PlatformType.SHOPIFY) {
             throw new IllegalArgumentException("Chỉ hỗ trợ đồng bộ thủ công cho Lazada và Shopify.");
         }
 
         return syncShopifyLocalChanges(channel);
+    }
+
+    private ChannelImportSyncResponse syncTikTokInventory(Channel channel) {
+        SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
+                .channel(channel)
+                .jobType("TIKTOK_INVENTORY_PUSH_SYNC")
+                .status(SyncStatus.PENDING)
+                .startedAt(OffsetDateTime.now())
+                .build());
+        try {
+            int pushedVariantCount = tikTokInventoryUpdateService.pushAvailableStock(channel.getId());
+            OffsetDateTime syncedAt = OffsetDateTime.now();
+            channel.setLastSyncedAt(syncedAt);
+            channelRepository.save(channel);
+            syncLog.setStatus(SyncStatus.SYNCED);
+            syncLog.setTotalItems(pushedVariantCount);
+            syncLog.setSuccessCount(pushedVariantCount);
+            syncLog.setFailCount(0);
+            syncLog.setCompletedAt(syncedAt);
+            syncLogRepository.save(syncLog);
+            return ChannelImportSyncResponse.builder()
+                    .channelId(channel.getId())
+                    .syncLogId(syncLog.getId())
+                    .productCount(0)
+                    .variantCount(pushedVariantCount)
+                    .warehouseCount(0)
+                    .pushedVariantCount(pushedVariantCount)
+                    .status(SyncStatus.SYNCED.name())
+                    .message("Đã đẩy tồn kho từ ứng dụng lên TikTok Shop.")
+                    .build();
+        } catch (Exception e) {
+            syncLog.setStatus(SyncStatus.FAILED);
+            syncLog.setFailCount(1);
+            syncLog.setErrorSummary(e.getMessage());
+            syncLog.setCompletedAt(OffsetDateTime.now());
+            syncLogRepository.save(syncLog);
+            throw e;
+        }
     }
 
     private ChannelImportSyncResponse syncShopifyLocalChanges(Channel channel) {

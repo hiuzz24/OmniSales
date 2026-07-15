@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.sync.tiktok.TikTokOAuthService;
 import fu.osms.sync.tiktok.dto.TikTokTokenData;
+import fu.osms.sync.tiktok.util.TikTokSignatureUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,10 +13,17 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 @Slf4j
 @Service
@@ -30,6 +38,9 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
 
     @Value("${tiktok.token-url}")
     private String tokenUrl;
+
+    @Value("${tiktok.api-url:https://open-api.tiktokglobalshop.com}")
+    private String apiUrl;
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -51,13 +62,53 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
             log.info("[TikTokOAuth] Exchanging authorization code for token");
             String responseStr = restTemplate.getForObject(fullUrl, String.class);
             Map<String, Object> response = objectMapper.readValue(responseStr, new TypeReference<>() {});
-            return normalizeTokenResponse(response);
+            TikTokTokenData tokenData = normalizeTokenResponse(response);
+            enrichAuthorizedShop(tokenData);
+            return tokenData;
         } catch (RestClientResponseException e) {
             log.error("[TikTokOAuth] Token exchange error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw new IllegalStateException("TikTok token API returned error: " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
             log.error("[TikTokOAuth] Failed to exchange token", e);
             throw new IllegalStateException("Failed to exchange TikTok token: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void enrichAuthorizedShop(TikTokTokenData tokenData) {
+        try {
+            String path = "/authorization/202309/shops";
+            Map<String, Object> query = new TreeMap<>();
+            query.put("app_key", appKey);
+            query.put("timestamp", Instant.now().getEpochSecond());
+            query.put("sign", TikTokSignatureUtil.sign(path, query, null, appSecret));
+
+            UriComponentsBuilder uri = UriComponentsBuilder.fromHttpUrl(apiUrl).path(path);
+            query.forEach(uri::queryParam);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-tts-access-token", tokenData.getAccessToken());
+            String responseBody = restTemplate.exchange(
+                    uri.build().encode().toUri(),
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    String.class
+            ).getBody();
+            Map<String, Object> response = objectMapper.readValue(responseBody, new TypeReference<>() {});
+            Map<String, Object> data = response.get("data") instanceof Map<?, ?> value
+                    ? (Map<String, Object>) value
+                    : Map.of();
+            Object shopsValue = data.get("shops");
+            if (!(shopsValue instanceof List<?> shops) || shops.isEmpty() || !(shops.get(0) instanceof Map<?, ?> rawShop)) {
+                return;
+            }
+            Map<String, Object> shop = (Map<String, Object>) rawShop;
+            putIfPresent(tokenData.getMetadata(), "shopCipher", firstNonNull(shop.get("cipher"), shop.get("shop_cipher")));
+            putIfPresent(tokenData.getMetadata(), "shopId", firstNonNull(shop.get("id"), shop.get("shop_id")));
+            putIfPresent(tokenData.getMetadata(), "shopName", firstNonNull(shop.get("name"), shop.get("shop_name")));
+            putIfPresent(tokenData.getMetadata(), "shopRegion", shop.get("region"));
+        } catch (Exception e) {
+            log.warn("[TikTokOAuth] Connected, but Get Authorized Shops failed: {}", e.getMessage());
         }
     }
 
@@ -92,6 +143,8 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
         putIfPresent(metadata, "refreshTokenExpireIn", data.get("refresh_token_expire_in"));
         putIfPresent(metadata, "userType", data.get("user_type"));
         putIfPresent(metadata, "grantedScopes", data.get("granted_scopes"));
+        putIfPresent(metadata, "shopCipher", firstNonNull(data.get("shop_cipher"), data.get("cipher")));
+        putIfPresent(metadata, "shopId", data.get("shop_id"));
 
         return TikTokTokenData.builder()
                 .accessToken(stringValue(accessToken))
