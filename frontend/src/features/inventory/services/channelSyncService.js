@@ -1,6 +1,6 @@
 import channelApi from '../../../api/channelApi';
 
-const SUPPORTED_PLATFORMS = new Set(['LAZADA', 'SHOPIFY']);
+const SUPPORTED_PLATFORMS = new Set(['LAZADA', 'SHOPIFY', 'TIKTOK']);
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? response;
 

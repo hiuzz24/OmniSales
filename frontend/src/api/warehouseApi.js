@@ -3,31 +3,31 @@
 const warehouseApi = {
     // Get all warehouses
     getAll: async (params) => {
-        const response = await axiosClient.get('/inventory/warehouses', { params });
+        const response = await axiosClient.get('/warehouses', { params });
         return response;
     },
 
     // Get warehouse by ID
     getById: async (id) => {
-        const response = await axiosClient.get(`/inventory/warehouses/${id}`);
+        const response = await axiosClient.get(`/warehouses/${id}`);
         return response;
     },
 
     // Create new warehouse
     create: async (data) => {
-        const response = await axiosClient.post('/inventory/warehouses', data);
+        const response = await axiosClient.post('/warehouses', data);
         return response;
     },
 
     // Update warehouse
     update: async (id, data) => {
-        const response = await axiosClient.put(`/inventory/warehouses/${id}`, data);
+        const response = await axiosClient.put(`/warehouses/${id}`, data);
         return response;
     },
 
     // Delete warehouse
     delete: async (id) => {
-        const response = await axiosClient.delete(`/inventory/warehouses/${id}`);
+        const response = await axiosClient.delete(`/warehouses/${id}`);
         return response;
     }
 };

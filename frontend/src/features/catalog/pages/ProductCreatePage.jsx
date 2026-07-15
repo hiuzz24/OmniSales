@@ -6,6 +6,7 @@ import { ROUTES } from '../../../app/router/routes';
 import productApi from '../../../api/productApi';
 import categoryApi from '../../../api/categoryApi';
 import channelApi from '../../../api/channelApi';
+import warehouseApi from '../../../api/warehouseApi';
 import ProductImageUploader from '../components/ProductImageUploader';
 import ProductForm from '../components/ProductForm';
 import ProductPriceStock from '../components/ProductPriceStock';
@@ -43,6 +44,8 @@ const ProductCreatePage = () => {
   const [selectedChannels, setSelectedChannels] = useState([]);
 
   const [categories, setCategories] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
 
   const [errors, setErrors] = useState({});
   const [variantErrors, setVariantErrors] = useState({});
@@ -51,9 +54,10 @@ const ProductCreatePage = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [catData, chanData] = await Promise.all([
+        const [catData, chanData, warehouseData] = await Promise.all([
           categoryApi.getAll(),
           channelApi.getAll(),
+          warehouseApi.getAll(),
         ]);
         const catList = catData.data?.data || catData.data || catData;
         if (Array.isArray(catList)) {
@@ -63,6 +67,17 @@ const ProductCreatePage = () => {
         if (Array.isArray(chanList)) {
           setChannels(chanList);
           setSelectedChannels(chanList.map((c, i) => c.id || c._id || (c.platform + i)));
+        }
+        const warehouseList = warehouseData.data?.data || warehouseData.data || warehouseData;
+        if (Array.isArray(warehouseList)) {
+          setWarehouses(warehouseList);
+          const channelWarehouseId = Array.isArray(chanList)
+            ? chanList.map((channel) => channel.metadata?.defaultWarehouseId).find(Boolean)
+            : null;
+          const preferredWarehouseId = warehouseList.some((warehouse) => warehouse.id === channelWarehouseId)
+            ? channelWarehouseId
+            : warehouseList[0]?.id;
+          setSelectedWarehouseId((prev) => prev || preferredWarehouseId || '');
         }
       } catch (error) {
         console.error('Failed to load initial data:', error);
@@ -118,7 +133,7 @@ const ProductCreatePage = () => {
         price: 0,
         costPrice: 0,
         optionValues: Object.fromEntries(
-          Object.entries({ Size: formData.size, 'Màu': formData.color }).filter(([_, v]) => v)
+          Object.entries({ Size: formData.size, 'Màu': formData.color }).filter(([, v]) => v)
         ),
         images: images.map((img, i) => ({
           url: img.url,
@@ -139,6 +154,7 @@ const ProductCreatePage = () => {
       weightGrams: weightGrams ? Number(weightGrams) : null,
       lowStockThreshold: lowStockThreshold === '' ? 5 : Number(lowStockThreshold),
       attributes: dimensions ? { dimensions } : {},
+      warehouseId: selectedWarehouseId || null,
       channelIds: selectedChannels,
       variants: requestVariants,
       images: images.map((img, i) => ({
@@ -189,7 +205,7 @@ const ProductCreatePage = () => {
     );
   };
 
-  const handlePriceChange = (field, value) => {
+  const handlePriceChange = (field) => {
     if (field === 'price') setPrice('0');
     if (field === 'costPrice') setCostPrice('0');
   };
@@ -294,6 +310,9 @@ const ProductCreatePage = () => {
           channels={channels}
           selectedChannels={selectedChannels}
           onChannelToggle={handleChannelToggle}
+          warehouses={warehouses}
+          selectedWarehouseId={selectedWarehouseId}
+          onWarehouseChange={setSelectedWarehouseId}
           showProduct={showProduct}
           onStatusToggle={() => setShowProduct(!showProduct)}
           onSubmit={handleSubmit}
