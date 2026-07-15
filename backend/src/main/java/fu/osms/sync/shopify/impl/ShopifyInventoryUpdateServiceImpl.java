@@ -82,6 +82,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
 
         String shopDomain = extractShopDomain(channel);
         String defaultLocationId = resolveLocationId(channel, shopDomain, credential.getAccessToken());
+        UUID defaultWarehouseId = resolveDefaultWarehouseId(channel);
 
         List<UUID> variantIds = mappings.stream()
                 .map(mapping -> mapping.getVariant().getId())
@@ -89,6 +90,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
                 .toList();
         Map<UUID, List<InventoryItem>> inventoryByVariantId = inventoryItemRepository.findByVariantIdIn(variantIds)
                 .stream()
+                .filter(item -> matchesDefaultWarehouse(item, defaultWarehouseId))
                 .collect(Collectors.groupingBy(item -> item.getVariant().getId()));
 
         int pushedCount = 0;
@@ -453,6 +455,31 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         }
         Object id = mapping.getMetadata().get("inventory_item_id");
         return id == null ? null : id.toString();
+    }
+
+    private UUID resolveDefaultWarehouseId(Channel channel) {
+        if (channel.getMetadata() == null) {
+            return null;
+        }
+
+        Object warehouseId = channel.getMetadata().get("defaultWarehouseId");
+        if (warehouseId == null || warehouseId.toString().isBlank()) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(warehouseId.toString());
+        } catch (IllegalArgumentException ignored) {
+            log.warn("[ShopifyStockSync] Ignore invalid defaultWarehouseId={} channelId={}", warehouseId, channel.getId());
+            return null;
+        }
+    }
+
+    private boolean matchesDefaultWarehouse(InventoryItem item, UUID defaultWarehouseId) {
+        if (defaultWarehouseId == null) {
+            return true;
+        }
+        return item.getWarehouse() != null && defaultWarehouseId.equals(item.getWarehouse().getId());
     }
 
     private String toInventoryItemGid(String value) {

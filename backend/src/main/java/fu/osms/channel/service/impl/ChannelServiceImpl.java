@@ -66,6 +66,7 @@ public class ChannelServiceImpl implements ChannelService {
 
         Channel channel = channelMapper.toEntity(request);
         channel.setStatus("CONNECTED");
+        replaceMetadata(channel, request.getMetadata());
         channelRepository.save(channel);
 
         ChannelCredential credential = ChannelCredential.builder()
@@ -108,9 +109,7 @@ public class ChannelServiceImpl implements ChannelService {
 
         channel.setDisplayName(request.getDisplayName());
         channel.setCommissionRate(request.getCommissionRate());
-        if (request.getMetadata() != null) {
-            channel.setMetadata(request.getMetadata());
-        }
+        mergeMetadata(channel, request.getMetadata());
         if (request.getSyncEnabled() != null) {
             channel.setSyncEnabled(request.getSyncEnabled());
         }
@@ -167,6 +166,7 @@ public class ChannelServiceImpl implements ChannelService {
         List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdInAndMappingState(productIds, "ACTIVE");
         return channelProducts.stream()
                 .filter(cp -> cp.getProduct() != null && cp.getChannel() != null)
+                .filter(cp -> cp.getExternalProductId() != null && !cp.getExternalProductId().isBlank())
                 .collect(Collectors.groupingBy(
                         cp -> cp.getProduct().getId(),
                         Collectors.mapping(
@@ -302,11 +302,6 @@ public class ChannelServiceImpl implements ChannelService {
         String resolvedAccountName = firstNonBlank(accountName, accountId, "Connected");
         String resolvedAccountId = firstNonBlank(accountId, resolvedAccountName);
 
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("accountId", resolvedAccountId);
-        metadata.put("accountName", resolvedAccountName);
-        applyLazadaWebhookMetadata(metadata);
-
         String displayName = "Lazada-" + resolvedAccountName;
 
         Channel channel = channelRepository
@@ -326,6 +321,13 @@ public class ChannelServiceImpl implements ChannelService {
         ChannelConnectionAction action = channel.getId() == null
                 ? ChannelConnectionAction.CONNECT
                 : ChannelConnectionAction.RECONNECT;
+
+        Map<String, Object> metadata = channel.getMetadata() == null
+                ? new HashMap<>()
+                : new HashMap<>(channel.getMetadata());
+        metadata.put("accountId", resolvedAccountId);
+        metadata.put("accountName", resolvedAccountName);
+        applyLazadaWebhookMetadata(metadata);
 
         boolean restoringDeletedChannel = channel.getDeletedAt() != null;
         channel.setStatus("CONNECTED");
@@ -400,8 +402,17 @@ public class ChannelServiceImpl implements ChannelService {
                 ? ChannelConnectionAction.CONNECT
                 : ChannelConnectionAction.RECONNECT;
 
+        Map<String, Object> persistedMetadata = channel.getMetadata() == null
+                ? new HashMap<>()
+                : new HashMap<>(channel.getMetadata());
+        persistedMetadata.putAll(resolvedMetadata);
+        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
         channel.setStatus("CONNECTED");
-        channel.setMetadata(resolvedMetadata);
+        channel.setDeletedAt(null);
+        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
+            channel.setSyncEnabled(true);
+        }
+        channel.setMetadata(persistedMetadata);
         if (channel.getDisplayName() == null || channel.getDisplayName().startsWith("TikTok-")) {
             channel.setDisplayName(displayName);
         }
@@ -456,6 +467,42 @@ public class ChannelServiceImpl implements ChannelService {
             updateShopifyWebhookMetadata(channelId, result);
         } catch (Exception e) {
             log.warn("[ChannelService] Failed to update Shopify webhook metadata for channel {}: {}", channelId, e.getMessage());
+        }
+    }
+
+    private void replaceMetadata(Channel channel, Map<String, Object> requestMetadata) {
+        Map<String, Object> metadata = new HashMap<>();
+        applyMetadataChanges(metadata, requestMetadata);
+        channel.setMetadata(metadata);
+    }
+
+    private void mergeMetadata(Channel channel, Map<String, Object> requestMetadata) {
+        if (requestMetadata == null) {
+            if (channel.getMetadata() == null) {
+                channel.setMetadata(new HashMap<>());
+            }
+            return;
+        }
+
+        Map<String, Object> metadata = channel.getMetadata() == null
+                ? new HashMap<>()
+                : new HashMap<>(channel.getMetadata());
+        applyMetadataChanges(metadata, requestMetadata);
+        channel.setMetadata(metadata);
+    }
+
+    private void applyMetadataChanges(Map<String, Object> metadata, Map<String, Object> changes) {
+        if (changes == null) {
+            return;
+        }
+
+        for (Map.Entry<String, Object> entry : changes.entrySet()) {
+            Object value = entry.getValue();
+            if (value == null || (value instanceof String stringValue && stringValue.isBlank())) {
+                metadata.remove(entry.getKey());
+            } else {
+                metadata.put(entry.getKey(), value);
+            }
         }
     }
 

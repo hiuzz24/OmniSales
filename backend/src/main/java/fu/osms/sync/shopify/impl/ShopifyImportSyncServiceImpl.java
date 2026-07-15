@@ -127,7 +127,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                         continue;
                     }
 
-                    Product product = upsertProduct(productNode);
+                    Product product = upsertProduct(channel, productNode, variantNode);
                     ChannelProduct channelProduct = upsertChannelProduct(channel, product, productNode);
 
                     if (!processedProductIds.containsKey(externalProductId)) {
@@ -187,23 +187,40 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         }
     }
 
-    private Product upsertProduct(Map<String, Object> productNode) {
+    private Product upsertProduct(Channel channel,
+                                  Map<String, Object> productNode,
+                                  Map<String, Object> variantNode) {
         String externalProductId = numericId(stringValue(productNode.get("id")));
         String sku = "SHOPIFY-" + externalProductId;
-        Product product = productRepository.findFirstBySkuAndDeletedAtIsNull(sku)
+        String externalSku = stringValue(variantNode.get("sku"));
+        Product product = (externalSku == null || externalSku.isBlank()
+                ? java.util.Optional.<Product>empty()
+                : productVariantRepository.findBySkuAndDeletedAtIsNull(externalSku).map(ProductVariant::getProduct))
+                .or(() -> channelProductRepository
+                        .findByChannelIdAndExternalProductId(channel.getId(), externalProductId)
+                        .map(ChannelProduct::getProduct))
+                .or(() -> productRepository.findFirstBySkuAndDeletedAtIsNull(sku))
                 .orElseGet(Product::new);
-        product.setSku(sku);
-        product.setName(firstNonBlank(stringValue(productNode.get("title")), "Shopify Product " + externalProductId));
-        product.setDescription(stringValue(productNode.get("descriptionHtml")));
-        product.setBrand(stringValue(productNode.get("vendor")));
+        boolean shopifyOwned = product.getId() == null || (product.getSku() != null && product.getSku().startsWith("SHOPIFY-"));
+        if (product.getId() == null) {
+            product.setSku(sku);
+        }
+        if (shopifyOwned) {
+            product.setName(firstNonBlank(stringValue(productNode.get("title")), "Shopify Product " + externalProductId));
+            product.setDescription(stringValue(productNode.get("descriptionHtml")));
+            product.setBrand(stringValue(productNode.get("vendor")));
+            product.setStatus(resolveStatus(stringValue(productNode.get("status"))));
+        }
         product.setUnit(product.getUnit() == null ? "pcs" : product.getUnit());
-        product.setStatus(resolveStatus(stringValue(productNode.get("status"))));
         product.setLowStockThreshold(product.getLowStockThreshold() == null ? 5 : product.getLowStockThreshold());
         Category category = resolveCategory(productNode);
         if (category != null) {
             product.setCategory(category);
         }
-        Map<String, Object> attributes = mapOf("shopifyProductId", externalProductId);
+        Map<String, Object> attributes = product.getAttributes() == null
+                ? new HashMap<>()
+                : new HashMap<>(product.getAttributes());
+        attributes.put("shopifyProductId", externalProductId);
         attributes.put("productType", stringValue(productNode.get("productType")));
         product.setAttributes(attributes);
         return productRepository.save(product);
@@ -254,10 +271,13 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         String externalVariantId = numericId(stringValue(variantNode.get("id")));
         String externalSku = stringValue(variantNode.get("sku"));
         String sku = resolveLocalVariantSku(channelProduct, externalSku, externalVariantId);
-        ProductVariant variant = channelProductVariantRepository
-                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
-                .map(ChannelProductVariant::getVariant)
-                .filter(existing -> shouldReuseMappedVariant(channelProduct, externalVariantId, existing))
+        ProductVariant variant = productVariantRepository.findBySkuAndDeletedAtIsNull(externalSku)
+                .filter(existing -> existing.getProduct() != null
+                        && Objects.equals(existing.getProduct().getId(), product.getId()))
+                .or(() -> channelProductVariantRepository
+                        .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
+                        .map(ChannelProductVariant::getVariant)
+                        .filter(existing -> shouldReuseMappedVariant(channelProduct, externalVariantId, existing)))
                 .orElseGet(() -> productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sku)
                         .orElseGet(ProductVariant::new));
         Map<String, Object> optionValues = selectedOptionValues(variantNode);
@@ -310,6 +330,11 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
     private boolean isSkuUsableForExternalVariant(ChannelProduct channelProduct, String sku, String externalVariantId) {
         return productVariantRepository.findBySkuAndDeletedAtIsNull(sku)
                 .map(existing -> {
+                    if (existing.getProduct() != null
+                            && channelProduct.getProduct() != null
+                            && Objects.equals(existing.getProduct().getId(), channelProduct.getProduct().getId())) {
+                        return true;
+                    }
                     List<ChannelProductVariant> mappings = channelProductVariantRepository.findByChannelProductId(channelProduct.getId())
                             .stream()
                             .filter(mapping -> mapping.getVariant() != null)

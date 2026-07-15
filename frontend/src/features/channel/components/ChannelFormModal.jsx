@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import channelApi from '../../../api/channelApi';
+import warehouseApi from '../../../api/warehouseApi';
 import styles from './ChannelFormModal.module.css';
 
 const PLATFORMS = [
@@ -28,14 +29,30 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     displayName: channelData?.displayName || '',
     commissionRate: channelData?.commissionRate ?? 0,
     shopDomain: channelData?.metadata?.shop || channelData?.metadata?.shopDomain || '',
+    defaultWarehouseId: channelData?.metadata?.defaultWarehouseId || '',
+    lazadaWarehouseCode: channelData?.metadata?.lazadaWarehouseCode || '',
+    shopCipher: channelData?.metadata?.shopCipher || channelData?.metadata?.shop_cipher || '',
+    tiktokWarehouseId: channelData?.metadata?.tiktokWarehouseId || '',
   });
   const [errors, setErrors] = useState({});
+  const [warehouses, setWarehouses] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   const isShopify = form.platform === 'SHOPIFY';
   const isLazada = form.platform === 'LAZADA';
   const isTikTok = form.platform === 'TIKTOK';
+
+  useEffect(() => {
+    if (!isEdit) return;
+
+    warehouseApi.getAll()
+      .then((response) => {
+        const data = response.data?.data || response.data || response;
+        setWarehouses(Array.isArray(data) ? data : data.content ?? []);
+      })
+      .catch(() => setWarehouses([]));
+  }, [isEdit]);
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -46,6 +63,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     const errs = {};
     if (!form.platform) errs.platform = 'Vui lòng chọn nền tảng';
     if (!form.displayName.trim()) errs.displayName = 'Tên hiển thị không được để trống';
+    if (isTikTok && isEdit && !form.shopCipher.trim()) errs.shopCipher = 'TikTok Shop Cipher không được để trống';
     const rate = Number(form.commissionRate);
     if (isNaN(rate) || rate < 0 || rate > 100) errs.commissionRate = 'Hoa hồng phải từ 0 đến 100';
     return errs;
@@ -58,11 +76,20 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
 
+    const metadata = {
+      ...(channelData?.metadata || {}),
+      ...(form.shopDomain ? { shopDomain: form.shopDomain } : {}),
+      defaultWarehouseId: form.defaultWarehouseId || null,
+      lazadaWarehouseCode: form.lazadaWarehouseCode || null,
+      shopCipher: form.shopCipher || null,
+      tiktokWarehouseId: form.tiktokWarehouseId || null,
+    };
+
     const payload = {
       platform: form.platform,
       displayName: form.displayName.trim(),
       commissionRate: Number(form.commissionRate),
-      metadata: form.shopDomain ? { shopDomain: form.shopDomain } : {},
+      metadata,
     };
 
     setIsSubmitting(true);
@@ -294,6 +321,75 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
                 </div>
                 {errors.commissionRate && <span className={styles.errorMsg}>{errors.commissionRate}</span>}
               </div>
+
+              {isEdit && warehouses.length > 0 && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Kho nguồn tồn kho</label>
+                  <select
+                    className={styles.select}
+                    value={form.defaultWarehouseId}
+                    onChange={(e) => handleChange('defaultWarehouseId', e.target.value)}
+                  >
+                    <option value="">Dùng tổng tồn tất cả kho</option>
+                    {warehouses.map((warehouse) => (
+                      <option key={warehouse.id} value={warehouse.id}>
+                        {warehouse.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.fieldHint}>
+                    Chọn cùng một kho cho Shopify, Lazada và TikTok nếu các sàn dùng chung một nguồn tồn.
+                  </span>
+                </div>
+              )}
+
+              {isLazada && isEdit && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Lazada warehouse code</label>
+                  <input
+                    type="text"
+                    className={styles.input}
+                    placeholder="VD: dropshipping hoặc mã kho Lazada"
+                    value={form.lazadaWarehouseCode}
+                    onChange={(e) => handleChange('lazadaWarehouseCode', e.target.value)}
+                  />
+                  <span className={styles.fieldHint}>
+                    Chỉ cần nhập khi Lazada yêu cầu cập nhật tồn theo MultiWarehouseInventories.
+                  </span>
+                </div>
+              )}
+
+              {isTikTok && isEdit && (
+                <>
+                  <div className={styles.field}>
+                    <label className={styles.label}>TikTok Shop Cipher <span className={styles.required}>*</span></label>
+                    <input
+                      type="text"
+                      className={`${styles.input} ${errors.shopCipher ? styles.inputError : ''}`}
+                      placeholder="GCP_..."
+                      value={form.shopCipher}
+                      onChange={(e) => handleChange('shopCipher', e.target.value)}
+                    />
+                    {errors.shopCipher && <span className={styles.errorMsg}>{errors.shopCipher}</span>}
+                    <span className={styles.fieldHint}>
+                      Giá trị <code>cipher</code> trả về từ TikTok API Get Authorized Shops.
+                    </span>
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>TikTok warehouse ID chính</label>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      placeholder="7068517275539719942"
+                      value={form.tiktokWarehouseId}
+                      onChange={(e) => handleChange('tiktokWarehouseId', e.target.value)}
+                    />
+                    <span className={styles.fieldHint}>
+                      Không bắt buộc sau lần kéo dữ liệu đầu tiên; dùng để chọn kho TikTok nhận tổng tồn nội bộ.
+                    </span>
+                  </div>
+                </>
+              )}
 
               {isLazada && isEdit && (
                 <div className={styles.shopifyOAuthBox}>

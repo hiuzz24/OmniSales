@@ -24,13 +24,16 @@ public class WebhookController {
 
     private final WebhookReceiverService webhookReceiverService;
     @PostMapping(value = "/api/webhooks/{platform}",consumes = MediaType.ALL_VALUE)
-    public ResponseEntity<ApiResponse<WebhookReceiveResult>> receiveByPlatform(
+    public ResponseEntity<?> receiveByPlatform(
             @PathVariable String platform,
             @RequestBody String rawBody,
             HttpServletRequest request
     ) {
         PlatformType platformType = PlatformType.valueOf(platform.toUpperCase());
         WebhookReceiveResult result = webhookReceiverService.receive(platformType, extractHeaders(request), rawBody);
+        if (platformType == PlatformType.TIKTOK) {
+            return ResponseEntity.ok().build();
+        }
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 

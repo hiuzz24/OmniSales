@@ -14,30 +14,24 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubscriptionService {
 
-    private static final List<String> WEBHOOK_TOPICS = List.of(
-            "orders/create",
-            "orders/updated",
-            "orders/cancelled",
-            "products/update",
-            "inventory_levels/update"
-    );
-
     private final ShopifyApiClient shopifyApiClient;
 
     @Value("${shopify.webhook-callback-url:}")
     private String callbackUrl;
 
+    @Value("${shopify.webhook-topics:orders/create,orders/updated,orders/cancelled,products/update,inventory_levels/update}")
+    private String configuredTopics;
+
     @Override
     public WebhookRegistrationResult registerWebhooks(String shopDomain, String accessToken) {
-        log.info("3");
         if (callbackUrl == null || callbackUrl.isBlank()) {
             return WebhookRegistrationResult.builder()
                     .status("SKIPPED")
@@ -62,18 +56,32 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
                     .build();
         }
 
-        Set<String> registeredTopics = existing.stream()
-                .filter(this::isOsmsWebhook)
-                .map(ShopifyWebhookResponse::getTopic)
-                .collect(Collectors.toCollection(HashSet::new));
-
+        List<String> webhookTopics = webhookTopics();
+        Map<String, ShopifyWebhookResponse> canonicalByTopic = new LinkedHashMap<>();
+        Set<Long> deletedDuplicateIds = new HashSet<>();
         for (ShopifyWebhookResponse webhook : existing) {
             if (isOsmsWebhook(webhook)) {
-                registeredWebhooks.add(toMetadata(webhook));
+                if (!webhookTopics.contains(webhook.getTopic())) {
+                    if (webhook.getId() != null) {
+                        log.info("[ShopifyWebhook] Removing disabled topic={} id={} shop={}",
+                                webhook.getTopic(), webhook.getId(), normalizedShop);
+                        deleteWebhook(normalizedShop, accessToken, webhook.getId(), deletedDuplicateIds);
+                    }
+                    continue;
+                }
+                ShopifyWebhookResponse canonical = canonicalByTopic.putIfAbsent(webhook.getTopic(), webhook);
+                if (canonical == null) {
+                    registeredWebhooks.add(toMetadata(webhook));
+                } else if (webhook.getId() != null) {
+                    log.warn("[ShopifyWebhook] Removing duplicate topic={} id={} shop={}",
+                            webhook.getTopic(), webhook.getId(), normalizedShop);
+                    deleteWebhook(normalizedShop, accessToken, webhook.getId(), deletedDuplicateIds);
+                }
             }
         }
+        Set<String> registeredTopics = new HashSet<>(canonicalByTopic.keySet());
 
-        for (String topic : WEBHOOK_TOPICS) {
+        for (String topic : webhookTopics) {
             if (registeredTopics.contains(topic)) {
                 log.info("[ShopifyWebhook] Already registered topic={} for shop={}", topic, normalizedShop);
                 continue;
@@ -91,7 +99,7 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
 
         String status = errors.isEmpty()
                 ? "SUCCESS"
-                : errors.size() < WEBHOOK_TOPICS.size() ? "PARTIAL" : "FAILED";
+                : errors.size() < webhookTopics.size() ? "PARTIAL" : "FAILED";
         String error = errors.isEmpty() ? null : "Failed to register: " + String.join(", ", errors);
 
         return WebhookRegistrationResult.builder()
@@ -152,7 +160,18 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
     private boolean isOsmsWebhook(ShopifyWebhookResponse webhook) {
         return webhook != null
                 && callbackUrl.equals(webhook.getAddress())
-                && WEBHOOK_TOPICS.contains(webhook.getTopic());
+                && webhook.getTopic() != null;
+    }
+
+    private List<String> webhookTopics() {
+        if (configuredTopics == null || configuredTopics.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(configuredTopics.split(","))
+                .map(String::trim)
+                .filter(topic -> !topic.isBlank())
+                .distinct()
+                .toList();
     }
 
     private Map<String, Object> toMetadata(ShopifyWebhookResponse webhook) {
