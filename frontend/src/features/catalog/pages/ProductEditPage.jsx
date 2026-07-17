@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { FormProvider, useForm, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -12,372 +14,57 @@ import ProductPriceStock from '../components/ProductPriceStock';
 import ProductVariantForm from '../components/ProductVariantForm';
 import ProductShippingInfo from '../components/ProductShippingInfo';
 import ProductChannelSidebar from '../components/ProductChannelSidebar';
-import { validateProductForm } from '../models/Product';
+import PlatformConfigSection from '../components/PlatformConfigSection';
+import { buildProductRequest, defaultProductFormValues, productEditorSchema } from '../models/Product';
 import styles from './ProductCreatePage.module.css';
+
+const unwrap = (response) => response?.data?.data || response?.data || response;
+const channelId = (channel, index) => channel.id || channel._id || (channel.platform + index);
 
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-
-  const [formData, setFormData] = useState({
-    name: '',
-    sku: '',
-    barcode: '',
-    description: '',
-    categoryId: '',
-    brand: '',
-    unit: '',
-  });
-  const [images, setImages] = useState([]);
-  const [price, setPrice] = useState('0');
-  const [costPrice, setCostPrice] = useState('0');
-  const [hasVariants, setHasVariants] = useState(false);
-  const [variants, setVariants] = useState([]);
-  const [weightGrams, setWeightGrams] = useState('');
-  const [dimensions, setDimensions] = useState('');
-  const [lowStockThreshold, setLowStockThreshold] = useState('5');
-  const [showProduct, setShowProduct] = useState(true);
-
+  const methods = useForm({ resolver: zodResolver(productEditorSchema), mode: 'onBlur', reValidateMode: 'onChange', defaultValues: defaultProductFormValues });
+  const { control, reset, setError, setValue, formState: { errors } } = methods;
   const [channels, setChannels] = useState([]);
-  const [selectedChannels, setSelectedChannels] = useState([]);
   const [categories, setCategories] = useState([]);
-
-  const [errors, setErrors] = useState({});
-  const [variantErrors, setVariantErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [existingAttributes, setExistingAttributes] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [hasVariants, selectedChannels, price, costPrice, hasOrders] = useWatch({ control, name: ['hasVariants', 'channelIds', 'price', 'costPrice', 'hasOrders'] });
 
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        const [catData, chanData, productDataResponse] = await Promise.all([
-          categoryApi.getAll(),
-          channelApi.getAll(),
-          productApi.getById(id)
-        ]);
+    Promise.all([categoryApi.getAll(), channelApi.getAll(), productApi.getById(id)]).then(([categoryResponse, channelResponse, productResponse]) => {
+      const product = unwrap(productResponse);
+      const channelData = unwrap(channelResponse);
+      const categoryData = unwrap(categoryResponse);
+      if (Array.isArray(categoryData)) setCategories(categoryData);
+      if (Array.isArray(channelData)) setChannels(channelData);
+      const isDefault = product.variants?.length === 1 && !Object.keys(product.variants[0].optionValues || {}).length;
+      const selected = (channelData || []).filter((channel, index) => product.channelIds?.includes(channelId(channel, index)) || (!product.channelIds?.length && product.channels?.includes(channel.platform))).map(channelId);
+      const configs = (product.channelSyncs || []).reduce((result, sync) => {
+        if (sync.channelId) result[sync.channelId] = { channelId: sync.channelId, categoryId: sync.platformConfig?.categoryId || '', categoryName: sync.platformConfig?.categoryName || '', categorySource: sync.platformConfig?.categorySource || '', categoryConfirmed: Boolean(sync.platformConfig?.categoryConfirmed), categoryVersion: sync.platformConfig?.categoryVersion || (sync.platform === 'TIKTOK' ? 'v1' : null), brandId: sync.platformConfig?.brandId || '', brandName: sync.platformConfig?.brandName || '', sizeChartImageUrl: sync.platformConfig?.sizeChartImageUrl || '', attributes: sync.platformConfig?.attributes || {}, variantAttributeBindings: sync.platformConfig?.variantAttributeBindings || {} };
+        return result;
+      }, {});
+      const first = product.variants?.[0] || {};
+      reset({ ...defaultProductFormValues, version: product.version, hasOrders: product.hasOrders, name: product.name || '', sku: product.sku || '', barcode: first.barcode || '', size: first.optionValues?.Size || '', color: first.optionValues?.['Màu'] || '', description: product.description || '', categoryId: product.categoryId || '', brand: product.brand || '', unit: product.unit || '', status: product.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT', hasVariants: !isDefault, price: first.price ?? '0', costPrice: first.costPrice ?? '0', packageWeightKg: product.weightGrams ? String(product.weightGrams / 1000) : '', packageWidthCm: product.attributes?.packageWidthCm || '', packageHeightCm: product.attributes?.packageHeightCm || '', packageLengthCm: product.attributes?.packageLengthCm || '', lowStockThreshold: product.lowStockThreshold ?? '5', images: product.images || [], variants: product.variants || [], channelIds: selected, channelConfigs: configs });
+      setExistingAttributes(product.attributes || {});
+    }).catch(() => toast.error('Lỗi khi tải dữ liệu sản phẩm')).finally(() => setLoading(false));
+  }, [id, reset]);
 
-        const catList = catData.data?.data || catData.data || catData;
-        if (Array.isArray(catList)) {
-          setCategories(catList);
-        }
-
-        const productData = productDataResponse.data?.data || productDataResponse.data || productDataResponse;
-
-        const chanList = chanData.data?.data || chanData.data || chanData;
-        if (Array.isArray(chanList)) {
-          setChannels(chanList);
-          const selectedChanIds = chanList
-            .filter((c, i) => {
-              const cid = c.id || c._id || (c.platform + i);
-              if (productData.channelIds && productData.channelIds.length > 0) {
-                return productData.channelIds.includes(cid);
-              }
-              return (productData.channels || []).includes(c.platform);
-            })
-            .map((c, i) => c.id || c._id || (c.platform + i));
-          setSelectedChannels(selectedChanIds);
-        }
-
-        setFormData({
-          name: productData.name || '',
-          sku: productData.sku || '',
-          description: productData.description || '',
-          categoryId: productData.categoryId || '',
-          brand: productData.brand || '',
-          unit: productData.unit || '',
-          barcode: '',
-          size: '',
-          color: '',
-          version: productData.version,
-          hasOrders: productData.hasOrders,
-        });
-
-        // Use global images
-        setImages(productData.images || []);
-
-        setWeightGrams(productData.weightGrams || '');
-        setDimensions(productData.attributes?.dimensions || '');
-        setLowStockThreshold(productData.lowStockThreshold ?? '5');
-        setShowProduct(productData.status === 'ACTIVE');
-
-        if (productData.variants && productData.variants.length > 0) {
-          // If there's only 1 variant and it has no optionValues, it might be the default variant
-          const firstVariant = productData.variants[0];
-          const isDefaultVariant = productData.variants.length === 1 &&
-            (!firstVariant.optionValues || Object.keys(firstVariant.optionValues).length === 0);
-
-          if (isDefaultVariant) {
-            setHasVariants(false);
-            setPrice(firstVariant.price || '');
-            setCostPrice(firstVariant.costPrice ?? '0');
-            setVariants(productData.variants);
-            setFormData(prev => ({
-              ...prev,
-              barcode: firstVariant.barcode || '',
-              size: firstVariant.optionValues?.Size || '',
-              color: firstVariant.optionValues?.['Màu'] || ''
-            }));
-          } else {
-            setHasVariants(true);
-            setVariants(productData.variants);
-          }
-        }
-
-      } catch (error) {
-        console.error('Failed to load initial data:', error);
-        toast.error('Lỗi khi tải dữ liệu sản phẩm');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadData();
-  }, [id]);
-
-  const validate = () => {
-    const dataToValidate = {
-      ...formData,
-      hasVariants,
-      price: '0',
-      costPrice: '0',
-      weightGrams: weightGrams,
-      lowStockThreshold: lowStockThreshold,
-      dimensions: dimensions,
-      variants: hasVariants ? variants : [],
-    };
-
-    const result = validateProductForm(dataToValidate);
-
-    if (result.success) {
-      setErrors({});
-      setVariantErrors({});
-      return true;
-    } else {
-      setErrors(result.fieldErrors);
-      setVariantErrors(result.variantErrors);
-      return false;
-    }
+  const onSubmit = async (values) => {
+    try { await productApi.update(id, buildProductRequest(values, { mode: 'edit', existingAttributes })); toast.success('Cập nhật sản phẩm thành công!'); navigate(ROUTES.PRODUCT_DETAIL.replace(':id', id)); }
+    catch (error) { if (error.response?.status === 409) setError('sku', { type: 'server', message: 'SKU đã tồn tại trong hệ thống' }); toast.error(error.response?.data?.message || 'Đã xảy ra lỗi khi cập nhật sản phẩm'); }
   };
-
-  const buildRequestBody = () => {
-    const status = showProduct ? 'ACTIVE' : 'DRAFT';
-
-    let requestVariants;
-    if (hasVariants) {
-      requestVariants = variants.map((v) => ({
-        id: v.id || null, // Keep id to update existing variants
-        sku: v.sku,
-        barcode: v.barcode || null,
-        name: [v.optionValues?.Size, v.optionValues?.['Màu']].filter(Boolean).join(' / ') || v.sku,
-        price: 0,
-        costPrice: v.costPrice ? Number(v.costPrice) : null,
-        isActive: v.isActive !== false,
-        optionValues: v.optionValues,
-        images: v.images?.length > 0 ? v.images.map((img, i) => ({ id: img.id || null, url: img.url, isPrimary: false, sortOrder: i })) : [],
-      }));
-    } else {
-      // Find default variant ID if it exists
-      const defaultVariantId = (!hasVariants && variants.length >= 1) ? variants[0].id : null;
-      requestVariants = [{
-        id: defaultVariantId,
-        sku: formData.sku,
-        barcode: formData.barcode || null,
-        name: formData.name || 'Mặc định',
-        price: 0,
-        costPrice: costPrice ? Number(costPrice) : null,
-        optionValues: Object.fromEntries(
-          Object.entries({ Size: formData.size, 'Màu': formData.color }).filter(([_, v]) => v)
-        ),
-        images: [],
-      }];
-    }
-
-    return {
-      version: formData.version,
-      name: formData.name,
-      sku: formData.sku,
-      description: formData.description || null,
-      categoryId: formData.categoryId || null,
-      brand: formData.brand || null,
-      unit: formData.unit || null,
-      status,
-      weightGrams: weightGrams ? Number(weightGrams) : null,
-      lowStockThreshold: lowStockThreshold === '' ? 5 : Number(lowStockThreshold),
-      attributes: dimensions ? { dimensions } : {},
-      channelIds: selectedChannels,
-      variants: requestVariants,
-      images: images.map((img, i) => ({
-        id: img.id || null,
-        url: img.url,
-        sortOrder: i,
-        isPrimary: i === 0,
-      })),
-    };
-  };
-
-  const handleSubmit = async () => {
-    if (!validate()) {
-      toast.error('Vui lòng kiểm tra lại thông tin');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const body = buildRequestBody();
-      await productApi.update(id, body);
-      toast.success('Cập nhật sản phẩm thành công!');
-      navigate(ROUTES.PRODUCT_DETAIL.replace(':id', id));
-    } catch (error) {
-      if (error.response?.status === 409) {
-        setErrors((prev) => ({
-          ...prev,
-          sku: 'SKU đã tồn tại trong hệ thống',
-        }));
-        toast.error('SKU đã tồn tại');
-      } else {
-        const msg = error.response?.data?.message || 'Đã xảy ra lỗi khi cập nhật sản phẩm';
-        toast.error(msg);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCancel = () => {
-    navigate(ROUTES.PRODUCT_DETAIL.replace(':id', id));
-  };
-
-  const handleChannelToggle = (channelId) => {
-    setSelectedChannels((prev) =>
-      prev.includes(channelId)
-        ? prev.filter((i) => i !== channelId)
-        : [...prev, channelId]
-    );
-  };
-
-  const handlePriceChange = (field, value) => {
-    // Price is disabled, do nothing
-  };
-
-  const handleShippingChange = (field, value) => {
-    if (field === 'weightGrams') setWeightGrams(value);
-    if (field === 'dimensions') setDimensions(value);
-    if (field === 'lowStockThreshold') setLowStockThreshold(value);
-  };
-
-  const handleAddVariant = (variant) => {
-    setVariants((prev) => [...prev, variant]);
-  };
-
-  const handleRemoveVariant = (index) => {
-    setVariants((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const variantToggleSubtitle = hasVariants
-    ? 'Sản phẩm có nhiều biến thể (size, màu...)'
-    : variants.length > 0
-      ? 'Sản phẩm đang dùng biến thể mặc định. Cập nhật giá và barcode ở các mục bên dưới.'
-      : 'Sản phẩm không có biến thể. Nhấn để thêm biến thể.';
-
-  if (isLoading) return <div style={{ padding: '20px' }}>Đang tải...</div>;
-
-  return (
-    <div className={styles.page}>
-      <div className={styles.header}>
-        <button className={styles.backBtn} onClick={handleCancel}>
-          <ArrowLeft className={styles.backIcon} />
-          Quay lại
-        </button>
-        <div className={styles.headerText}>
-          <h1 className={styles.headerTitle}>Chỉnh sửa sản phẩm</h1>
-          <p className={styles.headerSubtitle}>
-            Cập nhật thông tin và đồng bộ thay đổi
-          </p>
-        </div>
-      </div>
-
-      <div className={styles.layout}>
-        <div className={styles.mainColumn}>
-          <ProductImageUploader images={images} onChange={setImages} />
-
-          <ProductForm
-            formData={formData}
-            onChange={setFormData}
-            categories={categories}
-            errors={errors}
-            hasOrders={formData.hasOrders}
-            hasVariants={hasVariants}
-          />
-
-          <div className={styles.variantToggleCard}>
-            <div className={styles.variantToggleInfo}>
-              <div className={styles.variantToggleTitle}>Biến thể sản phẩm</div>
-              <div className={styles.variantToggleSubtitle}>
-                {variantToggleSubtitle}
-              </div>
-            </div>
-            <button
-              type="button"
-              className={`${styles.variantToggleBtn} ${hasVariants ? styles.variantToggleBtnActive : styles.variantToggleBtnInactive}`}
-              onClick={() => setHasVariants(!hasVariants)}
-            >
-              {hasVariants ? 'Đã bật biến thể' : 'Tạo biến thể'}
-            </button>
-          </div>
-
-          {!hasVariants && (
-            <ProductPriceStock
-              price={price}
-              costPrice={costPrice}
-              onChange={handlePriceChange}
-              errors={errors}
-              channels={channels}
-              selectedChannels={selectedChannels}
-              disablePrice
-              disableCostPrice
-            />
-          )}
-
-          {hasVariants && (
-            <ProductVariantForm
-              variants={variants}
-              onAdd={handleAddVariant}
-              onRemove={handleRemoveVariant}
-              onChange={setVariants}
-              errors={variantErrors}
-              globalError={errors.variants}
-              hasOrders={formData.hasOrders}
-              channels={channels}
-              selectedChannels={selectedChannels}
-              disablePrice
-              disableCostPrice
-            />
-          )}
-
-          <ProductShippingInfo
-            weightGrams={weightGrams}
-            dimensions={dimensions}
-            lowStockThreshold={lowStockThreshold}
-            onChange={handleShippingChange}
-            errors={errors}
-          />
-        </div>
-
-        <ProductChannelSidebar
-          channels={channels}
-          selectedChannels={selectedChannels}
-          onChannelToggle={handleChannelToggle}
-          showProduct={showProduct}
-          onStatusToggle={() => setShowProduct(!showProduct)}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          isSubmitting={isSubmitting}
-          isEditMode={true}
-        />
-      </div>
-    </div>
-  );
+  const selectedDetails = channels.filter((channel, index) => (selectedChannels || []).includes(channelId(channel, index)));
+  if (loading) return <div style={{ padding: '20px' }}>Đang tải...</div>;
+  return <FormProvider {...methods}><div className={styles.page}>
+    <div className={styles.header}><button className={styles.backBtn} onClick={() => navigate(ROUTES.PRODUCT_DETAIL.replace(':id', id))}><ArrowLeft className={styles.backIcon} />Quay lại</button><div className={styles.headerText}><h1 className={styles.headerTitle}>Chỉnh sửa sản phẩm</h1><p className={styles.headerSubtitle}>Cập nhật thông tin và đồng bộ thay đổi</p></div></div>
+    <div className={styles.layout}><div className={styles.mainColumn}>
+      <ProductImageUploader /><ProductForm categories={categories} />
+      <div className={styles.variantToggleCard}><div className={styles.variantToggleInfo}><div className={styles.variantToggleTitle}>Biến thể sản phẩm</div><div className={styles.variantToggleSubtitle}>{hasVariants ? 'Sản phẩm có nhiều biến thể (size, màu...)' : 'Sản phẩm đang dùng biến thể mặc định.'}</div></div><button type="button" className={`${styles.variantToggleBtn} ${hasVariants ? styles.variantToggleBtnActive : styles.variantToggleBtnInactive}`} onClick={() => setValue('hasVariants', !hasVariants, { shouldValidate: true })}>{hasVariants ? 'Đã bật biến thể' : 'Tạo biến thể'}</button></div>
+      {!hasVariants ? <ProductPriceStock price={price} costPrice={costPrice} onChange={(field, value) => setValue(field, value, { shouldDirty: true })} errors={errors} channels={channels} selectedChannels={selectedChannels} disableCostPrice /> : <ProductVariantForm hasOrders={hasOrders} channels={channels} selectedChannels={selectedChannels} disableCostPrice />}
+      <ProductShippingInfo /><PlatformConfigSection channels={selectedDetails} />
+    </div><ProductChannelSidebar channels={channels} onSubmit={onSubmit} onInvalid={() => toast.error('Vui lòng kiểm tra lại thông tin')} onCancel={() => navigate(ROUTES.PRODUCT_DETAIL.replace(':id', id))} isEditMode /></div>
+  </div></FormProvider>;
 };
-
 export default ProductEditPage;
-

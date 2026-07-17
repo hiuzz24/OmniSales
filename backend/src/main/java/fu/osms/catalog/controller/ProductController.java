@@ -78,6 +78,14 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success("Sync triggered", result));
     }
 
+    @PostMapping("/{productId}/channels/{channelId}/sync")
+    public ResponseEntity<ApiResponse<SyncResult>> syncProductToChannel(
+            @PathVariable UUID productId,
+            @PathVariable UUID channelId) {
+        SyncResult result = productService.syncProductToChannel(productId, channelId);
+        return ResponseEntity.ok(ApiResponse.success("Channel sync triggered", result));
+    }
+
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<ProductImportResult>> importExcel(
             @RequestParam("file") MultipartFile file) {

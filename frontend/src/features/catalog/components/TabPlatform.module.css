@@ -296,6 +296,9 @@
 .fw500 { font-weight: 500; }
 .textGray { color: #6b7280; }
 
+.mappingList { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.mappingRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 1fr) auto; gap: 16px; align-items: center; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
+
 @media (max-width: 760px) {
   .lookupRow,
   .formGrid {

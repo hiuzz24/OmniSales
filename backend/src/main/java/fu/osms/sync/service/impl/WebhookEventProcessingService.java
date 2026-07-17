@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -21,7 +20,6 @@ public class WebhookEventProcessingService {
     private final WebhookBusinessProcessor webhookBusinessProcessor;
 
     @Async("taskExecutor")
-    @Transactional
     public void processAsync(UUID eventId) {
         try {
             processSavedEvent(eventId);
@@ -30,9 +28,8 @@ public class WebhookEventProcessingService {
         }
     }
 
-    @Transactional
     public WebhookEvent processSavedEvent(UUID eventId) {
-        WebhookEvent event = webhookEventRepository.findById(eventId)
+        WebhookEvent event = webhookEventRepository.findWithChannelById(eventId)
                 .orElseThrow(() -> new IllegalArgumentException("Webhook event not found: " + eventId));
         try {
             String resultStatus = webhookBusinessProcessor.process(event);

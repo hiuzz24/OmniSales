@@ -1,145 +1,118 @@
-import React, { useState } from 'react';
-import { ChevronDown, ChevronRight, LinkIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
+import { RefreshCw } from 'lucide-react';
+import { toast } from 'react-toastify';
+import productApi from '../../../api/productApi';
+import PlatformConfigSection from './PlatformConfigSection';
 import styles from './TabPlatform.module.css';
 
 const statusLabel = {
-  SYNCED: 'Thành công',
-  SUCCESS: 'Thành công',
+  SYNCED: 'Đồng bộ thành công',
   PENDING: 'Chờ đồng bộ',
-  FAILED: 'Lỗi',
+  FAILED: 'Lỗi đồng bộ',
   OUT_OF_SYNC: 'Cần đồng bộ',
 };
 
-const TabPlatform = ({ product, channels = [] }) => {
-  const [expandedPlatform, setExpandedPlatform] = useState(null);
+const configFromSync = (sync) => ({
+  channelId: sync.channelId,
+  categoryId: sync.platformConfig?.categoryId || '',
+  categoryName: sync.platformConfig?.categoryName || '',
+  categorySource: sync.platformConfig?.categorySource || '',
+  categoryConfirmed: Boolean(sync.platformConfig?.categoryConfirmed),
+  categoryVersion: sync.platformConfig?.categoryVersion || (sync.platform === 'TIKTOK' ? 'v1' : null),
+  brandId: sync.platformConfig?.brandId || '',
+  brandName: sync.platformConfig?.brandName || '',
+  sizeChartImageUrl: sync.platformConfig?.sizeChartImageUrl || '',
+  attributes: sync.platformConfig?.attributes || {},
+  variantAttributeBindings: sync.platformConfig?.variantAttributeBindings || {},
+});
 
-  const productChannels = channels.filter(channel => {
-    const channelId = channel.id || channel._id;
-    if (product?.channelIds && product.channelIds.length > 0) {
-      return product.channelIds.includes(channelId);
+const TabPlatform = ({ product, onRefresh }) => {
+  const mappings = useMemo(() => product?.channelSyncs || [], [product?.channelSyncs]);
+  const [syncing, setSyncing] = useState({});
+  const configMethods = useForm({ defaultValues: { channelConfigs: {} } });
+  const mappingConfigs = useMemo(() => mappings.reduce((result, mapping) => ({
+    ...result,
+    [mapping.channelId]: configFromSync(mapping),
+  }), {}), [mappings]);
+
+  useEffect(() => {
+    configMethods.reset({
+      channelConfigs: mappingConfigs,
+    });
+  }, [configMethods, mappingConfigs]);
+
+  const platformChannels = useMemo(() => mappings.map((mapping) => ({
+    ...mapping,
+    id: mapping.channelId,
+    displayName: mapping.channelName,
+  })), [mappings]);
+
+  const saveConfig = async (channel, config) => {
+    try {
+      await productApi.updateChannelConfig(product.id, channel.channelId, config);
+      toast.success('Đã lưu cấu hình platform');
+      await onRefresh?.();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Không thể lưu cấu hình platform');
     }
-    return (product?.channels || []).includes(channel.platform);
-  });
-
-  const toggleExpand = (key) => {
-    setExpandedPlatform(prev => prev === key ? null : key);
   };
 
-  const calculateTotalStock = () => {
-    if (!product?.variants) return 0;
-    return product.variants.reduce((sum, variant) => sum + (variant.quantityOnHand || 0), 0);
+  const syncChannel = async (mapping) => {
+    if (!mapping.readyToSync) {
+      toast.error(mapping.configurationError || 'Hoàn tất cấu hình trước khi đồng bộ');
+      return;
+    }
+    try {
+      setSyncing((previous) => ({ ...previous, [mapping.channelId]: true }));
+      await productApi.syncChannel(product.id, mapping.channelId);
+      toast.success(`Đã đồng bộ ${mapping.channelName || mapping.platform}`);
+      await onRefresh?.();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Đồng bộ channel thất bại');
+    } finally {
+      setSyncing((previous) => ({ ...previous, [mapping.channelId]: false }));
+    }
   };
 
-  const renderStatusBadge = (syncStatus) => {
-    if (syncStatus === 'SYNCED' || syncStatus === 'SUCCESS') {
-      return <span className={styles.badgeSuccess}>{statusLabel[syncStatus]}</span>;
-    }
-    if (syncStatus === 'FAILED') {
-      return <span className={styles.badgeDanger}>{statusLabel[syncStatus]}</span>;
-    }
-    return <span className={styles.badgeWarning}>{statusLabel[syncStatus] || syncStatus}</span>;
-  };
+  if (mappings.length === 0) {
+    return <div className={styles.card}><p className={styles.emptyCell}>Sản phẩm chưa liên kết kênh bán hàng.</p></div>;
+  }
 
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
-        <div className={styles.titleRow}>
-          <LinkIcon className={styles.titleIcon} />
-          <h3 className={styles.cardTitle}>Platform Mapping</h3>
-        </div>
-        <p className={styles.cardSubtitle}>Thông tin kết nối và đồng bộ với các nền tảng bán hàng</p>
+        <div className={styles.titleRow}><h3 className={styles.cardTitle}>Cấu hình platform</h3></div>
+        <p className={styles.cardSubtitle}>Mỗi channel có category và trạng thái đồng bộ độc lập.</p>
       </div>
-
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th style={{ width: '40px' }}></th>
-              <th>Nền tảng</th>
-              <th>Trạng thái</th>
-              <th>Tồn kho dự kiến</th>
-              <th>Lần đồng bộ cuối</th>
-            </tr>
-          </thead>
-          <tbody>
-            {productChannels.length === 0 ? (
-              <tr>
-                <td colSpan="5" className={styles.emptyCell}>
-                  Sản phẩm chưa được liên kết với kênh bán hàng nào.
-                </td>
-              </tr>
-            ) : (
-              productChannels.map(channel => {
-                const channelId = channel.id || channel._id;
-                const rowKey = `${channel.platform}-${channelId}`;
-                const isExpanded = expandedPlatform === rowKey;
-                const commissionRate = channel.commissionRate || 0;
-                const syncInfo = (product?.channelSyncs || []).find(sync =>
-                  sync.channelId === channelId || sync.platform === channel.platform
-                ) || {};
-                const syncStatus = syncInfo.syncStatus || 'PENDING';
-                const lastSyncedAt = syncInfo.lastSyncedAt
-                  ? new Date(syncInfo.lastSyncedAt).toLocaleString('vi-VN')
-                  : 'Chưa đồng bộ';
-
-                return (
-                  <React.Fragment key={rowKey}>
-                    <tr
-                      onClick={() => toggleExpand(rowKey)}
-                      className={isExpanded ? styles.expandedRow : styles.clickableRow}
-                    >
-                      <td className={styles.centerCell}>
-                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                      </td>
-                      <td className={styles.fw500}>{channel.displayName || channel.platform}</td>
-                      <td>{renderStatusBadge(syncStatus)}</td>
-                      <td>{calculateTotalStock()}</td>
-                      <td className={styles.textGray}>{lastSyncedAt}</td>
-                    </tr>
-                    {isExpanded && (
-                      <tr>
-                        <td colSpan="5" className={styles.expandedCell}>
-                          <div className={styles.expandedPanel}>
-                            <h4 className={styles.sectionTitle}>Chi tiết giá bán từng biến thể</h4>
-                            <table className={styles.variantTable}>
-                              <thead>
-                                <tr>
-                                  <th>SKU biến thể</th>
-                                  <th>Thuộc tính</th>
-                                  <th>Giá gốc</th>
-                                  <th>Giá bán đề xuất ({commissionRate}%)</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(product.variants || []).map(variant => {
-                                  const rate = commissionRate / 100;
-                                  const price = Number(variant.price);
-                                  const suggestedPrice = rate >= 1 || !price
-                                    ? 'N/A'
-                                    : `${Math.round(price / (1 - rate)).toLocaleString('vi-VN')}đ`;
-
-                                  return (
-                                    <tr key={variant.id || variant.sku}>
-                                      <td>{variant.sku}</td>
-                                      <td>{Object.values(variant.optionValues || {}).filter(Boolean).join(' / ') || 'Mặc định'}</td>
-                                      <td>{price ? `${price.toLocaleString('vi-VN')}đ` : '0đ'}</td>
-                                      <td className={styles.suggestedPrice}>{suggestedPrice}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      <div className={styles.mappingList}>
+        {mappings.map((mapping) => (
+          <div className={styles.mappingRow} key={mapping.channelId}>
+            <div>
+              <strong>{mapping.channelName || mapping.platform}</strong>
+              <div className={styles.textGray}>{mapping.platform}</div>
+            </div>
+            <div>
+              <span className={mapping.readyToSync ? styles.badgeSuccess : styles.badgeWarning}>
+                {mapping.readyToSync ? 'Ready to sync' : mapping.configurationError || 'Thiếu cấu hình'}
+              </span>
+              <div className={styles.textGray}>{statusLabel[mapping.syncStatus] || mapping.syncStatus}</div>
+            </div>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={() => syncChannel(mapping)}
+              disabled={!mapping.readyToSync || syncing[mapping.channelId]}
+            >
+              <RefreshCw size={15} className={syncing[mapping.channelId] ? styles.spin : ''} />
+              Đồng bộ
+            </button>
+          </div>
+        ))}
       </div>
+      <FormProvider {...configMethods}>
+        <PlatformConfigSection channels={platformChannels} onSave={saveConfig} productId={product.id} />
+      </FormProvider>
     </div>
   );
 };

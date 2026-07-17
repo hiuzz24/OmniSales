@@ -28,4 +28,11 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
             "AND (metadata->>'shop' = :shop OR metadata->>'shopDomain' = :shop OR display_name = :shop) " +
             "LIMIT 1", nativeQuery = true)
     Optional<Channel> findActiveShopifyByShopDomain(@Param("shop") String shop);
+
+    @Query(value = "SELECT * FROM channels " +
+            "WHERE platform = 'TIKTOK' " +
+            "AND deleted_at IS NULL " +
+            "AND metadata->>'shopId' = :shopId " +
+            "LIMIT 1", nativeQuery = true)
+    Optional<Channel> findActiveTikTokByShopId(@Param("shopId") String shopId);
 }

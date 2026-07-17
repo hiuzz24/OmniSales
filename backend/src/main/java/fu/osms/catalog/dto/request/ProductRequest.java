@@ -52,4 +52,6 @@ public class ProductRequest {
     private List<ProductImageRequest> images;
 
     private List<UUID> channelIds;
+
+    private List<ChannelConfigRequest> channelConfigs;
 }

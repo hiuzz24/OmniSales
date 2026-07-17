@@ -3,6 +3,8 @@ package fu.osms.sync.tiktok.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.sync.tiktok.TikTokOAuthService;
+import fu.osms.sync.tiktok.TikTokApiClient;
+import fu.osms.sync.tiktok.dto.TikTokAuthorizedShop;
 import fu.osms.sync.tiktok.dto.TikTokTokenData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -33,6 +36,7 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final TikTokApiClient tikTokApiClient;
 
     @Override
     public TikTokTokenData exchangeToken(String code) {
@@ -59,6 +63,30 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
             log.error("[TikTokOAuth] Failed to exchange token", e);
             throw new IllegalStateException("Failed to exchange TikTok token: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public TikTokTokenData exchangeTokenAndResolveShop(String code) {
+        TikTokTokenData token = exchangeToken(code);
+        List<TikTokAuthorizedShop> shops = tikTokApiClient.getAuthorizedShops(token.getAccessToken());
+        log.info("[TikTokOAuth] Authorized shop count={}", shops.size());
+        if (shops.size() != 1) {
+            throw new IllegalStateException("TikTok authorization must contain exactly one active shop; received=" + shops.size());
+        }
+        TikTokAuthorizedShop shop = shops.get(0);
+        Map<String, Object> metadata = new HashMap<>(token.getMetadata());
+        metadata.put("shopCipher", shop.getShopCipher());
+        putIfPresent(metadata, "shopId", shop.getShopId());
+        putIfPresent(metadata, "shopName", shop.getShopName());
+        putIfPresent(metadata, "region", shop.getRegion());
+        return TikTokTokenData.builder()
+                .accessToken(token.getAccessToken())
+                .refreshToken(token.getRefreshToken())
+                .expiresInSeconds(token.getExpiresInSeconds())
+                .accountId(token.getAccountId())
+                .accountName(token.getAccountName())
+                .metadata(metadata)
+                .build();
     }
 
     @SuppressWarnings("unchecked")

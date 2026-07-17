@@ -50,8 +50,6 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
     @Override
     @Transactional
     public WebhookReceiveResult receive(PlatformType platform, Map<String, String> headers, String rawBody) {
-        log.info("[receive webhook]");
-        log.info("[receive webhook rawBody] {}",rawBody);
         PlatformWebhookHandler handler = handlerMap().get(platform);
         if (handler == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported webhook platform");
@@ -61,6 +59,15 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
         }
 
         Map<String, Object> payload = parsePayload(rawBody);
+        log.info("[tiktok payload]{}",payload);
+
+        if (handler.shouldIgnore(payload)) {
+            return WebhookReceiveResult.builder()
+                    .status("IGNORED")
+                    .message("Webhook ignored by handler rule")
+                    .build();
+        }
+
         String eventType = handler.extractEventType(headers, payload);
         String externalEventId = handler.extractExternalEventId(headers, payload, rawBody);
 
@@ -76,6 +83,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
         }
 
         Channel channel = handler.resolveChannel(headers, payload).orElse(null);
+
         WebhookEvent event = WebhookEvent.builder()
                 .platform(platform)
                 .channel(channel)
@@ -86,6 +94,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                 .build();
         try {
             event = webhookEventRepository.saveAndFlush(event);
+            log.info("[tiktok webhook receive event]{}",event);
         } catch (DataIntegrityViolationException e) {
             if (externalEventId != null) {
                 return duplicateResult(platform, externalEventId);
@@ -105,7 +114,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                     .build();
         }
 
-        if (platform == PlatformType.LAZADA) {
+        if (platform == PlatformType.LAZADA || platform == PlatformType.TIKTOK) {
             processAsyncAfterCommit(event.getId());
             return WebhookReceiveResult.builder()
                     .webhookEventId(event.getId())

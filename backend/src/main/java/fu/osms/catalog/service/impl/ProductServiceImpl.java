@@ -1,6 +1,7 @@
 package fu.osms.catalog.service.impl;
 
 import fu.osms.catalog.dto.request.ProductRequest;
+import fu.osms.catalog.dto.request.ChannelConfigRequest;
 import fu.osms.catalog.dto.request.ProductVariantRequest;
 import fu.osms.catalog.dto.response.ProductResponse;
 import fu.osms.catalog.entity.Category;
@@ -25,6 +26,7 @@ import fu.osms.auth.entity.User;
 import fu.osms.inventory.dto.response.StockSummaryDTO;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.catalog.service.ProductService;
+import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelRepository;
@@ -76,6 +78,7 @@ public class ProductServiceImpl implements ProductService {
     private final OrderItemRepository orderItemRepository;
     private final ProductLogRepository productLogRepository;
     private final ProductSyncOrchestratorService productSyncOrchestratorService;
+    private final ProductChannelConfigService productChannelConfigService;
 
     @Override
     @Transactional
@@ -83,6 +86,7 @@ public class ProductServiceImpl implements ProductService {
         if(productRepository.existsBySkuAndDeletedAtIsNull(request.getSku())){
             throw new AppException(ErrorCode.PRODUCT_SKU_CONFLICT);
         }
+        Map<UUID, ChannelConfigRequest> requestedChannelConfigs = channelConfigsById(request);
 
         Product product = productMapper.toEntity(request);
 
@@ -184,12 +188,16 @@ public class ProductServiceImpl implements ProductService {
         if (request.getChannelIds() != null && !request.getChannelIds().isEmpty()) {
             List<Channel> channels = channelRepository.findAllById(request.getChannelIds());
             List<ChannelProduct> channelProducts = channels.stream()
-                    .map(channel -> ChannelProduct.builder()
-                            .channel(channel)
-                            .product(savedProduct)
-                            .mappingState("ACTIVE")
-                            .syncStatus(SyncStatus.PENDING)
-                            .build())
+                    .map(channel -> {
+                        ChannelProduct mapping = ChannelProduct.builder()
+                                .channel(channel)
+                                .product(savedProduct)
+                                .mappingState("ACTIVE")
+                                .syncStatus(SyncStatus.PENDING)
+                                .build();
+                        productChannelConfigService.applyInitialConfig(mapping, requestedChannelConfigs.get(channel.getId()));
+                        return mapping;
+                    })
                     .toList();
             if (!channelProducts.isEmpty()) {
                 channelProductRepository.saveAll(channelProducts);
@@ -302,6 +310,7 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+        Map<UUID, ChannelConfigRequest> requestedChannelConfigs = channelConfigsById(request);
 
         if (request.getVersion() != null && !Objects.equals(product.getVersion(), request.getVersion())) {
             throw new AppException(ErrorCode.CONCURRENT_UPDATE);
@@ -503,15 +512,21 @@ public class ProductServiceImpl implements ProductService {
                             if (!"ACTIVE".equals(existingCp.getMappingState())) {
                                 existingCp.setMappingState("ACTIVE");
                             }
+                            ChannelConfigRequest config = requestedChannelConfigs.get(channel.getId());
+                            if (config != null) {
+                                productChannelConfigService.applyInitialConfig(existingCp, config);
+                            }
                             channelsToSave.add(existingCp);
                             existingChannelProductMap.remove(channel.getId());
                         } else {
-                            channelsToSave.add(ChannelProduct.builder()
+                            ChannelProduct newMapping = ChannelProduct.builder()
                                     .channel(channel)
                                     .product(product)
                                     .mappingState("ACTIVE")
                                     .syncStatus(SyncStatus.PENDING)
-                                    .build());
+                                    .build();
+                            productChannelConfigService.applyInitialConfig(newMapping, requestedChannelConfigs.get(channel.getId()));
+                            channelsToSave.add(newMapping);
                         }
                     }
                 }
@@ -541,6 +556,25 @@ public class ProductServiceImpl implements ProductService {
         );
 
         return this.getById(product.getId());
+    }
+
+    private Map<UUID, ChannelConfigRequest> channelConfigsById(ProductRequest request) {
+        if (request.getChannelConfigs() == null || request.getChannelConfigs().isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Set<UUID> selectedChannelIds = request.getChannelIds() == null
+                ? Collections.emptySet()
+                : new HashSet<>(request.getChannelIds());
+        Map<UUID, ChannelConfigRequest> result = new HashMap<>();
+        for (ChannelConfigRequest config : request.getChannelConfigs()) {
+            if (config == null || config.getChannelId() == null || !selectedChannelIds.contains(config.getChannelId())) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Channel configuration must belong to a selected channel");
+            }
+            if (result.put(config.getChannelId(), config) != null) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Duplicate channel configuration");
+            }
+        }
+        return result;
     }
 
     @Override
@@ -581,6 +615,11 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public SyncResult syncProductToAllChannels(UUID productId) {
         return productSyncOrchestratorService.syncProductToAllChannels(productId);
+    }
+
+    @Override
+    public SyncResult syncProductToChannel(UUID productId, UUID channelId) {
+        return productSyncOrchestratorService.syncProductToChannel(productId, channelId);
     }
 
     private PageResponse<ProductResponse> toPageResponse(Page<Product> pageResult, int page, int size) {

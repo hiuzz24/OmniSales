@@ -2,10 +2,8 @@ package fu.osms.channel.controller;
 
 import fu.osms.channel.enums.ChannelConnectionAction;
 import fu.osms.channel.service.ChannelConnectionLogService;
-import fu.osms.channel.service.ChannelService;
 import fu.osms.common.enums.PlatformType;
-import fu.osms.sync.tiktok.TikTokOAuthService;
-import fu.osms.sync.tiktok.dto.TikTokTokenData;
+import fu.osms.sync.tiktok.TikTokChannelConnectionService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +22,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TikTokOAuthController {
 
-    private final TikTokOAuthService tikTokOAuthService;
-    private final ChannelService channelService;
+    private final TikTokChannelConnectionService tikTokChannelConnectionService;
     private final ChannelConnectionLogService channelConnectionLogService;
 
     @Value("${app.frontend-url}")
@@ -65,20 +62,7 @@ public class TikTokOAuthController {
         }
 
         try {
-            TikTokTokenData tokenData = tikTokOAuthService.exchangeToken(code);
-            Map<String, Object> metadata = tokenData.getMetadata();
-            if (state != null && !state.isBlank()) {
-                metadata.put("state", state);
-            }
-
-            channelService.connectTikTok(
-                    tokenData.getAccessToken(),
-                    tokenData.getRefreshToken(),
-                    tokenData.getExpiresInSeconds(),
-                    tokenData.getAccountId(),
-                    tokenData.getAccountName(),
-                    metadata
-            );
+            tikTokChannelConnectionService.connect(code, state);
             response.sendRedirect(frontendUrl + "/channels?success=tiktok_connected");
         } catch (Exception e) {
             log.error("[TikTokOAuth] Failed to exchange token and connect channel", e);

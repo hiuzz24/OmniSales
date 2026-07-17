@@ -70,11 +70,11 @@ lazada:
   api-url: https://api.lazada.vn/rest
   auth-api-url: https://auth.lazada.com/rest
   auth-url: https://auth.lazada.com/oauth/authorize
-  default-category-id: ${LAZADA_DEFAULT_CATEGORY_ID:7932}
   default-package-weight: 0.5
   default-package-length: 20
   default-package-width: 15
   default-package-height: 5
+  fashion-root-category-ids: ${LAZADA_FASHION_ROOT_CATEGORY_IDS:}
   order:
     delivery-type: ${LAZADA_ORDER_DELIVERY_TYPE:dropship}
     shipping-allocate-type: ${LAZADA_ORDER_SHIPPING_ALLOCATE_TYPE:TFS}
@@ -83,3 +83,5 @@ tiktok:
   app-key: ${TIKTOK_APP_KEY:}
   app-secret: ${TIKTOK_APP_SECRET:}
   token-url: ${TIKTOK_TOKEN_URL:}
+  api-url: ${TIKTOK_API_URL:https://open-api.tiktokglobalshop.com}
+  fashion-root-category-ids: "${TIKTOK_FASHION_ROOT_CATEGORY_IDS:601152,824328,802312,803592,601303,877320,834568,846224}"

@@ -1,9 +1,13 @@
 import { useState, useRef } from 'react';
+import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import { Plus, ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './ProductImageUploader.module.css';
 
-const ProductImageUploader = ({ images = [], onChange }) => {
+const ProductImageUploader = () => {
+  const { control } = useFormContext();
+  const { fields, append, replace } = useFieldArray({ control, name: 'images', keyName: 'formId' });
+  const images = useWatch({ control, name: 'images', defaultValue: [] });
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlValue, setUrlValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -16,7 +20,7 @@ const ProductImageUploader = ({ images = [], onChange }) => {
       sortOrder: images.length,
       isPrimary: images.length === 0,
     };
-    onChange([...images, newImage]);
+    append(newImage);
     setUrlValue('');
     setShowUrlInput(false);
   };
@@ -27,8 +31,7 @@ const ProductImageUploader = ({ images = [], onChange }) => {
     if (updated.length > 0 && !updated.some(img => img.isPrimary)) {
       updated[0].isPrimary = true;
     }
-    // Re-sort
-    onChange(updated.map((img, i) => ({ ...img, sortOrder: i })));
+    replace(updated.map((image, sortOrder) => ({ ...image, sortOrder })));
   };
 
   const handleFileUpload = async (event) => {
@@ -44,7 +47,7 @@ const ProductImageUploader = ({ images = [], onChange }) => {
         sortOrder: images.length,
         isPrimary: images.length === 0,
       };
-      onChange([...images, newImage]);
+      append(newImage);
     } catch (error) {
       alert(error.message || 'Lỗi khi tải ảnh lên');
     } finally {
@@ -108,7 +111,7 @@ const ProductImageUploader = ({ images = [], onChange }) => {
       ) : (
         <div className={styles.imageGrid}>
           {images.map((image, index) => (
-            <div key={index} className={styles.imageItem}>
+            <div key={fields[index]?.formId || index} className={styles.imageItem}>
               <img src={image.url} alt={`Ảnh ${index + 1}`} />
               {index === 0 && (
                 <span className={styles.primaryBadge}>Ảnh chính</span>

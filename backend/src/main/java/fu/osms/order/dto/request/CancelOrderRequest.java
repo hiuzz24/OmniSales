@@ -8,6 +8,7 @@ public class CancelOrderRequest {
 
     private String reason;
     private String reasonId;
+    private String tikTokReason;
     private ShopifyCancelReason shopifyReason;
     private Boolean email;
     private Boolean restock;

@@ -19,6 +19,7 @@ import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.service.ChannelService;
+import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
@@ -53,6 +54,7 @@ public class ChannelServiceImpl implements ChannelService {
     private final ChannelProductMapper channelProductMapper;
     private final ChannelConnectionLogService channelConnectionLogService;
     private final ShopifyWebhookSubscriptionService shopifyWebhookSubscriptionService;
+    private final ProductChannelConfigService productChannelConfigService;
 
     @Value("${lazada.webhook-callback-url:}")
     private String lazadaWebhookCallbackUrl;
@@ -213,14 +215,26 @@ public class ChannelServiceImpl implements ChannelService {
                         cp -> cp.getProduct().getId(),
                         Collectors.mapping(
                                 cp -> ChannelSyncResponse.builder()
+                                        .channelId(cp.getChannel().getId())
+                                        .channelName(cp.getChannel().getDisplayName())
                                         .platform(cp.getChannel().getPlatform().name())
                                         .syncStatus(cp.getSyncStatus())
                                         .lastSyncedAt(cp.getLastSyncedAt())
                                         .lastSyncError(cp.getLastSyncError())
+                                        .readyToSync(productChannelConfigService.isReady(cp))
+                                        .configurationError(productChannelConfigService.configurationError(cp))
+                                        .platformConfig(platformConfig(cp))
                                         .build(),
                                 Collectors.toList()
                         )
                 ));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> platformConfig(ChannelProduct channelProduct) {
+        if (channelProduct.getMetadata() == null) return Collections.emptyMap();
+        Object value = channelProduct.getMetadata().get("platformConfig");
+        return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Collections.emptyMap();
     }
 
     @Override

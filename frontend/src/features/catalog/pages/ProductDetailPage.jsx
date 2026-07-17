@@ -113,7 +113,7 @@ const ProductDetailPage = () => {
           <div className={styles.tabContent}>
             {activeTab === 'overview' && <TabOverview product={product} />}
             {activeTab === 'inventory' && <TabInventory product={product} />}
-            {activeTab === 'platform' && <TabPlatform product={product} channels={channels} />}
+            {activeTab === 'platform' && <TabPlatform product={product} onRefresh={fetchProduct} />}
             {activeTab === 'images' && <TabImages product={product} />}
             {activeTab === 'variants' && <TabVariants product={product} />}
           </div>
