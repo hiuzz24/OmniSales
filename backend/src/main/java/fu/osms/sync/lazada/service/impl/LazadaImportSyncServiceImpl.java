@@ -274,27 +274,44 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         if (externalProductId == null || externalProductId.isBlank()) {
             externalProductId = "LAZADA-" + UUID.randomUUID();
         }
+        final String resolvedExternalProductId = externalProductId;
 
         ChannelProduct channelProduct = channelProductRepository
                 .findByChannelIdAndExternalProductId(channel.getId(), externalProductId)
                 .orElseGet(ChannelProduct::new);
 
-        Product product = channelProduct.getProduct();
+        Product product = extractSkus(productNode).stream()
+                    .map(this::resolveSellerSku)
+                    .filter(value -> value != null && !value.isBlank())
+                    .map(productVariantRepository::findBySkuAndDeletedAtIsNull)
+                    .flatMap(java.util.Optional::stream)
+                    .map(ProductVariant::getProduct)
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(channelProduct.getProduct());
         if (product == null) {
-            product = productRepository.findFirstBySkuAndDeletedAtIsNull("LAZADA-" + externalProductId)
+            product = java.util.Optional.<Product>empty()
+                    .or(() -> productRepository.findFirstBySkuAndDeletedAtIsNull("LAZADA-" + resolvedExternalProductId))
                     .orElseGet(Product::new);
         }
 
+        boolean lazadaOwned = product.getId() == null || (product.getSku() != null && product.getSku().startsWith("LAZADA-"));
         product.setSku(product.getSku() == null ? "LAZADA-" + externalProductId : product.getSku());
-        product.setName(resolveProductName(productNode, externalProductId));
-        product.setDescription(firstNonBlank(
-                firstText(productNode, "description", "short_description"),
-                productNode.path("attributes").path("description").asText(null)
-        ));
-        product.setBrand(resolveBrand(productNode));
+        if (lazadaOwned) {
+            product.setName(resolveProductName(productNode, externalProductId));
+            product.setDescription(firstNonBlank(
+                    firstText(productNode, "description", "short_description"),
+                    productNode.path("attributes").path("description").asText(null)
+            ));
+            product.setBrand(resolveBrand(productNode));
+            product.setStatus(resolveProductStatus(firstText(productNode, "status", "seller_status")));
+        }
         product.setUnit(product.getUnit() == null ? "pcs" : product.getUnit());
-        product.setStatus(resolveProductStatus(firstText(productNode, "status", "seller_status")));
-        product.setAttributes(toMap(productNode));
+        Map<String, Object> productAttributes = product.getAttributes() == null
+                ? new HashMap<>()
+                : new HashMap<>(product.getAttributes());
+        productAttributes.put("lazadaProduct", toMap(productNode));
+        product.setAttributes(productAttributes);
         Category category = resolveCategory(productNode, lazadaCategoryNames);
         if (category != null) {
             product.setCategory(category);
@@ -338,10 +355,13 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         String sellerSku = resolveSellerSku(skuNode);
         String localSku = resolveLocalVariantSku(channelProduct, sellerSku, externalProductId, externalVariantId);
 
-        ProductVariant variant = channelProductVariantRepository
-                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
-                .map(ChannelProductVariant::getVariant)
-                .filter(existing -> shouldReuseMappedVariant(channelProduct, existing))
+        ProductVariant variant = productVariantRepository.findBySkuAndDeletedAtIsNull(sellerSku)
+                .filter(existing -> existing.getProduct() != null
+                        && Objects.equals(existing.getProduct().getId(), product.getId()))
+                .or(() -> channelProductVariantRepository
+                        .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
+                        .map(ChannelProductVariant::getVariant)
+                        .filter(existing -> shouldReuseMappedVariant(channelProduct, existing)))
                 .orElseGet(() -> productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), localSku)
                         .orElseGet(ProductVariant::new));
         variant.setProduct(product);
@@ -392,6 +412,12 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         return productVariantRepository.findBySkuAndDeletedAtIsNull(sku)
                 .map(existing -> {
                     if (existing.getId() == null) {
+                        return true;
+                    }
+
+                    if (existing.getProduct() != null
+                            && channelProduct.getProduct() != null
+                            && Objects.equals(existing.getProduct().getId(), channelProduct.getProduct().getId())) {
                         return true;
                     }
 

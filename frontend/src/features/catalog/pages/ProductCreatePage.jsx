@@ -8,6 +8,7 @@ import { ROUTES } from '../../../app/router/routes';
 import productApi from '../../../api/productApi';
 import categoryApi from '../../../api/categoryApi';
 import channelApi from '../../../api/channelApi';
+import warehouseApi from '../../../api/warehouseApi';
 import ProductImageUploader from '../components/ProductImageUploader';
 import ProductForm from '../components/ProductForm';
 import ProductPriceStock from '../components/ProductPriceStock';

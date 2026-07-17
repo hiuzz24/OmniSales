@@ -13,8 +13,13 @@ import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.service.PlatformOrderWebhookProcessor;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import fu.osms.order.event.OrderCreatedEvent;
+import fu.osms.order.event.OrderCancelledEvent;
+import fu.osms.order.event.OrderPaidEvent;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -23,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcessor {
@@ -31,6 +37,7 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
     private final OrderItemRepository orderItemRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final PlatformOrderInventoryService platformOrderInventoryService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PlatformType getPlatform() {
@@ -40,11 +47,17 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
     @Override
     @Transactional
     public String process(WebhookEvent event) {
+        log.info("[process webhook]");
         Map<String, Object> payload = event.getRawPayload();
         String externalOrderId = WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(payload, "id", "order_id"));
         if (externalOrderId == null || externalOrderId.isBlank()) {
             throw new IllegalArgumentException("Shopify webhook payload is missing order id");
         }
+
+        Optional<Order> oldOrderOpt = orderRepository.findByChannel_IdAndExternalOrderId(event.getChannel().getId(), externalOrderId);
+        boolean isNew = !oldOrderOpt.isPresent();
+        OrderStatus oldStatus = oldOrderOpt.map(Order::getStatus).orElse(null);
+        String oldPaymentStatus = oldOrderOpt.map(Order::getPaymentStatus).orElse(null);
 
         Order order = ensureOrder(event, externalOrderId);
         assertOrderBelongsToEvent(order, event);
@@ -68,6 +81,17 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
         Order savedOrder = orderRepository.save(order);
         syncOrderItems(savedOrder, payload);
         platformOrderInventoryService.syncReservations(savedOrder);
+
+        if (isNew) {
+            eventPublisher.publishEvent(new OrderCreatedEvent(savedOrder));
+        }
+        if (savedOrder.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED) {
+            eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
+        }
+        if ("PAID".equals(savedOrder.getPaymentStatus()) && !"PAID".equals(oldPaymentStatus)) {
+            eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
+        }
+
         return "PROCESSED";
     }
 

@@ -35,11 +35,15 @@ public class UserInviteToken {
     @Column(name = "used_at")
     private OffsetDateTime usedAt;
 
+    @Builder.Default
+    @Column(nullable = false, length = 20)
+    private String status = "PENDING";
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
     public boolean isValid() {
-        return usedAt == null && expiresAt.isAfter(OffsetDateTime.now());
+        return usedAt == null && expiresAt.isAfter(OffsetDateTime.now()) && !"CANCELLED".equals(status);
     }
 }

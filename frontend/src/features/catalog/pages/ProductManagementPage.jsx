@@ -14,6 +14,7 @@ import styles from './ProductManagementPage.module.css';
 const PLATFORM_LABELS = {
   LAZADA: 'Lazada',
   SHOPIFY: 'Shopify',
+  TIKTOK: 'TikTok Shop',
 };
 
 const formatCount = (value) => Number(value ?? 0).toLocaleString('vi-VN');
@@ -96,7 +97,7 @@ const ProductManagementPage = () => {
         onPlatformChange={setPlatformFilter}
       />
       <ProductTable
-        key={tableRefreshKey}
+        key={`${tableRefreshKey}-${debouncedKeyword}-${statusFilter}-${platformFilter}`}
         keyword={debouncedKeyword}
         statusFilter={statusFilter}
         platformFilter={platformFilter}

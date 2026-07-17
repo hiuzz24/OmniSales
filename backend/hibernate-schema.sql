@@ -173,7 +173,8 @@ CREATE TABLE user_invite_tokens (
                                     token       VARCHAR(255) NOT NULL UNIQUE,
                                     expires_at  TIMESTAMPTZ  NOT NULL,
                                     used_at     TIMESTAMPTZ,
-                                    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+                                    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                                    status      VARCHAR(20)  NOT NULL DEFAULT 'PENDING'
 );
 
 -- ── Catalogue ────────────────────────────────────────────────

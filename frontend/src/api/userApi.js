@@ -63,6 +63,16 @@ const userApi = {
     const res = await axiosClient.post(`/users/${id}/cancel-invite`);
     return res.data?.data ?? res.data;
   },
+
+  getInvitations: async () => {
+    const res = await axiosClient.get('/users/invitations');
+    return res.data?.data ?? res.data;
+  },
+
+  cancelInviteByToken: async (id) => {
+    const res = await axiosClient.post(`/users/invitations/${id}/cancel`);
+    return res.data?.data ?? res.data;
+  },
 };
 
 export default userApi;

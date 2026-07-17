@@ -24,6 +24,10 @@ import fu.osms.catalog.enums.ProductLogAction;
 import fu.osms.catalog.repository.ProductLogRepository;
 import fu.osms.auth.entity.User;
 import fu.osms.inventory.dto.response.StockSummaryDTO;
+import fu.osms.inventory.entity.InventoryItem;
+import fu.osms.inventory.entity.Warehouse;
+import fu.osms.inventory.repository.InventoryItemRepository;
+import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.catalog.service.ProductService;
 import fu.osms.catalog.service.ProductChannelConfigService;
@@ -79,6 +83,8 @@ public class ProductServiceImpl implements ProductService {
     private final ProductLogRepository productLogRepository;
     private final ProductSyncOrchestratorService productSyncOrchestratorService;
     private final ProductChannelConfigService productChannelConfigService;
+    private final WarehouseRepository warehouseRepository;
+    private final InventoryItemRepository inventoryItemRepository;
 
     @Override
     @Transactional
@@ -135,6 +141,7 @@ public class ProductServiceImpl implements ProductService {
 
         Product savedProduct = productRepository.save(product);
 
+        List<ProductVariant> savedVariants = new ArrayList<>();
         if (request.getVariants() != null && !request.getVariants().isEmpty()) {
             List<ProductVariant> productVariants = request.getVariants().stream()
                     .map(vr -> {
@@ -144,7 +151,7 @@ public class ProductServiceImpl implements ProductService {
                         return v;
                     })
                     .toList();
-            List<ProductVariant> savedVariants = productVariantRepository.saveAll(productVariants);
+            savedVariants = productVariantRepository.saveAll(productVariants);
 
             List<ProductImage> variantImages = new ArrayList<>();
             for (int i = 0; i < request.getVariants().size(); i++) {
@@ -184,6 +191,8 @@ public class ProductServiceImpl implements ProductService {
                     .toList();
             productImageRepository.saveAll(productImages);
         }
+
+        createInitialInventoryItems(savedVariants, request.getWarehouseId(), savedProduct.getLowStockThreshold());
 
         if (request.getChannelIds() != null && !request.getChannelIds().isEmpty()) {
             List<Channel> channels = channelRepository.findAllById(request.getChannelIds());
@@ -310,7 +319,6 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
-        Map<UUID, ChannelConfigRequest> requestedChannelConfigs = channelConfigsById(request);
 
         if (request.getVersion() != null && !Objects.equals(product.getVersion(), request.getVersion())) {
             throw new AppException(ErrorCode.CONCURRENT_UPDATE);
@@ -702,6 +710,44 @@ public class ProductServiceImpl implements ProductService {
                 .notes(notes)
                 .build();
         productLogRepository.save(productLog);
+    }
+
+    private void createInitialInventoryItems(List<ProductVariant> variants, UUID warehouseId, Integer lowStockThreshold) {
+        if (warehouseId == null || variants == null || variants.isEmpty()) {
+            return;
+        }
+
+        Warehouse warehouse = warehouseRepository.findById(warehouseId)
+                .filter(w -> w.getDeletedAt() == null)
+                .filter(w -> Boolean.TRUE.equals(w.getIsActive()))
+                .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
+
+        List<InventoryItem> itemsToCreate = new ArrayList<>();
+        int threshold = lowStockThreshold == null ? 5 : lowStockThreshold;
+        for (ProductVariant variant : variants) {
+            if (variant.getId() == null) {
+                continue;
+            }
+            boolean exists = inventoryItemRepository
+                    .findByWarehouseIdAndVariantId(warehouse.getId(), variant.getId())
+                    .isPresent();
+            if (exists) {
+                continue;
+            }
+
+            itemsToCreate.add(InventoryItem.builder()
+                    .warehouse(warehouse)
+                    .variant(variant)
+                    .quantityOnHand(0)
+                    .reservedQuantity(0)
+                    .averageCost(variant.getCostPrice() == null ? BigDecimal.ZERO : variant.getCostPrice())
+                    .lowStockThreshold(threshold)
+                    .build());
+        }
+
+        if (!itemsToCreate.isEmpty()) {
+            inventoryItemRepository.saveAll(itemsToCreate);
+        }
     }
 
     private void applyCreateDefaultPrices(ProductVariant variant) {

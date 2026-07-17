@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 --  OSMS — Full Schema Reset (DROP → CREATE → SEED)
 --  Generated: 2026-06-21
 --  Order: DROP children first, then parents
@@ -46,6 +46,9 @@ DROP TABLE IF EXISTS daily_sales_summary          CASCADE;
 DROP TABLE IF EXISTS audit_logs                   CASCADE;
 DROP TABLE IF EXISTS notifications                CASCADE;
 DROP TABLE IF EXISTS system_logs                  CASCADE;
+DROP TABLE IF EXISTS api_metrics_daily            CASCADE;
+DROP TABLE IF EXISTS api_endpoint_limits          CASCADE;
+DROP TABLE IF EXISTS system_settings              CASCADE;
 DROP TABLE IF EXISTS sync_tasks                   CASCADE;
 DROP TABLE IF EXISTS sync_logs                    CASCADE;
 DROP TABLE IF EXISTS webhook_events               CASCADE;
@@ -83,6 +86,7 @@ DROP TABLE IF EXISTS refresh_tokens               CASCADE;
 DROP TABLE IF EXISTS user_roles                   CASCADE;
 DROP TABLE IF EXISTS roles                        CASCADE;
 DROP TABLE IF EXISTS users                        CASCADE;
+DROP TABLE IF EXISTS backup_files                 CASCADE;
 
 -- ─── 4. DROP ENUM TYPES ─────────────────────────────────────
 DROP TYPE IF EXISTS user_status        CASCADE;
@@ -101,7 +105,7 @@ CREATE TYPE user_status        AS ENUM ('ACTIVE', 'INACTIVE', 'LOCKED');
 CREATE TYPE platform_type      AS ENUM ('SHOPEE', 'TIKTOK', 'LAZADA', 'SHOPIFY', 'MANUAL');
 CREATE TYPE product_status     AS ENUM ('ACTIVE', 'INACTIVE', 'DRAFT');
 CREATE TYPE category_status    AS ENUM ('ACTIVE', 'INACTIVE');
-CREATE TYPE order_status       AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+CREATE TYPE order_status       AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED');
 CREATE TYPE inv_txn_type       AS ENUM ('IMPORT', 'EXPORT', 'TRANSFER_OUT', 'TRANSFER_IN', 'ADJUSTMENT', 'ORDER_DEDUCT', 'ORDER_CANCEL', 'OUTBOUND', 'INBOUND');
 CREATE TYPE sync_status        AS ENUM ('PENDING', 'SYNCED', 'FAILED', 'OUT_OF_SYNC');
 CREATE TYPE product_log_action AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'SYNC', 'MAPPING');
@@ -172,7 +176,8 @@ CREATE TABLE user_invite_tokens (
                                     token       VARCHAR(255) NOT NULL UNIQUE,
                                     expires_at  TIMESTAMPTZ  NOT NULL,
                                     used_at     TIMESTAMPTZ,
-                                    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+                                    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                                    status      VARCHAR(20)  NOT NULL DEFAULT 'PENDING'
 );
 
 -- ── Catalogue ────────────────────────────────────────────────
@@ -409,6 +414,7 @@ CREATE TABLE orders (
                         note              TEXT,
                         tracking_number   VARCHAR(200),
                         cancel_reason     VARCHAR(255),
+                        platform_metadata JSONB,
                         cancelled_by      UUID          REFERENCES users(id) ON DELETE SET NULL,
                         version           BIGINT        NOT NULL DEFAULT 0,
                         created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
@@ -662,6 +668,34 @@ CREATE TABLE system_logs (
                              logged_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE api_metrics_daily (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    endpoint VARCHAR(255) NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    request_count BIGINT NOT NULL DEFAULT 0,
+    success_count BIGINT NOT NULL DEFAULT 0,
+    fail_count BIGINT NOT NULL DEFAULT 0,
+    avg_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    recorded_date DATE NOT NULL,
+    recorded_hour INT NOT NULL,
+    CONSTRAINT uq_api_metric_endpoint_hour UNIQUE (endpoint, method, recorded_date, recorded_hour)
+);
+
+CREATE TABLE api_endpoint_limits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    endpoint VARCHAR(255) NOT NULL UNIQUE,
+    rate_limit_per_min INT NOT NULL DEFAULT 100,
+    daily_quota INT NOT NULL DEFAULT 50000
+);
+
+CREATE TABLE system_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(50) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
@@ -728,6 +762,17 @@ CREATE TABLE report_results (
                                 execution_time_ms INT,
                                 expires_at       TIMESTAMPTZ,
                                 created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE backup_files (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    filename    VARCHAR(255) NOT NULL,
+    filepath    VARCHAR(500) NOT NULL,
+    file_size   BIGINT       NOT NULL,
+    type        VARCHAR(20)  NOT NULL CHECK (type IN ('MANUAL', 'SCHEDULED')),
+    status      VARCHAR(20)  NOT NULL CHECK (status IN ('SUCCESS', 'FAILED')),
+    created_by  VARCHAR(255),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- ============================================================
@@ -864,6 +909,14 @@ CREATE TRIGGER trg_audit_logs_immutable
 --  ACCOUNT MOCK DATA ONLY
 --  Password for all accounts: 11111111
 -- ============================================================
+
+INSERT INTO system_settings (key, value, description, category) VALUES
+    ('default_reorder_level', '10', 'Mức cảnh báo tồn kho tối thiểu mặc định cho sản phẩm', 'INVENTORY'),
+    ('reserved_timeout_minutes', '30', 'Thời gian giữ chỗ hàng (phút) trước khi tự động hoàn trả', 'INVENTORY'),
+    ('low_stock_repeat_hours', '12', 'Khoảng thời gian nhắc nhở (giờ) giữa các lần gửi cảnh báo tồn kho', 'NOTIFICATION'),
+    ('timezone', 'Asia/Ho_Chi_Minh', 'Timezone hoạt động chính thức của hệ thống', 'SYSTEM'),
+    ('max_failed_login_attempts', '5', 'Số lần đăng nhập sai tối đa trước khi khóa tài khoản', 'SECURITY')
+ON CONFLICT (key) DO NOTHING;
 
 INSERT INTO roles (name, description) VALUES
     ('SYSTEM_ADMIN', 'System administrator'),

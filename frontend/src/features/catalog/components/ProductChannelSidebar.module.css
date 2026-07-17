@@ -79,6 +79,10 @@
   background: linear-gradient(135deg, #0f146d, #1a1f87);
 }
 
+.channelIconShopify {
+  background: linear-gradient(135deg, #5e8e2e, #86bf4a);
+}
+
 .channelIconDefault {
   background: linear-gradient(135deg, #6b7280, #9ca3af);
 }
@@ -166,6 +170,24 @@
 .statusLabel {
   font-size: 14px;
   color: #344054;
+}
+
+.select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--catalog-line, #d8deea);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--catalog-ink, #101828);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.select:focus {
+  border-color: var(--catalog-accent, #0756c7);
+  box-shadow: 0 0 0 4px rgba(7, 86, 199, 0.12);
 }
 
 /* Action buttons */

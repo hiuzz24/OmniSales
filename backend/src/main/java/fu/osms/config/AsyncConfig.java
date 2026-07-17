@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Configuration for async task execution.
@@ -34,6 +35,19 @@ public class AsyncConfig {
         // Khởi tạo executor
         executor.initialize();
         
+        return executor;
+    }
+
+    @Bean(name = "webhookExecutor")
+    public Executor webhookExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(1000);
+        executor.setThreadNamePrefix("Webhook-");
+        // If the queue is temporarily full, preserve the event instead of silently dropping it.
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
         return executor;
     }
 }

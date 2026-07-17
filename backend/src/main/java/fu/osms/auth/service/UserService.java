@@ -38,4 +38,8 @@ public interface UserService {
     UUID findUserIdByEmail(String email);
 
     void cancelInvite(UUID id);
+
+    java.util.List<fu.osms.auth.dto.response.UserInviteResponse> getInvitations();
+
+    void cancelInviteByTokenId(UUID tokenId);
 }

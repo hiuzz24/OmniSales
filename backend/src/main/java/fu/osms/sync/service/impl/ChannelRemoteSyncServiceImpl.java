@@ -9,6 +9,7 @@ import fu.osms.common.exception.ErrorCode;
 import fu.osms.sync.lazada.service.LazadaImportSyncService;
 import fu.osms.sync.service.ChannelRemoteSyncService;
 import fu.osms.sync.shopify.ShopifyImportSyncService;
+import fu.osms.sync.tiktok.TikTokImportSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ public class ChannelRemoteSyncServiceImpl implements ChannelRemoteSyncService {
     private final ChannelRepository channelRepository;
     private final LazadaImportSyncService lazadaImportSyncService;
     private final ShopifyImportSyncService shopifyImportSyncService;
+    private final TikTokImportSyncService tikTokImportSyncService;
 
     @Override
     @Transactional
@@ -39,6 +41,9 @@ public class ChannelRemoteSyncServiceImpl implements ChannelRemoteSyncService {
         }
         if (channel.getPlatform() == PlatformType.SHOPIFY) {
             return shopifyImportSyncService.syncProductsAndInventory(channelId);
+        }
+        if (channel.getPlatform() == PlatformType.TIKTOK) {
+            return tikTokImportSyncService.syncProductsAndInventory(channelId);
         }
 
         throw new AppException(ErrorCode.INVALID_REQUEST, "Chỉ hỗ trợ đồng bộ từ sàn cho Lazada và Shopify.");

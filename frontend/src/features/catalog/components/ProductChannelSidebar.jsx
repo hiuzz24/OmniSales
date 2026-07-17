@@ -1,18 +1,26 @@
 import { Save } from 'lucide-react';
-import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductChannelSidebar.module.css';
 
 const PLATFORM_ICONS = {
   SHOPEE: { label: 'S', className: 'channelIconShopee' },
   TIKTOK: { label: 'T', className: 'channelIconTiktok' },
   LAZADA: { label: 'L', className: 'channelIconLazada' },
+  SHOPIFY: { label: 'SH', className: 'channelIconShopify' },
 };
 
 const ProductChannelSidebar = ({
   channels = [],
+  selectedChannels = [],
+  onChannelToggle,
+  showProduct,
+  onStatusToggle,
   onSubmit,
   onInvalid,
   onCancel,
+  warehouses = [],
+  selectedWarehouseId = '',
+  onWarehouseChange,
+  isSubmitting = false,
   isEditMode = false,
 }) => {
   const { control, setValue, handleSubmit, formState: { isSubmitting } } = useFormContext();
@@ -89,6 +97,26 @@ const ProductChannelSidebar = ({
           />
         </div>
       </div>
+
+      {warehouses.length > 0 && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle}>Kho nguồn tồn kho</div>
+          <div className={styles.cardSubtitle}>
+            Kho được dùng để tạo tồn ban đầu và làm nguồn đồng bộ cho các kênh đã chọn
+          </div>
+          <select
+            className={styles.select}
+            value={selectedWarehouseId}
+            onChange={(event) => onWarehouseChange?.(event.target.value)}
+          >
+            {warehouses.map((warehouse) => (
+              <option key={warehouse.id} value={warehouse.id}>
+                {warehouse.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Action buttons */}
       <div className={styles.actions}>

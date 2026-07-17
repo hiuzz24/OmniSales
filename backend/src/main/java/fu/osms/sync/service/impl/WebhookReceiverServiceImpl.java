@@ -83,7 +83,6 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
         }
 
         Channel channel = handler.resolveChannel(headers, payload).orElse(null);
-
         WebhookEvent event = WebhookEvent.builder()
                 .platform(platform)
                 .channel(channel)
@@ -128,6 +127,11 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                 .webhookEventId(processedEvent.getId())
                 .status(processedEvent.getStatus())
                 .message("Webhook processed")
+        processAsyncAfterCommit(event.getId());
+        return WebhookReceiveResult.builder()
+                .webhookEventId(event.getId())
+                .status(event.getStatus())
+                .message("Webhook queued")
                 .build();
     }
 

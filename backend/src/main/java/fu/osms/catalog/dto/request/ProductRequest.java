@@ -19,6 +19,8 @@ public class ProductRequest {
 
     private UUID categoryId;
 
+    private UUID warehouseId;
+
     @Size(max = 100)
     private String sku;
 

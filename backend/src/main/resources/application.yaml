@@ -85,3 +85,5 @@ tiktok:
   token-url: ${TIKTOK_TOKEN_URL:}
   api-url: ${TIKTOK_API_URL:https://open-api.tiktokglobalshop.com}
   fashion-root-category-ids: "${TIKTOK_FASHION_ROOT_CATEGORY_IDS:601152,824328,802312,803592,601303,877320,834568,846224}"
+  product-api-version: ${TIKTOK_PRODUCT_API_VERSION:202502}
+  product-detail-api-version: ${TIKTOK_PRODUCT_DETAIL_API_VERSION:202309}

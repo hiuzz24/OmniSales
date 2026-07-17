@@ -312,11 +312,16 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("Chỉ có thể hủy lời mời đối với tài khoản chưa kích hoạt");
         }
 
-        // Delete invite tokens associated with this email
+        // Update invite tokens associated with this email to CANCELLED instead of deleting them
         List<UserInviteToken> tokens = userInviteTokenRepository.findAll().stream()
                 .filter(t -> t.getEmail().equalsIgnoreCase(user.getEmail()))
                 .toList();
-        userInviteTokenRepository.deleteAll(tokens);
+        for (UserInviteToken token : tokens) {
+            if (token.getUsedAt() == null && !"CANCELLED".equals(token.getStatus())) {
+                token.setStatus("CANCELLED");
+                userInviteTokenRepository.save(token);
+            }
+        }
 
         // Delete user roles
         List<UserRole> roles = userRoleRepository.findByUserId(user.getId());
@@ -326,5 +331,58 @@ public class UserServiceImpl implements UserService {
         userRepository.delete(user);
 
         log.info("Invitation cancelled and user deleted for email: {}", user.getEmail());
+    }
+
+    @Override
+    public List<fu.osms.auth.dto.response.UserInviteResponse> getInvitations() {
+        return userInviteTokenRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(token -> {
+                    String displayStatus = token.getStatus();
+                    if (!"CANCELLED".equalsIgnoreCase(displayStatus)) {
+                        if (token.getUsedAt() != null) {
+                            displayStatus = "ACCEPTED";
+                        } else if (token.getExpiresAt().isBefore(java.time.OffsetDateTime.now())) {
+                            displayStatus = "EXPIRED";
+                        } else {
+                            displayStatus = "PENDING";
+                        }
+                    }
+                    return fu.osms.auth.dto.response.UserInviteResponse.builder()
+                            .id(token.getId())
+                            .email(token.getEmail())
+                            .roleName(token.getRoleName())
+                            .token(token.getToken())
+                            .expiresAt(token.getExpiresAt())
+                            .usedAt(token.getUsedAt())
+                            .createdAt(token.getCreatedAt())
+                            .status(displayStatus)
+                            .build();
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public void cancelInviteByTokenId(UUID tokenId) {
+        UserInviteToken token = userInviteTokenRepository.findById(tokenId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy thông tin lời mời"));
+
+        if (token.getUsedAt() != null) {
+            throw new IllegalArgumentException("Không thể hủy lời mời đã được chấp nhận");
+        }
+
+        token.setStatus("CANCELLED");
+        userInviteTokenRepository.save(token);
+
+        userRepository.findByEmail(token.getEmail()).ifPresent(user -> {
+            if (user.getStatus() == UserStatus.INACTIVE && "Chờ kích hoạt".equals(user.getFullName())) {
+                List<UserRole> roles = userRoleRepository.findByUserId(user.getId());
+                userRoleRepository.deleteAll(roles);
+                userRepository.delete(user);
+                log.info("Deleted inactive user record for email: {}", user.getEmail());
+            }
+        });
+
+        log.info("Invitation cancelled for token ID: {}", tokenId);
     }
 }
