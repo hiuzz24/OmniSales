@@ -108,14 +108,6 @@ public class DatabaseMigration {
 
         try {
             jdbcTemplate.execute("""
-                        UPDATE inventory_items
-                        SET quantity_on_hand = GREATEST(quantity_on_hand, 0),
-                            reserved_quantity = LEAST(GREATEST(reserved_quantity, 0), GREATEST(quantity_on_hand, 0))
-                        WHERE quantity_on_hand < 0
-                           OR reserved_quantity < 0
-                           OR reserved_quantity > quantity_on_hand
-                    """);
-            jdbcTemplate.execute("""
                         ALTER TABLE inventory_items
                         DROP CONSTRAINT IF EXISTS chk_inventory_quantities_nonnegative,
                         DROP CONSTRAINT IF EXISTS chk_inventory_reserved_lte_onhand,
@@ -125,6 +117,16 @@ public class DatabaseMigration {
             log.info("Migration: restored inventory_items reserved <= on-hand constraint");
         } catch (Exception e) {
             log.warn("Migration skipped or failed for inventory_items reserved constraint: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE channel_credentials
+                        ADD COLUMN IF NOT EXISTS refresh_token_expires_at TIMESTAMPTZ
+                    """);
+            log.info("Migration: added refresh_token_expires_at column to channel_credentials table");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for channel_credentials.refresh_token_expires_at: {}", e.getMessage());
         }
 
     }

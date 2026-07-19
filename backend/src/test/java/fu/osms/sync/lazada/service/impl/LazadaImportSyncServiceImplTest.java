@@ -1,6 +1,7 @@
 package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import fu.osms.inventory.entity.Warehouse;
 import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
@@ -10,13 +11,13 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.channel.token.service.ChannelTokenService;
 import fu.osms.common.enums.PlatformType;
-import fu.osms.common.exception.AppException;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.SyncLog;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.SyncAlertService;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,18 +28,25 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LazadaImportSyncServiceImplTest {
 
-    @Mock private LazadaApiClient lazadaApiClient;
+    @Mock private LazadaAuthorizedApiClient lazadaApiClient;
+    @Mock private ChannelTokenService channelTokenService;
     @Mock private ChannelRepository channelRepository;
     @Mock private ChannelCredentialRepository credentialRepository;
     @Mock private ProductRepository productRepository;
@@ -52,97 +60,135 @@ class LazadaImportSyncServiceImplTest {
     @Mock private SyncLogRepository syncLogRepository;
     @Mock private SyncAlertService syncAlertService;
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private LazadaImportSyncServiceImpl service;
 
-    private Channel lazadaChannel;
+    private UUID channelId;
+    private Channel channel;
     private ChannelCredential credential;
 
     @BeforeEach
     void setUp() {
         service = new LazadaImportSyncServiceImpl(
-                lazadaApiClient, new ObjectMapper(),
-                channelRepository, credentialRepository,
-                productRepository, productVariantRepository, categoryRepository,
-                channelProductRepository, channelProductVariantRepository,
-                inventoryItemRepository, inventoryTransactionRepository, warehouseRepository,
-                syncLogRepository, syncAlertService);
+                lazadaApiClient,
+                channelTokenService,
+                objectMapper,
+                channelRepository,
+                credentialRepository,
+                productRepository,
+                productVariantRepository,
+                categoryRepository,
+                channelProductRepository,
+                channelProductVariantRepository,
+                inventoryItemRepository,
+                inventoryTransactionRepository,
+                warehouseRepository,
+                syncLogRepository,
+                syncAlertService
+        );
 
-        lazadaChannel = Channel.builder()
-                .id(UUID.randomUUID())
+        channelId = UUID.randomUUID();
+        channel = Channel.builder()
+                .id(channelId)
                 .platform(PlatformType.LAZADA)
-                .displayName("Lazada VN")
-                .status("ACTIVE")
+                .displayName("Lazada-Import")
+                .metadata(new HashMap<>())
                 .build();
         credential = ChannelCredential.builder()
                 .id(UUID.randomUUID())
-                .channel(lazadaChannel)
-                .accessToken("acc-tok")
+                .channel(channel)
+                .accessToken("access-tok")
                 .connectionState("CONNECTED")
                 .tokenExpiresAt(OffsetDateTime.now().plusHours(1))
+                .refreshTokenExpiresAt(OffsetDateTime.now().plusDays(30))
                 .build();
     }
 
-    private void stubSyncLogSave() {
+    @Test
+    @DisplayName("syncProductsAndWarehouses — channel platform != LAZADA throws IllegalArgumentException")
+    void syncProductsAndWarehouses_wrongPlatform() {
+        Channel shopify = Channel.builder()
+                .id(UUID.randomUUID())
+                .platform(PlatformType.SHOPIFY)
+                .displayName("Shopify-Channel")
+                .build();
+        UUID otherId = shopify.getId();
+        when(channelRepository.findById(otherId)).thenReturn(Optional.of(shopify));
+
+        assertThatThrownBy(() -> service.syncProductsAndWarehouses(otherId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Lazada");
+
+        verify(lazadaApiClient, never()).executeGet(any(UUID.class), anyString(), anyMap());
+        verify(credentialRepository, never()).findByChannelIdAndConnectionState(any(UUID.class), anyString());
+    }
+
+    @Test
+    @DisplayName("syncProductsAndWarehouses — channel not found throws AppException(CHANNEL_NOT_FOUND)")
+    void syncProductsAndWarehouses_channelNotFound() {
+        when(channelRepository.findById(channelId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.syncProductsAndWarehouses(channelId))
+                .isInstanceOf(fu.osms.common.exception.AppException.class)
+                .extracting("errorCode").isEqualTo(fu.osms.common.exception.ErrorCode.CHANNEL_NOT_FOUND);
+
+        verify(credentialRepository, never()).findByChannelIdAndConnectionState(any(UUID.class), anyString());
+    }
+
+    @Test
+    @DisplayName("syncProductsAndWarehouses — missing CONNECTED credential throws IllegalStateException")
+    void syncProductsAndWarehouses_noCredential() {
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
+        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.syncProductsAndWarehouses(channelId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("token");
+
+        verify(lazadaApiClient, never()).executeGet(any(UUID.class), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("syncProductsAndWarehouses — happy path persists SyncLog with status SYNCED")
+    void syncProductsAndWarehouses_happy() {
+        // Lazada payload uses /rc/warehouse/get (one warehouse), /category/tree/get (optional),
+        // /products/get (first call returns empty list so the loop exits).
+        when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
+        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
+                .thenReturn(Optional.of(credential));
+        when(lazadaApiClient.executeGet(eq(channelId), eq("/rc/warehouse/get"), anyMap()))
+                .thenReturn("{\"code\":\"0\",\"data\":{\"warehouses\":[{\"id\":\"WH-1\",\"name\":\"Main WH\"}]}}");
+        when(lazadaApiClient.executeGet(eq(channelId), eq("/category/tree/get"), anyMap()))
+                .thenReturn("{\"code\":\"0\",\"data\":[]}");
+        when(lazadaApiClient.executeGet(eq(channelId), eq("/products/get"), anyMap()))
+                .thenReturn("{\"code\":\"0\",\"data\":{\"products\":[]}}");
+        when(warehouseRepository.findFirstByNameAndDeletedAtIsNull("Main WH"))
+                .thenReturn(Optional.of(Warehouse.builder()
+                        .id(UUID.randomUUID())
+                        .name("Main WH")
+                        .address("[LAZADA_WAREHOUSE_CODE=WH-1]")
+                        .isActive(true)
+                        .build()));
+        when(warehouseRepository.save(any(Warehouse.class)))
+                .thenAnswer(i -> i.getArgument(0));
+        when(channelProductRepository.countByChannelIdAndMappingState(channelId, "ACTIVE"))
+                .thenReturn(0L);
+        when(channelProductVariantRepository.countActiveByChannelId(channelId))
+                .thenReturn(0L);
+        // Track SyncLog save so we can assert status
+        java.util.concurrent.atomic.AtomicReference<SyncLog> savedLog = new java.util.concurrent.atomic.AtomicReference<>();
         when(syncLogRepository.save(any(SyncLog.class))).thenAnswer(i -> {
             SyncLog log = i.getArgument(0);
             if (log.getId() == null) log.setId(UUID.randomUUID());
+            savedLog.set(log);
             return log;
         });
-    }
 
-    @Test
-    @DisplayName("syncProductsAndWarehouses — channel not found → AppException")
-    void sync_channelNotFound() {
-        UUID fake = UUID.randomUUID();
-        when(channelRepository.findById(fake)).thenReturn(Optional.empty());
+        var response = service.syncProductsAndWarehouses(channelId);
 
-        assertThatThrownBy(() -> service.syncProductsAndWarehouses(fake))
-                .isInstanceOf(AppException.class);
-    }
-
-    @Test
-    @DisplayName("syncProductsAndWarehouses — channel deleted → AppException")
-    void sync_channelDeleted() {
-        lazadaChannel.setDeletedAt(OffsetDateTime.now());
-        when(channelRepository.findById(lazadaChannel.getId())).thenReturn(Optional.of(lazadaChannel));
-
-        assertThatThrownBy(() -> service.syncProductsAndWarehouses(lazadaChannel.getId()))
-                .isInstanceOf(AppException.class);
-    }
-
-    @Test
-    @DisplayName("syncProductsAndWarehouses — wrong platform → IllegalArgumentException")
-    void sync_wrongPlatform() {
-        lazadaChannel.setPlatform(PlatformType.SHOPIFY);
-        when(channelRepository.findById(lazadaChannel.getId())).thenReturn(Optional.of(lazadaChannel));
-
-        assertThatThrownBy(() -> service.syncProductsAndWarehouses(lazadaChannel.getId()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Lazada");
-    }
-
-    @Test
-    @DisplayName("syncProductsAndWarehouses — no credential → IllegalStateException")
-    void sync_noCredential() {
-        when(channelRepository.findById(lazadaChannel.getId())).thenReturn(Optional.of(lazadaChannel));
-        when(credentialRepository.findByChannelIdAndConnectionState(lazadaChannel.getId(), "CONNECTED"))
-                .thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.syncProductsAndWarehouses(lazadaChannel.getId()))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("token");
-    }
-
-    @Test
-    @DisplayName("syncProductsAndWarehouses — blank access_token → IllegalStateException")
-    void sync_blankToken() {
-        credential.setAccessToken("  ");
-        when(channelRepository.findById(lazadaChannel.getId())).thenReturn(Optional.of(lazadaChannel));
-        when(credentialRepository.findByChannelIdAndConnectionState(lazadaChannel.getId(), "CONNECTED"))
-                .thenReturn(Optional.of(credential));
-
-        assertThatThrownBy(() -> service.syncProductsAndWarehouses(lazadaChannel.getId()))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("access_token");
+        assertThat(savedLog.get().getStatus()).isEqualTo(fu.osms.common.enums.SyncStatus.SYNCED);
+        assertThat(response.getStatus()).isEqualTo("SYNCED");
+        verify(syncAlertService, never()).notifySyncFailure(any(SyncLog.class));
     }
 }
