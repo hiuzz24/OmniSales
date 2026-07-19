@@ -67,21 +67,28 @@ const OrderDetailPage = () => {
   const [confirmPayment, setConfirmPayment] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonId, setCancelReasonId] = useState('');
+  const [tikTokReason, setTikTokReason] = useState('');
   const [shopifyReason, setShopifyReason] = useState('');
   const [cancelReasons, setCancelReasons] = useState([]);
   const [cancelReasonsLoading, setCancelReasonsLoading] = useState(false);
   const [cancelReasonsError, setCancelReasonsError] = useState(null);
 
-  const fetchOrder = async () => {
-    setLoading(true);
-    setError(null);
+  const fetchOrder = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const data = await orderService.getById(id);
       setOrder(data);
     } catch {
-      setError('Không thể tải thông tin đơn hàng');
+      if (!silent) {
+        setError('Không thể tải thông tin đơn hàng');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -97,6 +104,14 @@ const OrderDetailPage = () => {
   useEffect(() => {
     fetchOrder();
     fetchHistory();
+
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchOrder({ silent: true });
+      }
+    }, 15_000);
+
+    return () => window.clearInterval(refreshInterval);
   }, [id]);
 
   const handleUpdateStatus = async (newStatus) => {
@@ -143,15 +158,17 @@ const OrderDetailPage = () => {
 
   const isLazadaOrder = (value) => value?.platform === 'LAZADA';
   const isShopifyOrder = (value) => value?.platform === 'SHOPIFY';
+  const isTikTokOrder = (value) => value?.platform === 'TIKTOK';
 
   const handleOpenCancelModal = async () => {
     setShowCancelModal(true);
     setCancelReasonId('');
+    setTikTokReason('');
     setShopifyReason('');
     setCancelReasons([]);
     setCancelReasonsError(null);
 
-    if (!isLazadaOrder(order)) {
+    if (!isLazadaOrder(order) && !isTikTokOrder(order)) {
       return;
     }
 
@@ -160,19 +177,22 @@ const OrderDetailPage = () => {
       const reasons = await orderService.getCancelReasons(id);
       setCancelReasons(reasons || []);
       if (!reasons || reasons.length === 0) {
-        setCancelReasonsError('Không có lý do hủy hợp lệ từ Lazada cho đơn hàng này.');
-        toast.error('Không có lý do hủy hợp lệ từ Lazada');
+        const platformName = isTikTokOrder(order) ? 'TikTok' : 'Lazada';
+        setCancelReasonsError(`Không có lý do hủy hợp lệ từ ${platformName} cho đơn hàng này.`);
+        toast.error(`Không có lý do hủy hợp lệ từ ${platformName}`);
       }
-    } catch {
-      setCancelReasonsError('Không thể tải lý do hủy từ Lazada.');
-      toast.error('Không thể tải lý do hủy từ Lazada');
+    } catch (requestError) {
+      const platformName = isTikTokOrder(order) ? 'TikTok' : 'Lazada';
+      const message = requestError?.response?.data?.message || `Không thể tải lý do hủy từ ${platformName}.`;
+      setCancelReasonsError(message);
+      toast.error(message);
     } finally {
       setCancelReasonsLoading(false);
     }
   };
 
   const handleCancel = async () => {
-    if (!isLazadaOrder(order) && !isShopifyOrder(order) && !cancelReason.trim()) {
+    if (!isLazadaOrder(order) && !isShopifyOrder(order) && !isTikTokOrder(order) && !cancelReason.trim()) {
       toast.error('Vui lòng nhập lý do hủy');
       return;
     }
@@ -184,26 +204,34 @@ const OrderDetailPage = () => {
       toast.error('Vui lòng chọn lý do hủy Shopify');
       return;
     }
+    if (isTikTokOrder(order) && !tikTokReason) {
+      toast.error('Vui lòng chọn lý do hủy TikTok');
+      return;
+    }
     setUpdating(true);
     try {
       await orderService.cancel(id, {
         reason: cancelReason,
         reasonId: cancelReasonId,
+        tikTokReason: isTikTokOrder(order) ? tikTokReason : undefined,
         shopifyReason: isShopifyOrder(order) ? shopifyReason : undefined,
         email: isShopifyOrder(order) ? true : undefined,
         restock: isShopifyOrder(order) ? true : undefined,
         refund: isShopifyOrder(order) ? true : undefined,
       });
-      toast.success('Hủy đơn hàng thành công');
+      toast.success(isTikTokOrder(order)
+        ? 'Đã gửi yêu cầu hủy, đang chờ TikTok xác nhận'
+        : 'Hủy đơn hàng thành công');
       setShowCancelModal(false);
       setCancelReason('');
       setCancelReasonId('');
+      setTikTokReason('');
       setShopifyReason('');
       setCancelReasons([]);
       fetchOrder();
       fetchHistory();
-    } catch {
-      toast.error('Hủy đơn hàng thất bại');
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || 'Hủy đơn hàng thất bại');
     } finally {
       setUpdating(false);
     }
@@ -312,6 +340,13 @@ const OrderDetailPage = () => {
       return STATUS_FLOW.filter((status) => status !== order.status);
     }
 
+    const tikTokRawStatus = order.platformMetadata?.tiktok?.rawOrderStatus;
+    if (isTikTokOrder(order)
+      && order.status === 'PENDING'
+      && tikTokRawStatus !== 'AWAITING_SHIPMENT') {
+      return [];
+    }
+
     const platformFlow = ['PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED'];
     const currentIndex = platformFlow.indexOf(order.status);
     if (currentIndex < 0 || currentIndex >= platformFlow.length - 1) {
@@ -344,7 +379,14 @@ const OrderDetailPage = () => {
   const sc = STATUS_CONFIG[order.status] || { label: order.status, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' };
   const StatusIcon = sc.icon;
   const canChangeStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
-  const isCancellable = !['IN_TRANSIT', 'DELIVERED', 'CANCELLED'].includes(order.status);
+  const tikTokCancelPending = isTikTokOrder(order)
+    && order.platformMetadata?.tiktok?.pendingConfirmation === true;
+  const tikTokAwaitingShipment = order.platformMetadata?.tiktok?.rawOrderStatus === 'AWAITING_SHIPMENT';
+  const tikTokProcessingBlocked = isTikTokOrder(order)
+    && order.status === 'PENDING'
+    && !tikTokAwaitingShipment;
+  const isCancellable = !tikTokCancelPending
+    && !['IN_TRANSIT', 'DELIVERED', 'CANCELLED'].includes(order.status);
   const currentStep = getCurrentStep();
   const chStyle = getChannelStyle(order.channelName);
   const ChIcon = chStyle?.icon;
@@ -386,6 +428,18 @@ const OrderDetailPage = () => {
             <span className={styles.payPill} style={{ background: pc.bg, color: pc.color, borderColor: pc.border }}>
               {pc.label}
             </span>
+            {tikTokCancelPending && (
+              <span className={styles.statusPill} style={{ background: '#fff7ed', color: '#c2410c', borderColor: '#fed7aa' }}>
+                <Clock size={12} />
+                Đang chờ TikTok xác nhận hủy
+              </span>
+            )}
+            {tikTokProcessingBlocked && (
+              <span className={styles.statusPill} style={{ background: '#fff7ed', color: '#c2410c', borderColor: '#fed7aa' }}>
+                <Clock size={12} />
+                Chờ TikTok chuyển sang sẵn sàng xử lý
+              </span>
+            )}
           </div>
         </div>
 
@@ -736,7 +790,9 @@ const OrderDetailPage = () => {
                   Hệ thống sẽ đồng bộ trạng thái phù hợp về sàn nếu được hỗ trợ.
                   {confirmStatus === 'SHIPPED' && order.platform === 'LAZADA'
                     ? ' Với Lazada, trạng thái này tương ứng sẵn sàng giao/Ready To Ship.'
-                    : ''}
+                    : confirmStatus === 'SHIPPED' && order.platform === 'TIKTOK'
+                      ? ' Với TikTok, hệ thống sẽ báo kiện hàng sẵn sàng bàn giao cho đơn vị vận chuyển.'
+                      : ''}
                 </p>
               )}
               <div className={styles.confirmActions}>
@@ -838,6 +894,36 @@ const OrderDetailPage = () => {
                 )}
               </div>
             )}
+            {isTikTokOrder(order) && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                  Lý do hủy TikTok
+                </label>
+                {cancelReasonsLoading ? (
+                  <div style={{ padding: '10px 12px', fontSize: 13, color: '#64748b' }}>
+                    Đang tải lý do hủy từ TikTok...
+                  </div>
+                ) : (
+                  <select
+                    className={styles.cancelInput}
+                    value={tikTokReason}
+                    onChange={(e) => setTikTokReason(e.target.value)}
+                    disabled={updating || !!cancelReasonsError || cancelReasons.length === 0}
+                    style={{ minHeight: 42, resize: 'none' }}
+                  >
+                    <option value="">Chọn lý do hủy</option>
+                    {cancelReasons.map((reason) => (
+                      <option key={reason.id} value={reason.id}>
+                        {reason.name || reason.id}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {cancelReasonsError && (
+                  <p style={{ marginTop: 6, fontSize: 12, color: '#dc2626' }}>{cancelReasonsError}</p>
+                )}
+              </div>
+            )}
             {isShopifyOrder(order) && (
               <div style={{ marginBottom: 12 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
@@ -874,10 +960,10 @@ const OrderDetailPage = () => {
             <textarea
               className={styles.cancelInput}
               rows={3}
-              placeholder={isLazadaOrder(order) || isShopifyOrder(order) ? 'Ghi chú nội bộ OSMS...' : 'VD: Khách hàng yêu cầu hủy, hết hàng...'}
+              placeholder={isLazadaOrder(order) || isShopifyOrder(order) || isTikTokOrder(order) ? 'Ghi chú nội bộ OSMS...' : 'VD: Khách hàng yêu cầu hủy, hết hàng...'}
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
-              autoFocus={!isLazadaOrder(order) && !isShopifyOrder(order)}
+              autoFocus={!isLazadaOrder(order) && !isShopifyOrder(order) && !isTikTokOrder(order)}
             />
             <div className={styles.modalActions}>
               <button className={styles.btnGhost} onClick={() => setShowCancelModal(false)} disabled={updating}>
@@ -893,7 +979,9 @@ const OrderDetailPage = () => {
                     ? !cancelReasonId
                     : isShopifyOrder(order)
                       ? !shopifyReason
-                      : !cancelReason.trim())}
+                      : isTikTokOrder(order)
+                        ? !tikTokReason
+                        : !cancelReason.trim())}
               >
                 {updating ? 'Đang xử lý...' : 'Xác nhận hủy'}
               </button>

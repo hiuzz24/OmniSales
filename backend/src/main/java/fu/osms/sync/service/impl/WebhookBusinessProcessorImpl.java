@@ -25,7 +25,7 @@ public class WebhookBusinessProcessorImpl implements WebhookBusinessProcessor {
     @Override
     public String process(WebhookEvent event) {
         String eventType = event.getEventType() != null ? event.getEventType().toUpperCase() : "";
-        if (!eventType.contains("ORDER")) {
+        if (event.getPlatform() != PlatformType.TIKTOK && !eventType.contains("ORDER")) {
             return processCatalogEvent(event);
         }
 

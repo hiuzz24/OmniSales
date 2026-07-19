@@ -22,7 +22,7 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.WebhookEvent;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.service.PlatformCatalogWebhookProcessor;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -57,7 +58,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     private final WarehouseRepository warehouseRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -592,9 +593,10 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         }
 
         Set<String> sellerSkus = extractSellerSkus(payload);
-        Optional<JsonNode> remote = fetchRemoteProductBySellerSkus(credential, externalProductId, sellerSkus);
+        Optional<JsonNode> remote = fetchRemoteProductBySellerSkus(
+                event.getChannel().getId(), externalProductId, sellerSkus);
         if (remote.isEmpty() && externalProductId != null) {
-            remote = fetchRemoteProductBySearch(credential, externalProductId, sellerSkus);
+            remote = fetchRemoteProductBySearch(event.getChannel().getId(), externalProductId, sellerSkus);
         }
         if (remote.isEmpty()) {
             log.warn("[LazadaWebhook] Remote product detail not found channelId={} externalProductId={} sellerSkus={}",
@@ -605,14 +607,14 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         }));
     }
 
-    private Optional<JsonNode> fetchRemoteProductBySellerSkus(ChannelCredential credential,
+    private Optional<JsonNode> fetchRemoteProductBySellerSkus(UUID channelId,
                                                              String externalProductId,
                                                              Set<String> sellerSkus) {
         if (sellerSkus.isEmpty()) {
             return Optional.empty();
         }
         Optional<JsonNode> product = fetchRemoteProductBySellerSkuParam(
-                credential,
+                channelId,
                 externalProductId,
                 sellerSkus,
                 "sku_seller_list"
@@ -621,14 +623,14 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
             return product;
         }
         return fetchRemoteProductBySellerSkuParam(
-                credential,
+                channelId,
                 externalProductId,
                 sellerSkus,
                 "SkuSellerList"
         );
     }
 
-    private Optional<JsonNode> fetchRemoteProductBySellerSkuParam(ChannelCredential credential,
+    private Optional<JsonNode> fetchRemoteProductBySellerSkuParam(UUID channelId,
                                                                  String externalProductId,
                                                                  Set<String> sellerSkus,
                                                                  String paramName) {
@@ -638,12 +640,12 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         } catch (Exception e) {
             params.put(paramName, sellerSkus.toString());
         }
-        return fetchRemoteProductsSafely(credential, params).stream()
+        return fetchRemoteProductsSafely(channelId, params).stream()
                 .filter(product -> matchesProduct(product, externalProductId, sellerSkus))
                 .findFirst();
     }
 
-    private Optional<JsonNode> fetchRemoteProductBySearch(ChannelCredential credential,
+    private Optional<JsonNode> fetchRemoteProductBySearch(UUID channelId,
                                                          String externalProductId,
                                                          Set<String> sellerSkus) {
         List<String> searchValues = new ArrayList<>();
@@ -655,7 +657,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
             }
             Map<String, String> params = baseProductFetchParams();
             params.put("search", search);
-            Optional<JsonNode> product = fetchRemoteProductsSafely(credential, params).stream()
+            Optional<JsonNode> product = fetchRemoteProductsSafely(channelId, params).stream()
                     .filter(candidate -> matchesProduct(candidate, externalProductId, sellerSkus))
                     .findFirst();
             if (product.isPresent()) {
@@ -674,21 +676,19 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         return params;
     }
 
-    private List<JsonNode> fetchRemoteProductsSafely(ChannelCredential credential, Map<String, String> params) {
+    private List<JsonNode> fetchRemoteProductsSafely(UUID channelId, Map<String, String> params) {
         try {
-            return fetchRemoteProducts(credential, params);
+            return fetchRemoteProducts(channelId, params);
         } catch (Exception e) {
             log.warn("[LazadaWebhook] Failed to fetch product detail params={}: {}", params.keySet(), e.getMessage());
             return List.of();
         }
     }
 
-    private List<JsonNode> fetchRemoteProducts(ChannelCredential credential, Map<String, String> params) {
-        String response = lazadaApiClient.executeGet(
+    private List<JsonNode> fetchRemoteProducts(UUID channelId, Map<String, String> params) {
+        String response = lazadaApiClient.executeGet(channelId,
                 "/products/get",
-                params,
-                credential.getAccessToken(),
-                credential.getTokenExpiresAt() == null ? null : credential.getTokenExpiresAt().toEpochSecond()
+                params
         );
         JsonNode root = readTree(response);
         ensureLazadaSuccess(root, "/products/get");

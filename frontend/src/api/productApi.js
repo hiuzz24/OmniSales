@@ -37,6 +37,21 @@ const productApi = {
         return response;
     },
 
+    syncChannel: async (productId, channelId) => {
+        const response = await axiosClient.post(`/products/${productId}/channels/${channelId}/sync`);
+        return response;
+    },
+
+    getChannelConfig: async (productId, channelId) => {
+        const response = await axiosClient.get(`/products/${productId}/channels/${channelId}/config`);
+        return response;
+    },
+
+    updateChannelConfig: async (productId, channelId, data) => {
+        const response = await axiosClient.put(`/products/${productId}/channels/${channelId}/config`, data);
+        return response;
+    },
+
     importExcel: async (file) => {
         const formData = new FormData();
         formData.append('file', file);

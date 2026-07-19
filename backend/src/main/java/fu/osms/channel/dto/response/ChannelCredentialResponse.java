@@ -16,6 +16,7 @@ public class ChannelCredentialResponse {
     private UUID channelId;
     private String channelName;
     private OffsetDateTime tokenExpiresAt;
+    private OffsetDateTime refreshTokenExpiresAt;
     private String connectionState;
     private OffsetDateTime lastRefreshedAt;
     private String refreshError;

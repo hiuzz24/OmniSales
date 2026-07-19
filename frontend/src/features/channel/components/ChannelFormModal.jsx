@@ -412,6 +412,26 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
                 </div>
               )}
 
+              {isTikTok && isEdit && (
+                <div className={styles.shopifyOAuthBox}>
+                  <div className={styles.shopifyOAuthInfo}>
+                    <span className={styles.shopifyBadge} style={{ background: '#010101', color: '#fff' }}>OAuth 2.0</span>
+                    <p>Kết nối lại TikTok Shop để cấp lại quyền truy cập cho kênh.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.shopifyConnectBtn}
+                    style={{ background: '#010101', color: '#fff', borderColor: '#010101' }}
+                    onClick={handleTikTokConnect}
+                    disabled={isRedirecting}
+                  >
+                    {isRedirecting
+                      ? <><Loader2 size={16} className={styles.spinIcon} /> Đang chuyển hướng...</>
+                      : <><ExternalLink size={16} /> Kết nối lại TikTok Shop</>}
+                  </button>
+                </div>
+              )}
+
               <div className={styles.actions}>
                 <button type="button" className={styles.cancelBtn} onClick={onClose} disabled={isSubmitting}>
                   Hủy

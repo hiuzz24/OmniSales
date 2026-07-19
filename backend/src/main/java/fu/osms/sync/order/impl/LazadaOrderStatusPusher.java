@@ -1,13 +1,11 @@
 package fu.osms.sync.order.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import fu.osms.channel.entity.ChannelCredential;
-import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.entity.Order;
 import fu.osms.order.enums.OrderStatus;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.order.OrderStatusPushContext;
 import fu.osms.sync.order.OrderStatusPushResult;
 import fu.osms.sync.order.PlatformOrderStatusPusher;
@@ -27,8 +25,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
 
-    private final ChannelCredentialRepository credentialRepository;
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
     private final ObjectMapper objectMapper;
 
     @Value("${lazada.order.delivery-type:dropship}")
@@ -54,14 +51,12 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
 
     @Override
     public List<CancelReasonResponse> getCancelReasons(Order order) {
-        ChannelCredential credential = connectedCredential(order);
-        Long tokenExpiresAt = tokenExpiresAt(credential);
-        List<String> orderItemIds = orderItemIds(fetchOrderItems(order, credential, tokenExpiresAt));
+        List<String> orderItemIds = orderItemIds(fetchOrderItems(order));
         if (orderItemIds.isEmpty()) {
             return List.of();
         }
 
-        Map<String, Object> body = validateCancel(order, orderItemIds, credential, tokenExpiresAt);
+        Map<String, Object> body = validateCancel(order, orderItemIds);
         Map<String, Object> data = WebhookPayloadUtils.copyMap(body.get("data"));
         String warningMessage = WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(data, "tip_content", "tipContent"));
         Object reasonOptions = WebhookPayloadUtils.firstPresent(data, "reason_options", "reasonOptions");
@@ -82,9 +77,7 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
     }
 
     private OrderStatusPushResult pack(Order order) {
-        ChannelCredential credential = connectedCredential(order);
-        Long tokenExpiresAt = tokenExpiresAt(credential);
-        List<Map<String, Object>> items = fetchOrderItems(order, credential, tokenExpiresAt);
+        List<Map<String, Object>> items = fetchOrderItems(order);
         List<String> orderItemIds = orderItemIds(items);
         if (orderItemIds.isEmpty()) {
             return OrderStatusPushResult.failed("No Lazada order item id found");
@@ -100,7 +93,7 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
                 ))
         )));
 
-        Map<String, Object> body = executePost("/order/fulfill/pack", params, credential, tokenExpiresAt,
+        Map<String, Object> body = executePost(order, "/order/fulfill/pack", params,
                 "Lazada pack order API returned error");
         String packageId = extractPackageId(body);
         Map<String, Object> metadata = new HashMap<>();
@@ -113,8 +106,6 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
     }
 
     private OrderStatusPushResult readyToShip(Order order) {
-        ChannelCredential credential = connectedCredential(order);
-        Long tokenExpiresAt = tokenExpiresAt(credential);
         String packageId = existingPackageId(order);
         Map<String, Object> metadata = new HashMap<>();
 
@@ -136,7 +127,7 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
         params.put("readyToShipReq", toJson(Map.of(
                 "packages", List.of(Map.of("package_id", packageId))
         )));
-        executePost("/order/package/rts", params, credential, tokenExpiresAt,
+        executePost(order, "/order/package/rts", params,
                 "Lazada ready to ship API returned error");
 
         metadata.put("packageId", packageId);
@@ -145,9 +136,7 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
     }
 
     private OrderStatusPushResult cancel(Order order, String reasonId) {
-        ChannelCredential credential = connectedCredential(order);
-        Long tokenExpiresAt = tokenExpiresAt(credential);
-        List<Map<String, Object>> items = fetchOrderItems(order, credential, tokenExpiresAt);
+        List<Map<String, Object>> items = fetchOrderItems(order);
         List<String> orderItemIds = orderItemIds(items);
         if (orderItemIds.isEmpty()) {
             return OrderStatusPushResult.failed("No Lazada order item id found");
@@ -161,7 +150,7 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
         params.put("order_id", order.getExternalOrderId());
         params.put("order_item_id_list", toJson(orderItemIds));
         params.put("reason_id", reasonId);
-        executeGet("/order/reverse/cancel/create", params, credential, tokenExpiresAt,
+        executeGet(order, "/order/reverse/cancel/create", params,
                 "Lazada cancel order API returned error");
 
         Map<String, Object> metadata = new HashMap<>();
@@ -171,12 +160,10 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
         return OrderStatusPushResult.success("Lazada order cancelled", metadata);
     }
 
-    private List<Map<String, Object>> fetchOrderItems(Order order, ChannelCredential credential, Long tokenExpiresAt) {
-        String response = lazadaApiClient.executeGet(
+    private List<Map<String, Object>> fetchOrderItems(Order order) {
+        String response = lazadaApiClient.executeGet(order.getChannel().getId(),
                 "/order/items/get",
-                Map.of("order_id", order.getExternalOrderId()),
-                credential.getAccessToken(),
-                tokenExpiresAt
+                Map.of("order_id", order.getExternalOrderId())
         );
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, "Lazada order items response is invalid");
         assertLazadaSuccess(body, "Lazada order items API returned error");
@@ -190,28 +177,27 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
                 .toList();
     }
 
-    private Map<String, Object> validateCancel(Order order, List<String> orderItemIds,
-                                               ChannelCredential credential, Long tokenExpiresAt) {
+    private Map<String, Object> validateCancel(Order order, List<String> orderItemIds) {
         Map<String, String> params = new HashMap<>();
         params.put("order_id", order.getExternalOrderId());
         params.put("order_item_id_list", toJson(orderItemIds));
         log.info("[Laz params] {}",params);
-        return executeGet("/order/reverse/cancel/validate", params, credential, tokenExpiresAt,
+        return executeGet(order, "/order/reverse/cancel/validate", params,
                 "Lazada cancel validate API returned error");
     }
 
-    private Map<String, Object> executeGet(String apiPath, Map<String, String> params, ChannelCredential credential,
-                                           Long tokenExpiresAt, String errorMessage) {
-        String response = lazadaApiClient.executeGet(apiPath, params, credential.getAccessToken(), tokenExpiresAt);
+    private Map<String, Object> executeGet(Order order, String apiPath, Map<String, String> params,
+                                           String errorMessage) {
+        String response = lazadaApiClient.executeGet(order.getChannel().getId(), apiPath, params);
         log.info("[LazadaOrderStatusPush] Raw response for {}: {}", apiPath, response);
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, errorMessage);
         assertLazadaSuccess(body, errorMessage);
         return body;
     }
 
-    private Map<String, Object> executePost(String apiPath, Map<String, String> params, ChannelCredential credential,
-                                            Long tokenExpiresAt, String errorMessage) {
-        String response = lazadaApiClient.executePost(apiPath, params, credential.getAccessToken(), tokenExpiresAt);
+    private Map<String, Object> executePost(Order order, String apiPath, Map<String, String> params,
+                                            String errorMessage) {
+        String response = lazadaApiClient.executePost(order.getChannel().getId(), apiPath, params);
         log.info("[LazadaOrderStatusPush] Raw response for {}: {}", apiPath, response);
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, errorMessage);
         assertLazadaSuccess(body, errorMessage);
@@ -304,16 +290,6 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
                 .filter(reasonId -> reasonId != null && !reasonId.isBlank())
                 .findFirst()
                 .orElse(null);
-    }
-
-    private ChannelCredential connectedCredential(Order order) {
-        return credentialRepository.findByChannelIdAndConnectionState(order.getChannel().getId(), "CONNECTED")
-                .filter(credential -> credential.getAccessToken() != null && !credential.getAccessToken().isBlank())
-                .orElseThrow(() -> new IllegalStateException("Lazada channel credential not connected"));
-    }
-
-    private Long tokenExpiresAt(ChannelCredential credential) {
-        return credential.getTokenExpiresAt() != null ? credential.getTokenExpiresAt().toEpochSecond() : null;
     }
 
     private String existingPackageId(Order order) {

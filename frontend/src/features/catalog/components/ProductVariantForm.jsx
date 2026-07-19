@@ -1,7 +1,18 @@
 import { useState, useRef } from 'react';
+import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import { Plus, X, ImageIcon, Upload, Loader2, RefreshCcw } from 'lucide-react';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './ProductVariantForm.module.css';
+
+const isHttpUrl = (value) => {
+  if (!value?.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return ['http:', 'https:'].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
 
 const emptyVariant = () => ({
   sku: '',
@@ -14,46 +25,40 @@ const emptyVariant = () => ({
 });
 
 const ProductVariantForm = ({
-  variants = [],
-  onAdd,
-  onRemove,
-  onChange,
-  errors = {},
-  globalError,
   hasOrders = false,
   channels = [],
   selectedChannels = [],
   disablePrice = false,
   disableCostPrice = false,
 }) => {
+  const { control, setValue, formState: { errors } } = useFormContext();
+  const { fields, append, remove } = useFieldArray({ control, name: 'variants', keyName: 'formId' });
+  const variants = useWatch({ control, name: 'variants', defaultValue: [] });
+  const globalError = errors.variants?.message;
   const [editingImageIndex, setEditingImageIndex] = useState(null);
   const [urlValue, setUrlValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [failedImageUrls, setFailedImageUrls] = useState({});
   const fileInputRef = useRef(null);
 
   const handleFieldChange = (index, field, value) => {
-    const updated = [...variants];
-    updated[index] = { ...updated[index], [field]: value };
-    onChange(updated);
+    setValue(`variants.${index}.${field}`, value, { shouldDirty: true, shouldValidate: true });
   };
 
   const handleOptionChange = (index, optionKey, value) => {
-    const updated = [...variants];
-    updated[index] = {
-      ...updated[index],
-      optionValues: { ...updated[index].optionValues, [optionKey]: value },
-    };
-    onChange(updated);
+    setValue(`variants.${index}.optionValues.${optionKey}`, value, { shouldDirty: true, shouldValidate: true });
   };
 
   const handleSaveImage = () => {
     if (!urlValue.trim() || editingImageIndex === null) return;
-    const updated = [...variants];
-    updated[editingImageIndex] = {
-      ...updated[editingImageIndex],
-      images: [{ url: urlValue.trim() }]
-    };
-    onChange(updated);
+    if (!isHttpUrl(urlValue)) {
+      alert('URL ảnh biến thể phải bắt đầu bằng http:// hoặc https://');
+      return;
+    }
+    setValue(`variants.${editingImageIndex}.images`, [{ url: urlValue.trim() }], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
     setEditingImageIndex(null);
     setUrlValue('');
   };
@@ -65,13 +70,13 @@ const ProductVariantForm = ({
     try {
       setIsUploading(true);
       const secureUrl = await uploadImageToCloudinary(file);
-      
-      const updated = [...variants];
-      updated[editingImageIndex] = {
-        ...updated[editingImageIndex],
-        images: [{ url: secureUrl }]
-      };
-      onChange(updated);
+      if (!isHttpUrl(secureUrl)) {
+        throw new Error('Cloudinary không trả về URL ảnh hợp lệ');
+      }
+      setValue(`variants.${editingImageIndex}.images`, [{ url: secureUrl }], {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
       setEditingImageIndex(null);
       setUrlValue('');
     } catch (error) {
@@ -111,7 +116,7 @@ const ProductVariantForm = ({
           <div className={styles.cardTitle}>Biến thể sản phẩm</div>
           <div className={styles.cardSubtitle}>Thêm các phiên bản khác nhau (màu, size...)</div>
         </div>
-        <button type="button" className={styles.addBtn} onClick={() => onAdd(emptyVariant())}>
+        <button type="button" className={styles.addBtn} onClick={() => append(emptyVariant())}>
           <Plus className={styles.addBtnIcon} />
           Thêm biến thể
         </button>
@@ -140,9 +145,11 @@ const ProductVariantForm = ({
             </thead>
             <tbody>
               {variants.map((variant, index) => {
-                const variantErrors = errors[index] || {};
+                const variantErrors = errors.variants?.[index] || {};
+                const imageUrl = variant.images?.[0]?.url;
+                const canDisplayImage = isHttpUrl(imageUrl) && !failedImageUrls[imageUrl];
                 return (
-                  <tr key={index} style={{ opacity: variant.isActive === false ? 0.6 : 1 }}>
+                  <tr key={fields[index]?.formId || index} style={{ opacity: variant.isActive === false ? 0.6 : 1 }}>
                     <td className={styles.imgCell}>
                       <div
                         className={styles.imgPlaceholder}
@@ -152,10 +159,19 @@ const ProductVariantForm = ({
                             setUrlValue(variant.images?.[0]?.url || '');
                           }
                         }}
-                        title={variant.isActive === false ? '' : 'Thêm ảnh biến thể'}
+                        title={variant.isActive === false
+                          ? ''
+                          : imageUrl && !canDisplayImage
+                            ? 'Ảnh biến thể không tải được. Nhấn để thay ảnh.'
+                            : 'Thêm ảnh biến thể'}
                       >
-                        {variant.images?.[0]?.url ? (
-                          <img src={variant.images[0].url} alt={`Variant ${index}`} className={styles.imgThumbnail} />
+                        {canDisplayImage ? (
+                          <img
+                            src={imageUrl}
+                            alt={`Variant ${index + 1}`}
+                            className={styles.imgThumbnail}
+                            onError={() => setFailedImageUrls((previous) => ({ ...previous, [imageUrl]: true }))}
+                          />
                         ) : (
                           <ImageIcon className={styles.imgIcon} />
                         )}
@@ -193,7 +209,7 @@ const ProductVariantForm = ({
                       {variant.isActive === false && (
                         <div className={styles.inactiveBadge}>Đã vô hiệu hóa</div>
                       )}
-                      {variantErrors.sku && <div className={styles.errorText}>{variantErrors.sku}</div>}
+                      {variantErrors.sku && <div className={styles.errorText}>{variantErrors.sku.message}</div>}
                     </td>
                     <td>
                       <input
@@ -204,7 +220,7 @@ const ProductVariantForm = ({
                         onChange={(e) => handleFieldChange(index, 'barcode', e.target.value)}
                         disabled={variant.isActive === false}
                       />
-                      {variantErrors.barcode && <div className={styles.errorText}>{variantErrors.barcode}</div>}
+                      {variantErrors.barcode && <div className={styles.errorText}>{variantErrors.barcode.message}</div>}
                     </td>
                     <td>
                       <input
@@ -216,7 +232,7 @@ const ProductVariantForm = ({
                         min="0"
                         disabled={disablePrice || variant.isActive === false}
                       />
-                      {variantErrors.price && <div className={styles.errorText}>{variantErrors.price}</div>}
+                      {variantErrors.price && <div className={styles.errorText}>{variantErrors.price.message}</div>}
                     </td>
                     <td>
                       {renderSuggestedPrices(disablePrice ? 0 : variant.price)}
@@ -246,7 +262,7 @@ const ProductVariantForm = ({
                         <button
                           type="button"
                           className={styles.removeRowBtn}
-                          onClick={() => onRemove(index)}
+                          onClick={() => remove(index)}
                           title="Xóa biến thể"
                         >
                           <X size={16} />

@@ -167,9 +167,11 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
         }
 
+        validateTikTokProcessingTransition(order, oldStatus, status);
+
         OrderStatusPushResult pushResult = orderStatusPushService.push(order, status, OrderStatusPushContext.empty());
         if (shouldBlockLocalUpdate(order, status, pushResult)) {
-            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION, pushResult.getMessage());
         }
 
         if (status == OrderStatus.CANCELLED) {
@@ -276,6 +278,7 @@ public class OrderServiceImpl implements OrderService {
         CancelOrderRequest cancelRequest = request != null ? request : new CancelOrderRequest();
         String reason = cancelRequest.getReason();
         String reasonId = cancelRequest.getReasonId();
+        String tikTokReason = cancelRequest.getTikTokReason();
         ShopifyCancelReason shopifyReason = cancelRequest.getShopifyReason() != null
                 ? cancelRequest.getShopifyReason()
                 : ShopifyCancelReason.OTHER;
@@ -285,6 +288,12 @@ public class OrderServiceImpl implements OrderService {
         }
         if (order.getPlatform() == PlatformType.LAZADA && (reasonId == null || reasonId.isBlank())) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+        if (order.getPlatform() == PlatformType.TIKTOK && (tikTokReason == null || tikTokReason.isBlank())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Vui lòng chọn lý do hủy TikTok");
+        }
+        if (order.getPlatform() == PlatformType.TIKTOK && isTikTokCancellationPending(order)) {
+            throw new AppException(ErrorCode.CONFLICT, "Đơn hàng đang chờ TikTok xác nhận hủy");
         }
         if (oldStatus == OrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
@@ -297,13 +306,37 @@ public class OrderServiceImpl implements OrderService {
                 OrderStatusPushContext.builder()
                         .cancelReason(reason)
                         .cancelReasonId(reasonId)
+                        .tikTokReason(tikTokReason)
                         .shopifyReason(shopifyReason)
                         .email(cancelRequest.getEmail())
                         .restock(cancelRequest.getRestock())
                         .refund(cancelRequest.getRefund())
                         .build());
         if (shouldBlockLocalUpdate(order, OrderStatus.CANCELLED, pushResult)) {
-            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION, pushResult.getMessage());
+        }
+
+        if (order.getPlatform() == PlatformType.TIKTOK
+                && Boolean.TRUE.equals(pushResult.getMetadata().get("pendingConfirmation"))) {
+            order.setCancelReason(reason);
+            orderRepository.save(order);
+
+            var userOpt = SecurityUtils.getCurrentUser();
+            UUID actorId = userOpt.map(User::getId).orElse(null);
+            String actorEmail = userOpt.map(User::getEmail).orElse("system");
+            Map<String, Object> auditChanges = new java.util.HashMap<>();
+            auditChanges.put("oldStatus", oldStatus.name());
+            auditChanges.put("requestedStatus", OrderStatus.CANCELLED.name());
+            auditChanges.put("reason", reason != null ? reason : "");
+            auditChanges.put("tikTokReason", tikTokReason);
+            auditChanges.put("cancelStatus", String.valueOf(pushResult.getMetadata().get("cancelStatus")));
+            auditChanges.put("stage", "REQUESTED");
+            auditChanges.put("pendingConfirmation", true);
+            auditChanges.put("platformPushStatus", pushResult.getStatus().name());
+            auditChanges.put("platformPushMessage", pushResult.getMessage());
+            auditService.record(actorId, actorEmail, "ORDER_CANCEL", "ORDER", id,
+                    order.getId().toString(), auditChanges);
+            return;
         }
 
         releaseReservedInventory(order);
@@ -346,7 +379,13 @@ public class OrderServiceImpl implements OrderService {
                 || order.getStatus() == OrderStatus.DELIVERED) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
         }
-        return orderStatusPushService.getCancelReasons(order);
+        try {
+            return orderStatusPushService.getCancelReasons(order);
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, e.getMessage(), e);
+        }
     }
 
     private boolean isPlatformOrder(Order order) {
@@ -362,12 +401,15 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private boolean isStrictPlatformOrder(Order order) {
-        return order.getPlatform() == PlatformType.LAZADA || order.getPlatform() == PlatformType.SHOPIFY;
+        return order.getPlatform() == PlatformType.LAZADA
+                || order.getPlatform() == PlatformType.SHOPIFY
+                || order.getPlatform() == PlatformType.TIKTOK;
     }
 
     private boolean requiresTextCancelReason(Order order) {
         return order.getPlatform() != PlatformType.LAZADA
-                && order.getPlatform() != PlatformType.SHOPIFY;
+                && order.getPlatform() != PlatformType.SHOPIFY
+                && order.getPlatform() != PlatformType.TIKTOK;
     }
 
     private boolean shouldBlockLocalUpdate(Order order, OrderStatus status, OrderStatusPushResult pushResult) {
@@ -390,7 +432,54 @@ public class OrderServiceImpl implements OrderService {
             return status == OrderStatus.SHIPPED
                     || status == OrderStatus.CANCELLED;
         }
+        if (order.getPlatform() == PlatformType.TIKTOK) {
+            return status == OrderStatus.SHIPPED
+                    || status == OrderStatus.CANCELLED;
+        }
         return status == OrderStatus.CANCELLED;
+    }
+
+    private boolean isTikTokCancellationPending(Order order) {
+        if (order.getPlatformMetadata() == null) {
+            return false;
+        }
+        Object rawTikTok = order.getPlatformMetadata().get("tiktok");
+        if (!(rawTikTok instanceof Map<?, ?> tikTok)) {
+            return false;
+        }
+        Object pending = tikTok.get("pendingConfirmation");
+        return pending instanceof Boolean value ? value : Boolean.parseBoolean(String.valueOf(pending));
+    }
+
+    private void validateTikTokProcessingTransition(Order order, OrderStatus oldStatus, OrderStatus targetStatus) {
+        if (order.getPlatform() != PlatformType.TIKTOK || oldStatus != OrderStatus.PENDING) {
+            return;
+        }
+        if (targetStatus != OrderStatus.CONFIRMED
+                && targetStatus != OrderStatus.PROCESSING
+                && targetStatus != OrderStatus.SHIPPED) {
+            return;
+        }
+        String rawStatus = tikTokRawOrderStatus(order);
+        if (!"AWAITING_SHIPMENT".equalsIgnoreCase(rawStatus)) {
+            throw new AppException(
+                    ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
+                    "TikTok chưa chuyển đơn sang AWAITING_SHIPMENT; trạng thái hiện tại="
+                            + (rawStatus != null ? rawStatus : "UNKNOWN")
+            );
+        }
+    }
+
+    private String tikTokRawOrderStatus(Order order) {
+        if (order.getPlatformMetadata() == null) {
+            return null;
+        }
+        Object rawTikTok = order.getPlatformMetadata().get("tiktok");
+        if (!(rawTikTok instanceof Map<?, ?> tikTok)) {
+            return null;
+        }
+        Object rawStatus = tikTok.get("rawOrderStatus");
+        return rawStatus != null ? String.valueOf(rawStatus) : null;
     }
 
     @Override

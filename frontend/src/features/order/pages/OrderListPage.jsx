@@ -81,8 +81,8 @@ const OrderListPage = () => {
     }
   }, []);
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
+  const fetchOrders = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const params = {
         page,
@@ -101,7 +101,7 @@ const OrderListPage = () => {
       console.error('Failed to fetch orders:', error);
       setOrders([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [page, keyword, statusFilter, channelFilter, fromDate, toDate]);
 
@@ -117,6 +117,17 @@ const OrderListPage = () => {
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  useEffect(() => {
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchOrders({ silent: true });
+        fetchStats();
+      }
+    }, 15_000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [fetchOrders, fetchStats]);
 
   useEffect(() => { setPage(0); }, [keyword, statusFilter, channelFilter, fromDate, toDate]);
 

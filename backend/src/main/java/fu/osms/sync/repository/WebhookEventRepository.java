@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.stereotype.Repository;
 
 import fu.osms.common.enums.PlatformType;
@@ -20,4 +21,7 @@ public interface WebhookEventRepository extends JpaRepository<WebhookEvent, UUID
     Page<WebhookEvent> findByChannel_IdAndStatus(UUID channelId, String status, Pageable pageable);
 
     Optional<WebhookEvent> findByPlatformAndExternalEventId(PlatformType platform, String externalEventId);
+
+    @EntityGraph(attributePaths = "channel")
+    Optional<WebhookEvent> findWithChannelById(UUID id);
 }

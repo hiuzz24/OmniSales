@@ -104,6 +104,14 @@
   margin-top: 2px;
 }
 
+.configurationStatus {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--catalog-muted, #667085);
+}
+
 .suggestedPrice {
   font-size: 12px;
   color: #059669;

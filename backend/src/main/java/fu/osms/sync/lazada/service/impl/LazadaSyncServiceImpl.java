@@ -6,27 +6,29 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.channel.entity.Channel;
-import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
-import fu.osms.channel.repository.ChannelCredentialRepository;
+import fu.osms.channel.token.exception.PlatformAccessTokenExpiredException;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.SyncStatus;
-import fu.osms.common.exception.TokenExpiredException;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;
 import fu.osms.sync.lazada.service.LazadaPayloadBuilder;
+import fu.osms.sync.lazada.dto.LazadaProductConfig;
+import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.sync.service.PlatformSyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -34,31 +36,26 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LazadaSyncServiceImpl implements PlatformSyncService {
 
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
     private final LazadaImageService lazadaImageService;
     private final LazadaPayloadBuilder lazadaPayloadBuilder;
-    private final ChannelCredentialRepository channelCredentialRepository;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ObjectMapper objectMapper;
+    private final ProductChannelConfigService productChannelConfigService;
 
     @Override
     public boolean syncProduct(Product product, List<ProductVariant> variants, List<ProductImage> images, Channel channel, ChannelProduct channelProduct) {
         try {
-            ChannelCredential credential = channelCredentialRepository
-                    .findByChannelIdAndConnectionState(channel.getId(), "CONNECTED")
-                    .orElse(null);
-
-            if (credential == null || credential.getAccessToken() == null || credential.getAccessToken().isBlank()) {
-                throw new IllegalStateException("Access token is missing or channel disconnected");
+            if (!productChannelConfigService.isReady(channelProduct)) {
+                String error = productChannelConfigService.configurationError(channelProduct);
+                throw new IllegalStateException(error == null ? "Missing Lazada product configuration" : error);
             }
 
-            Long tokenExpiresAt = null;
-            if (credential.getTokenExpiresAt() != null) {
-                tokenExpiresAt = credential.getTokenExpiresAt().toEpochSecond();
-            }
-
-            List<String> migratedImageUrls = lazadaImageService.migrateImages(images, credential.getAccessToken(), tokenExpiresAt);
+            LazadaProductConfig config = resolveProductConfig(channelProduct);
+            validateSyncPrerequisites(product, variants, config);
+            List<String> migratedImageUrls = lazadaImageService.migrateImages(images, channel.getId());
+            migrateSizeChartImage(config, channel.getId());
 
             boolean isNew = (channelProduct.getExternalProductId() == null);
             Map<String, String> externalSkuIdBySku = isNew ? Map.of() : resolveExternalSkuIds(channelProduct);
@@ -67,6 +64,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
                     variants,
                     migratedImageUrls,
                     externalSkuIdBySku,
+                    config,
                     isNew
             );
 
@@ -75,7 +73,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
 
             String apiPath = isNew ? "/product/create" : "/product/update";
 
-            String responseStr = lazadaApiClient.executePost(apiPath, params, credential.getAccessToken(), tokenExpiresAt);
+            String responseStr = lazadaApiClient.executePost(channel.getId(), apiPath, params);
             log.error("[LazadaSync] Raw Lazada response for {}: {}", apiPath, responseStr);
             JsonNode root = objectMapper.readTree(responseStr);
 
@@ -146,7 +144,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
                 throw new RuntimeException("Lazada API returned error: " + errorMsg);
             }
 
-        } catch (TokenExpiredException e) {
+        } catch (PlatformAccessTokenExpiredException e) {
             log.error("[LazadaSync] Token expired for channel {}", channel.getId(), e);
             throw e;
         } catch (Exception e) {
@@ -168,6 +166,59 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
                         ChannelProductVariant::getExternalVariantId,
                         (first, ignored) -> first
                 ));
+    }
+
+    private void migrateSizeChartImage(LazadaProductConfig config, UUID channelId) {
+        if (config.getAttributes() == null || config.getAttributes().isEmpty()) return;
+        Map<String, Object> attributes = new HashMap<>(config.getAttributes());
+        for (Map.Entry<String, Object> entry : attributes.entrySet()) {
+            String normalized = entry.getKey() == null ? "" : entry.getKey().trim().toLowerCase()
+                    .replace(' ', '_').replace('-', '_');
+            if (!"size_chart".equals(normalized) && !"size_chart_image".equals(normalized)) continue;
+            String sourceUrl = entry.getValue() == null ? null : String.valueOf(entry.getValue());
+            if (sourceUrl == null || sourceUrl.isBlank()) return;
+            entry.setValue(lazadaImageService.migrateImageUrl(sourceUrl, channelId));
+            config.setAttributes(attributes);
+            return;
+        }
+    }
+
+    private LazadaProductConfig resolveProductConfig(ChannelProduct channelProduct) {
+        if (channelProduct.getMetadata() == null || !(channelProduct.getMetadata().get("platformConfig") instanceof Map<?, ?> config)) {
+            throw new IllegalStateException("Missing Lazada product configuration");
+        }
+        return objectMapper.convertValue(config, LazadaProductConfig.class);
+    }
+
+    private void validateSyncPrerequisites(Product product, List<ProductVariant> variants, LazadaProductConfig config) {
+        if (config.getBrandId() == null || config.getBrandId().isBlank()) {
+            throw new IllegalStateException("Missing Lazada brand configuration");
+        }
+        if (product.getWeightGrams() == null || product.getWeightGrams() <= 0) {
+            throw new IllegalStateException("Missing package weight");
+        }
+        Map<String, Object> attributes = product.getAttributes();
+        for (String key : List.of("packageWidthCm", "packageHeightCm", "packageLengthCm")) {
+            Object value = attributes == null ? null : attributes.get(key);
+            if (!isPositiveNumber(value)) {
+                throw new IllegalStateException("Missing " + key);
+            }
+        }
+        for (ProductVariant variant : variants) {
+            if (!Boolean.FALSE.equals(variant.getIsActive())
+                    && (variant.getPrice() == null || variant.getPrice().compareTo(BigDecimal.ZERO) <= 0)) {
+                throw new IllegalStateException("Missing selling price for SKU " + variant.getSku());
+            }
+        }
+    }
+
+    private boolean isPositiveNumber(Object value) {
+        if (value == null || value.toString().isBlank()) return false;
+        try {
+            return new BigDecimal(value.toString()).signum() > 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private String resolveLazadaErrorMessage(JsonNode root) {

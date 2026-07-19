@@ -1,8 +1,6 @@
 package fu.osms.sync.webhook.impl;
 
-import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProductVariant;
-import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.inventory.service.PlatformOrderInventoryService;
@@ -12,7 +10,7 @@ import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
 import fu.osms.sync.entity.WebhookEvent;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.service.PlatformOrderWebhookProcessor;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
@@ -41,9 +39,8 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
-    private final ChannelCredentialRepository channelCredentialRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
     private final PlatformOrderInventoryService platformOrderInventoryService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -66,12 +63,8 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         OrderStatus oldStatus = oldOrderOpt.map(Order::getStatus).orElse(null);
         String oldPaymentStatus = oldOrderOpt.map(Order::getPaymentStatus).orElse(null);
 
-        ChannelCredential credential = resolveCredential(event);
-        Long tokenExpiresAt = credential.getTokenExpiresAt() != null
-                ? credential.getTokenExpiresAt().toEpochSecond()
-                : null;
-        Map<String, Object> orderData = fetchOrderDetail(externalOrderId, credential.getAccessToken(), tokenExpiresAt);
-        List<Map<String, Object>> orderItemsData = fetchOrderItems(externalOrderId, credential.getAccessToken(), tokenExpiresAt);
+        Map<String, Object> orderData = fetchOrderDetail(event.getChannel().getId(), externalOrderId);
+        List<Map<String, Object>> orderItemsData = fetchOrderItems(event.getChannel().getId(), externalOrderId);
 
         Order order = ensureOrder(event, externalOrderId);
         assertOrderBelongsToEvent(order, event);
@@ -121,28 +114,17 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
                 .orElseThrow(() -> new IllegalStateException("Cannot create or load Lazada order"));
     }
 
-    private ChannelCredential resolveCredential(WebhookEvent event) {
-        ChannelCredential credential = channelCredentialRepository.findByChannelId(event.getChannel().getId())
-                .orElseThrow(() -> new IllegalStateException("Channel credential not connected"));
-        if (!"CONNECTED".equals(credential.getConnectionState())
-                || credential.getAccessToken() == null
-                || credential.getAccessToken().isBlank()) {
-            throw new IllegalStateException("Channel credential not connected");
-        }
-        return credential;
-    }
-
-    private Map<String, Object> fetchOrderDetail(String orderId, String accessToken, Long tokenExpiresAt) {
+    private Map<String, Object> fetchOrderDetail(UUID channelId, String orderId) {
         log.info("[lazada fetch order]");
-        String response = lazadaApiClient.executeGet("/order/get", Map.of("order_id", orderId), accessToken, tokenExpiresAt);
+        String response = lazadaApiClient.executeGet(channelId, "/order/get", Map.of("order_id", orderId));
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, "Lazada order detail response is invalid");
         assertLazadaSuccess(body, "Lazada order detail API returned error");
         return WebhookPayloadUtils.copyMap(body.get("data"));
     }
 
-    private List<Map<String, Object>> fetchOrderItems(String orderId, String accessToken, Long tokenExpiresAt) {
+    private List<Map<String, Object>> fetchOrderItems(UUID channelId, String orderId) {
         log.info("[lazada fetch order item]");
-        String response = lazadaApiClient.executeGet("/order/items/get", Map.of("order_id", orderId), accessToken, tokenExpiresAt);
+        String response = lazadaApiClient.executeGet(channelId, "/order/items/get", Map.of("order_id", orderId));
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, "Lazada order items response is invalid");
         assertLazadaSuccess(body, "Lazada order items API returned error");
         Object data = body.get("data");
