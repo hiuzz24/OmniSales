@@ -39,6 +39,10 @@ spring:
           write timeout: 5000
 
 app:
+  channel-token-refresh:
+    enabled: ${CHANNEL_TOKEN_REFRESH_ENABLED:true}
+    fixed-delay-ms: ${CHANNEL_TOKEN_REFRESH_FIXED_DELAY_MS:600000}
+    refresh-before-minutes: ${CHANNEL_TOKEN_REFRESH_BEFORE_MINUTES:30}
   notifications:
     email-enabled: ${NOTIFICATION_EMAIL_ENABLED:false}
     low-stock-repeat-hours: ${LOW_STOCK_NOTIFICATION_REPEAT_HOURS:12}
@@ -82,7 +86,8 @@ lazada:
 tiktok:
   app-key: ${TIKTOK_APP_KEY:}
   app-secret: ${TIKTOK_APP_SECRET:}
-  token-url: ${TIKTOK_TOKEN_URL:}
+  token-url: ${TIKTOK_TOKEN_URL:https://auth.tiktok-shops.com/api/v2/token/get}
+  refresh-token-url: ${TIKTOK_REFRESH_TOKEN_URL:https://auth.tiktok-shops.com/api/v2/token/refresh}
   api-url: ${TIKTOK_API_URL:https://open-api.tiktokglobalshop.com}
   fashion-root-category-ids: "${TIKTOK_FASHION_ROOT_CATEGORY_IDS:601152,824328,802312,803592,601303,877320,834568,846224}"
   product-api-version: ${TIKTOK_PRODUCT_API_VERSION:202502}

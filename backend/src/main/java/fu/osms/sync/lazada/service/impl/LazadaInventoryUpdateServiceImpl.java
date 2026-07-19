@@ -12,7 +12,8 @@ import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
+import fu.osms.channel.token.service.ChannelTokenService;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +41,8 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
     private static final String API_PATH = "/product/stock/sellable/update";
     private static final String WAREHOUSE_CODE_MARKER = "LAZADA_WAREHOUSE_CODE=";
 
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
+    private final ChannelTokenService channelTokenService;
     private final ObjectMapper objectMapper;
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
@@ -64,6 +66,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         );
         ChannelCredential credential = credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED")
                 .orElseThrow(() -> new IllegalStateException("Kenh Lazada chua co token ket noi."));
+        channelTokenService.getValidToken(channelId);
         if (credential.getAccessToken() == null || credential.getAccessToken().isBlank()) {
             throw new IllegalStateException("Kenh Lazada chua co access_token. Vui long ket noi lai bang OAuth Lazada.");
         }
@@ -241,11 +244,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         );
 
         String response = lazadaApiClient.executePost(
-                API_PATH,
-                params,
-                credential.getAccessToken(),
-                tokenExpiresAt(credential)
-        );
+                credential.getChannel().getId(), API_PATH, params);
         ensureSuccess(response);
         log.info(
                 "[LazadaStockSync] Lazada API success api={} batchSkuCount={} responseLength={}",

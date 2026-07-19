@@ -4,6 +4,16 @@ import { Plus, X, ImageIcon, Upload, Loader2, RefreshCcw } from 'lucide-react';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './ProductVariantForm.module.css';
 
+const isHttpUrl = (value) => {
+  if (!value?.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return ['http:', 'https:'].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
+
 const emptyVariant = () => ({
   sku: '',
   barcode: '',
@@ -28,6 +38,7 @@ const ProductVariantForm = ({
   const [editingImageIndex, setEditingImageIndex] = useState(null);
   const [urlValue, setUrlValue] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [failedImageUrls, setFailedImageUrls] = useState({});
   const fileInputRef = useRef(null);
 
   const handleFieldChange = (index, field, value) => {
@@ -40,7 +51,14 @@ const ProductVariantForm = ({
 
   const handleSaveImage = () => {
     if (!urlValue.trim() || editingImageIndex === null) return;
-    setValue(`variants.${editingImageIndex}.images`, [{ url: urlValue.trim() }], { shouldDirty: true });
+    if (!isHttpUrl(urlValue)) {
+      alert('URL ảnh biến thể phải bắt đầu bằng http:// hoặc https://');
+      return;
+    }
+    setValue(`variants.${editingImageIndex}.images`, [{ url: urlValue.trim() }], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
     setEditingImageIndex(null);
     setUrlValue('');
   };
@@ -52,8 +70,13 @@ const ProductVariantForm = ({
     try {
       setIsUploading(true);
       const secureUrl = await uploadImageToCloudinary(file);
-      
-      setValue(`variants.${editingImageIndex}.images`, [{ url: secureUrl }], { shouldDirty: true });
+      if (!isHttpUrl(secureUrl)) {
+        throw new Error('Cloudinary không trả về URL ảnh hợp lệ');
+      }
+      setValue(`variants.${editingImageIndex}.images`, [{ url: secureUrl }], {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
       setEditingImageIndex(null);
       setUrlValue('');
     } catch (error) {
@@ -123,6 +146,8 @@ const ProductVariantForm = ({
             <tbody>
               {variants.map((variant, index) => {
                 const variantErrors = errors.variants?.[index] || {};
+                const imageUrl = variant.images?.[0]?.url;
+                const canDisplayImage = isHttpUrl(imageUrl) && !failedImageUrls[imageUrl];
                 return (
                   <tr key={fields[index]?.formId || index} style={{ opacity: variant.isActive === false ? 0.6 : 1 }}>
                     <td className={styles.imgCell}>
@@ -134,10 +159,19 @@ const ProductVariantForm = ({
                             setUrlValue(variant.images?.[0]?.url || '');
                           }
                         }}
-                        title={variant.isActive === false ? '' : 'Thêm ảnh biến thể'}
+                        title={variant.isActive === false
+                          ? ''
+                          : imageUrl && !canDisplayImage
+                            ? 'Ảnh biến thể không tải được. Nhấn để thay ảnh.'
+                            : 'Thêm ảnh biến thể'}
                       >
-                        {variant.images?.[0]?.url ? (
-                          <img src={variant.images[0].url} alt={`Variant ${index}`} className={styles.imgThumbnail} />
+                        {canDisplayImage ? (
+                          <img
+                            src={imageUrl}
+                            alt={`Variant ${index + 1}`}
+                            className={styles.imgThumbnail}
+                            onError={() => setFailedImageUrls((previous) => ({ ...previous, [imageUrl]: true }))}
+                          />
                         ) : (
                           <ImageIcon className={styles.imgIcon} />
                         )}

@@ -29,6 +29,7 @@ public class TikTokChannelConnectionServiceImpl implements TikTokChannelConnecti
                 token.getAccessToken(),
                 token.getRefreshToken(),
                 token.getExpiresInSeconds(),
+                token.getRefreshExpiresInSeconds(),
                 token.getAccountId(),
                 token.getAccountName(),
                 metadata

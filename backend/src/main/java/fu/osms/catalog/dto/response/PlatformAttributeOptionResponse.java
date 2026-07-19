@@ -11,4 +11,5 @@ import lombok.*;
 public class PlatformAttributeOptionResponse {
     private String id;
     private String name;
+    private String platformValue;
 }

@@ -2,6 +2,8 @@ package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import fu.osms.channel.token.dto.PlatformTokenRefreshResult;
+import fu.osms.channel.token.exception.TokenRefreshException;
 import fu.osms.sync.lazada.service.LazadaApiClient;
 import fu.osms.sync.lazada.service.LazadaOAuthService;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.OffsetDateTime;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -90,6 +93,36 @@ public class LazadaOAuthServiceImpl implements LazadaOAuthService {
         }
     }
 
+    @Override
+    public PlatformTokenRefreshResult refreshToken(String refreshToken) {
+        Map<String, String> params = new HashMap<>();
+        params.put("refresh_token", refreshToken);
+        try {
+            String responseStr = lazadaApiClient.executePost(
+                    "/auth/token/refresh", params, null, null, authApiUrl);
+            Map<String, Object> response = objectMapper.readValue(responseStr, new TypeReference<>() {});
+            validateTokenResponse(response);
+            OffsetDateTime now = OffsetDateTime.now();
+            long expiresIn = longValue(response.get("expires_in"));
+            long refreshExpiresIn = longValue(response.get("refresh_expires_in"));
+            return PlatformTokenRefreshResult.builder()
+                    .accessToken(String.valueOf(response.get("access_token")))
+                    .refreshToken(stringValue(response.get("refresh_token")))
+                    .tokenExpiresAt(expiresIn > 0 ? now.plusSeconds(expiresIn) : null)
+                    .refreshTokenExpiresAt(refreshExpiresIn > 0 ? now.plusSeconds(refreshExpiresIn) : null)
+                    .build();
+        } catch (TokenRefreshException error) {
+            throw error;
+        } catch (Exception error) {
+            String message = error.getMessage() == null ? "" : error.getMessage().toLowerCase();
+            if (message.contains("refresh token")
+                    && (message.contains("expired") || message.contains("invalid"))) {
+                throw TokenRefreshException.expired("Lazada refresh token is invalid or expired; reconnect the channel");
+            }
+            throw TokenRefreshException.transientFailure("Unable to refresh Lazada token", error);
+        }
+    }
+
     private Object firstNonNull(Object... values) {
         for (Object value : values) {
             if (value != null && !String.valueOf(value).isBlank()) {
@@ -97,6 +130,19 @@ public class LazadaOAuthServiceImpl implements LazadaOAuthService {
             }
         }
         return null;
+    }
+
+    private String stringValue(Object value) {
+        return value == null || String.valueOf(value).isBlank() ? null : String.valueOf(value);
+    }
+
+    private long longValue(Object value) {
+        if (value == null) return 0;
+        try {
+            return value instanceof Number number ? number.longValue() : Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private void validateTokenResponse(Map<String, Object> responseMap) {

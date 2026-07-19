@@ -1,4 +1,5 @@
 import { Save } from 'lucide-react';
+import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductChannelSidebar.module.css';
 
 const PLATFORM_ICONS = {
@@ -10,17 +11,12 @@ const PLATFORM_ICONS = {
 
 const ProductChannelSidebar = ({
   channels = [],
-  selectedChannels = [],
-  onChannelToggle,
-  showProduct,
-  onStatusToggle,
   onSubmit,
   onInvalid,
   onCancel,
   warehouses = [],
   selectedWarehouseId = '',
   onWarehouseChange,
-  isSubmitting = false,
   isEditMode = false,
 }) => {
   const { control, setValue, handleSubmit, formState: { isSubmitting } } = useFormContext();

@@ -1,8 +1,10 @@
 package fu.osms.catalog.dto.request;
 
 import fu.osms.catalog.enums.ProductStatus;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -17,10 +19,12 @@ import java.util.UUID;
 @Builder
 public class ProductRequest {
 
+    @NotNull(message = "Product category must not be null")
     private UUID categoryId;
 
     private UUID warehouseId;
 
+    @NotBlank(message = "Product SKU must not be blank")
     @Size(max = 100)
     private String sku;
 
@@ -47,13 +51,17 @@ public class ProductRequest {
     private Map<String, Object> attributes;
 
     @NotEmpty(message = "Sản phẩm phải có ít nhất một biến thể")
+    @Valid
     private List<ProductVariantRequest> variants;
 
     private Long version;
 
+    @NotEmpty(message = "Product must have at least one image")
+    @Valid
     private List<ProductImageRequest> images;
 
     private List<UUID> channelIds;
 
+    @Valid
     private List<ChannelConfigRequest> channelConfigs;
 }

@@ -19,28 +19,47 @@ const configFromSync = (sync) => ({
   categoryName: sync.platformConfig?.categoryName || '',
   categorySource: sync.platformConfig?.categorySource || '',
   categoryConfirmed: Boolean(sync.platformConfig?.categoryConfirmed),
-  categoryVersion: sync.platformConfig?.categoryVersion || (sync.platform === 'TIKTOK' ? 'v1' : null),
+  categoryVersion: sync.platformConfig?.categoryVersion || (sync.platform === 'TIKTOK' ? 'v2' : null),
   brandId: sync.platformConfig?.brandId || '',
   brandName: sync.platformConfig?.brandName || '',
   sizeChartImageUrl: sync.platformConfig?.sizeChartImageUrl || '',
   attributes: sync.platformConfig?.attributes || {},
-  variantAttributeBindings: sync.platformConfig?.variantAttributeBindings || {},
+  variantAttributeValueMappings: sync.platformConfig?.variantAttributeValueMappings || {},
 });
 
 const TabPlatform = ({ product, onRefresh }) => {
   const mappings = useMemo(() => product?.channelSyncs || [], [product?.channelSyncs]);
   const [syncing, setSyncing] = useState({});
-  const configMethods = useForm({ defaultValues: { channelConfigs: {} } });
+  const configMethods = useForm({
+    defaultValues: {
+      name: '',
+      description: '',
+      images: [],
+      sku: '',
+      variants: [],
+      hasVariants: false,
+      channelConfigs: {},
+    },
+  });
   const mappingConfigs = useMemo(() => mappings.reduce((result, mapping) => ({
     ...result,
     [mapping.channelId]: configFromSync(mapping),
   }), {}), [mappings]);
 
   useEffect(() => {
+    const variants = product?.variants || [];
+    const hasVariants = variants.length > 1
+      || (variants.length === 1 && Object.keys(variants[0].optionValues || {}).length > 0);
     configMethods.reset({
+      name: product?.name || '',
+      description: product?.description || '',
+      images: product?.images || [],
+      sku: product?.sku || '',
+      variants,
+      hasVariants,
       channelConfigs: mappingConfigs,
     });
-  }, [configMethods, mappingConfigs]);
+  }, [configMethods, mappingConfigs, product?.name, product?.description, product?.images, product?.sku, product?.variants]);
 
   const platformChannels = useMemo(() => mappings.map((mapping) => ({
     ...mapping,
@@ -82,30 +101,35 @@ const TabPlatform = ({ product, onRefresh }) => {
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
-        <div className={styles.titleRow}><h3 className={styles.cardTitle}>Cấu hình platform</h3></div>
-        <p className={styles.cardSubtitle}>Mỗi channel có category và trạng thái đồng bộ độc lập.</p>
+        <div className={styles.titleRow}>
+          <span className={styles.sectionIcon}>🔄</span>
+          <h3 className={styles.cardTitle}>Trạng thái đồng bộ</h3>
+        </div>
+        <p className={styles.cardSubtitle}>Kiểm tra trạng thái kết nối và đồng bộ của sản phẩm trên các sàn.</p>
       </div>
       <div className={styles.mappingList}>
         {mappings.map((mapping) => (
           <div className={styles.mappingRow} key={mapping.channelId}>
-            <div>
-              <strong>{mapping.channelName || mapping.platform}</strong>
-              <div className={styles.textGray}>{mapping.platform}</div>
+            <div className={styles.channelInfo}>
+              <strong className={styles.channelName}>{mapping.channelName || mapping.platform}</strong>
+              <div className={styles.channelType}>
+                {mapping.platform}
+              </div>
             </div>
-            <div>
+            <div className={styles.statusInfo}>
               <span className={mapping.readyToSync ? styles.badgeSuccess : styles.badgeWarning}>
-                {mapping.readyToSync ? 'Ready to sync' : mapping.configurationError || 'Thiếu cấu hình'}
+                {mapping.readyToSync ? 'Sẵn sàng đồng bộ' : mapping.configurationError || 'Thiếu cấu hình'}
               </span>
-              <div className={styles.textGray}>{statusLabel[mapping.syncStatus] || mapping.syncStatus}</div>
+              <div className={styles.syncStatus}>{statusLabel[mapping.syncStatus] || mapping.syncStatus}</div>
             </div>
             <button
               type="button"
-              className={styles.primaryButton}
+              className={styles.syncButton}
               onClick={() => syncChannel(mapping)}
               disabled={!mapping.readyToSync || syncing[mapping.channelId]}
             >
-              <RefreshCw size={15} className={syncing[mapping.channelId] ? styles.spin : ''} />
-              Đồng bộ
+              <RefreshCw size={16} className={syncing[mapping.channelId] ? styles.spin : ''} />
+              Đồng bộ ngay
             </button>
           </div>
         ))}

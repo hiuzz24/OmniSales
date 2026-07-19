@@ -59,8 +59,6 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
         }
 
         Map<String, Object> payload = parsePayload(rawBody);
-        log.info("[tiktok payload]{}",payload);
-
         if (handler.shouldIgnore(payload)) {
             return WebhookReceiveResult.builder()
                     .status("IGNORED")
@@ -70,16 +68,9 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
 
         String eventType = handler.extractEventType(headers, payload);
         String externalEventId = handler.extractExternalEventId(headers, payload, rawBody);
-
-        if (externalEventId != null) {
-            WebhookEvent existing = webhookEventRepository.findByPlatformAndExternalEventId(platform, externalEventId).orElse(null);
-            if (existing != null) {
-                return WebhookReceiveResult.builder()
-                        .webhookEventId(existing.getId())
-                        .status(existing.getStatus())
-                        .message("Duplicate webhook ignored")
-                        .build();
-            }
+        WebhookEvent existing = findExisting(platform, externalEventId);
+        if (existing != null) {
+            return duplicateResult(existing);
         }
 
         Channel channel = handler.resolveChannel(headers, payload).orElse(null);
@@ -91,15 +82,18 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                 .status("RECEIVED")
                 .rawPayload(payload)
                 .build();
+
         try {
             event = webhookEventRepository.saveAndFlush(event);
-            log.info("[tiktok webhook receive event]{}",event);
         } catch (DataIntegrityViolationException e) {
             if (externalEventId != null) {
                 return duplicateResult(platform, externalEventId);
             }
             throw e;
         }
+
+        log.info("[WebhookReceiver] Persisted eventId={}, platform={}, eventType={}, channelId={}",
+                event.getId(), platform, eventType, channel == null ? null : channel.getId());
 
         if (channel == null) {
             event.setStatus("FAILED");
@@ -113,20 +107,6 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                     .build();
         }
 
-        if (platform == PlatformType.LAZADA || platform == PlatformType.TIKTOK) {
-            processAsyncAfterCommit(event.getId());
-            return WebhookReceiveResult.builder()
-                    .webhookEventId(event.getId())
-                    .status(event.getStatus())
-                    .message("Webhook queued")
-                    .build();
-        }
-
-        WebhookEvent processedEvent = webhookEventProcessingService.processSavedEvent(event.getId());
-        return WebhookReceiveResult.builder()
-                .webhookEventId(processedEvent.getId())
-                .status(processedEvent.getStatus())
-                .message("Webhook processed")
         processAsyncAfterCommit(event.getId());
         return WebhookReceiveResult.builder()
                 .webhookEventId(event.getId())
@@ -150,7 +130,12 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<WebhookEventResponse> search(PlatformType platform, String status, String eventType, UUID channelId, int page, int size) {
+    public PageResponse<WebhookEventResponse> search(PlatformType platform,
+                                                     String status,
+                                                     String eventType,
+                                                     UUID channelId,
+                                                     int page,
+                                                     int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "receivedAt"));
         Specification<WebhookEvent> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -176,13 +161,24 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
         return handlers.stream().collect(Collectors.toMap(PlatformWebhookHandler::getPlatform, Function.identity()));
     }
 
+    private WebhookEvent findExisting(PlatformType platform, String externalEventId) {
+        if (externalEventId == null) {
+            return null;
+        }
+        return webhookEventRepository.findByPlatformAndExternalEventId(platform, externalEventId).orElse(null);
+    }
+
+    private WebhookReceiveResult duplicateResult(WebhookEvent existing) {
+        return WebhookReceiveResult.builder()
+                .webhookEventId(existing.getId())
+                .status(existing.getStatus())
+                .message("Duplicate webhook ignored")
+                .build();
+    }
+
     private WebhookReceiveResult duplicateResult(PlatformType platform, String externalEventId) {
         return webhookEventRepository.findByPlatformAndExternalEventId(platform, externalEventId)
-                .map(existing -> WebhookReceiveResult.builder()
-                        .webhookEventId(existing.getId())
-                        .status(existing.getStatus())
-                        .message("Duplicate webhook ignored")
-                        .build())
+                .map(this::duplicateResult)
                 .orElseGet(() -> WebhookReceiveResult.builder()
                         .status("IGNORED")
                         .message("Duplicate webhook ignored")

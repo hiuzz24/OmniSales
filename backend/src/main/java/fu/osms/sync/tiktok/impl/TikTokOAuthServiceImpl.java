@@ -7,6 +7,8 @@ import fu.osms.sync.tiktok.TikTokApiClient;
 import fu.osms.sync.tiktok.dto.TikTokAuthorizedShop;
 import fu.osms.sync.tiktok.dto.TikTokTokenData;
 import fu.osms.sync.tiktok.util.TikTokSignatureUtil;
+import fu.osms.channel.token.dto.PlatformTokenRefreshResult;
+import fu.osms.channel.token.exception.TokenRefreshException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,6 +42,9 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
 
     @Value("${tiktok.token-url}")
     private String tokenUrl;
+
+    @Value("${tiktok.refresh-token-url:https://auth.tiktok-shops.com/api/v2/token/refresh}")
+    private String refreshTokenUrl;
 
     @Value("${tiktok.api-url:https://open-api.tiktokglobalshop.com}")
     private String apiUrl;
@@ -95,10 +100,56 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
                 .accessToken(token.getAccessToken())
                 .refreshToken(token.getRefreshToken())
                 .expiresInSeconds(token.getExpiresInSeconds())
+                .refreshExpiresInSeconds(token.getRefreshExpiresInSeconds())
                 .accountId(token.getAccountId())
                 .accountName(token.getAccountName())
                 .metadata(metadata)
                 .build();
+    }
+
+    @Override
+    public PlatformTokenRefreshResult refreshToken(String refreshToken) {
+        validateConfig();
+        String fullUrl = UriComponentsBuilder.fromHttpUrl(refreshTokenUrl)
+                .queryParam("app_key", appKey)
+                .queryParam("app_secret", appSecret)
+                .queryParam("refresh_token", refreshToken)
+                .queryParam("grant_type", "refresh_token")
+                .build()
+                .encode()
+                .toUriString();
+        try {
+            String responseStr = restTemplate.getForObject(fullUrl, String.class);
+            Map<String, Object> response = objectMapper.readValue(responseStr, new TypeReference<>() {});
+            TikTokTokenData token = normalizeTokenResponse(response);
+            return PlatformTokenRefreshResult.builder()
+                    .accessToken(token.getAccessToken())
+                    .refreshToken(token.getRefreshToken())
+                    .tokenExpiresAt(OffsetDateTime.now().plusSeconds(token.getExpiresInSeconds()))
+                    .refreshTokenExpiresAt(token.getRefreshExpiresInSeconds() > 0
+                            ? OffsetDateTime.now().plusSeconds(token.getRefreshExpiresInSeconds()) : null)
+                    .grantedScopes(stringList(token.getMetadata().get("grantedScopes")))
+                    .accountId(token.getAccountId())
+                    .build();
+        } catch (RestClientResponseException error) {
+            String body = error.getResponseBodyAsString();
+            String normalized = body == null ? "" : body.toLowerCase();
+            if (normalized.contains("refresh_token")
+                    && (normalized.contains("expired") || normalized.contains("invalid"))) {
+                throw TokenRefreshException.expired("TikTok refresh token is invalid or expired; reconnect the channel");
+            }
+            throw TokenRefreshException.transientFailure("Unable to refresh TikTok token", error);
+        } catch (TokenRefreshException error) {
+            throw error;
+        } catch (Exception error) {
+            String normalized = error.getMessage() == null ? "" : error.getMessage().toLowerCase();
+            if (normalized.contains("refresh")
+                    && (normalized.contains("expired") || normalized.contains("invalid"))) {
+                throw TokenRefreshException.expired(
+                        "TikTok refresh token is invalid or expired; reconnect the channel");
+            }
+            throw TokenRefreshException.transientFailure("Unable to refresh TikTok token", error);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -177,10 +228,16 @@ public class TikTokOAuthServiceImpl implements TikTokOAuthService {
                 .accessToken(stringValue(accessToken))
                 .refreshToken(stringValue(data.get("refresh_token")))
                 .expiresInSeconds(secondsUntilEpoch(data.get("access_token_expire_in")))
+                .refreshExpiresInSeconds(secondsUntilEpoch(data.get("refresh_token_expire_in")))
                 .accountId(accountId)
                 .accountName(accountName)
                 .metadata(metadata)
                 .build();
+    }
+
+    private List<String> stringList(Object value) {
+        if (!(value instanceof List<?> values)) return null;
+        return values.stream().map(String::valueOf).toList();
     }
 
     private void validateConfig() {

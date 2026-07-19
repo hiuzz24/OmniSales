@@ -11,16 +11,14 @@ import fu.osms.catalog.service.PlatformLookupService;
 import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.catalog.service.impl.PlatformLookupServiceFactory;
 import fu.osms.channel.entity.Channel;
-import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
-import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.sync.service.PlatformSyncService;
-import fu.osms.sync.tiktok.TikTokApiClient;
+import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import fu.osms.sync.tiktok.TikTokProductPayloadBuilder;
 import fu.osms.sync.tiktok.dto.TikTokProductPayloadContext;
 import lombok.RequiredArgsConstructor;
@@ -49,8 +47,7 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
     private static final String SIZE_CHART_IMAGE_CACHE_KEY = "tiktokSizeChartImageUris";
     private static final String MANAGED_KEY = "tiktokManagedByOsms";
 
-    private final TikTokApiClient tikTokApiClient;
-    private final ChannelCredentialRepository credentialRepository;
+    private final TikTokAuthorizedApiClient tikTokApiClient;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ProductChannelConfigService productChannelConfigService;
@@ -68,24 +65,23 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
             Map<String, Object> config = productConfig(channelProduct);
             validate(product, variants, images, channel, channelProduct, config);
 
-            ChannelCredential credential = credentialRepository
-                    .findByChannelIdAndConnectionState(channel.getId(), "CONNECTED")
-                    .orElseThrow(() -> new IllegalStateException("TikTok channel is not connected"));
-            String accessToken = credential.getAccessToken();
-            if (accessToken == null || accessToken.isBlank()) {
-                throw new IllegalStateException("TikTok access token is missing");
-            }
-
             boolean isCreate = channelProduct.getExternalProductId() == null || channelProduct.getExternalProductId().isBlank();
-            List<String> imageUris = resolveImageUris(channelProduct, images, accessToken);
-            String sizeChartImageUri = resolveSizeChartImageUri(channelProduct, config, accessToken);
-            String defaultWarehouseId = isCreate ? resolveDefaultWarehouseId(channel, accessToken) : null;
+            List<String> imageUris = resolveImageUris(channel.getId(), channelProduct, images);
+            String sizeChartImageUri = resolveSizeChartImageUri(channel.getId(), channelProduct, config);
             List<PlatformAttributeResponse> schema = lookup(channel).getAttributes(
                     channel.getId(), text(config.get("categoryId")), text(config.get("categoryVersion")));
             validateRequiredProductAttributes(schema, config);
             Map<UUID, String> externalVariantIdByVariantId = channelProductVariantRepository
                     .findByChannelProductId(channelProduct.getId()).stream()
+                    .filter(value -> value.getExternalVariantId() != null
+                            && !value.getExternalVariantId().isBlank())
                     .collect(Collectors.toMap(value -> value.getVariant().getId(), ChannelProductVariant::getExternalVariantId));
+            boolean hasNewSku = variants.stream()
+                    .filter(variant -> !Boolean.FALSE.equals(variant.getIsActive()))
+                    .anyMatch(variant -> !externalVariantIdByVariantId.containsKey(variant.getId()));
+            String defaultWarehouseId = isCreate || hasNewSku
+                    ? resolveDefaultWarehouseId(channel)
+                    : null;
             String rawPayload = objectMapper.writeValueAsString(payloadBuilder.buildPayload(
                     new TikTokProductPayloadContext(
                             product,
@@ -102,8 +98,8 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
             ));
             Map<String, String> query = Map.of("shop_cipher", shopCipher(channel));
             String response = isCreate
-                    ? tikTokApiClient.executePost("/product/202309/products", query, rawPayload, accessToken)
-                    : tikTokApiClient.executePut("/product/202309/products/" + channelProduct.getExternalProductId(), query, rawPayload, accessToken);
+                    ? tikTokApiClient.executePost(channel.getId(), "/product/202309/products", query, rawPayload)
+                    : tikTokApiClient.executePut(channel.getId(), "/product/202309/products/" + channelProduct.getExternalProductId(), query, rawPayload);
 
             JsonNode root = objectMapper.readTree(response);
             ensureSuccess(root);
@@ -142,7 +138,8 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
         if (product.getWeightGrams() == null || product.getWeightGrams() <= 0) {
             throw new IllegalStateException("TikTok package weight is required");
         }
-        if (images == null || images.stream().noneMatch(image -> image.getUrl() != null && !image.getUrl().isBlank())) {
+        if (images == null || images.stream().noneMatch(image -> image.getVariant() == null
+                && image.getUrl() != null && !image.getUrl().isBlank())) {
             throw new IllegalStateException("TikTok product requires at least one image");
         }
         if (text(config.get("sizeChartImageUrl")) == null) {
@@ -164,16 +161,6 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
             if (!Boolean.TRUE.equals(mapping.getMetadata() == null ? null : mapping.getMetadata().get(MANAGED_KEY))) {
                 throw new IllegalStateException("TikTok update is only supported for products created by OSMS");
             }
-            Map<UUID, ChannelProductVariant> byVariantId = channelProductVariantRepository
-                    .findByChannelProductId(mapping.getId()).stream()
-                    .collect(Collectors.toMap(value -> value.getVariant().getId(), value -> value));
-            for (ProductVariant variant : variants) {
-                if (Boolean.FALSE.equals(variant.getIsActive())) continue;
-                ChannelProductVariant external = byVariantId.get(variant.getId());
-                if (external == null || external.getExternalVariantId() == null || external.getExternalVariantId().isBlank()) {
-                    throw new IllegalStateException("Missing TikTok SKU mapping for " + variant.getSku());
-                }
-            }
         }
         if (config.get("categoryId") == null) {
             throw new IllegalStateException("TikTok category is required");
@@ -184,15 +171,19 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
         validateGrantedScopes(channel);
     }
 
-    private List<String> resolveImageUris(ChannelProduct channelProduct, List<ProductImage> images, String accessToken) throws Exception {
+    private List<String> resolveImageUris(UUID channelId,
+                                          ChannelProduct channelProduct,
+                                          List<ProductImage> images) throws Exception {
         Map<String, Object> metadata = channelProduct.getMetadata() == null ? new HashMap<>() : new HashMap<>(channelProduct.getMetadata());
         Map<String, String> cache = stringMap(metadata.get(IMAGE_CACHE_KEY));
         List<String> uris = new ArrayList<>();
         for (ProductImage image : images) {
+            if (image.getVariant() != null) continue;
             if (image.getUrl() == null || image.getUrl().isBlank()) continue;
             String uri = cache.get(image.getUrl());
             if (uri == null) {
-                JsonNode root = objectMapper.readTree(tikTokApiClient.uploadProductImage(image.getUrl(), "MAIN_IMAGE", accessToken));
+                JsonNode root = objectMapper.readTree(
+                        tikTokApiClient.uploadProductImage(channelId, image.getUrl(), "MAIN_IMAGE"));
                 ensureSuccess(root);
                 uri = root.path("data").path("uri").asText(null);
                 if (uri == null || uri.isBlank()) throw new IllegalStateException("TikTok image upload response is missing uri");
@@ -205,9 +196,9 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
         return uris;
     }
 
-    private String resolveSizeChartImageUri(ChannelProduct channelProduct,
-                                            Map<String, Object> config,
-                                            String accessToken) throws Exception {
+    private String resolveSizeChartImageUri(UUID channelId,
+                                            ChannelProduct channelProduct,
+                                            Map<String, Object> config) throws Exception {
         String imageUrl = text(config.get("sizeChartImageUrl"));
         if (imageUrl == null) {
             throw new IllegalStateException("TikTok size chart image is required");
@@ -218,7 +209,7 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
         String uri = cache.get(imageUrl);
         if (uri == null) {
             JsonNode root = objectMapper.readTree(
-                    tikTokApiClient.uploadProductImage(imageUrl, "SIZE_CHART_IMAGE", accessToken));
+                    tikTokApiClient.uploadProductImage(channelId, imageUrl, "SIZE_CHART_IMAGE"));
             ensureSuccess(root);
             uri = root.path("data").path("uri").asText(null);
             if (uri == null || uri.isBlank()) {
@@ -289,11 +280,11 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
         };
     }
 
-    private String resolveDefaultWarehouseId(Channel channel, String accessToken) throws Exception {
+    private String resolveDefaultWarehouseId(Channel channel) throws Exception {
         String response = tikTokApiClient.executeGet(
+                channel.getId(),
                 "/logistics/202309/warehouses",
-                Map.of("shop_cipher", shopCipher(channel)),
-                accessToken
+                Map.of("shop_cipher", shopCipher(channel))
         );
         JsonNode root = objectMapper.readTree(response);
         ensureSuccess(root);

@@ -1,5 +1,6 @@
 package fu.osms.catalog.dto.request;
 
+import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -24,7 +25,9 @@ public class ChannelConfigRequest {
     private String categoryVersion;
     private String brandId;
     private String brandName;
+    @Pattern(regexp = "(?i)^(|https?://.+)$", message = "Size chart image URL must start with http:// or https://")
     private String sizeChartImageUrl;
     private Map<String, Object> attributes;
     private Map<String, String> variantAttributeBindings;
+    private Map<String, Map<String, String>> variantAttributeValueMappings;
 }

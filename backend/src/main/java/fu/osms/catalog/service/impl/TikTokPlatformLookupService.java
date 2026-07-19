@@ -10,11 +10,11 @@ import fu.osms.catalog.dto.response.PlatformBrandPageResponse;
 import fu.osms.catalog.service.PlatformLookupService;
 import fu.osms.catalog.dto.request.CategorySuggestionRequest;
 import fu.osms.catalog.dto.response.PlatformCategorySuggestionResponse;
-import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.repository.ChannelRepository;
-import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.common.enums.PlatformType;
-import fu.osms.sync.tiktok.TikTokApiClient;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
+import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
@@ -39,10 +39,11 @@ import java.util.concurrent.Callable;
 @RequiredArgsConstructor
 public class TikTokPlatformLookupService implements PlatformLookupService {
 
-    private static final String DEFAULT_CATEGORY_VERSION = "v1";
+    private static final String DEFAULT_CATEGORY_VERSION = "v2";
+    private static final int PRODUCT_NAME_MIN_LENGTH = 25;
+    private static final int PRODUCT_NAME_MAX_LENGTH = 255;
 
-    private final TikTokApiClient tikTokApiClient;
-    private final ChannelCredentialRepository credentialRepository;
+    private final TikTokAuthorizedApiClient tikTokApiClient;
     private final ChannelRepository channelRepository;
     private final ObjectMapper objectMapper;
     private final CacheManager cacheManager;
@@ -107,7 +108,7 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
         String version = version(request.getCategoryVersion());
         String imageUri = cached(cacheManager.getCache("tiktokSuggestionImageUris"),
                 request.getChannelId() + ":" + request.getPrimaryImageUrl(),
-                () -> uploadSuggestionImage(request.getPrimaryImageUrl(), accessToken(request.getChannelId())));
+                () -> uploadSuggestionImage(request.getChannelId(), request.getPrimaryImageUrl()));
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("product_title", request.getTitle().trim());
         if (request.getDescription() != null && !request.getDescription().isBlank()) body.put("description", request.getDescription());
@@ -115,8 +116,9 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
         body.put("category_version", version);
         String rawBody = writeJson(body);
         log.info("[TikTokCategorySuggestion] channelId={} categoryVersion={}", request.getChannelId(), version);
-        String response = tikTokApiClient.executePost("/product/202309/categories/recommend",
-                Map.of("shop_cipher", shopCipher(request.getChannelId())), rawBody, accessToken(request.getChannelId()));
+        String response = tikTokApiClient.executePost(request.getChannelId(),
+                "/product/202309/categories/recommend",
+                Map.of("shop_cipher", shopCipher(request.getChannelId())), rawBody);
         JsonNode root = readTree(response);
         ensureSuccess(root, "/product/202309/categories/recommend");
         List<PlatformCategorySuggestionResponse> suggestions = mapLeafCategorySuggestion(root.path("data"), inputHash(request));
@@ -138,10 +140,9 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
     }
 
     private List<PlatformCategoryNodeResponse> loadCategories(UUID channelId, String categoryVersion) {
-        String response = tikTokApiClient.executeGet(
+        String response = tikTokApiClient.executeGet(channelId,
                 "/product/202309/categories",
-                Map.of("category_version", categoryVersion, "locale", "vi-VN", "shop_cipher", shopCipher(channelId)),
-                accessToken(channelId)
+                Map.of("category_version", categoryVersion, "locale", "vi-VN", "shop_cipher", shopCipher(channelId))
         );
         JsonNode root = readTree(response);
         ensureSuccess(root, "/product/202309/categories");
@@ -162,10 +163,9 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
     private List<PlatformAttributeResponse> loadAttributes(UUID channelId, String categoryId, String categoryVersion) {
         log.info("[TikTokCategoryAttributes] channelId={} categoryId={} categoryVersion={}",
                 channelId, categoryId, categoryVersion);
-        String response = tikTokApiClient.executeGet(
+        String response = tikTokApiClient.executeGet(channelId,
                 "/product/202309/categories/" + categoryId + "/attributes",
-                Map.of("category_version", categoryVersion, "locale", "vi-VN", "shop_cipher", shopCipher(channelId)),
-                accessToken(channelId)
+                Map.of("category_version", categoryVersion, "locale", "vi-VN", "shop_cipher", shopCipher(channelId))
         );
         JsonNode root = readTree(response);
         ensureSuccess(root, "/product/202309/categories/{categoryId}/attributes");
@@ -188,7 +188,7 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
         if (keyword != null && !keyword.isBlank()) params.put("brand_name", keyword.trim());
         if (pageToken != null && !pageToken.isBlank()) params.put("page_token", pageToken);
         List<PlatformBrandResponse> brands = new ArrayList<>();
-        String response = tikTokApiClient.executeGet("/product/202309/brands", params, accessToken(channelId));
+        String response = tikTokApiClient.executeGet(channelId, "/product/202309/brands", params);
         JsonNode root = readTree(response);
         ensureSuccess(root, "/product/202309/brands");
         JsonNode rawBrands = root.path("data").path("brands");
@@ -204,8 +204,8 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
                 .build();
     }
 
-    private String uploadSuggestionImage(String imageUrl, String accessToken) {
-        JsonNode root = readTree(tikTokApiClient.uploadProductImage(imageUrl, "MAIN_IMAGE", accessToken));
+    private String uploadSuggestionImage(UUID channelId, String imageUrl) {
+        JsonNode root = readTree(tikTokApiClient.uploadProductImage(channelId, imageUrl, "MAIN_IMAGE"));
         ensureSuccess(root, "/product/202309/images/upload");
         String uri = text(root.path("data"), "uri");
         if (uri == null || uri.isBlank()) throw new IllegalStateException("TikTok suggestion image upload is missing URI");
@@ -215,7 +215,13 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
     private void requireSuggestionInput(CategorySuggestionRequest request) {
         if (request == null || request.getChannelId() == null || request.getTitle() == null || request.getTitle().isBlank()
                 || request.getPrimaryImageUrl() == null || request.getPrimaryImageUrl().isBlank()) {
-            throw new IllegalArgumentException("Category suggestion requires channel, title and primary image");
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Category suggestion requires channel, title and primary image");
+        }
+        int productNameLength = request.getTitle().trim().length();
+        if (productNameLength < PRODUCT_NAME_MIN_LENGTH || productNameLength > PRODUCT_NAME_MAX_LENGTH) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Tên sản phẩm TikTok phải có từ 25 đến 255 ký tự");
         }
     }
 
@@ -297,25 +303,25 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
             rawOptions.forEach(option -> options.add(PlatformAttributeOptionResponse.builder()
                     .id(text(option, "id"))
                     .name(text(option, "name", "local_name"))
+                    .platformValue(text(option, "name", "local_name"))
                     .build()));
         }
+        String attributeType = text(attribute, "input_type", "type");
+        boolean saleProperty = "SALES_PROPERTY".equalsIgnoreCase(attributeType)
+                || "SALE_PROPERTY".equalsIgnoreCase(attributeType)
+                || attribute.path("is_sale_property").asBoolean(false)
+                || attribute.path("is_sale_prop").asBoolean(false);
+        boolean required = attribute.path("is_required").asBoolean(false)
+                || attribute.path("is_requried").asBoolean(false);
         return PlatformAttributeResponse.builder()
                 .id(text(attribute, "id", "attribute_id"))
                 .name(text(attribute, "name", "attribute_name", "id"))
                 .label(text(attribute, "local_name", "name", "attribute_name"))
-                .inputType(text(attribute, "input_type", "type"))
-                .required(attribute.path("is_required").asBoolean(false))
-                .saleProperty(attribute.path("is_sale_property").asBoolean(false)
-                        || attribute.path("is_sale_prop").asBoolean(false))
+                .inputType(attributeType)
+                .required(required)
+                .saleProperty(saleProperty)
                 .options(options)
                 .build();
-    }
-
-    private String accessToken(UUID channelId) {
-        return credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED")
-                .filter(value -> value.getAccessToken() != null && !value.getAccessToken().isBlank())
-                .map(ChannelCredential::getAccessToken)
-                .orElseThrow(() -> new IllegalStateException("TikTok channel is not connected"));
     }
 
     private String shopCipher(UUID channelId) {

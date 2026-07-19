@@ -33,7 +33,7 @@ public class TikTokProductPayloadBuilderImpl implements TikTokProductPayloadBuil
         payload.put("title", product.getName());
         payload.put("description", product.getDescription());
         payload.put("category_id", text(config.get("categoryId")));
-        payload.put("category_version", defaultMessage(text(config.get("categoryVersion")), "v1"));
+        payload.put("category_version", defaultMessage(text(config.get("categoryVersion")), "v2"));
         payload.put("main_images", context.imageUris().stream().map(uri -> Map.of("uri", uri)).toList());
         if (context.sizeChartImageUri() != null && !context.sizeChartImageUri().isBlank()) {
             payload.put("size_chart", Map.of("image", Map.of("uri", context.sizeChartImageUri())));
@@ -59,8 +59,9 @@ public class TikTokProductPayloadBuilderImpl implements TikTokProductPayloadBuil
                 continue;
             }
             Map<String, Object> sku = new LinkedHashMap<>();
-            if (!context.create()) {
-                sku.put("id", context.externalVariantIdByVariantId().get(variant.getId()));
+            String externalVariantId = context.externalVariantIdByVariantId().get(variant.getId());
+            if (!context.create() && externalVariantId != null && !externalVariantId.isBlank()) {
+                sku.put("id", externalVariantId);
             }
             sku.put("seller_sku", variant.getSku());
             sku.put("external_sku_id", variant.getId().toString());
@@ -69,11 +70,16 @@ public class TikTokProductPayloadBuilderImpl implements TikTokProductPayloadBuil
                     "currency", context.currency()
             ));
 
-            List<Map<String, Object>> salesAttributes = salesAttributes(variant, config, context.attributeSchema());
+            List<Map<String, Object>> salesAttributes = salesAttributes(
+                    variant, context.variants(), context.attributeSchema());
+            if (activeVariantCount(context.variants()) > 1 && salesAttributes.isEmpty()) {
+                throw new IllegalStateException(
+                        "Missing TikTok sales attributes for SKU " + variant.getSku());
+            }
             if (!salesAttributes.isEmpty()) {
                 sku.put("sales_attributes", salesAttributes);
             }
-            if (context.create()) {
+            if (context.create() || externalVariantId == null || externalVariantId.isBlank()) {
                 sku.put("inventory", List.of(Map.of(
                         "warehouse_id", context.defaultWarehouseId(),
                         "quantity", 0
@@ -112,32 +118,67 @@ public class TikTokProductPayloadBuilderImpl implements TikTokProductPayloadBuil
     }
 
     private List<Map<String, Object>> salesAttributes(ProductVariant variant,
-                                                       Map<String, Object> config,
+                                                       List<ProductVariant> variants,
                                                        List<PlatformAttributeResponse> schema) {
-        Map<String, String> bindings = stringMap(config.get("variantAttributeBindings"));
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Map.Entry<String, String> binding : bindings.entrySet()) {
-            Object localValue = variant.getOptionValues() == null ? null : variant.getOptionValues().get(binding.getValue());
-            if (localValue == null || localValue.toString().isBlank()) {
+        for (PlatformAttributeResponse attribute : schema) {
+            if (!Boolean.TRUE.equals(attribute.getSaleProperty())) continue;
+            String attributeId = text(attribute.getId());
+            String attributeName = text(attribute.getName());
+            if (attributeId == null && attributeName == null) {
                 continue;
             }
-            PlatformAttributeResponse attribute = schema.stream()
-                    .filter(item -> binding.getKey().equals(item.getId()) || binding.getKey().equals(item.getName()))
-                    .findFirst().orElse(null);
-            Map<String, Object> output = new LinkedHashMap<>();
-            output.put("id", attribute == null ? binding.getKey() : attribute.getId());
-            if (attribute != null) {
-                output.put("name", attribute.getName());
+
+            String optionKey = tikTokVariantOptionKey(attribute);
+            if (optionKey == null) continue;
+            boolean attributeIsUsed = variants.stream()
+                    .filter(item -> !Boolean.FALSE.equals(item.getIsActive()))
+                    .map(item -> item.getOptionValues() == null ? null : item.getOptionValues().get(optionKey))
+                    .anyMatch(value -> text(value) != null);
+            if (!attributeIsUsed) continue;
+
+            String selectedValue = text(variant.getOptionValues() == null
+                    ? null : variant.getOptionValues().get(optionKey));
+            if (selectedValue == null) {
+                throw new IllegalStateException("Missing TikTok "
+                        + defaultMessage(attributeName, attributeId) + " value for SKU " + variant.getSku());
             }
-            PlatformAttributeOptionResponse option = attribute == null ? null : attribute.getOptions().stream()
-                    .filter(item -> localValue.toString().equalsIgnoreCase(item.getName())).findFirst().orElse(null);
-            if (option != null && option.getId() != null) {
+
+            PlatformAttributeOptionResponse option = attribute.getOptions() == null ? null : attribute.getOptions().stream()
+                    .filter(item -> selectedValue.equals(item.getId()) || selectedValue.equalsIgnoreCase(item.getName()))
+                    .findFirst().orElse(null);
+            if (attribute.getOptions() != null && !attribute.getOptions().isEmpty() && option == null) {
+                throw new IllegalStateException("TikTok sales attribute value is no longer valid for "
+                        + defaultMessage(attributeName, attributeId) + ", SKU " + variant.getSku()
+                        + ". Save the platform configuration again.");
+            }
+
+            Map<String, Object> output = new LinkedHashMap<>();
+            if (attributeId != null) output.put("id", attributeId);
+            if (attributeName != null) output.put("name", attributeName);
+            if (option != null && text(option.getId()) != null) {
                 output.put("value_id", option.getId());
             }
-            output.put("value_name", localValue.toString());
+            String valueName = option == null ? selectedValue : defaultMessage(option.getName(), selectedValue);
+            output.put("value_name", valueName);
             result.add(output);
         }
         return result;
+    }
+
+    private String tikTokVariantOptionKey(PlatformAttributeResponse attribute) {
+        if ("100000".equals(attribute.getId())) return "Màu";
+        if ("100007".equals(attribute.getId())) return "Size";
+        String name = text(attribute.getName());
+        if (name == null) return null;
+        String normalized = name.trim().toLowerCase(java.util.Locale.ROOT);
+        if (normalized.contains("màu") || normalized.contains("color")) return "Màu";
+        if (normalized.contains("kích cỡ") || normalized.equals("size")) return "Size";
+        return null;
+    }
+
+    private long activeVariantCount(List<ProductVariant> variants) {
+        return variants.stream().filter(variant -> !Boolean.FALSE.equals(variant.getIsActive())).count();
     }
 
     private Map<String, Object> dimensions(Product product) {
@@ -158,16 +199,6 @@ public class TikTokProductPayloadBuilderImpl implements TikTokProductPayloadBuil
     @SuppressWarnings("unchecked")
     private Map<String, Object> map(Object value) {
         return value instanceof Map<?, ?> map ? objectMapper.convertValue(map, new TypeReference<>() {}) : new HashMap<>();
-    }
-
-    private Map<String, String> stringMap(Object value) {
-        Map<String, String> result = new HashMap<>();
-        map(value).forEach((key, entry) -> {
-            if (entry != null) {
-                result.put(key, String.valueOf(entry));
-            }
-        });
-        return result;
     }
 
     private String text(Object value) {

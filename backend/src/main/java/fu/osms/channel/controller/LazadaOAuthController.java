@@ -84,6 +84,7 @@ public class LazadaOAuthController {
             String accessToken = toStringValue(tokenData.get("access_token"));
             String refreshToken = toStringValue(tokenData.get("refresh_token"));
             int expiresIn = toIntValue(tokenData.get("expires_in"), 604800);
+            int refreshExpiresIn = toIntValue(tokenData.get("refresh_expires_in"), 0);
             String accountId = toStringValue(tokenData.get("account_id"));
             String accountName = toStringValue(tokenData.get("account_name"));
 
@@ -91,7 +92,8 @@ public class LazadaOAuthController {
                 throw new IllegalStateException("Lazada OAuth callback không có access_token.");
             }
 
-            channelService.connectLazada(accessToken, refreshToken, expiresIn, accountId, accountName);
+            channelService.connectLazada(accessToken, refreshToken, expiresIn,
+                    refreshExpiresIn, accountId, accountName);
 
             response.sendRedirect(frontendUrl + "/channels?success=lazada_connected");
         } catch (Exception e) {

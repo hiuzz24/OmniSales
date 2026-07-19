@@ -1,63 +1,42 @@
 package fu.osms.channel.service.impl;
 
 import fu.osms.channel.dto.request.ChannelRequest;
-import fu.osms.channel.dto.request.CreateManualChannelRequest;
-import fu.osms.channel.dto.response.ChannelCredentialResponse;
 import fu.osms.channel.dto.response.ChannelProductResponse;
 import fu.osms.channel.dto.response.ChannelResponse;
 import fu.osms.channel.dto.response.ChannelSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
-import fu.osms.channel.entity.ChannelProduct;
-import fu.osms.channel.enums.ChannelConnectionAction;
-import fu.osms.channel.mapper.ChannelCredentialMapper;
 import fu.osms.channel.mapper.ChannelMapper;
-import fu.osms.channel.mapper.ChannelProductMapper;
 import fu.osms.channel.repository.ChannelCredentialRepository;
-import fu.osms.channel.repository.ChannelProductRepository;
-import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
-import fu.osms.channel.service.ChannelConnectionLogService;
+import fu.osms.channel.service.ChannelConnectionService;
+import fu.osms.channel.service.ChannelProductQueryService;
+import fu.osms.channel.service.ChannelResponseService;
 import fu.osms.channel.service.ChannelService;
-import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
-import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.dto.shopify.WebhookRegistrationResult;
-import fu.osms.sync.shopify.ShopifyWebhookSubscriptionService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.OffsetDateTime;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChannelServiceImpl implements ChannelService {
 
     private final ChannelRepository channelRepository;
     private final ChannelCredentialRepository credentialRepository;
-    private final ChannelProductRepository channelProductRepository;
-    private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ChannelMapper channelMapper;
-    private final ChannelProductMapper channelProductMapper;
-    private final ChannelConnectionLogService channelConnectionLogService;
-    private final ShopifyWebhookSubscriptionService shopifyWebhookSubscriptionService;
-    private final ProductChannelConfigService productChannelConfigService;
-
-    @Value("${lazada.webhook-callback-url:}")
-    private String lazadaWebhookCallbackUrl;
+    private final ChannelConnectionService connectionService;
+    private final ChannelProductQueryService productQueryService;
+    private final ChannelResponseService responseService;
 
     @Override
     @Transactional
@@ -65,50 +44,38 @@ public class ChannelServiceImpl implements ChannelService {
         if (channelRepository.existsByPlatformAndDisplayName(request.getPlatform(), request.getDisplayName())) {
             throw new AppException(ErrorCode.CHANNEL_ALREADY_EXISTS);
         }
-
         Channel channel = channelMapper.toEntity(request);
         channel.setStatus("CONNECTED");
         replaceMetadata(channel, request.getMetadata());
         channelRepository.save(channel);
-
-        ChannelCredential credential = ChannelCredential.builder()
+        credentialRepository.save(ChannelCredential.builder()
                 .channel(channel)
-                .accessToken(null)
-                .refreshToken(null)
                 .connectionState("CONNECTED")
-                .build();
-        credentialRepository.save(credential);
-
-        return channelMapper.toResponse(channel);
+                .build());
+        return responseService.toResponse(channel);
     }
 
     @Override
     @Transactional(readOnly = true)
     public ChannelResponse getById(UUID id) {
-        Channel channel = channelRepository.findById(id)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
-        enrichChannelStats(channel);
-        return channelMapper.toResponse(channel);
+        Channel channel = activeChannel(id);
+        responseService.enrichStats(channel);
+        return responseService.toResponse(channel);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ChannelResponse> getAll() {
-        return channelRepository.findByDeletedAtIsNull()
-                .stream()
-                .peek(this::enrichChannelStats)
-                .map(channelMapper::toResponse)
+        return channelRepository.findByDeletedAtIsNull().stream()
+                .peek(responseService::enrichStats)
+                .map(responseService::toResponse)
                 .toList();
     }
 
     @Override
     @Transactional
     public ChannelResponse update(UUID id, ChannelRequest request) {
-        Channel channel = channelRepository.findById(id)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
-
+        Channel channel = activeChannel(id);
         channel.setDisplayName(request.getDisplayName());
         channel.setCommissionRate(request.getCommissionRate());
         mergeMetadata(channel, request.getMetadata());
@@ -116,372 +83,68 @@ public class ChannelServiceImpl implements ChannelService {
             channel.setSyncEnabled(request.getSyncEnabled());
         }
         channelRepository.save(channel);
-
-
-
-        return channelMapper.toResponse(channel);
+        return responseService.toResponse(channel);
     }
 
     @Override
-    @Transactional
     public void delete(UUID id) {
-        Channel channel = channelRepository.findById(id)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
-
-        unregisterShopifyWebhooks(channel);
-
-        channel.setDeletedAt(OffsetDateTime.now());
-        channelRepository.save(channel);
-
-        credentialRepository.findByChannelId(id).ifPresent(cred -> {
-            cred.setConnectionState("DISCONNECTED");
-            credentialRepository.save(cred);
-        });
-
-        List<ChannelProduct> mappedProducts = channelProductRepository.findByChannelId(id);
-        for (ChannelProduct cp : mappedProducts) {
-            cp.setMappingState("ARCHIVED");
-        }
-        channelProductRepository.saveAll(mappedProducts);
-
-        channelConnectionLogService.logSuccess(
-                channel,
-                ChannelConnectionAction.DISCONNECT,
-                "Disconnected channel " + channel.getDisplayName(),
-                Map.of("channelName", channel.getDisplayName())
-        );
+        connectionService.disconnect(id);
     }
 
     @Override
-    @Transactional(readOnly = true)
     public PageResponse<ChannelProductResponse> getChannelProducts(UUID channelId, int page, int size) {
-        throw new UnsupportedOperationException("Chưa code");
+        return productQueryService.getChannelProducts(channelId, page, size);
     }
 
     @Override
-    @Transactional(readOnly = true)
     public Map<UUID, List<String>> getProductChannels(Collection<UUID> productIds) {
-        if (productIds == null || productIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdInAndMappingState(productIds, "ACTIVE");
-        return channelProducts.stream()
-                .filter(cp -> cp.getProduct() != null && cp.getChannel() != null)
-                .filter(cp -> cp.getExternalProductId() != null && !cp.getExternalProductId().isBlank())
-                .collect(Collectors.groupingBy(
-                        cp -> cp.getProduct().getId(),
-                        Collectors.mapping(
-                                cp -> cp.getChannel().getPlatform().name(),
-                                Collectors.collectingAndThen(
-                                        Collectors.toList(),
-                                        list -> list.stream().distinct().collect(Collectors.toList())
-                                )
-                        )
-                ));
+        return productQueryService.getProductChannels(productIds);
     }
 
     @Override
-    @Transactional(readOnly = true)
     public Map<UUID, List<UUID>> getProductChannelIds(Collection<UUID> productIds) {
-        if (productIds == null || productIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdInAndMappingState(productIds, "ACTIVE");
-        return channelProducts.stream()
-                .filter(cp -> cp.getProduct() != null && cp.getChannel() != null)
-                .collect(Collectors.groupingBy(
-                        cp -> cp.getProduct().getId(),
-                        Collectors.mapping(
-                                cp -> cp.getChannel().getId(),
-                                Collectors.collectingAndThen(
-                                        Collectors.toList(),
-                                        list -> list.stream().distinct().collect(Collectors.toList())
-                                )
-                        )
-                ));
+        return productQueryService.getProductChannelIds(productIds);
     }
 
     @Override
-    @Transactional(readOnly = true)
     public Map<UUID, List<ChannelSyncResponse>> getProductChannelSyncs(Collection<UUID> productIds) {
-        if (productIds == null || productIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<ChannelProduct> channelProducts = channelProductRepository.findByProductIdInAndMappingState(productIds, "ACTIVE");
-        return channelProducts.stream()
-                .filter(cp -> cp.getProduct() != null && cp.getChannel() != null)
-                .collect(Collectors.groupingBy(
-                        cp -> cp.getProduct().getId(),
-                        Collectors.mapping(
-                                cp -> ChannelSyncResponse.builder()
-                                        .channelId(cp.getChannel().getId())
-                                        .channelName(cp.getChannel().getDisplayName())
-                                        .platform(cp.getChannel().getPlatform().name())
-                                        .syncStatus(cp.getSyncStatus())
-                                        .lastSyncedAt(cp.getLastSyncedAt())
-                                        .lastSyncError(cp.getLastSyncError())
-                                        .readyToSync(productChannelConfigService.isReady(cp))
-                                        .configurationError(productChannelConfigService.configurationError(cp))
-                                        .platformConfig(platformConfig(cp))
-                                        .build(),
-                                Collectors.toList()
-                        )
-                ));
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> platformConfig(ChannelProduct channelProduct) {
-        if (channelProduct.getMetadata() == null) return Collections.emptyMap();
-        Object value = channelProduct.getMetadata().get("platformConfig");
-        return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Collections.emptyMap();
+        return productQueryService.getProductChannelSyncs(productIds);
     }
 
     @Override
-    @Transactional
     public ChannelResponse connectShopify(String shop, String accessToken) {
-        log.info("1");
-        String normalizedShop = shop.endsWith(".myshopify.com")
-                ? shop.substring(0, shop.length() - ".myshopify.com".length())
-                : shop;
-
-        log.info("[ChannelService] connectShopify — shop={}", normalizedShop);
-
-        Channel channel = channelRepository
-                .findActiveShopifyByShopDomain(normalizedShop)
-                .or(() -> channelRepository.findByPlatformAndDisplayName(PlatformType.SHOPIFY, normalizedShop))
-                .orElseGet(() -> Channel.builder()
-                        .platform(PlatformType.SHOPIFY)
-                        .displayName(normalizedShop)
-                        .build());
-        ChannelConnectionAction action = channel.getId() == null
-                ? ChannelConnectionAction.CONNECT
-                : ChannelConnectionAction.RECONNECT;
-
-        Map<String, Object> metadata = channel.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channel.getMetadata());
-        metadata.put("shopDomain", normalizedShop);
-
-        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
-        channel.setStatus("CONNECTED");
-        channel.setDeletedAt(null);
-        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
-            channel.setSyncEnabled(true);
-        }
-        channel.setMetadata(metadata);
-        channelRepository.save(channel);
-
-        ChannelCredential credential = credentialRepository
-                .findByChannelId(channel.getId())
-                .orElseGet(() -> ChannelCredential.builder().channel(channel).build());
-
-        credential.setAccessToken(accessToken);
-        credential.setConnectionState("CONNECTED");
-        credentialRepository.save(credential);
-        channelConnectionLogService.logSuccess(
-                channel,
-                action,
-                "Connected Shopify channel " + normalizedShop,
-                Map.of("shopDomain", normalizedShop)
-        );
-
-        log.info("[ChannelService] connectShopify success — channelId={}", channel.getId());
-        return channelMapper.toResponse(channel);
+        return connectionService.connectShopify(shop, accessToken);
     }
 
     @Override
     public void registerShopifyWebhooks(String shop, String accessToken, UUID channelId) {
-        try {
-            log.info("2");
-            WebhookRegistrationResult result = shopifyWebhookSubscriptionService.registerWebhooks(shop, accessToken);
-            safeUpdateShopifyWebhookMetadata(channelId, result);
-            log.info("[ChannelService] Shopify webhook registration status={} shop={}", result.getStatus(), shop);
-        } catch (Exception e) {
-            log.warn("[ChannelService] Shopify webhook registration failed but channel connected: {}", e.getMessage());
-            WebhookRegistrationResult result = WebhookRegistrationResult.builder()
-                    .status("FAILED")
-                    .error(e.getMessage())
-                    .webhooks(Collections.emptyList())
-                    .build();
-            safeUpdateShopifyWebhookMetadata(channelId, result);
-        }
+        connectionService.registerShopifyWebhooks(shop, accessToken, channelId);
     }
 
     @Override
-    @Transactional
-    public ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName) {
-        log.info("[ChannelService] connectLazada — accountId={}, accountName={}", accountId, accountName);
-
-        String resolvedAccountName = firstNonBlank(accountName, accountId, "Connected");
-        String resolvedAccountId = firstNonBlank(accountId, resolvedAccountName);
-
-        String displayName = "Lazada-" + resolvedAccountName;
-
-        Channel channel = channelRepository
-                .findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
-                .filter(c -> c.getMetadata() != null && java.util.Objects.equals(resolvedAccountId, c.getMetadata().get("accountId")))
-                .findFirst()
-                .or(() -> channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
-                        .filter(c -> c.getDisplayName() == null
-                                || "Lazada-null".equalsIgnoreCase(c.getDisplayName())
-                                || c.getMetadata() == null
-                                || c.getMetadata().get("accountId") == null)
-                        .findFirst())
-                .orElseGet(() -> Channel.builder()
-                        .platform(PlatformType.LAZADA)
-                        .displayName(displayName)
-                        .build());
-        ChannelConnectionAction action = channel.getId() == null
-                ? ChannelConnectionAction.CONNECT
-                : ChannelConnectionAction.RECONNECT;
-
-        Map<String, Object> metadata = channel.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channel.getMetadata());
-        metadata.put("accountId", resolvedAccountId);
-        metadata.put("accountName", resolvedAccountName);
-        applyLazadaWebhookMetadata(metadata);
-
-        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
-        channel.setStatus("CONNECTED");
-        channel.setDeletedAt(null);
-        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
-            channel.setSyncEnabled(true);
-        }
-        channel.setMetadata(metadata);
-        if (channel.getDisplayName() == null || channel.getDisplayName().startsWith("Lazada-")) {
-            channel.setDisplayName(displayName);
-        }
-        channelRepository.save(channel);
-
-        ChannelCredential credential = credentialRepository
-                .findByChannelId(channel.getId())
-                .orElseGet(() -> ChannelCredential.builder().channel(channel).build());
-
-        credential.setAccessToken(accessToken);
-        credential.setRefreshToken(refreshToken);
-        credential.setConnectionState("CONNECTED");
-        
-        OffsetDateTime tokenExpiresAt = OffsetDateTime.now().plusSeconds(expiresIn);
-        credential.setTokenExpiresAt(tokenExpiresAt);
-
-        credentialRepository.save(credential);
-        Map<String, Object> connectionMetadata = new HashMap<>();
-        connectionMetadata.put("accountId", accountId != null ? accountId : "");
-        connectionMetadata.put("accountName", accountName != null ? accountName : "");
-        connectionMetadata.put("webhookCallbackUrl", configuredLazadaWebhookCallbackUrl());
-        connectionMetadata.put("webhookRegistrationStatus", "MANUAL_CONFIGURATION_REQUIRED");
-        channelConnectionLogService.logSuccess(
-                channel,
-                action,
-                "Connected Lazada channel " + displayName,
-                connectionMetadata
-        );
-
-        if (configuredLazadaWebhookCallbackUrl().isBlank()) {
-            log.warn("[ChannelService] Lazada webhook callback URL is not configured. Set LAZADA_WEBHOOK_CALLBACK_URL to receive Lazada push events.");
-        }
-
-        log.info("[ChannelService] connectLazada success — channelId={}, expiresAt={}", channel.getId(), tokenExpiresAt);
-        return channelMapper.toResponse(channel);
+    public ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn,
+                                         int refreshExpiresIn, String accountId, String accountName) {
+        return connectionService.connectLazada(accessToken, refreshToken, expiresIn,
+                refreshExpiresIn, accountId, accountName);
     }
 
     @Override
-    @Transactional
-    public ChannelResponse connectTikTok(String accessToken, String refreshToken, int expiresIn, String accountId, String accountName, Map<String, Object> metadata) {
-        log.info("[ChannelService] connectTikTok - accountId={}, accountName={}", accountId, accountName);
-
-        String resolvedAccountName = firstNonBlank(accountName, accountId, "Connected");
-        String resolvedAccountId = firstNonBlank(accountId, resolvedAccountName);
-        String displayName = "TikTok-" + resolvedAccountName;
-
-        Map<String, Object> resolvedMetadata = metadata == null
-                ? new HashMap<>()
-                : new HashMap<>(metadata);
-        resolvedMetadata.put("accountId", resolvedAccountId);
-        resolvedMetadata.put("accountName", resolvedAccountName);
-
-        Channel channel = channelRepository
-                .findByPlatformAndDeletedAtIsNull(PlatformType.TIKTOK).stream()
-                .filter(c -> c.getMetadata() != null
-                        && (java.util.Objects.equals(resolvedAccountId, c.getMetadata().get("accountId"))
-                        || java.util.Objects.equals(resolvedAccountId, c.getMetadata().get("openId"))))
-                .findFirst()
-                .orElseGet(() -> Channel.builder()
-                        .platform(PlatformType.TIKTOK)
-                        .displayName(displayName)
-                        .build());
-        ChannelConnectionAction action = channel.getId() == null
-                ? ChannelConnectionAction.CONNECT
-                : ChannelConnectionAction.RECONNECT;
-
-        Map<String, Object> persistedMetadata = channel.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channel.getMetadata());
-        persistedMetadata.putAll(resolvedMetadata);
-        boolean restoringDeletedChannel = channel.getDeletedAt() != null;
-        channel.setStatus("CONNECTED");
-        channel.setDeletedAt(null);
-        if (restoringDeletedChannel || channel.getSyncEnabled() == null) {
-            channel.setSyncEnabled(true);
-        }
-        channel.setMetadata(persistedMetadata);
-        if (channel.getDisplayName() == null || channel.getDisplayName().startsWith("TikTok-")) {
-            channel.setDisplayName(displayName);
-        }
-        channelRepository.save(channel);
-
-        ChannelCredential credential = credentialRepository
-                .findByChannelId(channel.getId())
-                .orElseGet(() -> ChannelCredential.builder().channel(channel).build());
-
-        credential.setAccessToken(accessToken);
-        credential.setRefreshToken(refreshToken);
-        credential.setConnectionState("CONNECTED");
-        if (expiresIn > 0) {
-            credential.setTokenExpiresAt(OffsetDateTime.now().plusSeconds(expiresIn));
-        }
-        credentialRepository.save(credential);
-
-        channelConnectionLogService.logSuccess(
-                channel,
-                action,
-                "Connected TikTok channel " + displayName,
-                Map.of(
-                        "accountId", resolvedAccountId,
-                        "accountName", resolvedAccountName
-                )
-        );
-
-        log.info("[ChannelService] connectTikTok success - channelId={}", channel.getId());
-        return channelMapper.toResponse(channel);
+    public ChannelResponse connectTikTok(String accessToken, String refreshToken, int expiresIn,
+                                         int refreshExpiresIn, String accountId, String accountName,
+                                         Map<String, Object> metadata) {
+        return connectionService.connectTikTok(accessToken, refreshToken, expiresIn,
+                refreshExpiresIn, accountId, accountName, metadata);
     }
 
     @Override
-    @Transactional
     public void updateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result) {
-        Channel channel = channelRepository.findById(channelId)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
-
-        Map<String, Object> metadata = channel.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channel.getMetadata());
-        metadata.put("shopifyWebhooks", result.getWebhooks());
-        metadata.put("webhookRegistrationStatus", result.getStatus());
-        metadata.put("webhookRegistrationError", result.getError());
-
-        channel.setMetadata(metadata);
-        channelRepository.save(channel);
+        connectionService.updateShopifyWebhookMetadata(channelId, result);
     }
 
-    private void safeUpdateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result) {
-        try {
-            updateShopifyWebhookMetadata(channelId, result);
-        } catch (Exception e) {
-            log.warn("[ChannelService] Failed to update Shopify webhook metadata for channel {}: {}", channelId, e.getMessage());
-        }
+    private Channel activeChannel(UUID id) {
+        return channelRepository.findById(id)
+                .filter(channel -> channel.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
     }
 
     private void replaceMetadata(Channel channel, Map<String, Object> requestMetadata) {
@@ -491,16 +154,8 @@ public class ChannelServiceImpl implements ChannelService {
     }
 
     private void mergeMetadata(Channel channel, Map<String, Object> requestMetadata) {
-        if (requestMetadata == null) {
-            if (channel.getMetadata() == null) {
-                channel.setMetadata(new HashMap<>());
-            }
-            return;
-        }
-
         Map<String, Object> metadata = channel.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channel.getMetadata());
+                ? new HashMap<>() : new HashMap<>(channel.getMetadata());
         applyMetadataChanges(metadata, requestMetadata);
         channel.setMetadata(metadata);
     }
@@ -509,76 +164,12 @@ public class ChannelServiceImpl implements ChannelService {
         if (changes == null) {
             return;
         }
-
-        for (Map.Entry<String, Object> entry : changes.entrySet()) {
-            Object value = entry.getValue();
-            if (value == null || (value instanceof String stringValue && stringValue.isBlank())) {
-                metadata.remove(entry.getKey());
+        changes.forEach((key, value) -> {
+            if (value == null || value instanceof String text && text.isBlank()) {
+                metadata.remove(key);
             } else {
-                metadata.put(entry.getKey(), value);
+                metadata.put(key, value);
             }
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private void unregisterShopifyWebhooks(Channel channel) {
-        if (channel.getPlatform() != PlatformType.SHOPIFY) {
-            return;
-        }
-
-        try {
-            ChannelCredential credential = credentialRepository.findByChannelId(channel.getId()).orElse(null);
-            if (credential == null || credential.getAccessToken() == null || credential.getAccessToken().isBlank()) {
-                return;
-            }
-
-            Map<String, Object> metadata = channel.getMetadata();
-            String shopDomain = metadata != null && metadata.get("shopDomain") != null
-                    ? metadata.get("shopDomain").toString()
-                    : channel.getDisplayName();
-            List<Map<String, Object>> savedWebhooks = metadata != null
-                    ? (List<Map<String, Object>>) metadata.get("shopifyWebhooks")
-                    : Collections.emptyList();
-
-            shopifyWebhookSubscriptionService.unregisterWebhooks(shopDomain, credential.getAccessToken(), savedWebhooks);
-        } catch (Exception e) {
-            log.warn("[ChannelService] Failed to unregister Shopify webhooks for channel {}: {}", channel.getId(), e.getMessage());
-        }
-    }
-
-    private void enrichChannelStats(Channel channel) {
-        Map<String, Object> metadata = channel.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channel.getMetadata());
-        metadata.put("productCount", channelProductRepository.countByChannelIdAndMappingState(channel.getId(), "ACTIVE"));
-        metadata.put("skuVariantCount", channelProductVariantRepository.countActiveByChannelId(channel.getId()));
-        metadata.putIfAbsent("warehouseCount", 0);
-        if (channel.getPlatform() == PlatformType.LAZADA) {
-            applyLazadaWebhookMetadata(metadata);
-        }
-        channel.setMetadata(metadata);
-    }
-
-    private void applyLazadaWebhookMetadata(Map<String, Object> metadata) {
-        String callbackUrl = configuredLazadaWebhookCallbackUrl();
-        metadata.put("webhookCallbackUrl", callbackUrl);
-        metadata.put("webhookRegistrationStatus", callbackUrl.isBlank()
-                ? "MISSING_CALLBACK_URL"
-                : "MANUAL_CONFIGURATION_REQUIRED");
-        metadata.put("webhookRegistrationNote",
-                "Configure this URL in Lazada Open Platform Push Mechanism and subscribe product/stock messages.");
-    }
-
-    private String configuredLazadaWebhookCallbackUrl() {
-        return lazadaWebhookCallbackUrl == null ? "" : lazadaWebhookCallbackUrl.trim();
-    }
-
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank() && !"null".equalsIgnoreCase(value)) {
-                return value;
-            }
-        }
-        return null;
+        });
     }
 }

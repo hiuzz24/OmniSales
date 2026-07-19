@@ -32,7 +32,8 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.SyncLog;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
+import fu.osms.channel.token.service.ChannelTokenService;
 import fu.osms.sync.lazada.service.LazadaImportSyncService;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.SyncAlertService;
@@ -61,7 +62,8 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
     private static final int MAX_VARIANT_SKU_LENGTH = 100;
     private static final String WAREHOUSE_CODE_MARKER = "LAZADA_WAREHOUSE_CODE=";
 
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
+    private final ChannelTokenService channelTokenService;
     private final ObjectMapper objectMapper;
     private final ChannelRepository channelRepository;
     private final ChannelCredentialRepository credentialRepository;
@@ -92,6 +94,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         if (credential.getAccessToken() == null || credential.getAccessToken().isBlank()) {
             throw new IllegalStateException("Kênh Lazada chưa có access_token. Vui lòng kết nối lại bằng OAuth Lazada trước khi đồng bộ.");
         }
+        channelTokenService.getValidToken(channelId);
 
         SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
                 .channel(channel)
@@ -174,11 +177,9 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             params.put("limit", String.valueOf(PRODUCT_PAGE_SIZE));
             params.put("offset", String.valueOf(offset));
 
-            String response = lazadaApiClient.executeGet(
+            String response = lazadaApiClient.executeGet(credential.getChannel().getId(),
                     "/products/get",
-                    params,
-                    credential.getAccessToken(),
-                    tokenExpiresAt(credential)
+                    params
             );
 
             JsonNode root = readTree(response);
@@ -201,11 +202,9 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
     }
 
     private List<JsonNode> fetchWarehouses(ChannelCredential credential) {
-        String response = lazadaApiClient.executeGet(
+        String response = lazadaApiClient.executeGet(credential.getChannel().getId(),
                 "/rc/warehouse/get",
-                Map.of(),
-                credential.getAccessToken(),
-                tokenExpiresAt(credential)
+                Map.of()
         );
 
         JsonNode root = readTree(response);
@@ -221,11 +220,9 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
 
     private Map<String, String> fetchCategoryNames(ChannelCredential credential) {
         try {
-            String response = lazadaApiClient.executeGet(
+            String response = lazadaApiClient.executeGet(credential.getChannel().getId(),
                     "/category/tree/get",
-                    Map.of(),
-                    credential.getAccessToken(),
-                    tokenExpiresAt(credential)
+                    Map.of()
             );
             JsonNode root = readTree(response);
             ensureLazadaSuccess(root, "/category/tree/get");

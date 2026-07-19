@@ -4,8 +4,17 @@ import { Plus, ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './ProductImageUploader.module.css';
 
+const isHttpUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
+
 const ProductImageUploader = () => {
-  const { control } = useFormContext();
+  const { control, formState: { errors } } = useFormContext();
   const { fields, append, replace } = useFieldArray({ control, name: 'images', keyName: 'formId' });
   const images = useWatch({ control, name: 'images', defaultValue: [] });
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -15,6 +24,10 @@ const ProductImageUploader = () => {
 
   const handleAddImage = () => {
     if (!urlValue.trim()) return;
+    if (!isHttpUrl(urlValue.trim())) {
+      alert('URL ảnh phải bắt đầu bằng http:// hoặc https://');
+      return;
+    }
     const newImage = {
       url: urlValue.trim(),
       sortOrder: images.length,
@@ -107,6 +120,7 @@ const ProductImageUploader = () => {
         <div className={styles.emptyState}>
           <ImageIcon className={styles.emptyStateIcon} />
           <p>Chưa có hình ảnh nào. Nhấn "Thêm ảnh" để thêm URL hình ảnh.</p>
+          {errors.images?.message && <p className={styles.errorText}>{errors.images.message}</p>}
         </div>
       ) : (
         <div className={styles.imageGrid}>

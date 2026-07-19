@@ -265,6 +265,16 @@
   color: #9ca3af;
 }
 
+.refreshError {
+  max-width: 320px;
+  margin-top: 3px;
+  color: #b91c1c;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .platformTag {
   display: inline-block;
   padding: 3px 10px;

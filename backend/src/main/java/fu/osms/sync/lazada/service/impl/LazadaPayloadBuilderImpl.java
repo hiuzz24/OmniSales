@@ -132,12 +132,14 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
                                          Element sku,
                                          ProductVariant variant,
                                          LazadaProductConfig config) {
-        if (variant.getOptionValues() == null || config.getVariantAttributeBindings() == null) return;
-        config.getVariantAttributeBindings().forEach((platformAttribute, optionKey) -> {
-            Object value = variant.getOptionValues().get(optionKey);
-            if (value != null && !value.toString().isBlank()) {
-                appendTextElement(document, sku, platformAttribute, value.toString());
+        if (config.getVariantAttributeValueMappings() == null) return;
+        config.getVariantAttributeValueMappings().forEach((platformAttribute, skuMappings) -> {
+            String platformValue = skuMappings == null ? null : skuMappings.get(variant.getSku());
+            if (platformValue == null || platformValue.isBlank()) {
+                throw new IllegalStateException("Missing Lazada " + platformAttribute
+                        + " value for SKU " + variant.getSku());
             }
+            appendTextElement(document, sku, platformAttribute, platformValue);
         });
     }
 

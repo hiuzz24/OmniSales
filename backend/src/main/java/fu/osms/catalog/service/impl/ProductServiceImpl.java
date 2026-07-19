@@ -147,7 +147,7 @@ public class ProductServiceImpl implements ProductService {
                     .map(vr -> {
                         ProductVariant v = productVariantMapper.toEntity(vr);
                         v.setProduct(savedProduct);
-                        applyCreateDefaultPrices(v);
+                        applyCreateCostPriceDefault(v);
                         return v;
                     })
                     .toList();
@@ -319,6 +319,7 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+        Map<UUID, ChannelConfigRequest> requestedChannelConfigs = channelConfigsById(request);
 
         if (request.getVersion() != null && !Objects.equals(product.getVersion(), request.getVersion())) {
             throw new AppException(ErrorCode.CONCURRENT_UPDATE);
@@ -750,8 +751,7 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
-    private void applyCreateDefaultPrices(ProductVariant variant) {
-        variant.setPrice(BigDecimal.ZERO);
+    private void applyCreateCostPriceDefault(ProductVariant variant) {
         variant.setCostPrice(BigDecimal.ZERO);
     }
 }

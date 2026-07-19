@@ -58,7 +58,7 @@ const ProductCreatePage = () => {
       <ProductImageUploader />
       <ProductForm categories={categories} />
       <div className={styles.variantToggleCard}><div className={styles.variantToggleInfo}><div className={styles.variantToggleTitle}>Biến thể sản phẩm</div><div className={styles.variantToggleSubtitle}>{hasVariants ? 'Sản phẩm có nhiều biến thể (size, màu...)' : 'Sản phẩm không có biến thể. Nhấn để thêm biến thể.'}</div></div><button type="button" className={`${styles.variantToggleBtn} ${hasVariants ? styles.variantToggleBtnActive : styles.variantToggleBtnInactive}`} onClick={() => setValue('hasVariants', !hasVariants, { shouldValidate: true })}>{hasVariants ? 'Đã bật biến thể' : 'Tạo biến thể'}</button></div>
-      {!hasVariants ? <ProductPriceStock price={price} costPrice={costPrice} onChange={(field, value) => setValue(field, value, { shouldDirty: true })} errors={errors} channels={channels} selectedChannels={selectedChannels} disablePrice disableCostPrice /> : <ProductVariantForm channels={channels} selectedChannels={selectedChannels} disablePrice disableCostPrice />}
+      {!hasVariants ? <ProductPriceStock price={price} costPrice={costPrice} onChange={(field, value) => setValue(field, value, { shouldDirty: true, shouldValidate: true })} errors={errors} channels={channels} selectedChannels={selectedChannels} disableCostPrice /> : <ProductVariantForm channels={channels} selectedChannels={selectedChannels} disableCostPrice />}
       <ProductShippingInfo />
       <PlatformConfigSection channels={selectedChannelDetails} />
     </div><ProductChannelSidebar channels={channels} onSubmit={onSubmit} onInvalid={onInvalid} onCancel={() => navigate(ROUTES.PRODUCTS)} /></div>

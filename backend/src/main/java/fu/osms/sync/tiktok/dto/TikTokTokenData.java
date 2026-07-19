@@ -12,6 +12,7 @@ public class TikTokTokenData {
     private final String accessToken;
     private final String refreshToken;
     private final int expiresInSeconds;
+    private final int refreshExpiresInSeconds;
     private final String accountId;
     private final String accountName;
     private final Map<String, Object> metadata;

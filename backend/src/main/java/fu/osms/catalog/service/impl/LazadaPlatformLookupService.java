@@ -10,10 +10,8 @@ import fu.osms.catalog.dto.response.PlatformCategoryNodeResponse;
 import fu.osms.catalog.dto.response.PlatformCategorySuggestionResponse;
 import fu.osms.catalog.dto.request.CategorySuggestionRequest;
 import fu.osms.catalog.service.PlatformLookupService;
-import fu.osms.channel.entity.ChannelCredential;
-import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.common.enums.PlatformType;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +19,6 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,8 +36,7 @@ import java.util.concurrent.Callable;
 @RequiredArgsConstructor
 public class LazadaPlatformLookupService implements PlatformLookupService {
 
-    private final LazadaApiClient lazadaApiClient;
-    private final ChannelCredentialRepository credentialRepository;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
     private final ObjectMapper objectMapper;
     private final CacheManager cacheManager;
 
@@ -53,7 +49,6 @@ public class LazadaPlatformLookupService implements PlatformLookupService {
     }
 
     @Override
-    // MANUAL_CATEGORY_BROWSER_FALLBACK: suggestion-first no longer calls this automatically.
     public List<PlatformCategoryNodeResponse> getCategories(UUID channelId, String parentId, String keyword, String ignoredVersion) {
         List<PlatformCategoryNodeResponse> tree = categoryTree(channelId);
         if (keyword != null && !keyword.isBlank()) {
@@ -91,10 +86,10 @@ public class LazadaPlatformLookupService implements PlatformLookupService {
     @Override
     public List<PlatformCategorySuggestionResponse> suggestCategories(CategorySuggestionRequest request) {
         requireSuggestionInput(request);
-        String response = lazadaApiClient.executeGet("/product/category/suggestion/get", Map.of(
+        String response = lazadaApiClient.executeGet(request.getChannelId(), "/product/category/suggestion/get", Map.of(
                 "product_name", request.getTitle().trim(),
                 "image_url", request.getPrimaryImageUrl().trim()
-        ), accessToken(request.getChannelId()), tokenExpiresAt(request.getChannelId()));
+        ));
         JsonNode root = readTree(response);
         ensureSuccess(root, "/product/category/suggestion/get");
         Map<String, PlatformCategorySuggestionResponse> result = new LinkedHashMap<>();
@@ -119,7 +114,10 @@ public class LazadaPlatformLookupService implements PlatformLookupService {
     }
 
     private List<PlatformCategoryNodeResponse> loadCategoryTree(UUID channelId) {
-        String response = lazadaApiClient.executeGet("/category/tree/get", Map.of(), accessToken(channelId), tokenExpiresAt(channelId));
+        String response = lazadaApiClient.executeGet(channelId,
+                "/category/tree/get",
+                Map.of("language_code", "vi_VN")
+        );
         JsonNode root = readTree(response);
         ensureSuccess(root, "/category/tree/get");
         List<PlatformCategoryNodeResponse> nodes = new ArrayList<>();
@@ -145,8 +143,7 @@ public class LazadaPlatformLookupService implements PlatformLookupService {
         if (keyword != null && !keyword.isBlank()) {
             params.put("brand_name", keyword.trim());
         }
-        String response = lazadaApiClient.executeGet("/category/brands/query", params,
-                accessToken(channelId), tokenExpiresAt(channelId));
+        String response = lazadaApiClient.executeGet(channelId, "/category/brands/query", params);
         JsonNode root = readTree(response);
         ensureSuccess(root, "/category/brands/query");
         JsonNode items = brandItems(root.path("data"));
@@ -197,11 +194,12 @@ public class LazadaPlatformLookupService implements PlatformLookupService {
     }
 
     private JsonNode executeAttributesRequest(UUID channelId, String categoryId, boolean retried) {
-        String response = lazadaApiClient.executeGet(
+        String response = lazadaApiClient.executeGet(channelId,
                 "/category/attributes/get",
-                Map.of("primary_category_id", categoryId),
-                accessToken(channelId),
-                tokenExpiresAt(channelId)
+                Map.of(
+                        "primary_category_id", categoryId,
+                        "language_code", "vi_VN"
+                )
         );
         JsonNode root = readTree(response);
         if ("0".equals(root.path("code").asText())) {
@@ -239,7 +237,8 @@ public class LazadaPlatformLookupService implements PlatformLookupService {
         if (rawOptions.isArray()) {
             rawOptions.forEach(option -> options.add(PlatformAttributeOptionResponse.builder()
                     .id(text(option, "id", "value", "en_name"))
-                    .name(text(option, "en_name", "name", "label", "value"))
+                    .name(text(option, "name", "label", "value", "en_name"))
+                    .platformValue(text(option, "en_name", "value", "name"))
                     .build()));
         }
         boolean saleProperty = attribute.path("is_sale_prop").asInt(0) == 1;
@@ -270,21 +269,6 @@ public class LazadaPlatformLookupService implements PlatformLookupService {
                 .available(true)
                 .build());
         collectCategories(node.path("children"), id, target);
-    }
-
-    private String accessToken(UUID channelId) {
-        return credential(channelId).getAccessToken();
-    }
-
-    private Long tokenExpiresAt(UUID channelId) {
-        OffsetDateTime value = credential(channelId).getTokenExpiresAt();
-        return value == null ? null : value.toEpochSecond();
-    }
-
-    private ChannelCredential credential(UUID channelId) {
-        return credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED")
-                .filter(value -> value.getAccessToken() != null && !value.getAccessToken().isBlank())
-                .orElseThrow(() -> new IllegalStateException("Lazada channel is not connected"));
     }
 
     private JsonNode readTree(String response) {

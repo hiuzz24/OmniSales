@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { ChevronDown, ChevronRight, ChevronLeft, RefreshCw, Loader2, Upload } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronLeft, RefreshCw, Loader2, Search, Upload } from 'lucide-react';
 import { toast } from 'react-toastify';
 import platformLookupApi from '../../../api/platformLookupApi';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './PlatformConfigSection.module.css';
 
-const SUPPORTED_BINDINGS = ['Size', 'M\u00e0u'];
 const SYSTEM_ATTRIBUTES = new Set([
   'sellersku', 'seller_sku', 'price', 'supply_price', 'quantity',
   'package_weight', 'package_width', 'package_height', 'package_length',
@@ -17,24 +16,38 @@ const OPTIONAL_LAZADA_SPECIFICATIONS = new Set([
   'sleeves_type', 'sleeve_type',
 ]);
 const TIKTOK_LISTING_ATTRIBUTE_IDS = new Set(['100149', '101489', '101490']);
+const TIKTOK_PRODUCT_NAME_MIN_LENGTH = 25;
+const TIKTOK_PRODUCT_NAME_MAX_LENGTH = 255;
 const extractData = (response) => response?.data?.data || response?.data || response || [];
+const isHttpUrl = (value) => {
+  if (!value?.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return ['http:', 'https:'].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
 
 const emptyConfig = (channel) => ({
   channelId: channel.channelId || channel.id,
   categoryId: '',
   categoryName: '',
-  categoryVersion: channel.platform === 'TIKTOK' ? 'v1' : null,
+  categoryVersion: channel.platform === 'TIKTOK' ? 'v2' : null,
   brandId: '',
   brandName: '',
   sizeChartImageUrl: '',
   attributes: {},
-  variantAttributeBindings: {},
+  variantAttributeValueMappings: {},
 });
 
 const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
   const { control, setValue } = useFormContext();
   const configs = useWatch({ control, name: 'channelConfigs', defaultValue: {} });
-  const [productName, productDescription, productImages] = useWatch({ control, name: ['name', 'description', 'images'] });
+  const [productName, productDescription, productImages, productSku, productVariants, hasVariants] = useWatch({
+    control,
+    name: ['name', 'description', 'images', 'sku', 'variants', 'hasVariants'],
+  });
   const platformChannels = channels.filter((channel) => ['LAZADA', 'TIKTOK'].includes(channel.platform));
   const [openChannelId, setOpenChannelId] = useState(null);
   const [categoryState, setCategoryState] = useState({});
@@ -49,6 +62,13 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
   const [brandSearchValues, setBrandSearchValues] = useState({});
   const [loading, setLoading] = useState({});
   const [sizeChartUploading, setSizeChartUploading] = useState({});
+  const categorySearchTimers = useRef({});
+  const brandSearchTimers = useRef({});
+
+  useEffect(() => () => {
+    Object.values(categorySearchTimers.current).forEach((timer) => clearTimeout(timer));
+    Object.values(brandSearchTimers.current).forEach((timer) => clearTimeout(timer));
+  }, []);
 
   const configFor = (channel) => configs[channel.channelId || channel.id] || emptyConfig(channel);
   const setLoadingFor = (channelId, value) => setLoading((previous) => ({ ...previous, [channelId]: value }));
@@ -83,6 +103,19 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     }
   };
 
+  const searchCategories = (channel, value, immediate = false) => {
+    const channelId = channel.channelId || channel.id;
+    setSearchValues((previous) => ({ ...previous, [channelId]: value }));
+    clearTimeout(categorySearchTimers.current[channelId]);
+
+    const runSearch = () => loadCategories(channel, null, value.trim() || null);
+    if (immediate) {
+      runSearch();
+      return;
+    }
+    categorySearchTimers.current[channelId] = setTimeout(runSearch, 350);
+  };
+
   const loadBrands = async (channel, keyword = null, categoryIdOverride = null, page = 0, pageToken = null) => {
     if (!['LAZADA', 'TIKTOK'].includes(channel.platform)) return;
     const channelId = channel.channelId || channel.id;
@@ -113,6 +146,19 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     }
   };
 
+  const searchBrands = (channel, value, immediate = false) => {
+    const channelId = channel.channelId || channel.id;
+    setBrandSearchValues((previous) => ({ ...previous, [channelId]: value }));
+    clearTimeout(brandSearchTimers.current[channelId]);
+
+    const runSearch = () => loadBrands(channel, value.trim() || null, null, 0, null);
+    if (immediate) {
+      runSearch();
+      return;
+    }
+    brandSearchTimers.current[channelId] = setTimeout(runSearch, 350);
+  };
+
   const loadNextBrandPage = async (channel) => {
     const channelId = channel.channelId || channel.id;
     const current = brandPages[channelId];
@@ -137,8 +183,15 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
 
   const suggestCategories = async (channel) => {
     const channelId = channel.channelId || channel.id;
+    const normalizedProductName = productName?.trim() || '';
     if (!productId && (!productName?.trim() || !primaryImageUrl)) {
       toast.error('Hãy nhập tên sản phẩm và thêm ảnh chính trước khi gợi ý danh mục');
+      return;
+    }
+    if (channel.platform === 'TIKTOK'
+      && (normalizedProductName.length < TIKTOK_PRODUCT_NAME_MIN_LENGTH
+        || normalizedProductName.length > TIKTOK_PRODUCT_NAME_MAX_LENGTH)) {
+      toast.error(`Tên sản phẩm TikTok phải có từ ${TIKTOK_PRODUCT_NAME_MIN_LENGTH} đến ${TIKTOK_PRODUCT_NAME_MAX_LENGTH} ký tự`);
       return;
     }
     const hash = inputHash();
@@ -192,14 +245,21 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     setValue(`channelConfigs.${channelId}`, { ...configFor(channel), ...patch }, { shouldDirty: true });
   };
 
-  const uploadSizeChartImage = async (channel, event) => {
+  const uploadSizeChartImage = async (channel, event, attributeKey = null) => {
     const file = event.target.files?.[0];
     if (!file) return;
     const channelId = channel.channelId || channel.id;
     try {
       setSizeChartUploading((previous) => ({ ...previous, [channelId]: true }));
       const imageUrl = await uploadImageToCloudinary(file);
-      updateConfig(channel, { sizeChartImageUrl: imageUrl });
+      if (attributeKey) {
+        const config = configFor(channel);
+        updateConfig(channel, {
+          attributes: { ...config.attributes, [attributeKey]: imageUrl },
+        });
+      } else {
+        updateConfig(channel, { sizeChartImageUrl: imageUrl });
+      }
       toast.success('Đã tải ảnh bảng size lên');
     } catch (error) {
       toast.error(error.message || 'Không thể tải ảnh bảng size lên');
@@ -233,7 +293,8 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
       return;
     }
     const next = { ...current, categoryId: category.id, categoryName: category.name, categorySource: source,
-      categoryConfirmed: source === 'PLATFORM_SUGGESTION', brandId: '', brandName: '', attributes: {}, variantAttributeBindings: {} };
+      categoryConfirmed: source === 'PLATFORM_SUGGESTION', brandId: '', brandName: '', attributes: {},
+      variantAttributeValueMappings: {} };
     updateConfig(channel, next);
     await loadAttributes(channel, next);
     await loadBrands(channel, null, category.id);
@@ -241,31 +302,97 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
 
   const renderAttribute = (channel, attribute) => {
     const config = configFor(channel);
-    const attributeKey = channel.platform === 'TIKTOK' ? attribute.id : attribute.name;
+    const attributeKey = channel.platform === 'TIKTOK'
+      ? attribute.id || attribute.name
+      : attribute.name || attribute.id;
     const storedValue = config.attributes?.[attributeKey];
     const value = typeof storedValue === 'object' && storedValue !== null
       ? storedValue.valueId || storedValue.valueName || ''
       : storedValue ?? '';
-    if (attribute.saleProperty) {
-      const binding = config.variantAttributeBindings?.[attributeKey] || '';
-      return <label className={styles.field} key={attributeKey}>
+    const normalizedAttributeName = String(attribute.name || '')
+      .trim().toLowerCase().replace(/[\s-]+/g, '_');
+    const isLazadaSizeChart = channel.platform === 'LAZADA'
+      && ['size_chart', 'size_chart_image'].includes(normalizedAttributeName);
+    if (isLazadaSizeChart) {
+      const channelId = channel.channelId || channel.id;
+      const invalidUrl = Boolean(value) && !isHttpUrl(String(value));
+      return <div className={styles.field} key={attributeKey}>
         <span>{attribute.label || attribute.name}{attribute.required ? ' *' : ''}</span>
-        <select className={styles.input} value={binding} onChange={(event) => updateConfig(channel, {
-          variantAttributeBindings: { ...config.variantAttributeBindings, [attributeKey]: event.target.value },
-        })}>
-          <option value="">Chưa liên kết</option>
-          {SUPPORTED_BINDINGS.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-      </label>;
+        <input
+          className={styles.input}
+          type="url"
+          placeholder="https://..."
+          value={value}
+          onChange={(event) => updateConfig(channel, {
+            attributes: { ...config.attributes, [attributeKey]: event.target.value },
+          })}
+        />
+        {invalidUrl && <span className={styles.helperText}>URL ảnh phải bắt đầu bằng http:// hoặc https://.</span>}
+        <label className={styles.fileUploadRow}>
+          <input
+            className={styles.fileInput}
+            type="file"
+            accept="image/*"
+            onChange={(event) => uploadSizeChartImage(channel, event, attributeKey)}
+            disabled={sizeChartUploading[channelId]}
+          />
+          {sizeChartUploading[channelId] ? <Loader2 className={styles.spin} size={16} /> : <Upload size={16} />}
+          <span>{sizeChartUploading[channelId] ? 'Đang tải...' : 'Chọn ảnh bảng size từ máy'}</span>
+        </label>
+      </div>;
+    }
+    if (attribute.saleProperty) {
+      if (channel.platform === 'TIKTOK') return null;
+      if (channel.platform === 'LAZADA') {
+        const skus = hasVariants
+          ? (productVariants || []).filter((variant) => variant.isActive !== false && variant.sku?.trim())
+              .map((variant) => variant.sku.trim())
+          : (productSku?.trim() ? [productSku.trim()] : []);
+        const uniqueSkus = [...new Set(skus)];
+        const mappings = config.variantAttributeValueMappings?.[attributeKey] || {};
+        const options = attribute.options || [];
+        return <div className={`${styles.field} ${styles.fullWidth}`} key={attributeKey}>
+          <span>{attribute.label || attribute.name}{attribute.required ? ' *' : ''}</span>
+          {uniqueSkus.length === 0
+            ? <span className={styles.helperText}>Hãy nhập SKU sản phẩm trước khi map thuộc tính {channel.platform === 'TIKTOK' ? 'TikTok' : 'Lazada'}.</span>
+            : <div className={styles.skuMappingContainer}>
+                {uniqueSkus.map((sku) => <label className={styles.skuMappingRow} key={`${attributeKey}-${sku}`}>
+                  <span className={styles.skuLabel}>SKU: {sku}</span>
+                  <select className={styles.input} value={mappings[sku] || ''} onChange={(event) => updateConfig(channel, {
+                    variantAttributeValueMappings: {
+                      ...config.variantAttributeValueMappings,
+                      [attributeKey]: { ...mappings, [sku]: event.target.value },
+                    },
+                  })}>
+                    <option value="">Chọn {attribute.label || attribute.name} {channel.platform === 'TIKTOK' ? 'TikTok' : 'Lazada'}</option>
+                    {options.map((option) => <option key={option.id || option.platformValue || option.name}
+                      value={channel.platform === 'TIKTOK'
+                        ? option.id || option.name
+                        : option.platformValue || option.id || option.name}>
+                      {option.name || option.platformValue}
+                    </option>)}
+                  </select>
+                </label>)}
+              </div>}
+        </div>;
+      }
+      return null;
     }
     const options = attribute.options || [];
     const selectedOption = options.find((option) => String(option.id) === String(value)
-      || String(option.name) === String(value));
-    const selectedValue = selectedOption ? String(selectedOption.id || selectedOption.name) : '';
+      || String(option.name) === String(value)
+      || String(option.platformValue) === String(value));
+    const selectedValue = selectedOption
+      ? String(channel.platform === 'LAZADA'
+          ? selectedOption.platformValue || selectedOption.id || selectedOption.name
+          : selectedOption.id || selectedOption.name)
+      : '';
     return <label className={styles.field} key={attributeKey}>
       <span>{attribute.label || attribute.name}{attribute.required ? ' *' : ''}</span>
       {options.length > 0 ? <select className={styles.input} value={selectedValue} onChange={(event) => {
-        const option = options.find((item) => String(item.id || item.name) === event.target.value);
+        const option = options.find((item) => String(channel.platform === 'LAZADA'
+          ? item.platformValue || item.id || item.name
+          : item.id || item.name) === event.target.value);
         updateConfig(channel, {
           attributes: {
             ...config.attributes,
@@ -276,12 +403,17 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
                   valueId: option?.id || event.target.value,
                   valueName: option?.name || event.target.value,
                 }
-              : option?.name || event.target.value,
+              : option?.platformValue || option?.name || event.target.value,
           },
         });
       }}>
         <option value="">Chọn giá trị</option>
-        {options.map((option) => <option key={option.id || option.name} value={option.id || option.name}>{option.name}</option>)}
+        {options.map((option) => <option key={option.id || option.platformValue || option.name}
+          value={channel.platform === 'LAZADA'
+            ? option.platformValue || option.id || option.name
+            : option.id || option.name}>
+          {option.name || option.platformValue}
+        </option>)}
       </select> : <input className={styles.input} value={value} onChange={(event) => updateConfig(channel, {
         attributes: {
           ...config.attributes,
@@ -303,13 +435,15 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
       const suggestions = suggestionState[channelId] || { items: [], hash: null };
       const suggestionsAreStale = suggestions.hash && suggestions.hash !== inputHash();
       const isManualBrowserOpen = Boolean(manualBrowser[channelId]);
-      const productAttributes = (attributeState[channelId] || []).filter((attribute) =>
-        !attribute.saleProperty && !isSystemManaged(attribute));
-      const requiredAttributes = productAttributes.filter((attribute) => attribute.required);
-      const optionalAttributes = productAttributes.filter((attribute) =>
+      const configurableAttributes = (attributeState[channelId] || []).filter((attribute) =>
+        !isSystemManaged(attribute));
+      const productAttributes = configurableAttributes.filter((attribute) => !attribute.saleProperty);
+      const requiredAttributes = configurableAttributes.filter((attribute) =>
+        attribute.required && !(channel.platform === 'TIKTOK' && attribute.saleProperty));
+      const optionalAttributes = configurableAttributes.filter((attribute) =>
         !attribute.required && (channel.platform === 'TIKTOK'
-          ? isTikTokListingAttribute(attribute)
-          : isOptionalLazadaSpecification(attribute)));
+          ? !attribute.saleProperty && isTikTokListingAttribute(attribute)
+          : !attribute.saleProperty && isOptionalLazadaSpecification(attribute)));
       const loadedBrands = brandState[channelId] || [];
       const brandPage = brandPages[channelId] || { page: 0, size: 50, totalElements: 0, totalPages: 0 };
       const selectedBrand = config.brandId && !loadedBrands.some((brand) => String(brand.id) === String(config.brandId))
@@ -317,6 +451,12 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
         : [];
       const availableBrands = [...selectedBrand, ...loadedBrands];
       const platformLabel = channel.platform === 'TIKTOK' ? 'TikTok' : 'Lazada';
+      const normalizedProductName = productName?.trim() || '';
+      const isTikTokProductNameInvalid = channel.platform === 'TIKTOK'
+        && (normalizedProductName.length < TIKTOK_PRODUCT_NAME_MIN_LENGTH
+          || normalizedProductName.length > TIKTOK_PRODUCT_NAME_MAX_LENGTH);
+      const isSuggestionInputMissing = !productId && (!normalizedProductName || !primaryImageUrl);
+      const isSizeChartUrlInvalid = Boolean(config.sizeChartImageUrl) && !isHttpUrl(config.sizeChartImageUrl);
       return <div className={styles.panel} key={channelId}>
         <button className={styles.panelHeader} type="button" onClick={() => toggle(channel)}>
           <span>{openChannelId === channelId ? <ChevronDown size={18} color="#6b7280" /> : <ChevronRight size={18} color="#6b7280" />}</span>
@@ -331,7 +471,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
             </div>
             <div className={styles.actions}>
               <button type="button" className={styles.saveButton} onClick={() => suggestCategories(channel)}
-                disabled={(!productId && (!productName?.trim() || !primaryImageUrl)) || loading[channelId]}>
+                disabled={isSuggestionInputMissing || isTikTokProductNameInvalid || loading[channelId]}>
                 Gợi ý danh mục
               </button>
               <button type="button" className={styles.backButton} onClick={() => {
@@ -341,7 +481,10 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
                 Chọn danh mục khác
               </button>
             </div>
-            {!productId && (!productName?.trim() || !primaryImageUrl) ? <p className={styles.helperText}>Nhập tên sản phẩm và ảnh chính trước khi gợi ý danh mục.</p> : null}
+            {isSuggestionInputMissing ? <p className={styles.helperText}>Nhập tên sản phẩm và ảnh chính trước khi gợi ý danh mục.</p> : null}
+            {!isSuggestionInputMissing && isTikTokProductNameInvalid
+              ? <p className={styles.helperText}>Tên sản phẩm TikTok phải có từ 25 đến 255 ký tự để gợi ý danh mục.</p>
+              : null}
             {loading[channelId] && <span className={styles.helperText}>Đang tải dữ liệu...</span>}
             {suggestionsAreStale && <p className={styles.helperText}>Thông tin sản phẩm đã thay đổi. Hãy gợi ý lại hoặc chọn danh mục thủ công.</p>}
             {!suggestionsAreStale && suggestions.items.length > 0 && <div className={styles.categoryList}>
@@ -356,11 +499,24 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
             {isManualBrowserOpen && <div className={styles.manualBrowser}>
               <div className={styles.actions}>
                 <input className={styles.search} placeholder="Tìm kiếm danh mục..." value={searchValues[channelId] || ''}
-                  onChange={(event) => setSearchValues((previous) => ({ ...previous, [channelId]: event.target.value }))} />
+                  onChange={(event) => searchCategories(channel, event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      searchCategories(channel, event.currentTarget.value, true);
+                    }
+                  }} />
+                <button type="button" className={styles.iconButton} title="Tìm danh mục"
+                  onClick={() => searchCategories(channel, searchValues[channelId] || '', true)}>
+                  <Search size={16} />
+                </button>
                 <button type="button" className={styles.iconButton} title="Làm mới" onClick={async () => {
                   await platformLookupApi.clearCache(channel.platform, channelId);
                   await loadCategories(channel);
-                  if (config.categoryId) await loadBrands(channel, brandSearchValues[channelId] || null, null, 0);
+                  if (config.categoryId) {
+                    await loadAttributes(channel, config);
+                    await loadBrands(channel, brandSearchValues[channelId] || null, null, 0);
+                  }
                 }}><RefreshCw size={16} /></button>
               </div>
               {category.history.length > 0 && <button className={styles.backButton} style={{ marginBottom: '16px' }} type="button" onClick={() => loadCategories(channel, category.history.at(-1))}>
@@ -393,8 +549,20 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
             <div className={styles.brandRow}>
               <div className={styles.field}>
                 <span>Tìm kiếm</span>
-                <input className={styles.input} placeholder="Nhập tên thương hiệu..." value={brandSearchValues[channelId] || ''}
-                  onChange={(event) => setBrandSearchValues((previous) => ({ ...previous, [channelId]: event.target.value }))} />
+                <div className={styles.actions}>
+                  <input className={styles.input} placeholder="Nhập tên thương hiệu..." value={brandSearchValues[channelId] || ''}
+                    onChange={(event) => searchBrands(channel, event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        searchBrands(channel, event.currentTarget.value, true);
+                      }
+                    }} />
+                  <button type="button" className={styles.iconButton} title="Tìm thương hiệu"
+                    onClick={() => searchBrands(channel, brandSearchValues[channelId] || '', true)}>
+                    <Search size={16} />
+                  </button>
+                </div>
               </div>
               <div className={styles.field}>
                 <span>Chọn thương hiệu từ danh sách</span>
@@ -434,6 +602,9 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
                 value={config.sizeChartImageUrl || ''}
                 onChange={(event) => updateConfig(channel, { sizeChartImageUrl: event.target.value })}
               />
+              {isSizeChartUrlInvalid
+                ? <span className={styles.helperText}>URL ảnh phải bắt đầu bằng http:// hoặc https://.</span>
+                : null}
             </label>
             <label className={styles.field}>
               <span>Hoặc chọn ảnh từ máy</span>

@@ -1,47 +1,43 @@
 package fu.osms.sync.tiktok.impl;
 
-import fu.osms.sync.tiktok.TikTokApiClient;
-import fu.osms.sync.tiktok.dto.TikTokAuthorizedShop;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.sync.tiktok.TikTokApiClient;
+import fu.osms.sync.tiktok.dto.TikTokAuthorizedShop;
 import fu.osms.sync.tiktok.util.TikTokSignatureUtil;
+import fu.osms.channel.token.exception.PlatformAccessTokenExpiredException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpEntity;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
+import java.net.URI;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
-import java.util.List;
-import java.util.ArrayList;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TikTokApiClientImpl implements TikTokApiClient {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+    };
 
     @Value("${tiktok.app-key}")
     private String appKey;
@@ -63,30 +59,50 @@ public class TikTokApiClientImpl implements TikTokApiClient {
 
     @Override
     public String executeGet(String apiPath, Map<String, String> queryParams, String accessToken) {
-        return execute(apiPath, queryParams, null, accessToken, HttpMethod.GET);
+        return executeRaw(apiPath, queryParams, null, accessToken, HttpMethod.GET);
+    }
+
+    @Override
+    public String executePost(String apiPath,
+                              Map<String, String> queryParams,
+                              String rawJsonBody,
+                              String accessToken) {
+        return executeRaw(apiPath, queryParams, rawJsonBody, accessToken, HttpMethod.POST);
+    }
+
+    @Override
+    public String executePut(String apiPath,
+                             Map<String, String> queryParams,
+                             String rawJsonBody,
+                             String accessToken) {
+        return executeRaw(apiPath, queryParams, rawJsonBody, accessToken, HttpMethod.PUT);
+    }
+
+    @Override
     public Map<String, Object> searchProducts(String accessToken, String shopCipher, String pageToken) {
+        validateShopCipher(shopCipher);
         String path = "/product/" + productApiVersion + "/products/search";
-        Map<String, Object> query = commonQuery(shopCipher);
-        query.put("page_size", 100);
+        Map<String, String> query = commonQuery(shopCipher);
+        query.put("page_size", "100");
         if (pageToken != null && !pageToken.isBlank()) {
             query.put("page_token", pageToken);
         }
-        return execute(path, HttpMethod.POST, query, Map.of("status", "ALL"), accessToken);
+        return executeForMap(path, HttpMethod.POST, query, Map.of("status", "ALL"), accessToken);
     }
 
     @Override
-    public String executePost(String apiPath, Map<String, String> queryParams, String rawJsonBody, String accessToken) {
-        return execute(apiPath, queryParams, rawJsonBody, accessToken, HttpMethod.POST);
     public Map<String, Object> getProduct(String accessToken, String shopCipher, String productId) {
+        validateShopCipher(shopCipher);
         String path = "/product/" + productDetailApiVersion + "/products/" + productId;
-        return execute(path, HttpMethod.GET, commonQuery(shopCipher), null, accessToken);
+        return executeForMap(path, HttpMethod.GET, commonQuery(shopCipher), null, accessToken);
     }
 
     @Override
-    public String executePut(String apiPath, Map<String, String> queryParams, String rawJsonBody, String accessToken) {
-        return execute(apiPath, queryParams, rawJsonBody, accessToken, HttpMethod.PUT);
-    public Map<String, Object> searchInventory(String accessToken, String shopCipher, List<String> productIds) {
-        return execute(
+    public Map<String, Object> searchInventory(String accessToken,
+                                               String shopCipher,
+                                               List<String> productIds) {
+        validateShopCipher(shopCipher);
+        return executeForMap(
                 "/product/202309/inventory/search",
                 HttpMethod.POST,
                 commonQuery(shopCipher),
@@ -96,10 +112,9 @@ public class TikTokApiClientImpl implements TikTokApiClient {
     }
 
     @Override
-    public String uploadProductImage(String imageUrl, String useCase, String accessToken) {
-        validateConfiguration(accessToken);
     public Map<String, Object> getWarehouses(String accessToken, String shopCipher) {
-        return execute(
+        validateShopCipher(shopCipher);
+        return executeForMap(
                 "/logistics/202309/warehouses",
                 HttpMethod.GET,
                 commonQuery(shopCipher),
@@ -113,35 +128,36 @@ public class TikTokApiClientImpl implements TikTokApiClient {
                                 String shopCipher,
                                 String productId,
                                 List<Map<String, Object>> skus) {
+        validateShopCipher(shopCipher);
         String path = "/product/202309/products/" + productId + "/inventory/update";
-        Map<String, Object> response = execute(
+        Map<String, Object> response = executeForMap(
                 path,
                 HttpMethod.POST,
                 commonQuery(shopCipher),
                 Map.of("skus", skus),
                 accessToken
         );
-        Map<String, Object> data = map(response.get("data"));
+        Map<String, Object> data = asMap(response.get("data"));
         Object errors = data.get("errors");
         if (errors instanceof List<?> errorList && !errorList.isEmpty()) {
             throw new IllegalStateException("TikTok rejected inventory update: " + errors);
         }
     }
 
-    private Map<String, Object> execute(String path,
-                                        HttpMethod method,
-                                        Map<String, Object> query,
-                                        Object requestBody,
-                                        String accessToken) {
-        validateConfiguration(accessToken, query.get("shop_cipher"));
+    @Override
+    public String uploadProductImage(String imageUrl, String useCase, String accessToken) {
+        validateConfiguration(accessToken);
+        String path = "/product/202309/images/upload";
+        String sourceImageUrl = requireHttpImageUrl(imageUrl, useCase);
+
         try {
-            ResponseEntity<byte[]> source = restTemplate.getForEntity(imageUrl, byte[].class);
+            ResponseEntity<byte[]> source = restTemplate.getForEntity(sourceImageUrl, byte[].class);
             byte[] bytes = source.getBody();
             if (bytes == null || bytes.length == 0) {
-                throw new IllegalStateException("TikTok source image is empty: " + imageUrl);
+                throw new IllegalStateException("TikTok source image is empty for " + useCase);
             }
 
-            Map<String, String> params = signedParams("/product/202309/images/upload", Map.of());
+            Map<String, String> params = signedParams(path, Map.of(), null);
             HttpHeaders headers = new HttpHeaders();
             headers.set("x-tts-access-token", accessToken);
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -157,119 +173,30 @@ public class TikTokApiClientImpl implements TikTokApiClient {
                 body.add("use_case", useCase);
             }
 
-            UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(apiUrl + "/product/202309/images/upload");
+            UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(apiUrl + path);
             params.forEach(builder::queryParam);
+            log.info("[TikTokApiClient] Calling POST {}, params={}", path, params.keySet());
             ResponseEntity<String> response = restTemplate.exchange(
-                    builder.build().encode().toUri(), HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
-            return response.getBody();
+                    builder.build().encode().toUri(),
+                    HttpMethod.POST,
+                    new HttpEntity<>(body, headers),
+                    String.class
+            );
+            String responseBody = response.getBody();
+            throwIfAccessTokenExpired(responseBody, null);
+            return responseBody;
         } catch (RestClientResponseException e) {
-            throw new IllegalStateException("TikTok image upload failed: " + e.getResponseBodyAsString(), e);
+            throw apiException("TikTok image upload failed", e);
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
             throw new IllegalStateException("TikTok image upload failed: " + e.getMessage(), e);
         }
-    }
-            String body = requestBody == null ? null : objectMapper.writeValueAsString(requestBody);
-            query.put("sign", TikTokSignatureUtil.sign(path, query, body, appSecret));
-
-            UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromHttpUrl(apiUrl).path(path);
-            query.forEach(uriBuilder::queryParam);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("x-tts-access-token", accessToken);
-            HttpEntity<String> entity = new HttpEntity<>(body, headers);
-            String responseBody = restTemplate.exchange(
-                    uriBuilder.build().encode().toUri(),
-    private String execute(String apiPath,
-                           Map<String, String> queryParams,
-                           String rawJsonBody,
-                           String accessToken,
-                           HttpMethod method) {
-        validateConfiguration(accessToken);
-        Map<String, String> params = signedParams(apiPath, queryParams, rawJsonBody);
-
-        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(apiUrl + apiPath);
-        params.forEach(builder::queryParam);
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("x-tts-access-token", accessToken);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        try {
-            log.info("[TikTokApiClient] Calling {} {}, params={}", method, apiPath, params.keySet());
-            ResponseEntity<String> response = restTemplate.exchange(
-                    builder.build().encode().toUri(),
-                    method,
-                    entity,
-                    new HttpEntity<>(rawJsonBody, headers),
-                    String.class
-            ).getBody();
-            Map<String, Object> response = objectMapper.readValue(responseBody, MAP_TYPE);
-            ensureSuccess(response);
-            return response;
-            );
-            return response.getBody();
-        } catch (RestClientResponseException e) {
-            throw new IllegalStateException(
-                    "TikTok Shop API error " + e.getStatusCode() + ": " + e.getResponseBodyAsString(),
-                    e
-            );
-        } catch (Exception e) {
-            if (e instanceof IllegalStateException illegalStateException) {
-                throw illegalStateException;
-            }
-            throw new IllegalStateException("Cannot call TikTok Shop API: " + e.getMessage(), e);
-        }
-    }
-
-    private Map<String, Object> commonQuery(String shopCipher) {
-        Map<String, Object> query = new TreeMap<>();
-        query.put("app_key", appKey);
-        query.put("shop_cipher", shopCipher);
-        query.put("timestamp", Instant.now().getEpochSecond());
-        return query;
-    }
-
-    private void ensureSuccess(Map<String, Object> response) {
-        Object code = response.get("code");
-        if (code != null && !"0".equals(String.valueOf(code))) {
-            throw new IllegalStateException(
-                    "TikTok Shop API failed: code=" + code + ", message=" + response.get("message")
-            );
-            log.error("[TikTokApiClient] API error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new IllegalStateException("TikTok API returned error: " + e.getResponseBodyAsString(), e);
-        }
-    }
-
-    private void validateConfiguration(String accessToken, Object shopCipher) {
-        if (appKey == null || appKey.isBlank() || appSecret == null || appSecret.isBlank()) {
-            throw new IllegalStateException("Missing TIKTOK_APP_KEY or TIKTOK_APP_SECRET");
-        }
-        if (accessToken == null || accessToken.isBlank()) {
-            throw new IllegalStateException("TikTok channel has no access token; reconnect the channel");
-        }
-    }
-
-    private Map<String, String> signedParams(String apiPath, Map<String, String> queryParams) {
-        return signedParams(apiPath, queryParams, null);
-        if (shopCipher == null || shopCipher.toString().isBlank()) {
-            throw new IllegalStateException("TikTok channel is missing shopCipher metadata");
-        }
-    }
-
-    private Map<String, String> signedParams(String apiPath, Map<String, String> queryParams, String rawJsonBody) {
-        Map<String, String> params = new HashMap<>();
-        if (queryParams != null) {
-            params.putAll(queryParams);
-        }
-        params.put("app_key", appKey);
-        params.put("timestamp", String.valueOf(Instant.now().getEpochSecond()));
-        params.put("sign", sign(apiPath, params, rawJsonBody));
-        return params;
     }
 
     @Override
     public List<TikTokAuthorizedShop> getAuthorizedShops(String accessToken) {
         String response = executeGet("/authorization/202309/shops", Map.of(), accessToken);
-        log.info("[TikTokApiClient] Authorized shops response: {}", response);
         try {
             JsonNode shops = objectMapper.readTree(response).path("data").path("shops");
             List<TikTokAuthorizedShop> result = new ArrayList<>();
@@ -286,34 +213,162 @@ public class TikTokApiClientImpl implements TikTokApiClient {
                     }
                 });
             }
+            log.info("[TikTokApiClient] Authorized shop count={}", result.size());
             return result;
         } catch (Exception e) {
             throw new IllegalStateException("Cannot parse TikTok authorized shops", e);
         }
     }
 
-    private String sign(String apiPath, Map<String, String> params, String rawJsonBody) {
+    private Map<String, Object> executeForMap(String path,
+                                              HttpMethod method,
+                                              Map<String, String> query,
+                                              Object requestBody,
+                                              String accessToken) {
+        String rawBody = requestBody == null ? null : serialize(requestBody);
+        String responseBody = executeRaw(path, query, rawBody, accessToken, method);
         try {
-            StringBuilder source = new StringBuilder(appSecret).append(apiPath);
-            new TreeMap<>(params).forEach((key, value) -> {
-                if (!"sign".equals(key) && !"access_token".equals(key) && value != null) {
-                    source.append(key).append(value);
-                }
-            });
-            if (rawJsonBody != null && !rawJsonBody.isBlank()) {
-                source.append(rawJsonBody);
-            }
-            source.append(appSecret);
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(appSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            byte[] bytes = mac.doFinal(source.toString().getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder();
-            for (byte value : bytes) {
-                hex.append(String.format("%02x", value));
-            }
-            return hex.toString();
+            Map<String, Object> response = objectMapper.readValue(responseBody, MAP_TYPE);
+            ensureSuccess(response);
+            return response;
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to sign TikTok API request", e);
+            throw new IllegalStateException("Cannot parse TikTok Shop API response", e);
+        }
+    }
+
+    private String executeRaw(String apiPath,
+                              Map<String, String> queryParams,
+                              String rawJsonBody,
+                              String accessToken,
+                              HttpMethod method) {
+        validateConfiguration(accessToken);
+        Map<String, String> params = signedParams(apiPath, queryParams, rawJsonBody);
+
+        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(apiUrl + apiPath);
+        params.forEach(builder::queryParam);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("x-tts-access-token", accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        try {
+            log.info("[TikTokApiClient] Calling {} {}, params={}", method, apiPath, params.keySet());
+            ResponseEntity<String> response = restTemplate.exchange(
+                    builder.build().encode().toUri(),
+                    method,
+                    new HttpEntity<>(rawJsonBody, headers),
+                    String.class
+            );
+            return response.getBody();
+        } catch (RestClientResponseException e) {
+            throw apiException("TikTok Shop API error", e);
+        } catch (PlatformAccessTokenExpiredException e) {
+            throw e;
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot call TikTok Shop API: " + e.getMessage(), e);
+        }
+    }
+
+    private Map<String, String> signedParams(String apiPath,
+                                             Map<String, String> queryParams,
+                                             String rawJsonBody) {
+        Map<String, String> params = new HashMap<>();
+        if (queryParams != null) {
+            params.putAll(queryParams);
+        }
+        params.put("app_key", appKey);
+        params.put("timestamp", String.valueOf(Instant.now().getEpochSecond()));
+        params.put("sign", TikTokSignatureUtil.sign(apiPath, params, rawJsonBody, appSecret));
+        return params;
+    }
+
+    private Map<String, String> commonQuery(String shopCipher) {
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("shop_cipher", shopCipher);
+        return query;
+    }
+
+    private void ensureSuccess(Map<String, Object> response) {
+        Object code = response.get("code");
+        if (code != null && !"0".equals(String.valueOf(code))) {
+            throw new IllegalStateException(
+                    "TikTok Shop API failed: code=" + code + ", message=" + response.get("message")
+            );
+        }
+    }
+
+    private void validateConfiguration(String accessToken) {
+        if (appKey == null || appKey.isBlank() || appSecret == null || appSecret.isBlank()) {
+            throw new IllegalStateException("Missing TIKTOK_APP_KEY or TIKTOK_APP_SECRET");
+        }
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new IllegalStateException("TikTok channel has no access token; reconnect the channel");
+        }
+    }
+
+    private void validateShopCipher(String shopCipher) {
+        if (shopCipher == null || shopCipher.isBlank()) {
+            throw new IllegalStateException("TikTok channel is missing shopCipher metadata");
+        }
+    }
+
+    private String requireHttpImageUrl(String imageUrl, String useCase) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            throw new IllegalStateException("TikTok " + useCase + " source image URL is missing");
+        }
+        String normalized = imageUrl.trim();
+        try {
+            URI uri = URI.create(normalized);
+            if (uri.isAbsolute() && ("http".equalsIgnoreCase(uri.getScheme())
+                    || "https".equalsIgnoreCase(uri.getScheme()))) {
+                return normalized;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Converted to a domain-specific message below.
+        }
+        throw new IllegalStateException(
+                "TikTok " + useCase + " source image must be an absolute http:// or https:// URL"
+        );
+    }
+
+    private String serialize(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot serialize TikTok Shop API request", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object value) {
+        return value instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    }
+
+    private RuntimeException apiException(String prefix, RestClientResponseException e) {
+        throwIfAccessTokenExpired(e.getResponseBodyAsString(), e);
+        return new IllegalStateException(
+                prefix + " " + e.getStatusCode() + ": " + e.getResponseBodyAsString(),
+                e
+        );
+    }
+
+    private void throwIfAccessTokenExpired(String responseBody, Throwable cause) {
+        if (responseBody == null || responseBody.isBlank()) return;
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            if (root.path("code").asInt(-1) == 105002) {
+                throw cause == null
+                        ? new PlatformAccessTokenExpiredException("TikTok access token has expired")
+                        : new PlatformAccessTokenExpiredException("TikTok access token has expired", cause);
+            }
+        } catch (PlatformAccessTokenExpiredException error) {
+            throw error;
+        } catch (Exception ignored) {
+            // Preserve the original platform error when the response is not JSON.
         }
     }
 

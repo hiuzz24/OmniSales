@@ -299,6 +299,7 @@ CREATE TABLE channel_credentials (
                                      access_token      TEXT,
                                      refresh_token     TEXT,
                                      token_expires_at  TIMESTAMPTZ,
+                                     refresh_token_expires_at TIMESTAMPTZ,
                                      connection_state  VARCHAR(20) NOT NULL DEFAULT 'DISCONNECTED'
                                          CHECK (connection_state IN ('CONNECTED','TOKEN_EXPIRED','REVOKED','DISCONNECTED')),
                                      last_refreshed_at TIMESTAMPTZ,
@@ -306,6 +307,9 @@ CREATE TABLE channel_credentials (
                                      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                                      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX idx_channel_credentials_token_refresh
+    ON channel_credentials (connection_state, token_expires_at);
 
 CREATE TABLE channel_connection_logs (
                                          id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -4,6 +4,11 @@ const numberOrNull = z.union([z.string(), z.number(), z.null(), z.undefined()])
   .transform((value) => value === '' || value == null ? null : Number(value))
   .refine((value) => value == null || (!Number.isNaN(value) && value >= 0), 'Giá trị phải là số không âm');
 
+const imageUrlSchema = z.string()
+  .trim()
+  .url('URL ảnh không hợp lệ')
+  .refine((value) => /^https?:\/\//i.test(value), 'URL ảnh phải bắt đầu bằng http:// hoặc https://');
+
 const variantSchema = z.object({
   id: z.string().nullable().optional(),
   sku: z.string().min(1, 'SKU không được để trống').max(100, 'SKU tối đa 100 ký tự'),
@@ -13,7 +18,7 @@ const variantSchema = z.object({
   costPrice: numberOrNull,
   isActive: z.boolean().optional(),
   optionValues: z.record(z.string(), z.unknown()).optional(),
-  images: z.array(z.object({ id: z.string().nullable().optional(), url: z.string().min(1), sortOrder: z.number().optional(), isPrimary: z.boolean().optional() })).optional(),
+  images: z.array(z.object({ id: z.string().nullable().optional(), url: imageUrlSchema, sortOrder: z.number().optional(), isPrimary: z.boolean().optional() })).optional(),
 });
 
 export const productEditorSchema = z.object({
@@ -37,16 +42,25 @@ export const productEditorSchema = z.object({
   packageHeightCm: numberOrNull,
   packageLengthCm: numberOrNull,
   lowStockThreshold: numberOrNull,
-  images: z.array(z.object({ id: z.string().nullable().optional(), url: z.string().min(1), sortOrder: z.number().optional(), isPrimary: z.boolean().optional() })),
+  images: z.array(z.object({ id: z.string().nullable().optional(), url: imageUrlSchema, sortOrder: z.number().optional(), isPrimary: z.boolean().optional() }))
+    .min(1, 'Vui lòng thêm ít nhất 1 ảnh sản phẩm'),
   variants: z.array(variantSchema),
   channelIds: z.array(z.string()),
   channelConfigs: z.record(z.string(), z.unknown()),
 }).superRefine((data, ctx) => {
-  if (!data.hasVariants) return;
+  if (!data.hasVariants) {
+    if (data.price == null || data.price <= 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: 'Giá bán phải lớn hơn 0' });
+    }
+    return;
+  }
   if (!data.variants.length) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants'], message: 'Vui lòng thêm ít nhất 1 biến thể' });
   const seen = new Set();
   data.variants.forEach((variant, index) => {
     if (seen.has(variant.sku)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'sku'], message: 'SKU này bị trùng lặp' });
+    if (variant.isActive !== false && (variant.price == null || variant.price <= 0)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'price'], message: 'Giá bán phải lớn hơn 0' });
+    }
     seen.add(variant.sku);
   });
 });
@@ -66,13 +80,13 @@ export function buildProductRequest(values, { mode, existingAttributes = {} }) {
     ? values.variants.map((variant) => ({
       id: variant.id || null, sku: variant.sku, barcode: variant.barcode || null,
       name: [variant.optionValues?.Size, variant.optionValues?.['Màu']].filter(Boolean).join(' / ') || variant.sku,
-      price: isCreate ? 0 : Number(variant.price || 0), costPrice: isCreate ? 0 : (variant.costPrice ?? null),
+        price: Number(variant.price || 0), costPrice: isCreate ? 0 : (variant.costPrice ?? null),
       isActive: variant.isActive !== false, optionValues: variant.optionValues,
       images: (variant.images || []).map((image, index) => ({ id: image.id || null, url: image.url, isPrimary: false, sortOrder: index })),
     }))
     : [{
       id: values.variants[0]?.id || null, sku: values.sku, barcode: values.barcode || null,
-      name: values.name || 'Mặc định', price: isCreate ? 0 : Number(values.price || 0),
+        name: values.name || 'Mặc định', price: Number(values.price || 0),
       costPrice: isCreate ? 0 : (values.costPrice ?? null), optionValues: optionValues({ Size: values.size, Màu: values.color }), images: [],
     }];
   return {

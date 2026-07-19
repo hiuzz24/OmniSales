@@ -3,8 +3,11 @@ package fu.osms.catalog.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.catalog.dto.request.ChannelConfigRequest;
 import fu.osms.catalog.dto.response.ChannelProductConfigResponse;
+import fu.osms.catalog.dto.response.PlatformAttributeOptionResponse;
 import fu.osms.catalog.dto.response.PlatformAttributeResponse;
 import fu.osms.catalog.entity.Product;
+import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.catalog.service.PlatformLookupService;
 import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.channel.entity.ChannelProduct;
@@ -17,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,8 +42,6 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
             "package_weight", "package_width", "package_height", "package_length",
             "brand", "brand_id"
     );
-    private static final Set<String> SUPPORTED_VARIANT_OPTIONS = Set.of("Size", "Màu");
-
     private static final Set<String> OPTIONAL_LAZADA_SPECIFICATION_ATTRIBUTES = Set.of(
             "clothing_material", "pattern", "neckline", "clothing_style", "details",
             "sleeves_type", "sleeve_type"
@@ -47,6 +49,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
     private static final Set<String> TIKTOK_LISTING_ATTRIBUTES = Set.of("100149", "101489", "101490");
 
     private final ChannelProductRepository channelProductRepository;
+    private final ProductVariantRepository productVariantRepository;
     private final PlatformLookupServiceFactory lookupServiceFactory;
     private final ObjectMapper objectMapper;
 
@@ -134,7 +137,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
             putIfText(nextConfig, "brandName", request.getBrandName());
         }
         if (platform == PlatformType.TIKTOK) {
-            nextConfig.put("categoryVersion", textOrDefault(request.getCategoryVersion(), "v1"));
+            nextConfig.put("categoryVersion", textOrDefault(request.getCategoryVersion(), "v2"));
             putIfText(nextConfig, "sizeChartImageUrl", request.getSizeChartImageUrl());
         }
 
@@ -162,13 +165,23 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
 
         List<PlatformAttributeResponse> schema = lookup.getAttributes(channelProduct.getChannel().getId(), categoryId, categoryVersion);
         Map<String, Object> validAttributes = filterAttributes(request.getAttributes(), schema, platform);
-        Map<String, String> validBindings = filterBindings(request.getVariantAttributeBindings(), schema);
+        Map<String, Map<String, String>> validValueMappings = platform == PlatformType.LAZADA
+                ? filterVariantValueMappings(request.getVariantAttributeValueMappings(), schema)
+                : Collections.emptyMap();
         nextConfig.put("attributes", validAttributes);
-        nextConfig.put("variantAttributeBindings", validBindings);
+        if (platform == PlatformType.LAZADA) {
+            nextConfig.put("variantAttributeValueMappings", validValueMappings);
+        }
 
-        String validationError = validationError(schema, validAttributes, validBindings, platform);
-        if (validationError == null && platform == PlatformType.TIKTOK && isEmpty(nextConfig.get("sizeChartImageUrl"))) {
-            validationError = "Missing TikTok size chart image";
+        String validationError = validationError(
+                schema, validAttributes, validValueMappings, platform, channelProduct);
+        if (validationError == null && platform == PlatformType.TIKTOK) {
+            String sizeChartImageUrl = stringValue(nextConfig.get("sizeChartImageUrl"));
+            if (sizeChartImageUrl == null || sizeChartImageUrl.isBlank()) {
+                validationError = "Missing TikTok size chart image";
+            } else if (!isHttpUrl(sizeChartImageUrl)) {
+                validationError = "TikTok size chart image URL must start with http:// or https://";
+            }
         }
         if (validationError != null) {
             markNotReady(nextConfig, validationError);
@@ -181,28 +194,115 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         persistConfig(channelProduct, nextConfig);
     }
 
+    private boolean isHttpUrl(String value) {
+        try {
+            URI uri = URI.create(value.trim());
+            return uri.isAbsolute() && ("http".equalsIgnoreCase(uri.getScheme())
+                    || "https".equalsIgnoreCase(uri.getScheme()));
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     private String validationError(List<PlatformAttributeResponse> schema,
                                    Map<String, Object> attributes,
-                                   Map<String, String> bindings,
-                                   PlatformType platform) {
+                                   Map<String, Map<String, String>> valueMappings,
+                                   PlatformType platform,
+                                   ChannelProduct channelProduct) {
+        List<ProductVariant> variants = productVariantRepository
+                .findByProductIdAndDeletedAtIsNull(channelProduct.getProduct().getId()).stream()
+                .filter(variant -> !Boolean.FALSE.equals(variant.getIsActive()))
+                .toList();
+        if (platform == PlatformType.TIKTOK && variants.size() > 1) {
+            boolean hasSalesAttribute = schema.stream()
+                    .filter(attribute -> Boolean.TRUE.equals(attribute.getSaleProperty()))
+                    .map(this::tikTokVariantOptionKey)
+                    .filter(Objects::nonNull)
+                    .anyMatch(optionKey -> variants.stream().anyMatch(variant ->
+                            !isEmpty(variant.getOptionValues() == null
+                                    ? null : variant.getOptionValues().get(optionKey))));
+            if (!hasSalesAttribute) {
+                return "TikTok product variants require Size or Màu values";
+            }
+        }
         for (PlatformAttributeResponse attribute : schema) {
             if (isSystemManaged(attribute)) continue;
+            if (platform == PlatformType.TIKTOK && Boolean.TRUE.equals(attribute.getSaleProperty())) {
+                String optionKey = tikTokVariantOptionKey(attribute);
+                if (optionKey == null || variants.size() <= 1) continue;
+                boolean attributeIsUsed = variants.stream().anyMatch(variant ->
+                        !isEmpty(variant.getOptionValues() == null ? null : variant.getOptionValues().get(optionKey)));
+                if (!attributeIsUsed) continue;
+                for (ProductVariant variant : variants) {
+                    Object value = variant.getOptionValues() == null
+                            ? null : variant.getOptionValues().get(optionKey);
+                    if (isEmpty(value)) {
+                        return "Missing TikTok " + displayName(attribute)
+                                + " value for SKU " + variant.getSku();
+                    }
+                }
+                continue;
+            }
             boolean requiredForListing = Boolean.TRUE.equals(attribute.getRequired())
                     || (platform == PlatformType.TIKTOK && isTikTokListingAttribute(attribute));
             if (!requiredForListing) continue;
             if (Boolean.TRUE.equals(attribute.getSaleProperty())) {
-                String binding = firstValue(bindings, attribute.getId(), attribute.getName());
-                if (binding == null || binding.isBlank()) {
-                    return "Missing variant attribute binding: " + displayName(attribute);
+                Map<String, String> skuMappings = firstValue(
+                        valueMappings, attribute.getId(), attribute.getName());
+                if (variants.isEmpty()) {
+                    return "Missing product SKU for " + platform.name() + " attribute: " + displayName(attribute);
                 }
-                if (!SUPPORTED_VARIANT_OPTIONS.contains(binding)) {
-                    return "Unsupported variant attribute binding: " + displayName(attribute);
+                for (ProductVariant variant : variants) {
+                    if (skuMappings == null || isEmpty(skuMappings.get(variant.getSku()))) {
+                        return "Missing " + platform.name() + " " + displayName(attribute)
+                                + " value for SKU " + variant.getSku();
+                    }
                 }
-            } else if (isEmpty(firstValue(attributes, attribute.getId(), attribute.getName()))) {
-                return "Missing required attribute: " + displayName(attribute);
+            } else {
+                Object value = firstValue(attributes, attribute.getId(), attribute.getName());
+                if (isEmpty(value)) {
+                    return "Missing required attribute: " + displayName(attribute);
+                }
+                if (platform == PlatformType.LAZADA
+                        && isLazadaSizeChartAttribute(attribute)
+                        && !isHttpUrl(String.valueOf(value))) {
+                    return "Lazada size chart image URL must start with http:// or https://";
+                }
             }
         }
         return null;
+    }
+
+    private Map<String, Map<String, String>> filterVariantValueMappings(
+            Map<String, Map<String, String>> mappings,
+            List<PlatformAttributeResponse> schema) {
+        if (mappings == null || mappings.isEmpty()) return new HashMap<>();
+        Map<String, Map<String, String>> result = new HashMap<>();
+        for (PlatformAttributeResponse attribute : schema) {
+            if (!Boolean.TRUE.equals(attribute.getSaleProperty())) continue;
+            Map<String, String> requested = firstValue(mappings, attribute.getId(), attribute.getName());
+            if (requested == null || requested.isEmpty()) continue;
+
+            Map<String, String> normalized = new HashMap<>();
+            requested.forEach((sku, selectedValue) -> {
+                if (sku == null || sku.isBlank() || selectedValue == null || selectedValue.isBlank()) return;
+                String platformValue = selectedValue;
+                if (attribute.getOptions() != null && !attribute.getOptions().isEmpty()) {
+                    PlatformAttributeOptionResponse option = attribute.getOptions().stream()
+                            .filter(candidate -> selectedValue.equals(candidate.getId())
+                                    || selectedValue.equals(candidate.getName())
+                                    || selectedValue.equals(candidate.getPlatformValue()))
+                            .findFirst()
+                            .orElse(null);
+                    platformValue = option == null ? null
+                            : textOrDefault(option.getPlatformValue(), option.getName());
+                }
+                if (platformValue != null && !platformValue.isBlank()) normalized.put(sku, platformValue);
+            });
+            String attributeKey = textOrDefault(attribute.getName(), attribute.getId());
+            if (!normalized.isEmpty() && attributeKey != null) result.put(attributeKey, normalized);
+        }
+        return result;
     }
 
     private Map<String, Object> filterAttributes(Map<String, Object> attributes,
@@ -223,27 +323,33 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         }
         Map<String, Object> result = new HashMap<>();
         attributes.forEach((key, value) -> {
-            if (allowed.contains(key) && !isEmpty(value)) result.put(key, value);
+            if (!allowed.contains(key) || isEmpty(value)) return;
+            PlatformAttributeResponse attribute = schema.stream()
+                    .filter(item -> key.equals(item.getId()) || key.equals(item.getName()))
+                    .findFirst()
+                    .orElse(null);
+            result.put(key, normalizeAttributeValue(value, attribute, platform));
         });
         return result;
     }
 
-    private Map<String, String> filterBindings(Map<String, String> bindings, List<PlatformAttributeResponse> schema) {
-        if (bindings == null || bindings.isEmpty()) return new HashMap<>();
-        Set<String> salePropertyNames = new HashSet<>();
-        for (PlatformAttributeResponse attribute : schema) {
-            if (Boolean.TRUE.equals(attribute.getRequired())
-                    && Boolean.TRUE.equals(attribute.getSaleProperty())
-                    && !isSystemManaged(attribute)) {
-                salePropertyNames.add(attribute.getName());
-                salePropertyNames.add(attribute.getId());
-            }
+    private Object normalizeAttributeValue(Object value,
+                                           PlatformAttributeResponse attribute,
+                                           PlatformType platform) {
+        if (platform != PlatformType.LAZADA || attribute == null
+                || attribute.getOptions() == null || attribute.getOptions().isEmpty()) {
+            return value;
         }
-        Map<String, String> result = new HashMap<>();
-        bindings.forEach((key, value) -> {
-            if (salePropertyNames.contains(key) && SUPPORTED_VARIANT_OPTIONS.contains(value)) result.put(key, value);
-        });
-        return result;
+        String selectedValue = String.valueOf(value);
+        PlatformAttributeOptionResponse selectedOption = attribute.getOptions().stream()
+                .filter(option -> selectedValue.equals(option.getId())
+                        || selectedValue.equals(option.getName())
+                        || selectedValue.equals(option.getPlatformValue()))
+                .findFirst()
+                .orElse(null);
+        return selectedOption == null
+                ? value
+                : textOrDefault(selectedOption.getPlatformValue(), selectedOption.getName());
     }
 
     private ChannelProductConfigResponse response(ChannelProduct channelProduct) {
@@ -260,7 +366,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
                 .brandId(stringValue(config.get("brandId")))
                 .brandName(stringValue(config.get("brandName")))
                 .attributes(mapValue(config.get("attributes")))
-                .variantAttributeBindings(stringMapValue(config.get("variantAttributeBindings")))
+                .variantAttributeValueMappings(nestedStringMapValue(config.get("variantAttributeValueMappings")))
                 .readyToSync(isReady(channelProduct))
                 .configurationError(configurationError(channelProduct))
                 .build();
@@ -302,11 +408,20 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         return value instanceof Map<?, ?> map ? objectMapper.convertValue(map, Map.class) : new HashMap<>();
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, String> stringMapValue(Object value) {
+    private Map<String, Map<String, String>> nestedStringMapValue(Object value) {
         if (!(value instanceof Map<?, ?> map)) return new HashMap<>();
-        Map<String, String> result = new HashMap<>();
-        map.forEach((key, entryValue) -> result.put(String.valueOf(key), String.valueOf(entryValue)));
+        Map<String, Map<String, String>> result = new HashMap<>();
+        map.forEach((key, nestedValue) -> {
+            if (nestedValue instanceof Map<?, ?> nestedMap) {
+                Map<String, String> entries = new HashMap<>();
+                nestedMap.forEach((nestedKey, entryValue) -> {
+                    if (nestedKey != null && entryValue != null) {
+                        entries.put(String.valueOf(nestedKey), String.valueOf(entryValue));
+                    }
+                });
+                result.put(String.valueOf(key), entries);
+            }
+        });
         return result;
     }
 
@@ -380,6 +495,22 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
 
     private boolean isTikTokListingAttribute(PlatformAttributeResponse attribute) {
         return attribute.getId() != null && TIKTOK_LISTING_ATTRIBUTES.contains(attribute.getId());
+    }
+
+    private String tikTokVariantOptionKey(PlatformAttributeResponse attribute) {
+        if ("100000".equals(attribute.getId())) return "Màu";
+        if ("100007".equals(attribute.getId())) return "Size";
+        String name = attribute.getName() == null ? "" : attribute.getName().trim().toLowerCase(Locale.ROOT);
+        if (name.contains("màu") || name.contains("color")) return "Màu";
+        if (name.contains("kích cỡ") || name.equals("size")) return "Size";
+        return null;
+    }
+
+    private boolean isLazadaSizeChartAttribute(PlatformAttributeResponse attribute) {
+        if (attribute.getName() == null) return false;
+        String normalized = attribute.getName().trim().toLowerCase(Locale.ROOT)
+                .replace(' ', '_').replace('-', '_');
+        return "size_chart".equals(normalized) || "size_chart_image".equals(normalized);
     }
 
     private String displayName(PlatformAttributeResponse attribute) {
