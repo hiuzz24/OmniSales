@@ -1,64 +1,51 @@
-import { useEffect, useMemo, useState } from 'react';
-import inventoryApi from '../../../api/inventoryApi';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
+import productApi from '../../../api/productApi';
 import styles from './TabInventory.module.css';
 
-const TabInventory = ({ product }) => {
-  const [transactions, setTransactions] = useState([]);
+const numberFormatter = new Intl.NumberFormat('vi-VN');
+
+const TabInventory = ({
+  productId,
+  insights,
+  insightsLoading,
+  insightsError,
+  onRetryInsights,
+}) => {
+  const [transactionPage, setTransactionPage] = useState({
+    content: [],
+    page: 0,
+    totalPages: 0,
+    totalElements: 0,
+    first: true,
+    last: true,
+  });
+  const [page, setPage] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
 
-  // Aggregate real inventory data from variants
-  const totalQuantity = product.variants?.reduce((sum, v) => sum + (v.quantityOnHand || 0), 0) || 0;
-  const availableQuantity = product.variants?.reduce((sum, v) => sum + (v.availableQuantity || 0), 0) || 0;
-  const reservedQuantity = totalQuantity - availableQuantity;
-
-  const variantIds = useMemo(() => {
-    const ids = product.variants
-      ?.map((variant) => variant.id || variant.variantId)
-      .filter(Boolean) || [];
-    return [...new Set(ids)];
-  }, [product.variants]);
+  const fetchHistory = useCallback(async () => {
+    try {
+      setHistoryLoading(true);
+      setHistoryError('');
+      const response = await productApi.getInventoryTransactions(productId, page, 30);
+      const data = response.data?.data || response.data || response;
+      setTransactionPage(data);
+    } catch (error) {
+      setHistoryError('Không tải được lịch sử xuất nhập kho.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [page, productId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchHistory = async () => {
-      if (variantIds.length === 0) {
-        setTransactions([]);
-        return;
-      }
-
-      try {
-        setHistoryLoading(true);
-        setHistoryError('');
-        const pages = await Promise.all(
-          variantIds.map((variantId) => inventoryApi.getTransactions(variantId, 0, 20))
-        );
-        if (cancelled) return;
-
-        const merged = pages
-          .flatMap((page) => page.content || [])
-          .sort((a, b) => new Date(b.performedAt || 0) - new Date(a.performedAt || 0))
-          .slice(0, 30);
-        setTransactions(merged);
-      } catch (error) {
-        console.error('Lỗi khi tải lịch sử xuất nhập kho:', error);
-        if (!cancelled) {
-          setHistoryError('Không tải được lịch sử xuất nhập kho.');
-        }
-      } finally {
-        if (!cancelled) {
-          setHistoryLoading(false);
-        }
-      }
-    };
-
     fetchHistory();
+  }, [fetchHistory]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [variantIds]);
+  const handleRetry = () => {
+    onRetryInsights();
+    fetchHistory();
+  };
 
   const formatDateTime = (value) => {
     if (!value) return '-';
@@ -74,79 +61,120 @@ const TabInventory = ({ product }) => {
     const before = Number(transaction.quantityBefore ?? 0);
     const after = Number(transaction.quantityAfter ?? 0);
     const change = Number(transaction.quantityChange ?? after - before);
-    const direction = change >= 0 ? 'lên' : 'xuống';
-    const productName = transaction.variantName || 'Sản phẩm';
-    const sku = transaction.variantSku ? ` (${transaction.variantSku})` : '';
-    const warehouseName = transaction.warehouseName || 'Chưa rõ kho';
-    return `${productName}${sku} tại ${warehouseName}: từ ${before} ${direction} ${after} (${formatQuantityChange(change)})`;
+    return `${before} → ${after} (${formatQuantityChange(change)})`;
   };
 
-  const isInboundTransaction = (type) => ['IMPORT', 'INBOUND', 'TRANSFER_IN', 'ORDER_CANCEL'].includes(type);
+  const isInboundTransaction = (type) => (
+    ['IMPORT', 'INBOUND', 'TRANSFER_IN', 'ORDER_CANCEL'].includes(type)
+  );
+
+  if (insightsLoading && !insights) {
+    return <div className={styles.feedbackState}>Đang tải dữ liệu tồn kho...</div>;
+  }
+
+  if (insightsError && !insights) {
+    return (
+      <div className={styles.feedbackState}>
+        <span>{insightsError}</span>
+        <button type="button" className={styles.retryButton} onClick={handleRetry}>
+          <RefreshCw size={16} />
+          Thử lại
+        </button>
+      </div>
+    );
+  }
+
+  if (!insights) return null;
+
+  const inventory = insights.inventory;
+  const warehouses = insights.warehouses || [];
+  const transactions = transactionPage.content || [];
 
   return (
     <div className={styles.tabContainer}>
       <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <h3 className={styles.cardTitle}>Thông tin tồn kho</h3>
-          <p className={styles.cardSubtitle}>Chi tiết về số lượng và trạng thái kho hàng</p>
+        <div className={styles.cardHeaderRow}>
+          <div>
+            <h3 className={styles.cardTitle}>Thông tin tồn kho</h3>
+            <p className={styles.cardSubtitle}>Số lượng thực tế trên toàn bộ kho đang hoạt động</p>
+          </div>
+          <button type="button" className={styles.iconButton} onClick={handleRetry} title="Làm mới dữ liệu">
+            <RefreshCw size={17} />
+          </button>
         </div>
 
-        <div className={styles.statsGrid}>
-          <div className={styles.statBox}>
-            <div className={styles.statLabel}>Tổng số lượng trong kho</div>
-            <div className={styles.statValueMain}>{totalQuantity}</div>
-            <div className={styles.statSubBox}>
-              <div className={styles.subLabelWarning}>Đã đặt trước (Reserved)</div>
-              <div className={styles.subValueWarning}>{reservedQuantity}</div>
-            </div>
+        <div className={styles.summaryGrid}>
+          <div className={styles.summaryItem}>
+            <span>Tổng tồn</span>
+            <strong>{numberFormatter.format(inventory.quantityOnHand || 0)}</strong>
           </div>
-          <div className={styles.statBox}>
-            <div className={styles.statLabel}>Kho</div>
-            <div className={styles.statValueMain}>Kho Quận 1</div>
-            <div className={styles.statSubBox}>
-              <div className={styles.subLabelSuccess}>Có thể bán (Available)</div>
-              <div className={styles.subValueSuccess}>{availableQuantity}</div>
-            </div>
+          <div className={styles.summaryItem}>
+            <span>Đã đặt trước</span>
+            <strong className={styles.subValueWarning}>{numberFormatter.format(inventory.reservedQuantity || 0)}</strong>
+          </div>
+          <div className={styles.summaryItem}>
+            <span>Có thể bán</span>
+            <strong className={styles.subValueSuccess}>{numberFormatter.format(inventory.availableQuantity || 0)}</strong>
           </div>
         </div>
 
         <div className={styles.formula}>
-          Công thức: Available = Warehouse Quantity - Reserved<br/>
-          {availableQuantity} = {totalQuantity} - {reservedQuantity}
+          Available = Quantity on hand - Reserved: {numberFormatter.format(inventory.availableQuantity || 0)} ={' '}
+          {numberFormatter.format(inventory.quantityOnHand || 0)} - {numberFormatter.format(inventory.reservedQuantity || 0)}
+        </div>
+
+        <div className={styles.warehouseSection}>
+          <h4 className={styles.sectionTitle}>Chi tiết theo kho</h4>
+          {warehouses.length === 0 ? (
+            <div className={styles.emptyWarehouse}>Sản phẩm chưa có tồn kho tại kho đang hoạt động.</div>
+          ) : (
+            <div className={styles.warehouseGrid}>
+              {warehouses.map((warehouse) => (
+                <div className={styles.warehouseItem} key={warehouse.warehouseId}>
+                  <div className={styles.warehouseHeader}>
+                    <strong>{warehouse.warehouseName}</strong>
+                    <span className={warehouse.lowStock ? styles.lowStock : styles.inStock}>
+                      {warehouse.lowStock ? 'Sắp hết hàng' : 'Ổn định'}
+                    </span>
+                  </div>
+                  <dl className={styles.warehouseMetrics}>
+                    <div><dt>Tổng tồn</dt><dd>{numberFormatter.format(warehouse.quantityOnHand || 0)}</dd></div>
+                    <div><dt>Đã giữ</dt><dd>{numberFormatter.format(warehouse.reservedQuantity || 0)}</dd></div>
+                    <div><dt>Có thể bán</dt><dd>{numberFormatter.format(warehouse.availableQuantity || 0)}</dd></div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <h3 className={styles.cardTitle}>Lịch sử xuất nhập kho</h3>
-          <p className={styles.cardSubtitle}>Các giao dịch kho hàng gần đây</p>
+          <p className={styles.cardSubtitle}>Các giao dịch kho hàng mới nhất của sản phẩm</p>
         </div>
-        
+
         <div className={styles.tableWrapper}>
           <table className={styles.table}>
             <thead>
               <tr>
                 <th>Ngày</th>
-                <th>Sản phẩm</th>
+                <th>Biến thể</th>
                 <th>Kho</th>
                 <th>Loại</th>
-                <th>Chi tiết tồn kho</th>
+                <th>Trước / Sau</th>
+                <th>Người thực hiện</th>
                 <th>Ghi chú</th>
               </tr>
             </thead>
             <tbody>
               {historyLoading ? (
-                <tr>
-                  <td colSpan="6" className={styles.emptyState}>Đang tải lịch sử xuất nhập kho...</td>
-                </tr>
+                <tr><td colSpan="7" className={styles.emptyState}>Đang tải lịch sử xuất nhập kho...</td></tr>
               ) : historyError ? (
-                <tr>
-                  <td colSpan="6" className={styles.errorState}>{historyError}</td>
-                </tr>
+                <tr><td colSpan="7" className={styles.errorState}>{historyError}</td></tr>
               ) : transactions.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className={styles.emptyState}>Chưa có giao dịch xuất nhập kho cho sản phẩm này</td>
-                </tr>
+                <tr><td colSpan="7" className={styles.emptyState}>Chưa có giao dịch kho cho sản phẩm này</td></tr>
               ) : (
                 transactions.map((item) => (
                   <tr key={item.id}>
@@ -164,6 +192,7 @@ const TabInventory = ({ product }) => {
                     <td className={isInboundTransaction(item.type) ? styles.textSuccess : styles.textBlue}>
                       {buildQuantityDetail(item)}
                     </td>
+                    <td>{item.performedByName || '-'}</td>
                     <td className={styles.textGray}>{item.note || '-'}</td>
                   </tr>
                 ))
@@ -171,6 +200,18 @@ const TabInventory = ({ product }) => {
             </tbody>
           </table>
         </div>
+
+        {!historyLoading && !historyError && transactionPage.totalPages > 0 && (
+          <div className={styles.pagination}>
+            <button type="button" disabled={transactionPage.first} onClick={() => setPage((value) => value - 1)}>
+              Trước
+            </button>
+            <span>Trang {transactionPage.page + 1} / {transactionPage.totalPages}</span>
+            <button type="button" disabled={transactionPage.last} onClick={() => setPage((value) => value + 1)}>
+              Sau
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

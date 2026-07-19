@@ -4,9 +4,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Map;
 import java.util.TreeMap;
-import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
 public class LazadaSignatureUtil {
 
     public static String generateSignature(String apiPath, Map<String, String> params, String appSecret) {
@@ -20,8 +18,6 @@ public class LazadaSignatureUtil {
                 query.append(key).append(value);
             }
         }
-        log.info("[Laz sign base] {}", query);
-
         return signWithHmacSha256(query.toString(), appSecret);
     }
 

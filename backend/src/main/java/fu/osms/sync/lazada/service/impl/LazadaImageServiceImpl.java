@@ -71,7 +71,6 @@ public class LazadaImageServiceImpl implements LazadaImageService {
             if (migratedUrl == null || migratedUrl.isBlank()) {
                 throw new RuntimeException("Missing image url in response");
             }
-            log.info("[LazadaImageService] Migrated image: {} -> {}", imageUrl, migratedUrl);
             return migratedUrl;
         } catch (Exception e) {
             log.error("[LazadaImageService] Failed to migrate image: {}", imageUrl, e);

@@ -275,7 +275,7 @@ class ChannelServiceImplTest {
             return ChannelResponse.builder().id(c.getId()).displayName(c.getDisplayName()).build();
         });
 
-        ChannelResponse res = channelService.connectLazada("access-tok", "refresh-tok",
+        ChannelResponse res = channelServiceq.connectLazada("access-tok", "refresh-tok",
                 3600, "acc-001", "Demo Lazada");
 
         assertThat(res.getDisplayName()).isEqualTo("Lazada-Demo Lazada");

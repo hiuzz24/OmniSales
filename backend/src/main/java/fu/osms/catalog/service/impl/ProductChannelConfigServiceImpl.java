@@ -127,6 +127,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
             return;
         }
 
+        Map<String, Object> previousConfig = config(channelProduct);
         Map<String, Object> nextConfig = new HashMap<>();
         putIfText(nextConfig, "categoryId", request.getCategoryId());
         putIfText(nextConfig, "categoryName", request.getCategoryName());
@@ -145,7 +146,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         String categoryId = request.getCategoryId();
         if (categoryId == null || categoryId.isBlank()) {
             markNotReady(nextConfig, "Missing " + platform.name() + " category");
-            persistConfig(channelProduct, nextConfig);
+            persistConfigChange(channelProduct, previousConfig, nextConfig);
             return;
         }
         String categoryVersion = stringValue(nextConfig.get("categoryVersion"));
@@ -153,13 +154,13 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
                 && Boolean.TRUE.equals(request.getCategoryConfirmed());
         if (!platformSuggestion && !lookup.isLeafCategory(channelProduct.getChannel().getId(), categoryId, categoryVersion)) {
             markNotReady(nextConfig, "Platform category must be an available leaf category");
-            persistConfig(channelProduct, nextConfig);
+            persistConfigChange(channelProduct, previousConfig, nextConfig);
             return;
         }
 
         if (platform == PlatformType.LAZADA && isEmpty(nextConfig.get("brandId"))) {
             markNotReady(nextConfig, "Missing Lazada brand");
-            persistConfig(channelProduct, nextConfig);
+            persistConfigChange(channelProduct, previousConfig, nextConfig);
             return;
         }
 
@@ -188,10 +189,8 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         } else {
             nextConfig.put("readyToSync", true);
             nextConfig.remove("configurationError");
-            channelProduct.setSyncStatus(SyncStatus.PENDING);
-            channelProduct.setLastSyncError(null);
         }
-        persistConfig(channelProduct, nextConfig);
+        persistConfigChange(channelProduct, previousConfig, nextConfig);
     }
 
     private boolean isHttpUrl(String value) {
@@ -396,6 +395,16 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
                 : new HashMap<>(channelProduct.getMetadata());
         metadata.put(CONFIG_KEY, config);
         channelProduct.setMetadata(metadata);
+    }
+
+    private void persistConfigChange(ChannelProduct channelProduct,
+                                     Map<String, Object> previousConfig,
+                                     Map<String, Object> nextConfig) {
+        if (!Objects.equals(previousConfig, nextConfig)) {
+            channelProduct.setSyncStatus(SyncStatus.PENDING);
+            channelProduct.setLastSyncError(null);
+        }
+        persistConfig(channelProduct, nextConfig);
     }
 
     private void markNotReady(Map<String, Object> config, String error) {
