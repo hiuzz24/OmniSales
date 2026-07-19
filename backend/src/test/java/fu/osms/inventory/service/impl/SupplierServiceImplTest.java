@@ -114,7 +114,7 @@ class SupplierServiceImplTest {
     @DisplayName("create - generates NCC0001 when no prior supplier exists")
     void create_generatesFirstCode() {
         when(supplierRepository.existsByNameIgnoreCase(sampleRequest.getName())).thenReturn(false);
-        when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.empty());
+        when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.empty());
         when(supplierMapper.toEntity(sampleRequest)).thenReturn(sample);
         when(supplierRepository.save(any(Supplier.class))).thenAnswer(inv -> inv.getArgument(0));
         when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(
@@ -134,7 +134,7 @@ class SupplierServiceImplTest {
     void create_incrementsSupplierCode() {
         Supplier latest = Supplier.builder().supplierCode("NCC0042").build();
         when(supplierRepository.existsByNameIgnoreCase(sampleRequest.getName())).thenReturn(false);
-        when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.of(latest));
+        when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.of(latest));
         when(supplierMapper.toEntity(sampleRequest)).thenReturn(sample);
         when(supplierRepository.save(any(Supplier.class))).thenAnswer(inv -> inv.getArgument(0));
         when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(
@@ -163,7 +163,7 @@ class SupplierServiceImplTest {
     void create_corruptedCodeFallsBackToNCC0001() {
         Supplier latest = Supplier.builder().supplierCode("BROKEN_CODE").build();
         when(supplierRepository.existsByNameIgnoreCase(sampleRequest.getName())).thenReturn(false);
-        when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.of(latest));
+        when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.of(latest));
         when(supplierMapper.toEntity(sampleRequest)).thenReturn(sample);
         when(supplierRepository.save(any(Supplier.class))).thenAnswer(inv -> inv.getArgument(0));
         when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(
@@ -323,7 +323,7 @@ class SupplierServiceImplTest {
         void create_overflowWrapsToNCC0001() {
             Supplier latest = Supplier.builder().supplierCode("NCC9999").build();
             when(supplierRepository.existsByNameIgnoreCase(sampleRequest.getName())).thenReturn(false);
-            when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.of(latest));
+            when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.of(latest));
             when(supplierMapper.toEntity(sampleRequest)).thenReturn(sample);
             when(supplierRepository.save(any(Supplier.class))).thenAnswer(inv -> inv.getArgument(0));
             when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(
@@ -344,7 +344,7 @@ class SupplierServiceImplTest {
         void create_nullLatestCodeFallsBackToNCC0001() {
             Supplier latest = Supplier.builder().supplierCode(null).build();
             when(supplierRepository.existsByNameIgnoreCase(sampleRequest.getName())).thenReturn(false);
-            when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.of(latest));
+            when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.of(latest));
             when(supplierMapper.toEntity(sampleRequest)).thenReturn(sample);
             when(supplierRepository.save(any(Supplier.class))).thenAnswer(inv -> inv.getArgument(0));
             when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(
@@ -361,7 +361,7 @@ class SupplierServiceImplTest {
         void create_emptyLatestCodeFallsBackToNCC0001() {
             Supplier latest = Supplier.builder().supplierCode("").build();
             when(supplierRepository.existsByNameIgnoreCase(sampleRequest.getName())).thenReturn(false);
-            when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.of(latest));
+            when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.of(latest));
             when(supplierMapper.toEntity(sampleRequest)).thenReturn(sample);
             when(supplierRepository.save(any(Supplier.class))).thenAnswer(inv -> inv.getArgument(0));
             when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(
@@ -381,7 +381,7 @@ class SupplierServiceImplTest {
                     .isActive(false)
                     .build();
             when(supplierRepository.existsByNameIgnoreCase(inactiveReq.getName())).thenReturn(false);
-            when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.empty());
+            when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.empty());
             when(supplierMapper.toEntity(inactiveReq)).thenReturn(
                     Supplier.builder().id(UUID.randomUUID()).name("Inactive request").isActive(false).build()
             );
@@ -502,7 +502,7 @@ class SupplierServiceImplTest {
         @MockitoSettings(strictness = Strictness.LENIENT)
         void create_callsMapperInExpectedOrder() {
             when(supplierRepository.existsByNameIgnoreCase(sampleRequest.getName())).thenReturn(false);
-            when(supplierRepository.findTopByOrderBySupplierCodeDesc()).thenReturn(Optional.empty());
+            when(supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC")).thenReturn(Optional.empty());
             when(supplierMapper.toEntity(sampleRequest)).thenReturn(sample);
             when(supplierRepository.save(any(Supplier.class))).thenAnswer(inv -> inv.getArgument(0));
             when(supplierMapper.toResponse(any(Supplier.class))).thenReturn(

@@ -10,6 +10,16 @@ const {
 
 test.describe('Customer API Tests', () => {
 
+  let createdCustomerIds = [];
+
+  test.afterEach(async ({ request, managerHeaders }) => {
+    if (!createdCustomerIds.length) return;
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    for (const id of createdCustomerIds.splice(0)) {
+      await deleteTestCustomer(request, authToken, id);
+    }
+  });
+
   // GET /api/customers - List Customers
   test('C1 - GET /api/customers - List customers with pagination returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/customers?page=0&size=10`, {
@@ -113,8 +123,7 @@ test.describe('Customer API Tests', () => {
     expect(body.data).toHaveProperty('fullName');
 
     if (body.data && body.data.id) {
-      const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-      await deleteTestCustomer(request, authToken, body.data.id);
+      createdCustomerIds.push(body.data.id);
     }
   });
 

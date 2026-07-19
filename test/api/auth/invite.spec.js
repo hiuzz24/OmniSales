@@ -79,7 +79,7 @@ test.describe('Invite Staff API Tests', () => {
     expect(response.status()).toBe(400);
   });
 
-  test('INV-API-6 — POST /auth/invite-user without explicit auth header still allowed (public endpoint by design)', async ({ request }) => {
+  test('INV-API-6 — POST /auth/invite-user without explicit auth header is rejected (auth-required)', async ({ request }) => {
     const response = await request.post(`${API_BASE}/auth/invite-user`, {
       data: {
         email: uniqueEmail(),
@@ -87,10 +87,10 @@ test.describe('Invite Staff API Tests', () => {
       },
     });
 
-    // Note: the controller does not gate this endpoint with an auth filter, so any
-    // caller can submit an invite request. We only assert that the request is
-    // processed (not rejected by Spring's authentication filter).
-    expect([200, 201, 400]).toContain(response.status());
+    // The /api/auth/invite-user endpoint is now correctly protected —
+    // only authenticated users with the right permissions should be able
+    // to invite new staff. An anonymous call must be rejected with 401/403.
+    expect([401, 403]).toContain(response.status());
   });
 
   test('INV-API-7 — GET /accept-invite/validate with unknown token returns 400', async ({ request }) => {

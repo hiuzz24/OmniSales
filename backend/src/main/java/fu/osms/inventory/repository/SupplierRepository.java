@@ -31,4 +31,6 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
     String findLatestCode();
 
     Optional<Supplier> findTopByOrderBySupplierCodeDesc();
+
+    Optional<Supplier> findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc(String prefix);
 }

@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -602,8 +603,23 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     @Transactional(readOnly = true)
     public String getNextReceiptCode() {
         int currentYear = LocalDate.now().getYear();
-        long count = stockReceiveRepository.countByYear(currentYear);
-        return "PN-" + currentYear + "-" + String.format("%03d", count + 1);
+        String prefix = "PN-" + currentYear + "-";
+
+        // Use max-of-code (instead of count + 1) so two concurrent calls do
+        // not generate the same suffix. Filter by prefix so other code
+        // schemes (e.g. REC-*) do not interfere.
+        Optional<InventoryReceipt> latest =
+                stockReceiveRepository.findTopByReceiptCodeStartingWithOrderByReceiptCodeDesc(prefix);
+        if (latest.isEmpty()) {
+            return prefix + "001";
+        }
+        String latestCode = latest.get().getReceiptCode();
+        try {
+            int number = Integer.parseInt(latestCode.substring(prefix.length()));
+            return prefix + String.format("%03d", number + 1);
+        } catch (Exception e) {
+            return prefix + "001";
+        }
     }
 
     private CostUpdateResult applyReceiptCostAndQuantity(

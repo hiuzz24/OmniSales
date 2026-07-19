@@ -206,8 +206,8 @@ test.describe('User List E2E Tests', () => {
 
   // USR-E2E-11
   test('USR-E2E-11 - Disable User button changes status', async ({ managerPage }) => {
-    await managerPage.goto('/users');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.goto('/users', { waitUntil: 'domcontentloaded' });
+    await managerPage.waitForSelector('table, [role="table"]', { timeout: 10000 });
 
     const editBtn = managerPage.locator('button:has-text("Sửa"), button:has-text("Edit")').first();
     if (await editBtn.count() > 0) {

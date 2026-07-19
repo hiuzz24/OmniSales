@@ -11,9 +11,11 @@ test.describe('Category API Tests', () => {
 
   let createdIds = [];
 
-  test.afterAll(async ({ request, managerHeaders }) => {
-    for (const id of createdIds) {
-      await deleteTestCategory(request, managerHeaders.Authorization.replace('Bearer ', ''), id);
+  test.afterEach(async ({ request, managerHeaders }) => {
+    if (!createdIds.length) return;
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    for (const id of createdIds.splice(0)) {
+      await deleteTestCategory(request, authToken, id);
     }
   });
 

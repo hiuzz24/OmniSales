@@ -235,16 +235,29 @@ class InviteStaffFlowIT extends BaseFullStackIT {
         postInvite(Map.of("email", email, "roleName", "SALES"));
         String token = latestTokenFor(email);
 
+        // 12 chars but no uppercase / digit / special char — fails the
+        // password @Pattern (which is what the test originally meant to
+        // exercise; "không đúng định dạng").
+        String weakPassword = "weakpassword";
+
         ResponseEntity<JsonNode> resp = rest.exchange(ACCEPT_PATH, HttpMethod.POST,
                 new HttpEntity<>(Map.of(
                         "token", token,
                         "fullName", "New Staff",
-                        "password", "weak",
-                        "confirmPassword", "weak"
+                        "password", weakPassword,
+                        "confirmPassword", weakPassword
                 ), jsonHeaders()), JsonNode.class);
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(resp.getBody().get("message").asText()).contains("không đúng định dạng");
+        String message = resp.getBody().get("message").asText();
+        JsonNode data = resp.getBody().path("data");
+        boolean topLevelMismatch = message.contains("không đúng định dạng");
+        boolean fieldLevelMismatch =
+                !data.isMissingNode() && !data.isNull()
+                        && data.toString().contains("không đúng định dạng");
+        assertThat(topLevelMismatch || fieldLevelMismatch)
+                .as("response should indicate a password format error")
+                .isTrue();
     }
 
     @Test

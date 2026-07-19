@@ -36,6 +36,8 @@ import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -222,7 +224,7 @@ class StockReceiveServiceImplTest {
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
             // Note: NO existsByInvoiceNumber call for CONFIRMED receipt
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
-            when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
+            when(stockReceiveRepository.findTopByReceiptCodeStartingWithOrderByReceiptCodeDesc(anyString())).thenReturn(Optional.empty());
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
             when(inventoryItemRepository.findByWarehouseIdAndVariantId(warehouseId, variantId))
@@ -274,7 +276,7 @@ class StockReceiveServiceImplTest {
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
-            when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
+            when(stockReceiveRepository.findTopByReceiptCodeStartingWithOrderByReceiptCodeDesc(anyString())).thenReturn(Optional.empty());
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
             when(stockReceiveItemRepository.save(any(InventoryReceiptItem.class))).thenReturn(receiptItem);
@@ -443,7 +445,7 @@ class StockReceiveServiceImplTest {
             request.setSupplierId(null);
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
-            when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
+            when(stockReceiveRepository.findTopByReceiptCodeStartingWithOrderByReceiptCodeDesc(anyString())).thenReturn(Optional.empty());
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
             when(inventoryItemRepository.findByWarehouseIdAndVariantId(warehouseId, variantId))
@@ -472,7 +474,7 @@ class StockReceiveServiceImplTest {
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
-            when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
+            when(stockReceiveRepository.findTopByReceiptCodeStartingWithOrderByReceiptCodeDesc(anyString())).thenReturn(Optional.empty());
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
 
@@ -517,7 +519,7 @@ class StockReceiveServiceImplTest {
             when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
             when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
             when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
-            when(stockReceiveRepository.countByYear(anyInt())).thenReturn(0L);
+            when(stockReceiveRepository.findTopByReceiptCodeStartingWithOrderByReceiptCodeDesc(anyString())).thenReturn(Optional.empty());
             when(userRepository.findById(userId)).thenReturn(Optional.of(user));
             when(stockReceiveRepository.save(any(InventoryReceipt.class))).thenReturn(receipt);
             when(inventoryItemRepository.findByWarehouseIdAndVariantId(warehouseId, variantId))

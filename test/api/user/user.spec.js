@@ -7,6 +7,16 @@ const {
 
 test.describe('User API Tests', () => {
 
+  let createdUserIds = [];
+
+  test.afterEach(async ({ request, managerHeaders }) => {
+    if (!createdUserIds.length) return;
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    for (const id of createdUserIds.splice(0)) {
+      await cleanupTestUser(request, authToken, id);
+    }
+  });
+
   // POST /users
   test('USR-API-1 - POST /users - Create user returns 201', async ({ request, managerHeaders }) => {
     const userData = {
@@ -29,8 +39,7 @@ test.describe('User API Tests', () => {
     expect(body.data.fullName).toBe(userData.fullName);
 
     if (body.data.id) {
-      const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-      await cleanupTestUser(request, authToken, body.data.id);
+      createdUserIds.push(body.data.id);
     }
   });
 
@@ -58,8 +67,7 @@ test.describe('User API Tests', () => {
     if (createResponse.ok()) {
       const body = await createResponse.json();
       if (body.data?.id) {
-        const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-        await cleanupTestUser(request, authToken, body.data.id);
+        createdUserIds.push(body.data.id);
       }
     }
   });
@@ -114,7 +122,7 @@ test.describe('User API Tests', () => {
     expect(body.success).toBe(true);
     expect(body.data.id).toBe(user.id);
 
-    await cleanupTestUser(request, authToken, user.id);
+    createdUserIds.push(user.id);
   });
 
   test('USR-API-7 - GET /users/{id} - Non-existent ID returns 404', async ({ request, managerHeaders }) => {
@@ -152,7 +160,7 @@ test.describe('User API Tests', () => {
     const body = await updateResponse.json();
     expect(body.data.fullName).toBe('After Update');
 
-    await cleanupTestUser(request, authToken, user.id);
+    createdUserIds.push(user.id);
   });
 
   // DELETE /users/{id}

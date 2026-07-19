@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -505,7 +506,22 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
     private String generateIssueCode() {
         int currentYear = LocalDate.now().getYear();
-        long count = inventoryIssueRepository.countByCreatedYear(currentYear);
-        return "PX-" + currentYear + "-" + String.format("%03d", count + 1);
+        String prefix = "PX-" + currentYear + "-";
+
+        // Use max-of-code (instead of count + 1) so two concurrent calls do
+        // not generate the same suffix. Filter by prefix so other code
+        // schemes do not interfere.
+        Optional<InventoryIssue> latest =
+                inventoryIssueRepository.findTopByIssueCodeStartingWithOrderByIssueCodeDesc(prefix);
+        if (latest.isEmpty()) {
+            return prefix + "001";
+        }
+        String latestCode = latest.get().getIssueCode();
+        try {
+            int number = Integer.parseInt(latestCode.substring(prefix.length()));
+            return prefix + String.format("%03d", number + 1);
+        } catch (Exception e) {
+            return prefix + "001";
+        }
     }
 }
