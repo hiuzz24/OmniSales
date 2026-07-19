@@ -1,4 +1,5 @@
 import { Save } from 'lucide-react';
+import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductChannelSidebar.module.css';
 
 const PLATFORM_ICONS = {
@@ -10,18 +11,16 @@ const PLATFORM_ICONS = {
 
 const ProductChannelSidebar = ({
   channels = [],
-  selectedChannels = [],
-  onChannelToggle,
-  showProduct,
-  onStatusToggle,
   onSubmit,
+  onInvalid,
   onCancel,
   warehouses = [],
   selectedWarehouseId = '',
   onWarehouseChange,
-  isSubmitting = false,
   isEditMode = false,
 }) => {
+  const { control, setValue, handleSubmit, formState: { isSubmitting } } = useFormContext();
+  const [selectedChannels = [], showProduct, channelConfigs = {}] = useWatch({ control, name: ['channelIds', 'status', 'channelConfigs'] });
   const getIcon = (platform) => {
     const icon = PLATFORM_ICONS[platform?.toUpperCase()] || { label: '?', className: 'channelIconDefault' };
     return icon;
@@ -43,6 +42,14 @@ const ProductChannelSidebar = ({
               const channelId = channel.id || channel._id || (channel.platform + index);
               const isSelected = selectedChannels.includes(channelId);
               const commissionRate = channel.commissionRate || 0;
+              const config = channelConfigs[channelId];
+              const configurationLabel = !isSelected
+                ? null
+                : channel.platform === 'SHOPIFY'
+                  ? 'Ready'
+                  : config?.categoryId
+                    ? 'Đã chọn danh mục'
+                    : 'Cấu hình sau';
 
               return (
                 <div key={channelId} className={styles.channelItem}>
@@ -57,13 +64,14 @@ const ProductChannelSidebar = ({
                       <span className={styles.commissionRate}>
                         % hoa hồng: {commissionRate}%
                       </span>
+                      {configurationLabel && <span className={styles.configurationStatus}>{configurationLabel}</span>}
                     </div>
                   </div>
                   <input
                     type="checkbox"
                     className={styles.toggle}
                     checked={isSelected}
-                    onChange={() => onChannelToggle(channelId)}
+                    onChange={() => setValue('channelIds', isSelected ? selectedChannels.filter((id) => id !== channelId) : [...selectedChannels, channelId], { shouldDirty: true })}
                   />
                 </div>
               );
@@ -80,8 +88,8 @@ const ProductChannelSidebar = ({
           <input
             type="checkbox"
             className={styles.toggle}
-            checked={showProduct}
-            onChange={() => onStatusToggle()}
+            checked={showProduct === 'ACTIVE'}
+            onChange={() => setValue('status', showProduct === 'ACTIVE' ? 'DRAFT' : 'ACTIVE', { shouldDirty: true })}
           />
         </div>
       </div>
@@ -111,7 +119,7 @@ const ProductChannelSidebar = ({
         <button
           type="button"
           className={styles.submitBtn}
-          onClick={onSubmit}
+          onClick={handleSubmit(onSubmit, onInvalid)}
           disabled={isSubmitting}
         >
           {isSubmitting ? (

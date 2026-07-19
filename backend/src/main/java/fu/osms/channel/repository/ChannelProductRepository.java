@@ -25,6 +25,8 @@ public interface ChannelProductRepository extends JpaRepository<ChannelProduct, 
 
     Optional<ChannelProduct> findByChannelIdAndExternalProductId(UUID channelId, String externalProductId);
 
+    Optional<ChannelProduct> findByProductIdAndChannelId(UUID productId, UUID channelId);
+
     long countByChannelIdAndMappingState(UUID channelId, String mappingState);
 
     List<ChannelProduct> findByProductIdAndMappingState(UUID productId, String mappingState);

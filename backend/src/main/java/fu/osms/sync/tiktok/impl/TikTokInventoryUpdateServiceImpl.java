@@ -1,9 +1,7 @@
 package fu.osms.sync.tiktok.impl;
 
 import fu.osms.channel.entity.Channel;
-import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProductVariant;
-import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
@@ -12,7 +10,7 @@ import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
-import fu.osms.sync.tiktok.TikTokApiClient;
+import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import fu.osms.sync.tiktok.TikTokInventoryUpdateService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,10 +30,9 @@ import java.util.UUID;
 public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateService {
 
     private final ChannelRepository channelRepository;
-    private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
-    private final TikTokApiClient tikTokApiClient;
+    private final TikTokAuthorizedApiClient tikTokApiClient;
 
     @Override
     @Transactional
@@ -47,8 +44,6 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
             throw new AppException(ErrorCode.INVALID_REQUEST, "Kênh không phải TikTok Shop.");
         }
 
-        ChannelCredential credential = credentialRepository.findByChannelId(channelId)
-                .orElseThrow(() -> new AppException(ErrorCode.INVALID_REQUEST, "Kênh TikTok chưa có thông tin xác thực."));
         String shopCipher = requireText(channel.getMetadata(), "shopCipher", "shop_cipher", "cipher");
         UUID defaultWarehouseId = optionalUuid(channel.getMetadata(), "defaultWarehouseId");
         String configuredTikTokWarehouseId = optionalText(channel.getMetadata(), "tiktokWarehouseId", "defaultTikTokWarehouseId");
@@ -91,7 +86,7 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
                 skuPayloads.add(Map.of("id", mapping.getExternalVariantId(), "inventory", inventory));
             }
 
-            tikTokApiClient.updateInventory(credential.getAccessToken(), shopCipher, entry.getKey(), skuPayloads);
+            tikTokApiClient.updateInventory(channelId, shopCipher, entry.getKey(), skuPayloads);
             OffsetDateTime syncedAt = OffsetDateTime.now();
             for (ChannelProductVariant mapping : entry.getValue()) {
                 mapping.setSyncStatus(SyncStatus.SYNCED);

@@ -15,6 +15,19 @@ const PLATFORM_META = {
   MANUAL: { label: 'Thủ công', color: '#6b7280', bg: '#f3f4f6', abbr: 'M' },
 };
 
+const connectionView = (channel) => {
+  if (channel.connectionState === 'REVOKED') {
+    return { connected: false, label: 'Seller đã thu hồi quyền' };
+  }
+  if (channel.connectionState === 'TOKEN_EXPIRED' || channel.status === 'ERROR') {
+    return { connected: false, label: 'Cần kết nối lại' };
+  }
+  if (channel.status === 'CONNECTED' && (!channel.connectionState || channel.connectionState === 'CONNECTED')) {
+    return { connected: true, label: 'Đã kết nối' };
+  }
+  return { connected: false, label: 'Ngắt kết nối' };
+};
+
 const ChannelConnectionPage = () => {
   const [channels, setChannels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -112,7 +125,7 @@ const ChannelConnectionPage = () => {
         </div>
         <div className={styles.statCard}>
           <div className={styles.statValue}>
-            {channels.filter(c => c.status === 'CONNECTED').length}
+            {channels.filter(c => connectionView(c).connected).length}
           </div>
           <div className={styles.statLabel}>Đang hoạt động</div>
         </div>
@@ -155,7 +168,8 @@ const ChannelConnectionPage = () => {
               <tbody>
                 {channels.map(ch => {
                   const meta = PLATFORM_META[ch.platform] || PLATFORM_META.MANUAL;
-                  const isConnected = ch.status === 'CONNECTED';
+                  const connection = connectionView(ch);
+                  const isConnected = connection.connected;
                   return (
                     <tr key={ch.id}>
                       <td>
@@ -169,6 +183,9 @@ const ChannelConnectionPage = () => {
                           <div>
                             <div className={styles.channelName}>{ch.displayName}</div>
                             <div className={styles.channelMeta}>{ch.metadata?.shopDomain || ''}</div>
+                            {!isConnected && ch.refreshError && (
+                              <div className={styles.refreshError} title={ch.refreshError}>{ch.refreshError}</div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -183,7 +200,7 @@ const ChannelConnectionPage = () => {
                       <td>
                         <span className={`${styles.statusBadge} ${isConnected ? styles.connected : styles.disconnected}`}>
                           {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                          {isConnected ? 'Đã kết nối' : 'Ngắt kết nối'}
+                          {connection.label}
                         </span>
                       </td>
                       <td className={styles.dateCell}>

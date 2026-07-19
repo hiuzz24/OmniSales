@@ -10,6 +10,7 @@ public class OrderStatusPushContext {
 
     private final String cancelReason;
     private final String cancelReasonId;
+    private final String tikTokReason;
     private final ShopifyCancelReason shopifyReason;
     private final Boolean email;
     private final Boolean restock;

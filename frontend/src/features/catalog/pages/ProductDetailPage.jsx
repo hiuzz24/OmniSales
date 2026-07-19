@@ -21,28 +21,62 @@ const ProductDetailPage = () => {
   const [product, setProduct] = useState(null);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
+  const [insightsError, setInsightsError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     fetchProduct();
+    fetchInsights();
   }, [id]);
+
+  useEffect(() => {
+    if (activeTab === 'inventory') {
+      fetchInsights();
+    }
+  }, [activeTab]);
 
   const fetchProduct = async () => {
     try {
       setLoading(true);
-      const [prodRes, chanRes] = await Promise.all([
+      const [productResult, channelResult] = await Promise.allSettled([
         productApi.getById(id),
         channelApi.getAll(),
       ]);
+
+      if (productResult.status === 'rejected') {
+        throw productResult.reason;
+      }
+
+      const prodRes = productResult.value;
       const responseData = prodRes.data?.data || prodRes.data || prodRes;
       setProduct(responseData);
-      setChannels(chanRes.data?.data || chanRes.data || chanRes);
+      if (channelResult.status === 'fulfilled') {
+        const chanRes = channelResult.value;
+        setChannels(chanRes.data?.data || chanRes.data || chanRes);
+      } else {
+        setChannels([]);
+      }
     } catch (error) {
       toast.error('Không thể tải thông tin sản phẩm');
       navigate(ROUTES.PRODUCTS);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInsights = async () => {
+    try {
+      setInsightsLoading(true);
+      setInsightsError('');
+      const response = await productApi.getInsights(id);
+      setInsights(response.data?.data || response.data || response);
+    } catch (error) {
+      setInsightsError('Không thể tải dữ liệu thống kê sản phẩm.');
+    } finally {
+      setInsightsLoading(false);
     }
   };
 
@@ -65,12 +99,22 @@ const ProductDetailPage = () => {
       const data = res.data?.data || res.data || res;
 
       if (data && data.failedCount > 0) {
-        toast.warning(`Đồng bộ xong nhưng có ${data.failedCount} kênh thất bại! Vui lòng kiểm tra Lịch sử đồng bộ.`);
+        const failedChannels = (data.details || [])
+          .filter((detail) => !detail.success)
+          .map((detail) => detail.channelName || detail.platform)
+          .filter(Boolean);
+        const failedLabel = failedChannels.length > 0
+          ? ` Kênh lỗi: ${failedChannels.join(', ')}.`
+          : '';
+
+        toast.warning(
+          `Đã đồng bộ thành công ${data.successCount || 0}/${data.totalChannels || 0} kênh.${failedLabel}`,
+        );
       } else {
         toast.success('Đồng bộ thành công lên tất cả các kênh!');
       }
 
-      await fetchProduct();
+      await Promise.all([fetchProduct(), fetchInsights()]);
     } catch (error) {
       toast.error('Đồng bộ thất bại. Vui lòng thử lại.');
     } finally {
@@ -101,7 +145,12 @@ const ProductDetailPage = () => {
       />
 
       <div className={styles.mainContent}>
-        <ProductStatsGrid product={product} />
+        <ProductStatsGrid
+          insights={insights}
+          loading={insightsLoading}
+          error={insightsError}
+          onRetry={fetchInsights}
+        />
 
         <div className={styles.tabsSection}>
           <ProductDetailTabs
@@ -112,8 +161,16 @@ const ProductDetailPage = () => {
 
           <div className={styles.tabContent}>
             {activeTab === 'overview' && <TabOverview product={product} />}
-            {activeTab === 'inventory' && <TabInventory product={product} />}
-            {activeTab === 'platform' && <TabPlatform product={product} channels={channels} />}
+            {activeTab === 'inventory' && (
+              <TabInventory
+                productId={product.id}
+                insights={insights}
+                insightsLoading={insightsLoading}
+                insightsError={insightsError}
+                onRetryInsights={fetchInsights}
+              />
+            )}
+            {activeTab === 'platform' && <TabPlatform product={product} onRefresh={fetchProduct} />}
             {activeTab === 'images' && <TabImages product={product} />}
             {activeTab === 'variants' && <TabVariants product={product} />}
           </div>

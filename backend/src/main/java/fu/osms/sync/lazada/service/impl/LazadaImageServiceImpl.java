@@ -3,7 +3,7 @@ package fu.osms.sync.lazada.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.catalog.entity.ProductImage;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,17 +22,18 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class LazadaImageServiceImpl implements LazadaImageService {
 
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
     private final ObjectMapper objectMapper;
 
     @Override
-    public List<String> migrateImages(List<ProductImage> images, String accessToken, Long tokenExpiresAt) {
+    public List<String> migrateImages(List<ProductImage> images, UUID channelId) {
         List<String> migratedUrls = new ArrayList<>();
         
         if (images == null || images.isEmpty()) {
@@ -44,35 +45,38 @@ public class LazadaImageServiceImpl implements LazadaImageService {
             if (originalUrl == null || originalUrl.isBlank()) {
                 continue;
             }
-
-            try {
-                String payload = buildImageMigratePayload(originalUrl);
-                Map<String, String> params = new HashMap<>();
-                params.put("payload", payload);
-
-                String responseStr = lazadaApiClient.executePost("/image/migrate", params, accessToken, tokenExpiresAt);
-                JsonNode root = objectMapper.readTree(responseStr);
-
-                if (root.has("code") && "0".equals(root.get("code").asText())) {
-                    JsonNode data = root.path("data");
-                    if (data.has("image") && data.path("image").has("url")) {
-                        String newUrl = data.path("image").path("url").asText();
-                        migratedUrls.add(newUrl);
-                        log.info("[LazadaImageService] Migrated image: {} -> {}", originalUrl, newUrl);
-                    } else {
-                        throw new RuntimeException("Missing image url in response");
-                    }
-                } else {
-                    String errorMsg = root.has("message") ? root.get("message").asText() : "Unknown error";
-                    throw new RuntimeException("Lazada API returned error: " + errorMsg);
-                }
-            } catch (Exception e) {
-                log.error("[LazadaImageService] Failed to migrate image: {}", originalUrl, e);
-                throw new RuntimeException("Failed to migrate image to Lazada CDN: " + originalUrl + ". Error: " + e.getMessage(), e);
-            }
+            migratedUrls.add(migrateImageUrl(originalUrl, channelId));
         }
 
         return migratedUrls;
+    }
+
+    @Override
+    public String migrateImageUrl(String imageUrl, UUID channelId) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            throw new IllegalArgumentException("Image URL must not be blank");
+        }
+        try {
+            String payload = buildImageMigratePayload(imageUrl);
+            Map<String, String> params = new HashMap<>();
+            params.put("payload", payload);
+
+            String responseStr = lazadaApiClient.executePost(channelId, "/image/migrate", params);
+            JsonNode root = objectMapper.readTree(responseStr);
+            if (!root.has("code") || !"0".equals(root.get("code").asText())) {
+                String errorMsg = root.has("message") ? root.get("message").asText() : "Unknown error";
+                throw new RuntimeException("Lazada API returned error: " + errorMsg);
+            }
+            String migratedUrl = root.path("data").path("image").path("url").asText(null);
+            if (migratedUrl == null || migratedUrl.isBlank()) {
+                throw new RuntimeException("Missing image url in response");
+            }
+            return migratedUrl;
+        } catch (Exception e) {
+            log.error("[LazadaImageService] Failed to migrate image: {}", imageUrl, e);
+            throw new RuntimeException("Failed to migrate image to Lazada CDN: " + imageUrl
+                    + ". Error: " + e.getMessage(), e);
+        }
     }
 
     private String buildImageMigratePayload(String imageUrl) {

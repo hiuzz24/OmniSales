@@ -34,6 +34,9 @@ public class ChannelCredential {
     @Column(name = "token_expires_at")
     private OffsetDateTime tokenExpiresAt;
 
+    @Column(name = "refresh_token_expires_at")
+    private OffsetDateTime refreshTokenExpiresAt;
+
     @Column(name = "connection_state", nullable = false, length = 20)
     @Builder.Default
     private String connectionState = "DISCONNECTED";

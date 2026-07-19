@@ -118,4 +118,63 @@ public class ProductSyncOrchestratorServiceImpl implements ProductSyncOrchestrat
         result.setFailedCount(failedCount);
         return result;
     }
+
+    @Override
+    @Transactional
+    public SyncResult syncProductToChannel(UUID productId, UUID channelId) {
+        Product product = productRepository.findById(productId)
+                .filter(p -> p.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+        ChannelProduct channelProduct = channelProductRepository.findByProductIdAndChannelId(productId, channelId)
+                .filter(mapping -> "ACTIVE".equals(mapping.getMappingState()))
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Active product channel mapping not found"));
+        Channel channel = channelProduct.getChannel();
+        List<ProductVariant> variants = productVariantRepository.findByProductIdAndDeletedAtIsNull(productId);
+        List<ProductImage> images = productImageRepository.findByProductIdOrderByIsPrimaryDescSortOrderAsc(productId);
+
+        SyncResult result = new SyncResult();
+        result.setTotalChannels(1);
+        SyncResult.ChannelSyncDetail detail = SyncResult.ChannelSyncDetail.builder()
+                .channelId(channel.getId().toString())
+                .channelName(channel.getDisplayName())
+                .platform(channel.getPlatform().name())
+                .build();
+        SyncLog syncLog = SyncLog.builder()
+                .product(product)
+                .channel(channel)
+                .jobType("PRODUCT_SYNC")
+                .status(SyncStatus.PENDING)
+                .totalItems(1)
+                .build();
+        syncLog = syncLogRepository.save(syncLog);
+        try {
+            boolean success = platformSyncServiceFactory.getService(channel.getPlatform())
+                    .syncProduct(product, variants, images, channel, channelProduct);
+            detail.setSuccess(success);
+            syncLog.setStatus(success ? SyncStatus.SYNCED : SyncStatus.FAILED);
+            syncLog.setSuccessCount(success ? 1 : 0);
+            syncLog.setFailCount(success ? 0 : 1);
+            syncLog.setErrorSummary(success ? null : channelProduct.getLastSyncError());
+            result.setSuccessCount(success ? 1 : 0);
+            result.setFailedCount(success ? 0 : 1);
+        } catch (Exception e) {
+            channelProduct.setSyncStatus(SyncStatus.FAILED);
+            channelProduct.setLastSyncError(e.getMessage());
+            channelProductRepository.save(channelProduct);
+            detail.setSuccess(false);
+            detail.setErrorMessage(e.getMessage());
+            syncLog.setStatus(SyncStatus.FAILED);
+            syncLog.setFailCount(1);
+            syncLog.setErrorSummary(e.getMessage());
+            result.setSuccessCount(0);
+            result.setFailedCount(1);
+        }
+        syncLog.setCompletedAt(OffsetDateTime.now());
+        syncLogRepository.save(syncLog);
+        if (syncLog.getStatus() == SyncStatus.FAILED) {
+            syncAlertService.notifySyncFailure(syncLog);
+        }
+        result.getDetails().add(detail);
+        return result;
+    }
 }

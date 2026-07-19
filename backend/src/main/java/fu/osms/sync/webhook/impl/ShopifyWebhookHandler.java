@@ -69,6 +69,11 @@ public class ShopifyWebhookHandler implements PlatformWebhookHandler {
     }
 
     @Override
+    public boolean shouldIgnore(Map<String, Object> payload) {
+        return false;
+    }
+
+    @Override
     public Optional<Channel> resolveChannel(Map<String, String> headers, Map<String, Object> payload) {
         String shopDomain = header(headers, "x-shopify-shop-domain");
         if (shopDomain == null || shopDomain.isBlank()) {

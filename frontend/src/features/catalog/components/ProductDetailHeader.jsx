@@ -27,9 +27,14 @@ const ProductDetailHeader = ({ product, onBack, onDelete, onEdit, onSync, isSync
       </div>
 
       <div className={styles.actions}>
-        <button className={styles.btnSecondary} onClick={onSync} disabled={isSyncing}>
+        <button
+          className={styles.btnSecondary}
+          onClick={onSync}
+          disabled={isSyncing}
+          title="Đồng bộ sản phẩm lên tất cả kênh đang liên kết"
+        >
           <RefreshCw className={`${styles.btnIcon} ${isSyncing ? styles.spin : ''}`} />
-          {isSyncing ? 'Đang đồng bộ...' : 'Sync now'}
+          {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ tất cả'}
         </button>
         <button className={styles.btnSecondary} onClick={onEdit}>
           <Edit className={styles.btnIcon} />

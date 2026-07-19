@@ -4,6 +4,7 @@ import fu.osms.channel.entity.Channel;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
+import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -13,13 +14,15 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
 public class TikTokWebhookHandler implements PlatformWebhookHandler {
+
+    private static final String ORDER_STATUS_EVENT = "TIKTOK_ORDER_STATUS_UPDATE";
+    private static final String REVERSE_STATUS_EVENT = "TIKTOK_REVERSE_STATUS_UPDATE";
 
     private final ChannelRepository channelRepository;
 
@@ -36,93 +39,67 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public boolean verify(Map<String, String> headers, String rawBody) {
-        if (!hasText(appKey) || !hasText(appSecret)) {
-            return false;
-        }
         String authorization = headers.get("authorization");
-        if (!hasText(authorization)) {
+        if (!hasText(appKey) || !hasText(appSecret) || !hasText(authorization) || rawBody == null) {
             return false;
         }
+
         try {
+            String signature = normalizeSignature(authorization);
+            if (signature.length() != 64) {
+                return false;
+            }
+
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(appSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            String expected = HexFormat.of().formatHex(
-                    mac.doFinal((appKey + rawBody).getBytes(StandardCharsets.UTF_8))
-            );
-            String actual = normalizeSignature(authorization);
-            return MessageDigest.isEqual(
-                    expected.getBytes(StandardCharsets.UTF_8),
-                    actual.getBytes(StandardCharsets.UTF_8)
-            );
-        } catch (Exception e) {
+            byte[] expected = mac.doFinal((appKey + rawBody).getBytes(StandardCharsets.UTF_8));
+            byte[] actual = HexFormat.of().parseHex(signature);
+            return MessageDigest.isEqual(expected, actual);
+        } catch (Exception ignored) {
             return false;
         }
     }
 
     @Override
     public String extractEventType(Map<String, String> headers, Map<String, Object> payload) {
-        String eventType = text(payload, "event_type", "eventType", "type");
-        if (hasText(eventType)) {
-            return eventType.toUpperCase();
+        String type = WebhookPayloadUtils.text(payload.get("type"));
+        if ("1".equals(type)) {
+            return ORDER_STATUS_EVENT;
         }
-        if (payload.containsKey("quantity_snapshot_after_change") || payload.containsKey("change_detail")) {
-            return "INVENTORY_UPDATE";
+        if ("2".equals(type)) {
+            return REVERSE_STATUS_EVENT;
         }
-        return "UNKNOWN";
+        return "TIKTOK_TYPE_" + (hasText(type) ? type : "UNKNOWN");
     }
 
     @Override
     public String extractExternalEventId(Map<String, String> headers,
                                          Map<String, Object> payload,
                                          String rawBody) {
-        String eventId = text(payload, "event_id", "tts_notification_id", "notification_id");
-        return hasText(eventId) ? eventId : "tiktok-" + sha256(rawBody);
+        String notificationId = WebhookPayloadUtils.text(payload.get("tts_notification_id"));
+        return hasText(notificationId) ? notificationId : "tiktok-" + sha256(rawBody);
+    }
+
+    @Override
+    public boolean shouldIgnore(Map<String, Object> payload) {
+        String type = WebhookPayloadUtils.text(payload.get("type"));
+        return !"1".equals(type) && !"2".equals(type);
     }
 
     @Override
     public Optional<Channel> resolveChannel(Map<String, String> headers, Map<String, Object> payload) {
-        String shopId = text(payload, "shop_id", "seller_id", "shopId", "sellerId");
-        List<Channel> channels = channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.TIKTOK);
-        if (hasText(shopId)) {
-            Optional<Channel> matched = channels.stream()
-                    .filter(channel -> matchesShop(channel, shopId))
-                    .findFirst();
-            if (matched.isPresent()) {
-                return matched;
-            }
+        String shopId = WebhookPayloadUtils.text(payload.get("shop_id"));
+        if (!hasText(shopId)) {
+            return Optional.empty();
         }
-        return channels.size() == 1 ? Optional.of(channels.get(0)) : Optional.empty();
+        return channelRepository.findActiveTikTokByShopId(shopId);
     }
 
-    private boolean matchesShop(Channel channel, String shopId) {
-        if (channel.getMetadata() == null) {
-            return false;
-        }
-        for (String key : List.of("shopId", "shop_id", "accountId", "openId")) {
-            Object value = channel.getMetadata().get(key);
-            if (value != null && shopId.equals(value.toString())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String normalizeSignature(String value) {
-        String normalized = value.trim().toLowerCase().replace("sha256=", "");
-        String[] tokens = normalized.split("\\s+");
-        String candidate = tokens.length == 0 ? normalized : tokens[tokens.length - 1];
-        String hex = candidate.replaceAll("[^0-9a-f]", "");
-        return hex.length() > 64 ? hex.substring(hex.length() - 64) : hex;
-    }
-
-    private String text(Map<String, Object> payload, String... keys) {
-        for (String key : keys) {
-            Object value = payload.get(key);
-            if (value != null && hasText(value.toString())) {
-                return value.toString();
-            }
-        }
-        return null;
+    private String normalizeSignature(String authorization) {
+        String candidate = authorization.trim().replaceFirst("(?i)^sha256=", "");
+        String[] tokens = candidate.split("\\s+");
+        candidate = tokens[tokens.length - 1];
+        return candidate.replaceAll("[^0-9A-Fa-f]", "");
     }
 
     private String sha256(String value) {
@@ -130,7 +107,7 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
-            return String.valueOf(value.hashCode());
+            throw new IllegalStateException("Cannot generate TikTok webhook event ID", e);
         }
     }
 

@@ -1,6 +1,6 @@
 package fu.osms.sync.lazada.service.impl;
 
-import fu.osms.common.exception.TokenExpiredException;
+import fu.osms.channel.token.exception.PlatformAccessTokenExpiredException;
 import fu.osms.sync.lazada.service.LazadaApiClient;
 import fu.osms.sync.lazada.util.LazadaSignatureUtil;
 import lombok.RequiredArgsConstructor;
@@ -61,13 +61,15 @@ public class LazadaApiClientImpl implements LazadaApiClient {
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
 
         try {
-            log.info("[LazadaApiClient] Calling POST {}, params: {}", fullUrl, allParams.keySet());
             ResponseEntity<String> response = restTemplate.postForEntity(fullUrl, request, String.class);
-            return response.getBody();
+            return validateAccessTokenResponse(response.getBody());
         } catch (RestClientResponseException e) {
             String errorBody = e.getResponseBodyAsString();
+            throwIfAccessTokenExpired(errorBody, e);
             log.error("[LazadaApiClient] API Error: {} - {}", e.getStatusCode(), errorBody);
             throw new RuntimeException("Lazada API Error: " + errorBody, e);
+        } catch (PlatformAccessTokenExpiredException e) {
+            throw e;
         } catch (Exception e) {
             log.error("[LazadaApiClient] Failed to execute request", e);
             throw new RuntimeException("Failed to execute request to Lazada: " + e.getMessage(), e);
@@ -82,16 +84,16 @@ public class LazadaApiClientImpl implements LazadaApiClient {
         allParams.forEach(builder::queryParam);
 //        String fullUrl = builder.build().encode().toUriString();
         URI fullUrl = builder.build().encode().toUri();
-        log.info("[LazadaApiClient] fullUrl={}", fullUrl);
-
         try {
-            log.info("[LazadaApiClient] Calling GET {}, params: {}", apiUrl + apiPath, allParams.keySet());
             ResponseEntity<String> response = restTemplate.getForEntity(fullUrl, String.class);
-            return response.getBody();
+            return validateAccessTokenResponse(response.getBody());
         } catch (RestClientResponseException e) {
             String errorBody = e.getResponseBodyAsString();
+            throwIfAccessTokenExpired(errorBody, e);
             log.error("[LazadaApiClient] API Error: {} - {}", e.getStatusCode(), errorBody);
             throw new RuntimeException("Lazada API Error: " + errorBody, e);
+        } catch (PlatformAccessTokenExpiredException e) {
+            throw e;
         } catch (Exception e) {
             log.error("[LazadaApiClient] Failed to execute request", e);
             throw new RuntimeException("Failed to execute request to Lazada: " + e.getMessage(), e);
@@ -100,7 +102,7 @@ public class LazadaApiClientImpl implements LazadaApiClient {
 
     private Map<String, String> buildSignedParams(String apiPath, Map<String, String> businessParams, String accessToken, Long tokenExpiresAt) {
         if (tokenExpiresAt != null && Instant.now().getEpochSecond() > tokenExpiresAt) {
-            throw new TokenExpiredException("Lazada access token has expired. Please reconnect the channel.");
+            throw new PlatformAccessTokenExpiredException("Lazada access token has expired");
         }
 
         Map<String, String> allParams = new HashMap<>();
@@ -115,12 +117,26 @@ public class LazadaApiClientImpl implements LazadaApiClient {
             allParams.put("access_token", accessToken);
         }
 
-        log.info("[LazadaApiClient] sign apiPath={}", apiPath);
-        log.info("[LazadaApiClient] params before sign={}",allParams);
-
         String signature = LazadaSignatureUtil.generateSignature(apiPath, allParams, appSecret);
-        log.info("[LazadaApiClient] generated sign={}", signature);
         allParams.put("sign", signature);
         return allParams;
+    }
+
+    private String validateAccessTokenResponse(String body) {
+        throwIfAccessTokenExpired(body, null);
+        return body;
+    }
+
+    private void throwIfAccessTokenExpired(String body, Throwable cause) {
+        String normalized = body == null ? "" : body.toLowerCase();
+        boolean expired = normalized.contains("illegalaccesstoken")
+                || normalized.contains("invalidaccesstoken")
+                || normalized.contains("access token expired")
+                || normalized.contains("access_token expired");
+        if (expired) {
+            throw cause == null
+                    ? new PlatformAccessTokenExpiredException("Lazada access token is invalid or expired")
+                    : new PlatformAccessTokenExpiredException("Lazada access token is invalid or expired", cause);
+        }
     }
 }

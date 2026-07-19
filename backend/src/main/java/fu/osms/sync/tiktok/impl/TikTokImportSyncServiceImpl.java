@@ -7,10 +7,8 @@ import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.entity.Channel;
-import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
-import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
@@ -24,7 +22,7 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.repository.SyncLogRepository;
-import fu.osms.sync.tiktok.TikTokApiClient;
+import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import fu.osms.sync.tiktok.TikTokImportSyncService;
 import fu.osms.sync.tiktok.util.TikTokWarehouseAddressFormatter;
 import lombok.RequiredArgsConstructor;
@@ -50,7 +48,6 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private static final String WAREHOUSE_MARKER = "TIKTOK_WAREHOUSE_ID:";
 
     private final ChannelRepository channelRepository;
-    private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ProductRepository productRepository;
@@ -58,14 +55,12 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private final WarehouseRepository warehouseRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final SyncLogRepository syncLogRepository;
-    private final TikTokApiClient tikTokApiClient;
+    private final TikTokAuthorizedApiClient tikTokApiClient;
 
     @Override
     @Transactional
     public ChannelImportSyncResponse syncProductsAndInventory(UUID channelId) {
         Channel channel = requireTikTokChannel(channelId);
-        ChannelCredential credential = credentialRepository.findByChannelId(channelId)
-                .orElseThrow(() -> new AppException(ErrorCode.INVALID_REQUEST, "Kênh TikTok chưa có thông tin xác thực."));
         String shopCipher = requireShopCipher(channel);
 
         SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
@@ -80,19 +75,13 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         Set<String> externalWarehouseIds = new LinkedHashSet<>();
 
         try {
-            List<Map<String, Object>> productSummaries = loadAllProductSummaries(
-                    credential.getAccessToken(),
-                    shopCipher
-            );
+            List<Map<String, Object>> productSummaries = loadAllProductSummaries(channelId, shopCipher);
             Map<String, Map<String, Object>> inventoryByProductId = loadInventoryByProductId(
-                    credential.getAccessToken(),
+                    channelId,
                     shopCipher,
                     productSummaries.stream().map(this::productId).filter(this::hasText).toList()
             );
-            Map<String, Map<String, Object>> warehousesById = loadWarehousesById(
-                    credential.getAccessToken(),
-                    shopCipher
-            );
+            Map<String, Map<String, Object>> warehousesById = loadWarehousesById(channelId, shopCipher);
             Map<String, Warehouse> localWarehousesByExternalId = syncTikTokWarehouses(warehousesById);
             externalWarehouseIds.addAll(localWarehousesByExternalId.keySet());
 
@@ -104,7 +93,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 }
 
                 Map<String, Object> detail = loadProductDetail(
-                        credential.getAccessToken(),
+                        channelId,
                         shopCipher,
                         externalProductId,
                         summary
@@ -148,11 +137,11 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         }
     }
 
-    private List<Map<String, Object>> loadAllProductSummaries(String accessToken, String shopCipher) {
+    private List<Map<String, Object>> loadAllProductSummaries(UUID channelId, String shopCipher) {
         List<Map<String, Object>> products = new ArrayList<>();
         String pageToken = null;
         do {
-            Map<String, Object> response = tikTokApiClient.searchProducts(accessToken, shopCipher, pageToken);
+            Map<String, Object> response = tikTokApiClient.searchProducts(channelId, shopCipher, pageToken);
             Map<String, Object> data = map(response.get("data"));
             products.addAll(listOfMaps(data.get("products")));
             pageToken = stringValue(data.get("next_page_token"));
@@ -160,13 +149,13 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         return products;
     }
 
-    private Map<String, Map<String, Object>> loadInventoryByProductId(String accessToken,
+    private Map<String, Map<String, Object>> loadInventoryByProductId(UUID channelId,
                                                                       String shopCipher,
                                                                       List<String> productIds) {
         Map<String, Map<String, Object>> result = new LinkedHashMap<>();
         for (int from = 0; from < productIds.size(); from += INVENTORY_BATCH_SIZE) {
             List<String> batch = productIds.subList(from, Math.min(productIds.size(), from + INVENTORY_BATCH_SIZE));
-            Map<String, Object> response = tikTokApiClient.searchInventory(accessToken, shopCipher, batch);
+            Map<String, Object> response = tikTokApiClient.searchInventory(channelId, shopCipher, batch);
             for (Map<String, Object> inventory : listOfMaps(map(response.get("data")).get("inventory"))) {
                 String productId = stringValue(inventory.get("product_id"));
                 if (hasText(productId)) {
@@ -177,8 +166,8 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         return result;
     }
 
-    private Map<String, Map<String, Object>> loadWarehousesById(String accessToken, String shopCipher) {
-        Map<String, Object> response = tikTokApiClient.getWarehouses(accessToken, shopCipher);
+    private Map<String, Map<String, Object>> loadWarehousesById(UUID channelId, String shopCipher) {
+        Map<String, Object> response = tikTokApiClient.getWarehouses(channelId, shopCipher);
         Map<String, Map<String, Object>> result = new LinkedHashMap<>();
         for (Map<String, Object> warehouse : listOfMaps(map(response.get("data")).get("warehouses"))) {
             String warehouseId = stringValue(warehouse.get("id"));
@@ -201,11 +190,11 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         return result;
     }
 
-    private Map<String, Object> loadProductDetail(String accessToken,
+    private Map<String, Object> loadProductDetail(UUID channelId,
                                                    String shopCipher,
                                                    String externalProductId,
                                                    Map<String, Object> fallback) {
-        Map<String, Object> response = tikTokApiClient.getProduct(accessToken, shopCipher, externalProductId);
+        Map<String, Object> response = tikTokApiClient.getProduct(channelId, shopCipher, externalProductId);
         Map<String, Object> data = map(response.get("data"));
         Map<String, Object> product = map(data.get("product"));
         return product.isEmpty() ? (data.isEmpty() ? fallback : data) : product;

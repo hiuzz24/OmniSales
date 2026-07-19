@@ -17,8 +17,18 @@ const productApi = {
 
     getById: async (id) => {
         const response = await axiosClient.get(`/products/${id}`);
-        console.log(response);
+        return response;
+    },
 
+    getInsights: async (id) => {
+        const response = await axiosClient.get(`/products/${id}/insights`);
+        return response;
+    },
+
+    getInventoryTransactions: async (id, page = 0, size = 30) => {
+        const response = await axiosClient.get(`/products/${id}/inventory-transactions`, {
+            params: { page, size },
+        });
         return response;
     },
 
@@ -34,6 +44,21 @@ const productApi = {
 
     sync: async (productId) => {
         const response = await axiosClient.post(`/products/${productId}/sync`);
+        return response;
+    },
+
+    syncChannel: async (productId, channelId) => {
+        const response = await axiosClient.post(`/products/${productId}/channels/${channelId}/sync`);
+        return response;
+    },
+
+    getChannelConfig: async (productId, channelId) => {
+        const response = await axiosClient.get(`/products/${productId}/channels/${channelId}/config`);
+        return response;
+    },
+
+    updateChannelConfig: async (productId, channelId, data) => {
+        const response = await axiosClient.put(`/products/${productId}/channels/${channelId}/config`, data);
         return response;
     },
 
