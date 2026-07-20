@@ -1,6 +1,7 @@
 package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
@@ -102,10 +103,17 @@ class LazadaInventoryUpdateServiceImplTest {
                 .isActive(true)
                 .build();
 
+        Product product = Product.builder()
+                .id(UUID.randomUUID())
+                .name("Test Product")
+                .sku("PROD-001")
+                .build();
+
         variant = ProductVariant.builder()
                 .id(UUID.randomUUID())
                 .sku("SKU-001")
                 .price(new BigDecimal("199.99"))
+                .product(product)
                 .build();
 
         ChannelProduct channelProduct = ChannelProduct.builder()

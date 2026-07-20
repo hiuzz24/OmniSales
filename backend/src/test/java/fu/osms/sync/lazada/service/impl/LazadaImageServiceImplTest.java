@@ -2,6 +2,7 @@ package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.catalog.entity.ProductImage;
+import fu.osms.sync.lazada.dto.LazadaMigratedImages;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -38,25 +39,27 @@ class LazadaImageServiceImplTest {
     }
 
     @Test
-    @DisplayName("migrateImages — empty list returns empty result without any API call")
+    @DisplayName("migrateImages — empty list throws IllegalStateException")
     void migrateImages_empty() {
-        List<String> result = service.migrateImages(List.of(), channelId);
+        assertThatThrownBy(() -> service.migrateImages(List.of(), channelId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Missing Lazada main product image");
 
-        assertThat(result).isEmpty();
         verify(lazadaApiClient, never()).executePost(any(UUID.class), anyString(), anyMap());
     }
 
     @Test
-    @DisplayName("migrateImages — null list returns empty result without any API call")
+    @DisplayName("migrateImages — null list throws IllegalStateException")
     void migrateImages_null() {
-        List<String> result = service.migrateImages(null, channelId);
+        assertThatThrownBy(() -> service.migrateImages(null, channelId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Missing Lazada main product image");
 
-        assertThat(result).isEmpty();
         verify(lazadaApiClient, never()).executePost(any(UUID.class), anyString(), anyMap());
     }
 
     @Test
-    @DisplayName("migrateImages — single valid image posts to /image/migrate and returns the Lazada CDN URL")
+    @DisplayName("migrateImages — single valid image posts to /image/migrate and returns the LazadaMigratedImages")
     void migrateImages_singleUrl() {
         ProductImage img = ProductImage.builder()
                 .id(UUID.randomUUID())
@@ -65,9 +68,10 @@ class LazadaImageServiceImplTest {
         when(lazadaApiClient.executePost(eq(channelId), eq("/image/migrate"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":{\"image\":{\"url\":\"https://laz-img.cdn/1\"}}}");
 
-        List<String> result = service.migrateImages(List.of(img), channelId);
+        LazadaMigratedImages result = service.migrateImages(List.of(img), channelId);
 
-        assertThat(result).containsExactly("https://laz-img.cdn/1");
+        assertThat(result.productImageUrls()).containsExactly("https://laz-img.cdn/1");
+        assertThat(result.variantImageUrls()).isEmpty();
     }
 
     @Test
@@ -81,9 +85,9 @@ class LazadaImageServiceImplTest {
         when(lazadaApiClient.executePost(eq(channelId), eq("/image/migrate"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":{\"image\":{\"url\":\"https://laz-img.cdn/y\"}}}");
 
-        List<String> result = service.migrateImages(List.of(blank, valid), channelId);
+        LazadaMigratedImages result = service.migrateImages(List.of(blank, valid), channelId);
 
-        assertThat(result).containsExactly("https://laz-img.cdn/y");
+        assertThat(result.productImageUrls()).containsExactly("https://laz-img.cdn/y");
     }
 
     @Test

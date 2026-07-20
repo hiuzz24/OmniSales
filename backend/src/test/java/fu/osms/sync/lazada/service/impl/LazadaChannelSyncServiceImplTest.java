@@ -14,6 +14,7 @@ import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
 import fu.osms.sync.lazada.dto.LazadaSyncTask;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.repository.SyncLogRepository;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.SyncAlertService;
 import fu.osms.sync.service.impl.PlatformSyncServiceFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,7 @@ class LazadaChannelSyncServiceImplTest {
     @Mock private ProductImageRepository productImageRepository;
     @Mock private PlatformSyncServiceFactory platformSyncServiceFactory;
     @Mock private SyncAlertService syncAlertService;
+    @Mock private MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     private LazadaChannelSyncServiceImpl service;
 
@@ -58,7 +60,7 @@ class LazadaChannelSyncServiceImplTest {
                 channelRepository, channelProductRepository, channelProductVariantRepository,
                 syncLogRepository, lazadaInventoryUpdateService,
                 productVariantRepository, productImageRepository,
-                platformSyncServiceFactory, syncAlertService);
+                platformSyncServiceFactory, syncAlertService, marketplaceWarehouseConsistencyService);
 
         lazadaChannel = Channel.builder()
                 .id(UUID.randomUUID())

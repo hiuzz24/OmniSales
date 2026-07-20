@@ -1,6 +1,6 @@
 package fu.osms.sync.lazada.service.impl;
 
-import fu.osms.common.exception.TokenExpiredException;
+import fu.osms.channel.token.exception.PlatformAccessTokenExpiredException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -87,7 +87,7 @@ class LazadaApiClientImplTest {
         Long expired = Instant.now().getEpochSecond() - 10;
 
         assertThatThrownBy(() -> client.executePost("/x", Map.of(), "tok", expired))
-                .isInstanceOf(TokenExpiredException.class)
+                .isInstanceOf(PlatformAccessTokenExpiredException.class)
                 .hasMessageContaining("expired");
     }
 

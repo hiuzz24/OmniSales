@@ -2,6 +2,7 @@ package fu.osms.sync.lazada.service.impl;
 
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.sync.lazada.dto.LazadaMigratedImages;
 import fu.osms.sync.lazada.dto.LazadaProductConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,6 +12,7 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,6 +51,10 @@ class LazadaPayloadBuilderImplTest {
                 .build();
     }
 
+    private LazadaMigratedImages createMigratedImages(List<String> productUrls, Map<UUID, List<String>> variantUrls) {
+        return new LazadaMigratedImages(productUrls, variantUrls);
+    }
+
     @Test
     @DisplayName("buildPayload — isCreate=true emits <PrimaryCategory> and <brand_id>")
     void buildPayload_create_containsCategoryAndBrand() {
@@ -63,8 +69,13 @@ class LazadaPayloadBuilderImplTest {
                 )))
                 .build();
 
+        LazadaMigratedImages migratedImages = createMigratedImages(
+                List.of("https://laz-img/1"),
+                Map.of()
+        );
+
         String xml = builder.buildPayload(product, List.of(variant),
-                List.of("https://laz-img/1"), Map.of(), config, true);
+                migratedImages, Map.of(), config, true);
 
         assertThat(xml).contains("<PrimaryCategory>100001</PrimaryCategory>");
         assertThat(xml).contains("<brand_id>9999</brand_id>");
@@ -88,8 +99,10 @@ class LazadaPayloadBuilderImplTest {
                 )))
                 .build();
 
+        LazadaMigratedImages migratedImages = createMigratedImages(List.of(), Map.of());
+
         String xml = builder.buildPayload(product, List.of(variant),
-                List.of(), Map.of(), config, false);
+                migratedImages, Map.of(), config, false);
 
         assertThat(xml).doesNotContain("<PrimaryCategory>");
         assertThat(xml).contains("<brand_id>9999</brand_id>");
@@ -109,8 +122,10 @@ class LazadaPayloadBuilderImplTest {
                 )))
                 .build();
 
+        LazadaMigratedImages migratedImages = createMigratedImages(List.of(), Map.of());
+
         String xml = builder.buildPayload(product, List.of(variant),
-                List.of(), Map.of("SKU-001", "EXT-SKU-ID-1"), config, true);
+                migratedImages, Map.of("SKU-001", "EXT-SKU-ID-1"), config, true);
 
         assertThat(xml).contains("<SkuId>EXT-SKU-ID-1</SkuId>");
     }
@@ -129,8 +144,10 @@ class LazadaPayloadBuilderImplTest {
                 )))
                 .build();
 
+        LazadaMigratedImages migratedImages = createMigratedImages(List.of(), Map.of());
+
         String xml = builder.buildPayload(product, List.of(variant),
-                List.of(), Map.of(), config, true);
+                migratedImages, Map.of(), config, true);
 
         assertThat(xml).doesNotContain("<SkuId>");
     }
@@ -148,10 +165,14 @@ class LazadaPayloadBuilderImplTest {
                 )))
                 .build();
 
+        LazadaMigratedImages migratedImages = createMigratedImages(List.of(), Map.of());
+
         assertThatThrownBy(() ->
-                builder.buildPayload(product, List.of(variant), List.of(), Map.of(), config, true))
+                builder.buildPayload(product, List.of(variant), migratedImages, Map.of(), config, true))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Missing Lazada color_family");
+                .hasMessageContaining("Failed to build Lazada product payload")
+                .hasCauseInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("Missing Lazada color_family value for SKU SKU-001");
     }
 
     @Test
@@ -167,8 +188,10 @@ class LazadaPayloadBuilderImplTest {
                 )))
                 .build();
 
+        LazadaMigratedImages migratedImages = createMigratedImages(List.of(), Map.of());
+
         String xml = builder.buildPayload(product, List.of(variant),
-                List.of(), Map.of(), config, true);
+                migratedImages, Map.of(), config, true);
 
         assertThat(xml).doesNotContain("<Images>");
         assertThat(xml).contains("<Skus>");
@@ -186,9 +209,13 @@ class LazadaPayloadBuilderImplTest {
                 .variantAttributeValueMappings(new HashMap<>())
                 .build();
 
+        LazadaMigratedImages migratedImages = createMigratedImages(List.of(), Map.of());
+
         assertThatThrownBy(() ->
-                builder.buildPayload(product, List.of(variant), List.of(), Map.of(), config, true))
+                builder.buildPayload(product, List.of(variant), migratedImages, Map.of(), config, true))
                 .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("Missing selling price");
+                .hasMessageContaining("Failed to build Lazada product payload")
+                .hasCauseInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("Missing selling price for SKU SKU-001");
     }
 }

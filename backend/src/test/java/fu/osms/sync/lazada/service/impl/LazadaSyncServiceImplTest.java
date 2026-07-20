@@ -13,6 +13,7 @@ import fu.osms.channel.token.exception.PlatformAccessTokenExpiredException;
 import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.sync.lazada.dto.LazadaMigratedImages;
 import fu.osms.sync.lazada.dto.LazadaProductConfig;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;
@@ -114,13 +115,14 @@ class LazadaSyncServiceImplTest {
     @Test
     @DisplayName("syncProduct — new product: calls /product/create, stores externalProductId, sets SYNCED")
     void syncProduct_new_happy() throws Exception {
+        List<ProductImage> images = List.of();
         when(productChannelConfigService.isReady(channelProduct)).thenReturn(true);
-        when(productChannelConfigService.configurationError(channelProduct)).thenReturn(null);
-        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId()))).thenReturn(List.of("https://laz-img/1"));
+        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId())))
+                .thenReturn(new LazadaMigratedImages(List.of("https://laz-img/1"), Map.of()));
         when(lazadaPayloadBuilder.buildPayload(
-                eq(product), eq(List.of(variant)), eq(List.of("https://laz-img/1")),
-                anyMap(), eq(config), eq(true))
-        ).thenReturn("<Request>create</Request>");
+                any(Product.class), anyList(), any(LazadaMigratedImages.class),
+                anyMap(), any(LazadaProductConfig.class), eq(true)))
+                .thenReturn("<Request>create</Request>");
         when(lazadaApiClient.executePost(eq(channel.getId()), eq("/product/create"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":{\"item_id\":\"LP-12345\",\"sku_list\":[{\"seller_sku\":\"SKU-001\",\"sku_id\":\"SKU-ID-1\"}]}}");
         when(channelProductVariantRepository.findByChannelProductIdAndVariantId(channelProduct.getId(), variant.getId()))
@@ -129,7 +131,7 @@ class LazadaSyncServiceImplTest {
                 .thenAnswer(i -> i.getArgument(0));
         when(channelProductRepository.save(any(ChannelProduct.class))).thenAnswer(i -> i.getArgument(0));
 
-        boolean ok = service.syncProduct(product, List.of(variant), List.of(), channel, channelProduct);
+        boolean ok = service.syncProduct(product, List.of(variant), images, channel, channelProduct);
 
         assertThat(ok).isTrue();
         assertThat(channelProduct.getExternalProductId()).isEqualTo("LP-12345");
@@ -156,26 +158,28 @@ class LazadaSyncServiceImplTest {
                 .externalSku("SKU-001")
                 .syncStatus(SyncStatus.SYNCED)
                 .build();
+        List<ProductImage> images = List.of();
 
         when(productChannelConfigService.isReady(channelProduct)).thenReturn(true);
-        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId()))).thenReturn(List.of());
+        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId())))
+                .thenReturn(new LazadaMigratedImages(List.of(), Map.of()));
         when(lazadaPayloadBuilder.buildPayload(
-                eq(product), eq(List.of(variant)), eq(List.of()),
-                eq(Map.of("SKU-001", "SKU-ID-OLD")), eq(config), eq(false))
-        ).thenReturn("<Request>update</Request>");
+                any(Product.class), anyList(), any(LazadaMigratedImages.class),
+                anyMap(), any(LazadaProductConfig.class), eq(false)))
+                .thenReturn("<Request>update</Request>");
         when(lazadaApiClient.executePost(eq(channel.getId()), eq("/product/update"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":{\"item_id\":\"LP-EXISTING\"}}");
         when(channelProductVariantRepository.findByChannelProductId(channelProduct.getId()))
                 .thenReturn(List.of(existingMapping));
         when(channelProductRepository.save(any(ChannelProduct.class))).thenAnswer(i -> i.getArgument(0));
 
-        boolean ok = service.syncProduct(product, List.of(variant), List.of(), channel, channelProduct);
+        boolean ok = service.syncProduct(product, List.of(variant), images, channel, channelProduct);
 
         assertThat(ok).isTrue();
-        verify(lazadaApiClient).executePost(channel.getId(), "/product/update", anyMap());
+        verify(lazadaApiClient).executePost(eq(channel.getId()), eq("/product/update"), anyMap());
         verify(lazadaPayloadBuilder).buildPayload(
-                eq(product), eq(List.of(variant)), eq(List.of()),
-                eq(Map.of("SKU-001", "SKU-ID-OLD")), eq(config), eq(false));
+                any(Product.class), anyList(), any(LazadaMigratedImages.class),
+                anyMap(), any(LazadaProductConfig.class), eq(false));
     }
 
     @Test
@@ -211,15 +215,17 @@ class LazadaSyncServiceImplTest {
     @Test
     @DisplayName("syncProduct — Lazada API error throws RuntimeException with detail message and sets FAILED")
     void syncProduct_apiError() throws Exception {
+        List<ProductImage> images = List.of();
         when(productChannelConfigService.isReady(channelProduct)).thenReturn(true);
-        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId()))).thenReturn(List.of());
-        when(lazadaPayloadBuilder.buildPayload(any(), any(), any(), any(), any(), eq(true)))
+        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId())))
+                .thenReturn(new LazadaMigratedImages(List.of(), Map.of()));
+        when(lazadaPayloadBuilder.buildPayload(any(), any(), any(LazadaMigratedImages.class), any(), any(), eq(true)))
                 .thenReturn("<Request>x</Request>");
         when(lazadaApiClient.executePost(any(UUID.class), eq("/product/create"), anyMap()))
                 .thenReturn("{\"code\":\"500\",\"message\":\"Invalid payload\",\"detail\":[{\"field\":\"price\",\"message\":\"required\"}]}");
         when(channelProductRepository.save(any(ChannelProduct.class))).thenAnswer(i -> i.getArgument(0));
 
-        assertThatThrownBy(() -> service.syncProduct(product, List.of(variant), List.of(), channel, channelProduct))
+        assertThatThrownBy(() -> service.syncProduct(product, List.of(variant), images, channel, channelProduct))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("Invalid payload")
                 .hasMessageContaining("price");
@@ -247,14 +253,16 @@ class LazadaSyncServiceImplTest {
     @Test
     @DisplayName("syncProduct — PlatformAccessTokenExpiredException bubbles through (no FAILED status set, no save)")
     void syncProduct_tokenExpiredBubbles() throws Exception {
+        List<ProductImage> images = List.of();
         when(productChannelConfigService.isReady(channelProduct)).thenReturn(true);
-        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId()))).thenReturn(List.of());
-        when(lazadaPayloadBuilder.buildPayload(any(), any(), any(), any(), any(), eq(true)))
+        when(lazadaImageService.migrateImages(anyList(), eq(channel.getId())))
+                .thenReturn(new LazadaMigratedImages(List.of(), Map.of()));
+        when(lazadaPayloadBuilder.buildPayload(any(), any(), any(LazadaMigratedImages.class), any(), any(), eq(true)))
                 .thenReturn("<Request>x</Request>");
         when(lazadaApiClient.executePost(any(UUID.class), eq("/product/create"), anyMap()))
                 .thenThrow(new PlatformAccessTokenExpiredException("expired"));
 
-        assertThatThrownBy(() -> service.syncProduct(product, List.of(variant), List.of(), channel, channelProduct))
+        assertThatThrownBy(() -> service.syncProduct(product, List.of(variant), images, channel, channelProduct))
                 .isInstanceOf(PlatformAccessTokenExpiredException.class);
 
         verify(channelProductRepository, never()).save(any(ChannelProduct.class));

@@ -19,6 +19,9 @@ import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;

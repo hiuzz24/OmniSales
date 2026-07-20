@@ -19,7 +19,10 @@ import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.repository.SyncLogRepository;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.SyncAlertService;
+import fu.osms.sync.service.impl.ChannelProductAggregationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,6 +63,9 @@ class LazadaImportSyncServiceImplTest {
     @Mock private WarehouseRepository warehouseRepository;
     @Mock private SyncLogRepository syncLogRepository;
     @Mock private SyncAlertService syncAlertService;
+    @Mock private MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    @Mock private MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    @Mock private ChannelProductAggregationService channelProductAggregationService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private LazadaImportSyncServiceImpl service;
@@ -84,7 +91,10 @@ class LazadaImportSyncServiceImplTest {
                 inventoryTransactionRepository,
                 warehouseRepository,
                 syncLogRepository,
-                syncAlertService
+                syncAlertService,
+                marketplaceInventoryPropagationService,
+                marketplaceWarehouseConsistencyService,
+                channelProductAggregationService
         );
 
         channelId = UUID.randomUUID();
@@ -152,29 +162,27 @@ class LazadaImportSyncServiceImplTest {
     @Test
     @DisplayName("syncProductsAndWarehouses — happy path persists SyncLog with status SYNCED")
     void syncProductsAndWarehouses_happy() {
-        // Lazada payload uses /rc/warehouse/get (one warehouse), /category/tree/get (optional),
-        // /products/get (first call returns empty list so the loop exits).
-        when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
-        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
+        lenient().when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
+        lenient().when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
                 .thenReturn(Optional.of(credential));
-        when(lazadaApiClient.executeGet(eq(channelId), eq("/rc/warehouse/get"), anyMap()))
+        lenient().when(lazadaApiClient.executeGet(eq(channelId), eq("/rc/warehouse/get"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":{\"warehouses\":[{\"id\":\"WH-1\",\"name\":\"Main WH\"}]}}");
-        when(lazadaApiClient.executeGet(eq(channelId), eq("/category/tree/get"), anyMap()))
+        lenient().when(lazadaApiClient.executeGet(eq(channelId), eq("/category/tree/get"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":[]}");
-        when(lazadaApiClient.executeGet(eq(channelId), eq("/products/get"), anyMap()))
+        lenient().when(lazadaApiClient.executeGet(eq(channelId), eq("/products/get"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":{\"products\":[]}}");
-        when(warehouseRepository.findFirstByNameAndDeletedAtIsNull("Main WH"))
+        lenient().when(warehouseRepository.findFirstByNameAndDeletedAtIsNull("Main WH"))
                 .thenReturn(Optional.of(Warehouse.builder()
                         .id(UUID.randomUUID())
                         .name("Main WH")
                         .address("[LAZADA_WAREHOUSE_CODE=WH-1]")
                         .isActive(true)
                         .build()));
-        when(warehouseRepository.save(any(Warehouse.class)))
+        lenient().when(warehouseRepository.save(any(Warehouse.class)))
                 .thenAnswer(i -> i.getArgument(0));
-        when(channelProductRepository.countByChannelIdAndMappingState(channelId, "ACTIVE"))
+        lenient().when(channelProductRepository.countByChannelIdAndMappingState(channelId, "ACTIVE"))
                 .thenReturn(0L);
-        when(channelProductVariantRepository.countActiveByChannelId(channelId))
+        lenient().when(channelProductVariantRepository.countActiveByChannelId(channelId))
                 .thenReturn(0L);
         // Track SyncLog save so we can assert status
         java.util.concurrent.atomic.AtomicReference<SyncLog> savedLog = new java.util.concurrent.atomic.AtomicReference<>();

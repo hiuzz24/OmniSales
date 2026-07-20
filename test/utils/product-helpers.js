@@ -71,6 +71,7 @@ async function createTestProduct(request, token, overrides = {}) {
     sku: `TEST-${timestamp}`,
     status: 'ACTIVE',
     lowStockThreshold: 5,
+    images: ['https://via.placeholder.com/300'],
     variants: [
       {
         sku: `TEST-V-${timestamp}`,

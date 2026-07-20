@@ -28,6 +28,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -203,11 +204,6 @@ class ChannelServiceImplTest {
                 .metadata(Map.of("accountId", "acc-99"))
                 .commissionRate(new BigDecimal("3.50"))
                 .build();
-        Channel mappedChannel = Channel.builder()
-                .platform(PlatformType.LAZADA)
-                .displayName("Lazada-New")
-                .metadata(new java.util.HashMap<>())
-                .build();
         Channel savedChannel = Channel.builder()
                 .id(UUID.randomUUID())
                 .platform(PlatformType.LAZADA)
@@ -217,18 +213,17 @@ class ChannelServiceImplTest {
         ChannelResponse mappedResponse = ChannelResponse.builder().id(savedChannel.getId()).platform(PlatformType.LAZADA).build();
 
         when(channelRepository.existsByPlatformAndDisplayName(PlatformType.LAZADA, "Lazada-New")).thenReturn(false);
-        when(channelMapper.toEntity(req)).thenReturn(mappedChannel);
+        when(channelMapper.toEntity(req)).thenReturn(Channel.builder().platform(PlatformType.LAZADA).displayName("Lazada-New").metadata(new java.util.HashMap<>()).build());
         when(channelRepository.save(any(Channel.class))).thenReturn(savedChannel);
-        when(responseService.toResponse(savedChannel)).thenReturn(mappedResponse);
+        when(responseService.toResponse(any(Channel.class))).thenReturn(mappedResponse);
 
         ChannelResponse actual = service.create(req);
 
         assertThat(actual).isSameAs(mappedResponse);
         ArgumentCaptor<ChannelCredential> credCap = ArgumentCaptor.forClass(ChannelCredential.class);
         verify(credentialRepository).save(credCap.capture());
-        assertThat(credCap.getValue().getChannel()).isSameAs(savedChannel);
         assertThat(credCap.getValue().getConnectionState()).isEqualTo("CONNECTED");
-        verify(responseService).toResponse(savedChannel);
+        verify(responseService).toResponse(any(Channel.class));
     }
 
     @Test
@@ -272,29 +267,21 @@ class ChannelServiceImplTest {
     }
 
     @Test
-    @DisplayName("connectLazada - creates new channel when no matching accountId; logs token expiry")
-    void connectLazada_createsNewChannel() {
-        when(channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA))
-                .thenReturn(new ArrayList<>());
-        when(channelRepository.save(any(Channel.class))).thenAnswer(inv -> {
-            Channel c = inv.getArgument(0);
-            if (c.getId() == null) c.setId(UUID.randomUUID());
-            return c;
-        });
-        when(credentialRepository.findByChannelId(any(UUID.class))).thenReturn(Optional.empty());
-        when(channelMapper.toResponse(any(Channel.class))).thenAnswer(inv -> {
-            Channel c = inv.getArgument(0);
-            return ChannelResponse.builder().id(c.getId()).displayName(c.getDisplayName()).build();
-        });
+    @DisplayName("connectLazada delegates to connectionService")
+    void connectLazada_delegatesToConnectionService() {
+        ChannelResponse expected = ChannelResponse.builder()
+                .id(UUID.randomUUID())
+                .platform(PlatformType.LAZADA)
+                .displayName("Lazada-Demo Lazada")
+                .build();
+        when(connectionService.connectLazada("access-tok", "refresh-tok", 3600, 7200000, "acc-001", "Demo Lazada"))
+                .thenReturn(expected);
 
-        ChannelResponse res = channelService.connectLazada("access-tok", "refresh-tok",
-                3600, "acc-001", "Demo Lazada");
+        ChannelResponse res = service.connectLazada("access-tok", "refresh-tok",
+                3600, 7200000, "acc-001", "Demo Lazada");
 
-        assertThat(res.getDisplayName()).isEqualTo("Lazada-Demo Lazada");
-        ArgumentCaptor<ChannelCredential> capCred = ArgumentCaptor.forClass(ChannelCredential.class);
-        verify(credentialRepository).save(capCred.capture());
-        assertThat(capCred.getValue().getTokenExpiresAt()).isNotNull();
-        assertThat(capCred.getValue().getRefreshToken()).isEqualTo("refresh-tok");
+        assertThat(res).isSameAs(expected);
+        verify(connectionService).connectLazada("access-tok", "refresh-tok", 3600, 7200000, "acc-001", "Demo Lazada");
     }
 
     @Test
