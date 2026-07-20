@@ -16,6 +16,8 @@ import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.mapper.StockReceiveMapper;
 import fu.osms.inventory.repository.*;
 import fu.osms.inventory.service.StockReceiveService;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -47,16 +49,14 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     private final ProductVariantRepository variantRepository;
     private final UserRepository userRepository;
     private final StockReceiveMapper receiptMapper;
+    private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @Override
     @Transactional
     public StockReceiveResponse createReceipt(StockReceiveRequest request, UUID createdByUserId) {
-        // 1. Validate warehouse
-        Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
-        if (Boolean.FALSE.equals(warehouse.getIsActive())) {
-            throw new AppException(ErrorCode.WAREHOUSE_NOT_FOUND);
-        }
+        // 1. Always use the shared marketplace warehouse.
+        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
 
         // 2. Validate supplier (optional)
         Supplier supplier = null;
@@ -162,6 +162,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 11. Process each item
         List<InventoryReceiptItem> savedItems = new ArrayList<>();
+        Set<UUID> changedVariantIds = new HashSet<>();
 
         for (int i = 0; i < itemRequests.size(); i++) {
             StockReceiveItemRequest itemReq = itemRequests.get(i);
@@ -207,6 +208,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
                 receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
                 receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
+                changedVariantIds.add(productVariant.getId());
             }
 
             // c. Save receiptItem (for both DRAFT and CONFIRMED)
@@ -264,6 +266,9 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         response.setTotalQuantity(savedItems.stream()
                 .mapToInt(InventoryReceiptItem::getQuantity)
                 .sum());
+        if ("CONFIRMED".equals(status)) {
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        }
 
         return response;
     }
@@ -343,12 +348,8 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 "Chỉ có thể chỉnh sửa phiếu nhập ở trạng thái Lưu tạm");
         }
 
-        // 3. Validate warehouse
-        Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
-                .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
-        if (Boolean.FALSE.equals(warehouse.getIsActive())) {
-            throw new AppException(ErrorCode.WAREHOUSE_NOT_FOUND);
-        }
+        // 3. Always use the shared marketplace warehouse.
+        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
 
         // 4. Validate supplier (optional)
         Supplier supplier = null;
@@ -510,10 +511,12 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         // 5. Load approvedBy user
         var approvedByUser = userRepository.findById(approvedByUserId).orElse(null);
 
-        // 6. Update inventory for each item
+        // 6. Update inventory for each item in the shared marketplace warehouse.
+        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
+        receipt.setWarehouse(warehouse);
+        Set<UUID> changedVariantIds = new HashSet<>();
         for (InventoryReceiptItem receiptItem : receiptItems) {
             ProductVariant productVariant = receiptItem.getVariant();
-            Warehouse warehouse = receipt.getWarehouse();
 
             // Find or create InventoryItem
             InventoryItem inventoryItem = inventoryItemRepository
@@ -563,6 +566,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     .note("Completed from DRAFT")
                     .build();
             inventoryTransactionRepository.save(confirmedTransaction);
+            changedVariantIds.add(productVariant.getId());
         }
 
         // 7. Update receipt status to CONFIRMED
@@ -583,6 +587,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         response.setTotalQuantity(receiptItems.stream()
                 .mapToInt(InventoryReceiptItem::getQuantity)
                 .sum());
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
 
         return response;
     }
@@ -604,6 +609,17 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         int currentYear = LocalDate.now().getYear();
         long count = stockReceiveRepository.countByYear(currentYear);
         return "PN-" + currentYear + "-" + String.format("%03d", count + 1);
+    }
+
+    @Override
+    @Transactional
+    public int syncPendingMarketplaceInventory() {
+        List<UUID> variantIds = stockReceiveRepository.findConfirmedVariantIdsPendingMarketplaceSync();
+        if (variantIds.isEmpty()) {
+            return 0;
+        }
+        marketplaceInventoryPropagationService.pushAvailableStock(variantIds);
+        return variantIds.size();
     }
 
     private CostUpdateResult applyReceiptCostAndQuantity(

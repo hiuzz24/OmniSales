@@ -6,6 +6,7 @@ import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
+import fu.osms.channel.dto.response.ChannelSyncDetailResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelProductRepository;
@@ -22,6 +23,7 @@ import fu.osms.sync.lazada.dto.LazadaSyncTask;
 import fu.osms.sync.lazada.service.LazadaSyncTaskDispatcher;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.ChannelLocalSyncService;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.PlatformSyncService;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
 import fu.osms.sync.tiktok.TikTokInventoryUpdateService;
@@ -29,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -57,6 +60,67 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
     private final TikTokInventoryUpdateService tikTokInventoryUpdateService;
     private final StockReceiveRepository stockReceiveRepository;
     private final InventoryIssueRepository inventoryIssueRepository;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    private final TransactionTemplate transactionTemplate;
+
+    @Override
+    public ChannelImportSyncResponse syncAllLocalChanges(UUID requestedChannelId) {
+        channelRepository.findById(requestedChannelId)
+                .filter(c -> c.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+
+        marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
+
+        int productCount = 0;
+        int variantCount = 0;
+        int warehouseCount = 0;
+        int pushedVariantCount = 0;
+        int failedCount = 0;
+        List<String> failedMessages = new ArrayList<>();
+        List<ChannelSyncDetailResponse> details = new ArrayList<>();
+
+        List<Channel> channels = channelRepository.findByDeletedAtIsNull().stream()
+                .filter(channel -> Boolean.TRUE.equals(channel.getSyncEnabled()))
+                .filter(channel -> channel.getPlatform() == PlatformType.SHOPIFY
+                        || channel.getPlatform() == PlatformType.LAZADA
+                        || channel.getPlatform() == PlatformType.TIKTOK)
+                .toList();
+
+        for (Channel channel : channels) {
+            long startedAt = System.currentTimeMillis();
+            try {
+                ChannelImportSyncResponse response = transactionTemplate.execute(status ->
+                        syncLocalChanges(channel.getId())
+                );
+                if (response == null) {
+                    continue;
+                }
+                productCount += response.getProductCount();
+                variantCount += response.getVariantCount();
+                warehouseCount += response.getWarehouseCount();
+                pushedVariantCount += response.getPushedVariantCount();
+                details.add(detail(channel, response, response.getStatus(), response.getMessage(), startedAt));
+            } catch (Exception e) {
+                failedCount++;
+                failedMessages.add(channel.getDisplayName() + ": " + e.getMessage());
+                log.error("[ChannelLocalSync] Sync all failed for channelId={}", channel.getId(), e);
+                details.add(detail(channel, null, SyncStatus.FAILED.name(), e.getMessage(), startedAt));
+            }
+        }
+
+        return ChannelImportSyncResponse.builder()
+                .channelId(requestedChannelId)
+                .productCount(productCount)
+                .variantCount(variantCount)
+                .warehouseCount(warehouseCount)
+                .pushedVariantCount(pushedVariantCount)
+                .status(failedCount == 0 ? SyncStatus.SYNCED.name() : SyncStatus.FAILED.name())
+                .message(failedCount == 0
+                        ? "Đã đồng bộ từ ứng dụng lên tất cả sàn đã liên kết."
+                        : "Đồng bộ hoàn tất một phần. Lỗi " + failedCount + " kênh: " + failedMessages)
+                .details(details)
+                .build();
+    }
 
     @Override
     @Transactional
@@ -68,6 +132,9 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
         if (!Boolean.TRUE.equals(channel.getSyncEnabled())) {
             throw new IllegalStateException("Kênh đang tắt đồng bộ.");
         }
+
+        marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
+        validateSellerBinding(channel);
 
         if (channel.getPlatform() == PlatformType.LAZADA) {
             return lazadaSyncTaskDispatcher.dispatch(LazadaSyncTask.localChanges(channelId));
@@ -249,5 +316,57 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
         variantIds.addAll(stockReceiveRepository.findChangedConfirmedVariantIdsBetween(changedSince, changedUntil));
         variantIds.addAll(inventoryIssueRepository.findChangedAppliedVariantIdsBetween(changedSince, changedUntil));
         return variantIds;
+    }
+
+    private ChannelSyncDetailResponse detail(Channel channel,
+                                             ChannelImportSyncResponse response,
+                                             String status,
+                                             String message,
+                                             long startedAt) {
+        return ChannelSyncDetailResponse.builder()
+                .channelId(channel.getId())
+                .channelName(channel.getDisplayName())
+                .platform(channel.getPlatform())
+                .sellerId(metadataText(channel, "accountId", "openId"))
+                .shopId(metadataText(channel, "shopId"))
+                .shopDomain(metadataText(channel, "shopDomain", "shop"))
+                .status(status)
+                .message(message)
+                .productCount(response == null ? 0 : response.getProductCount())
+                .variantCount(response == null ? 0 : response.getVariantCount())
+                .warehouseCount(response == null ? 0 : response.getWarehouseCount())
+                .pushedVariantCount(response == null ? 0 : response.getPushedVariantCount())
+                .durationMs(System.currentTimeMillis() - startedAt)
+                .build();
+    }
+
+    private String metadataText(Channel channel, String... keys) {
+        if (channel.getMetadata() == null) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = channel.getMetadata().get(key);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+        return null;
+    }
+
+    private void validateSellerBinding(Channel channel) {
+        if (channel.getPlatform() == PlatformType.LAZADA && metadataText(channel, "accountId") == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Kênh Lazada thiếu accountId/sellerId. Hãy kết nối lại Lazada trước khi đồng bộ.");
+        }
+        if (channel.getPlatform() == PlatformType.TIKTOK && metadataText(channel, "shopCipher", "shop_cipher", "cipher") == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Kênh TikTok thiếu shopCipher. Hãy kết nối lại TikTok Shop trước khi đồng bộ.");
+        }
+        if (channel.getPlatform() == PlatformType.SHOPIFY
+                && metadataText(channel, "shopDomain", "shop") == null
+                && (channel.getDisplayName() == null || channel.getDisplayName().isBlank())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Kênh Shopify thiếu shopDomain. Hãy kết nối lại Shopify trước khi đồng bộ.");
+        }
     }
 }

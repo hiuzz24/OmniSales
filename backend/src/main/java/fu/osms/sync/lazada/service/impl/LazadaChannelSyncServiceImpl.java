@@ -21,6 +21,7 @@ import fu.osms.sync.lazada.dto.LazadaSyncTask;
 import fu.osms.sync.lazada.service.LazadaChannelSyncService;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.repository.SyncLogRepository;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.SyncAlertService;
 import fu.osms.sync.service.PlatformSyncService;
 import fu.osms.sync.service.impl.PlatformSyncServiceFactory;
@@ -51,6 +52,7 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
     private final ProductImageRepository productImageRepository;
     private final PlatformSyncServiceFactory platformSyncServiceFactory;
     private final SyncAlertService syncAlertService;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @Override
     @Transactional
@@ -63,6 +65,8 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
         if (channel.getPlatform() != PlatformType.LAZADA) {
             throw new IllegalArgumentException("Chỉ hỗ trợ đồng bộ cho kênh Lazada.");
         }
+
+        marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
 
         SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
                 .channel(channel)

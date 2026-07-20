@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,6 +38,12 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
     @Override
     @Transactional
     public int pushAvailableStock(UUID channelId) {
+        return pushAvailableStock(channelId, null);
+    }
+
+    @Override
+    @Transactional
+    public int pushAvailableStock(UUID channelId, Collection<UUID> variantIds) {
         Channel channel = channelRepository.findById(channelId)
                 .filter(item -> item.getDeletedAt() == null)
                 .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
@@ -48,7 +55,13 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
         UUID defaultWarehouseId = optionalUuid(channel.getMetadata(), "defaultWarehouseId");
         String configuredTikTokWarehouseId = optionalText(channel.getMetadata(), "tiktokWarehouseId", "defaultTikTokWarehouseId");
 
-        List<ChannelProductVariant> mappings = channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId);
+        Set<UUID> scopedVariantIds = sanitizeVariantIds(variantIds);
+        List<ChannelProductVariant> mappings = scopedVariantIds.isEmpty()
+                ? channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId)
+                : channelProductVariantRepository.findActiveByChannelIdAndVariantIdInWithVariant(
+                        channelId,
+                        new ArrayList<>(scopedVariantIds)
+                );
         Map<String, List<ChannelProductVariant>> mappingsByProductId = new LinkedHashMap<>();
         for (ChannelProductVariant mapping : mappings) {
             String productId = mapping.getChannelProduct().getExternalProductId();
@@ -96,6 +109,19 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
             pushedVariantCount += entry.getValue().size();
         }
         return pushedVariantCount;
+    }
+
+    private Set<UUID> sanitizeVariantIds(Collection<UUID> variantIds) {
+        if (variantIds == null || variantIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<UUID> result = new LinkedHashSet<>();
+        for (UUID variantId : variantIds) {
+            if (variantId != null) {
+                result.add(variantId);
+            }
+        }
+        return result;
     }
 
     private int availableQuantity(ChannelProductVariant mapping, UUID defaultWarehouseId) {

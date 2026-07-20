@@ -15,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -58,6 +59,16 @@ public class StockReceiveController {
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<String>> getNextReceiptCode() {
         return ResponseEntity.ok(ApiResponse.success(stockReceiveService.getNextReceiptCode()));
+    }
+
+    @PostMapping("/sync-marketplace-inventory")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> syncPendingMarketplaceInventory() {
+        int syncedVariantCount = stockReceiveService.syncPendingMarketplaceInventory();
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đồng bộ tồn kho phiếu nhập lên các sàn thành công",
+                Map.of("syncedVariantCount", syncedVariantCount)
+        ));
     }
 
     @GetMapping("/{id}")

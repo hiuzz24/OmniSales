@@ -7,6 +7,11 @@ const warehouseApi = {
         return response;
     },
 
+    getMaster: async () => {
+        const response = await axiosClient.get('/warehouses/master');
+        return response;
+    },
+
     // Get warehouse by ID
     getById: async (id) => {
         const response = await axiosClient.get(`/warehouses/${id}`);

@@ -20,6 +20,7 @@ const inventoryApi = {
     if (filters.keyword) params.keyword = filters.keyword;
     if (filters.status && filters.status !== 'all') params.status = filters.status;
     if (filters.warehouseId && filters.warehouseId !== 'all') params.warehouseId = filters.warehouseId;
+    if (filters.platforms?.length) params.platforms = filters.platforms.join(',');
     const res = categoryId
       ? await axiosClient.get(`/inventory/category/${categoryId}`, { params })
       : await axiosClient.get('/inventory', { params });
