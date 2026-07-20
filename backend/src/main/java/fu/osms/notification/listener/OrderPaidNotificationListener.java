@@ -36,7 +36,7 @@ public class OrderPaidNotificationListener {
                     try {
                         notificationService.createNotification(
                                 userId,
-                                "ORDER",
+                                "ORDER_PAID",
                                 title,
                                 body,
                                 "ORDER",

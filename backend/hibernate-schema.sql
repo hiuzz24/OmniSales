@@ -760,6 +760,8 @@ CREATE TABLE report_results (
                                 created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+
+
 -- ============================================================
 --  FUNCTIONS & TRIGGERS
 -- ============================================================
