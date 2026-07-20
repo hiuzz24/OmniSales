@@ -145,6 +145,87 @@ mvn test jacoco:report
 # Report tại: backend/target/site/jacoco/index.html
 ```
 
+### Backend Integration Tests (Spring Boot Failsafe)
+
+> Integration Tests (IT) chạy với Spring context đầy đủ (`@SpringBootTest`),
+> kết nối tới PostgreSQL `osms_it` thật, dùng JWT thật, mock các dịch vụ
+> ngoài (Gmail, RabbitMQ, RestCountries). Có 3 loại: full-stack controller
+> IT, repository IT (custom JPQL), và multi-step flow + security IT.
+
+#### Chuẩn bị Database `osms_it`
+
+Yêu cầu: PostgreSQL đang chạy, `backend/.env` có `DB_PASSWORD`.
+
+```powershell
+# Cách 1 — dùng script PowerShell (Windows)
+cd OmniSales/backend
+powershell -ExecutionPolicy Bypass -File src/test/resources/db-init.ps1
+```
+
+```bash
+# Cách 2 — dùng shell script (Linux/macOS)
+cd OmniSales/backend
+./src/test/resources/db-init.sh
+```
+
+Script sẽ:
+1. Tìm `psql.exe` (hoặc `psql`) trong PATH / Program Files
+2. Đọc `DB_PASSWORD` từ `backend/.env`
+3. Drop + recreate database `osms_it`
+4. Apply `backend/hibernate-schema.sql` để có schema + master data
+
+#### Chạy toàn bộ IT
+
+```bash
+cd OmniSales/backend
+mvn verify
+```
+
+Hoặc dùng `run-it.ps1` (tự reset DB rồi chạy Failsafe):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File src/test/resources/run-it.ps1
+```
+
+> Lưu ý: Sau khi SecurityIT (SEC-04) chạy, một số user có thể bị lock.
+> Reset trước khi chạy lại bằng:
+> ```sql
+> UPDATE users SET failed_login_attempts=0, locked_until=NULL, status='ACTIVE';
+> ```
+
+#### Chạy một class IT cụ thể
+
+```bash
+mvn verify -Dit.test=CustomerControllerFullStackIT
+```
+
+#### Chạy nhiều class IT
+
+```bash
+mvn verify "-Dit.test=CustomerControllerFullStackIT,OrderControllerFullStackIT,ApiFlowsIT,SecurityIT"
+```
+
+#### Cấu trúc file IT
+
+| Loại | Pattern file | Mô tả |
+|------|--------------|-------|
+| Full-stack controller IT | `*ControllerFullStackIT.java` | `@SpringBootTest` + `TestRestTemplate` + JWT thật |
+| Full-stack auth/user | `*ControllerFullStackIT.java` | Auth, User, Customer, Order |
+| Repository IT (custom JPQL) | `*RepositoryIT.java` | `@SpringBootTest` + JPA repository thật |
+| Multi-step flow | `flow/ApiFlowsIT.java` | FLOW-01..04 theo L3 spec |
+| Security / OWASP | `security/SecurityIT.java` | SEC-01..08 theo L3 spec |
+| Controller slice (cũ) | `*ControllerIT.java` | `@WebMvcTest`, không DB |
+
+#### Helpers có sẵn
+
+- `IntegrationTestBase` — boot Spring context, login cache, truncate DB giữa các test
+- `BaseFullStackIT` — thêm helpers HTTP (`getForJson`, `postForJson`, ...)
+- `ControllerSliceITBase` — base cho `@WebMvcTest` slice
+- `TestDataFactory` — factory tạo entity với giá trị unique
+- `JwtTestUtils` — mint JWT trực tiếp (kể cả expired)
+- `IntegrationTestCleanupHelper` — `TRUNCATE` các bảng transactional
+- `TestExternalServicesConfig` — mock `JavaMailSender`, Rabbit, RestCountries
+
 ---
 
 ## Cấu trúc & Conventions Code
@@ -412,6 +493,90 @@ npx playwright test
 
 ---
 
+## Test data cleanup
+
+Mục tiêu: **DB phải sạch** sau khi tests chạy. Hai lớp bảo vệ:
+
+### 1. Sau mỗi test — `afterEach` cleanup
+
+Mỗi spec phải đăng ký `afterEach` xóa dữ liệu nó tạo ra. Pattern mẫu (xem `test/api/channel/channel.spec.js` để tham khảo đầy đủ):
+
+```javascript
+const { createTestChannel, deleteTestChannel } = require('../../utils/channel-helpers');
+
+test.describe('Channel API Tests', () => {
+  let createdChannelIds = [];
+
+  test.afterEach(async ({ request, managerHeaders }) => {
+    if (!createdChannelIds.length) return;
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    for (const id of createdChannelIds.splice(0)) {
+      await deleteTestChannel(request, authToken, id);
+    }
+  });
+
+  test('create a channel', async ({ request, managerHeaders }) => {
+    // ...
+    createdChannelIds.push(created.id);
+  });
+});
+```
+
+Danh sách helpers có sẵn trong `test/utils/`:
+
+| Helper                  | Chức năng                              | Cleanup API                                   |
+|-------------------------|----------------------------------------|------------------------------------------------|
+| product-helpers         | `createTestProduct`, `deleteTestProduct` | `DELETE /api/products/{id}/delete`            |
+| customer-helpers        | `createTestCustomer`, `deleteTestCustomer` | `DELETE /api/customers/{id}`                 |
+| order-helpers           | `createTestOrder`, `deleteTestOrder` (cancel) | `POST /api/orders/{id}/cancel`          |
+| user-helpers            | `createTestUser`, `cleanupTestUser`     | `DELETE /api/users/{id}`                       |
+| category (in inventory-helpers) | `createTestCategory`, `deleteTestCategory` | `DELETE /api/categories/{id}`         |
+| channel-helpers         | `createTestChannel`, `deleteTestChannel` | `DELETE /api/channels/{id}`                  |
+| supplier-helpers        | `createTestSupplier`, `deactivateTestSupplier` | `PATCH /api/suppliers/{id}/status` |
+| warehouse-helpers       | `createTestReceipt/Delivery/Stocktake/Transfer` + `cleanupTestData(type,id)` | mixed |
+
+**Supplier không có DELETE API.** Cleanup là PATCH `/api/suppliers/{id}/status` với `{ isActive: false }` (đặt tên là "deactivate").
+
+### 2. Cuối mỗi lần `npm test` — `globalTeardown`
+
+`test/global-teardown.js` chạy tự động sau khi tất cả workers kết thúc. Nó thực hiện hai lớp cleanup:
+
+1. **API cleanup (luôn chạy)** — gọi `cleanupAllTestData(request, token)` trong `utils/cleanup-helpers.js` để xóa các thực thể có DELETE API.
+2. **SQL cleanup (opt-in)** — chỉ chạy khi `TEST_DB_SQL_CLEANUP=true`. Xóa các thực thể không có DELETE API (inventory_transactions, stocktakes, transfers, suppliers còn sót) bằng câu SQL trực tiếp.
+
+⚠️ **Cảnh báo:** Đừng bao giờ bật `TEST_DB_SQL_CLEANUP=true` trên DB shared với dev. Chỉ bật khi chạy trên DB test riêng.
+
+### 3. Scripts thủ công
+
+Khi DB đã đầy rác từ nhiều lần chạy test, dùng một trong các scripts:
+
+```bash
+# Xem bao nhiêu dòng test còn sót lại
+npm run db:dry-run          # = node scripts/dry-run-counts.js
+
+# Backup DB trước khi xóa
+npm run db:backup           # = node scripts/backup-db.js
+                            # Ghi file SQL vào backend/backups/
+
+# Xóa rác (kèm confirm)
+npm run db:delete-test      # = node scripts/delete-test-data.js
+                            # Cờ: --dry-run, --yes, --validate
+
+# Cleanup nhẹ qua API (chạy sau khi test xong)
+npm run test:clean          # = node scripts/cleanup-test-data.js
+```
+
+### 4. KHÔNG dùng TRUNCATE
+
+Không bao giờ dùng `TRUNCATE` toàn DB. Hai lý do:
+
+1. Sẽ xóa luôn master data (admin, manager, warehouses, countries).
+2. Triggers `trg_*_immutable` sẽ chặn xóa tables bảo toàn như `inventory_transactions` và `audit_logs` — nên TRUNCATE không qua RESTRICT cũng không ăn thua.
+
+Các scripts có sẵn (`scripts/delete-test-data.js`, `cleanup-helpers.js`) chỉ xóa các dòng có marker test rõ ràng (`TEST-`, `Test`, `TestSup`, etc.).
+
+---
+
 ## Quick Reference
 
 | Lệnh | Mô tả |
@@ -424,4 +589,12 @@ npx playwright test
 | `npx playwright test --headed` | Chạy với cửa sổ trình duyệt |
 | `npx playwright show-report` | Mở HTML report |
 | `mvn test` | Chạy backend unit tests |
-| `mvn test -Dtest=ClassName` | Chạy một class test cụ thể |
+| `mvn test -Dtest=ClassName` | Chạy một class test cụ thể (Surefire) |
+| `mvn verify` | Chạy toàn bộ Integration Test (Failsafe) |
+| `mvn verify -Dit.test=ClassName` | Chạy một IT class cụ thể |
+| `powershell -ExecutionPolicy Bypass -File src/test/resources/db-init.ps1` | Reset + seed DB `osms_it` |
+| `powershell -ExecutionPolicy Bypass -File src/test/resources/run-it.ps1` | Reset DB + chạy full IT |
+| `npm run test:clean` | Dọn rác qua API (sau khi test) |
+| `npm run db:backup` | Backup DB ra file SQL |
+| `npm run db:dry-run` | Đếm bao nhiêu dòng test còn sót |
+| `npm run db:delete-test` | Xóa rác trong transaction |

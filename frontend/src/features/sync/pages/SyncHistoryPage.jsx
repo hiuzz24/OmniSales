@@ -9,6 +9,14 @@ import styles from './SyncHistoryPage.module.css';
 
 const PAGE_SIZE = 20;
 
+const JOB_TYPE_LABELS = {
+  SHOPIFY_REMOTE_IMPORT_SYNC: 'Đồng bộ từ Shopify về ứng dụng',
+  LAZADA_IMPORT: 'Đồng bộ từ Lazada về ứng dụng',
+  SHOPIFY_LOCAL_CHANGES_SYNC: 'Đồng bộ từ ứng dụng lên Shopify',
+  LAZADA_LOCAL_CHANGES_SYNC: 'Đồng bộ từ ứng dụng lên Lazada',
+  PRODUCT_SYNC: 'Đồng bộ sản phẩm',
+};
+
 const SyncHistoryPage = () => {
   const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
@@ -57,7 +65,11 @@ const SyncHistoryPage = () => {
   }, [page, statusFilter, channelFilter]);
 
   useEffect(() => {
-    fetchLogs();
+    const timer = window.setTimeout(() => {
+      fetchLogs();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [fetchLogs]);
 
   const getStatusBadge = (status) => {
@@ -77,6 +89,60 @@ const SyncHistoryPage = () => {
       case 'SHOPIFY': return <Badge variant="shopify">Shopify</Badge>;
       default: return <Badge variant="default">{platform}</Badge>;
     }
+  };
+
+  const getSyncSubject = (log) => {
+    if (log.productName) {
+      return {
+        title: log.productName,
+        subtitle: log.productSku,
+      };
+    }
+
+    return {
+      title: JOB_TYPE_LABELS[log.jobType] || log.jobType || 'Đồng bộ theo kênh',
+      subtitle: log.channelName || 'Toàn bộ kênh bán',
+    };
+  };
+
+  const getSyncDetail = (log) => {
+    if (log.status !== 'SYNCED') {
+      return <div className={styles.errorText}>{log.errorSummary || 'Lỗi không xác định'}</div>;
+    }
+
+    const inventoryChanges = log.inventoryChanges || [];
+    if (inventoryChanges.length > 0) {
+      return (
+        <div className={styles.changeList}>
+          {inventoryChanges.map((change) => (
+            <div key={change.id} className={styles.changeItem}>
+              {formatInventoryChange(change)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    const successCount = Number(log.successCount ?? 0).toLocaleString('vi-VN');
+    const totalItems = Number(log.totalItems ?? 0).toLocaleString('vi-VN');
+    return (
+      <span style={{ color: '#166534', fontSize: '13px' }}>
+        Đã xử lý {successCount}/{totalItems} mục
+      </span>
+    );
+  };
+
+  const formatInventoryChange = (change) => {
+    const before = Number(change.quantityBefore ?? 0);
+    const after = Number(change.quantityAfter ?? 0);
+    const delta = Number(change.quantityChange ?? after - before);
+    const direction = delta >= 0 ? 'lên' : 'giảm còn';
+    const deltaText = delta > 0 ? `+${delta}` : `${delta}`;
+    const productName = change.variantName || 'Sản phẩm';
+    const sku = change.variantSku ? ` (${change.variantSku})` : '';
+    const warehouseName = change.warehouseName || 'Chưa rõ kho';
+
+    return `${productName}${sku} tại ${warehouseName}: tồn kho từ ${before} ${direction} ${after} (${deltaText})`;
   };
 
   return (
@@ -140,30 +206,27 @@ const SyncHistoryPage = () => {
                       <td colSpan="6" className={styles.emptyState}>Chưa có lịch sử đồng bộ nào</td>
                     </tr>
                   ) : (
-                    logs.map((log) => (
-                      <tr key={log.id}>
-                        <td>
-                          {new Date(log.startedAt).toLocaleString('vi-VN')}
-                        </td>
-                        <td>
-                          <div className={styles.productName}>{log.productName || '-'}</div>
-                          {log.productSku && <div className={styles.productSku}>{log.productSku}</div>}
-                        </td>
-                        <td>
-                          {getChannelBadge(log.platform)}
-                          {log.channelName && <div className={styles.productSku}>{log.channelName}</div>}
-                        </td>
-                        <td>{getStatusBadge(log.status)}</td>
-                        <td>
-                          {log.status === 'SYNCED' ? (
-                            <span style={{ color: '#166534', fontSize: '13px' }}>Đồng bộ {log.successCount}/{log.totalItems} sản phẩm</span>
-                          ) : (
-                            <div className={styles.errorText}>{log.errorSummary || 'Lỗi không xác định'}</div>
-                          )}
-                        </td>
-                        <td>{log.triggeredByEmail || 'Hệ thống'}</td>
-                      </tr>
-                    ))
+                    logs.map((log) => {
+                      const subject = getSyncSubject(log);
+                      return (
+                        <tr key={log.id}>
+                          <td>
+                            {new Date(log.startedAt).toLocaleString('vi-VN')}
+                          </td>
+                          <td>
+                            <div className={styles.productName}>{subject.title}</div>
+                            {subject.subtitle && <div className={styles.productSku}>{subject.subtitle}</div>}
+                          </td>
+                          <td>
+                            {getChannelBadge(log.platform)}
+                            {log.channelName && <div className={styles.productSku}>{log.channelName}</div>}
+                          </td>
+                          <td>{getStatusBadge(log.status)}</td>
+                          <td>{getSyncDetail(log)}</td>
+                          <td>{log.triggeredByEmail || 'Hệ thống'}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

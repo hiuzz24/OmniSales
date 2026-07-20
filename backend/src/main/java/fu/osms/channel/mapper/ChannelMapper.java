@@ -17,6 +17,10 @@ public interface ChannelMapper {
     @Mapping(target = "deletedAt", ignore = true)
     Channel toEntity(ChannelRequest request);
 
+    @Mapping(target = "connectionState", ignore = true)
+    @Mapping(target = "tokenExpiresAt", ignore = true)
+    @Mapping(target = "refreshTokenExpiresAt", ignore = true)
+    @Mapping(target = "refreshError", ignore = true)
     ChannelResponse toResponse(Channel channel);
 
     @Mapping(target = "id", ignore = true)

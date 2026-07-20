@@ -1,6 +1,9 @@
-const API_BASE = process.env.API_BASE || 'http://localhost:8080/api';
-const TEST_EMAIL = 'manager@osms.vn';
-const TEST_PASSWORD = 'Duy16042004%';
+const {
+  TEST_EMAIL,
+  TEST_PASSWORD,
+  API_BASE: ENV_API_BASE,
+} = require('./env-config');
+const API_BASE = process.env.API_BASE || ENV_API_BASE;
 const { expect } = require('@playwright/test');
 
 async function loginAsOwner(page) {
@@ -42,9 +45,21 @@ async function getAuthToken(request) {
   return body.data.accessToken;
 }
 
+// Cache auth tokens per worker (process) so we don't hammer the login
+// endpoint and trip the API rate limiter (100 req/min).
+// JWT lifetime is 24h (JWT_EXPIRATION_MS) so a single cached token per
+// worker is fine for the whole test run.
+let _tokenCache = null;
+let _tokenCacheAt = 0;
+const TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 async function getAuthHeaders(request) {
-  const token = await getAuthToken(request);
-  return { Authorization: `Bearer ${token}` };
+  const now = Date.now();
+  if (!_tokenCache || (now - _tokenCacheAt) > TOKEN_TTL_MS) {
+    _tokenCache = await getAuthToken(request);
+    _tokenCacheAt = now;
+  }
+  return { Authorization: `Bearer ${_tokenCache}` };
 }
 
 async function getWarehouses(request, token) {

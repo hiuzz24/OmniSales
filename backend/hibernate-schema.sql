@@ -44,6 +44,9 @@ DROP TABLE IF EXISTS daily_sales_summary          CASCADE;
 DROP TABLE IF EXISTS audit_logs                   CASCADE;
 DROP TABLE IF EXISTS notifications                CASCADE;
 DROP TABLE IF EXISTS system_logs                  CASCADE;
+DROP TABLE IF EXISTS api_metrics_daily              CASCADE;
+DROP TABLE IF EXISTS api_endpoint_limits            CASCADE;
+DROP TABLE IF EXISTS system_settings                CASCADE;
 DROP TABLE IF EXISTS sync_tasks                   CASCADE;
 DROP TABLE IF EXISTS sync_logs                    CASCADE;
 DROP TABLE IF EXISTS webhook_events               CASCADE;
@@ -76,10 +79,13 @@ DROP TABLE IF EXISTS countries                    CASCADE;
 DROP TABLE IF EXISTS warehouses                   CASCADE;
 DROP TABLE IF EXISTS suppliers                    CASCADE;
 DROP TABLE IF EXISTS password_reset_tokens        CASCADE;
+DROP TABLE IF EXISTS user_invite_tokens           CASCADE;
 DROP TABLE IF EXISTS refresh_tokens               CASCADE;
 DROP TABLE IF EXISTS user_roles                   CASCADE;
 DROP TABLE IF EXISTS roles                        CASCADE;
 DROP TABLE IF EXISTS users                        CASCADE;
+DROP TABLE IF EXISTS backup_files                 CASCADE;
+
 
 -- ─── 4. DROP ENUM TYPES ─────────────────────────────────────
 DROP TYPE IF EXISTS user_status        CASCADE;
@@ -89,14 +95,14 @@ DROP TYPE IF EXISTS order_status       CASCADE;
 DROP TYPE IF EXISTS inv_txn_type       CASCADE;
 DROP TYPE IF EXISTS sync_status        CASCADE;
 DROP TYPE IF EXISTS product_log_action CASCADE;
-
+DROP TYPE IF EXISTS category_status CASCADE;
 -- ============================================================
 --  CREATE ENUM TYPES
 -- ============================================================
 CREATE TYPE user_status        AS ENUM ('ACTIVE', 'INACTIVE', 'LOCKED');
 CREATE TYPE platform_type      AS ENUM ('SHOPEE', 'TIKTOK', 'LAZADA', 'SHOPIFY', 'MANUAL');
 CREATE TYPE product_status     AS ENUM ('ACTIVE', 'INACTIVE', 'DRAFT');
-CREATE TYPE order_status       AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED');
+CREATE TYPE order_status       AS ENUM ('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED');
 CREATE TYPE inv_txn_type       AS ENUM ('IMPORT', 'EXPORT', 'TRANSFER_OUT', 'TRANSFER_IN','ADJUSTMENT', 'ORDER_DEDUCT', 'ORDER_CANCEL', 'OUTBOUND');
 CREATE TYPE sync_status        AS ENUM ('PENDING', 'SYNCED', 'FAILED', 'OUT_OF_SYNC');
 CREATE TYPE product_log_action AS ENUM ('CREATE', 'UPDATE', 'DELETE', 'SYNC', 'MAPPING');
@@ -158,6 +164,17 @@ CREATE TABLE password_reset_tokens (
                                        expires_at TIMESTAMPTZ  NOT NULL,
                                        used_at    TIMESTAMPTZ,
                                        created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_invite_tokens (
+                                    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                                    email       VARCHAR(255) NOT NULL,
+                                    role_name   VARCHAR(50)  NOT NULL,
+                                    token       VARCHAR(255) NOT NULL UNIQUE,
+                                    expires_at  TIMESTAMPTZ  NOT NULL,
+                                    used_at     TIMESTAMPTZ,
+                                    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                                    status      VARCHAR(20)  NOT NULL DEFAULT 'PENDING'
 );
 
 -- ── Catalogue ────────────────────────────────────────────────
@@ -282,6 +299,7 @@ CREATE TABLE channel_credentials (
                                      access_token      TEXT,
                                      refresh_token     TEXT,
                                      token_expires_at  TIMESTAMPTZ,
+                                     refresh_token_expires_at TIMESTAMPTZ,
                                      connection_state  VARCHAR(20) NOT NULL DEFAULT 'DISCONNECTED'
                                          CHECK (connection_state IN ('CONNECTED','TOKEN_EXPIRED','REVOKED','DISCONNECTED')),
                                      last_refreshed_at TIMESTAMPTZ,
@@ -289,6 +307,9 @@ CREATE TABLE channel_credentials (
                                      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                                      updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX idx_channel_credentials_token_refresh
+    ON channel_credentials (connection_state, token_expires_at);
 
 CREATE TABLE channel_connection_logs (
                                          id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -393,6 +414,7 @@ CREATE TABLE orders (
                         note              TEXT,
                         tracking_number   VARCHAR(200),
                         cancel_reason     VARCHAR(255),
+                        platform_metadata JSONB,
                         cancelled_by      UUID          REFERENCES users(id) ON DELETE SET NULL,
                         version           BIGINT        NOT NULL DEFAULT 0,
                         created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
@@ -425,6 +447,7 @@ CREATE TABLE suppliers (
                            phone        VARCHAR(50),
                            email        VARCHAR(255),
                            address      TEXT,
+                           supplier_code VARCHAR(255),
                            is_active    BOOLEAN      NOT NULL DEFAULT TRUE,
                            created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                            updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
@@ -641,6 +664,34 @@ CREATE TABLE system_logs (
                              logged_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE api_metrics_daily (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    endpoint VARCHAR(255) NOT NULL,
+    method VARCHAR(10) NOT NULL,
+    request_count BIGINT NOT NULL DEFAULT 0,
+    success_count BIGINT NOT NULL DEFAULT 0,
+    fail_count BIGINT NOT NULL DEFAULT 0,
+    avg_latency_ms DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    recorded_date DATE NOT NULL,
+    recorded_hour INT NOT NULL,
+    CONSTRAINT uq_api_metric_endpoint_hour UNIQUE (endpoint, method, recorded_date, recorded_hour)
+);
+
+CREATE TABLE api_endpoint_limits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    endpoint VARCHAR(255) NOT NULL UNIQUE,
+    rate_limit_per_min INT NOT NULL DEFAULT 100,
+    daily_quota INT NOT NULL DEFAULT 50000
+);
+
+CREATE TABLE system_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(50) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
@@ -708,6 +759,8 @@ CREATE TABLE report_results (
                                 expires_at       TIMESTAMPTZ,
                                 created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+
 
 -- ============================================================
 --  FUNCTIONS & TRIGGERS
@@ -1097,5 +1150,44 @@ CREATE TYPE category_status AS ENUM ('ACTIVE', 'INACTIVE');
 
 ALTER TABLE categories
     ADD COLUMN status category_status NOT NULL DEFAULT 'ACTIVE';
+
+ALTER TABLE suppliers
+    ADD COLUMN IF NOT EXISTS supplier_code VARCHAR(255);
+ALTER TABLE inventory_issues
+    ADD COLUMN IF NOT EXISTS document_reference_id VARCHAR(255);
+
+UPDATE suppliers s
+SET supplier_code = x.code
+FROM (
+         SELECT id, 'SUP-' || LPAD(ROW_NUMBER() OVER (ORDER BY created_at, id)::text, 5, '0') AS code
+         FROM suppliers
+         WHERE supplier_code IS NULL
+     ) x
+WHERE s.id = x.id;
+
+ALTER TABLE suppliers
+    ALTER COLUMN supplier_code SET NOT NULL;
+
+ALTER TABLE suppliers
+    ADD CONSTRAINT uq_suppliers_supplier_code UNIQUE (supplier_code);
+
+CREATE TABLE backup_files (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    filename    VARCHAR(255) NOT NULL,
+    filepath    VARCHAR(500) NOT NULL,
+    file_size   BIGINT       NOT NULL,
+    type        VARCHAR(20)  NOT NULL CHECK (type IN ('MANUAL', 'SCHEDULED')),
+    status      VARCHAR(20)  NOT NULL CHECK (status IN ('SUCCESS', 'FAILED')),
+    created_by  VARCHAR(255),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO system_settings (key, value, description, category) VALUES
+    ('default_reorder_level', '10', 'Mức cảnh báo tồn kho tối thiểu mặc định cho sản phẩm', 'INVENTORY'),
+    ('reserved_timeout_minutes', '30', 'Thời gian giữ chỗ hàng (phút) trước khi tự động hoàn trả', 'INVENTORY'),
+    ('low_stock_repeat_hours', '12', 'Khoảng thời gian nhắc nhở (giờ) giữa các lần gửi cảnh báo tồn kho', 'NOTIFICATION'),
+    ('timezone', 'Asia/Ho_Chi_Minh', 'Timezone hoạt động chính thức của hệ thống', 'SYSTEM'),
+    ('max_failed_login_attempts', '5', 'Số lần đăng nhập sai tối đa trước khi khóa tài khoản', 'SECURITY')
+ON CONFLICT (key) DO NOTHING;
 
 

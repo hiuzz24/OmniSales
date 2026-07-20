@@ -5,8 +5,8 @@ import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.notification.repository.NotificationRepository;
 import fu.osms.notification.service.NotificationService;
+import fu.osms.system.service.SystemSettingService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -24,9 +24,7 @@ public class InventoryAlertService {
     private final InventoryItemRepository inventoryItemRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
-
-    @Value("${app.notifications.low-stock-repeat-hours:12}")
-    private long lowStockRepeatHours;
+    private final SystemSettingService systemSettingService;
 
     public void notifyLowStockAfterStockChange(InventoryItem item) {
         notifyLowStockIfNeeded(item, false);
@@ -49,7 +47,7 @@ public class InventoryAlertService {
         String body = sku + " tại " + warehouseName + " còn có thể bán " + available
                 + " / mức tối thiểu " + reorderLevel + ".";
 
-        userRoleRepository.findByRoleNameIn(List.of("OWNER", "OPERATIONS")).stream()
+        userRoleRepository.findByRoleNameIn(List.of("OWNER", "OPERATIONS", "SYSTEM_ADMIN")).stream()
                 .map(userRole -> userRole.getUser().getId())
                 .distinct()
                 .filter(userId -> !enforceRepeatWindow || shouldSendLowStockNotification(userId, item))
@@ -71,7 +69,8 @@ public class InventoryAlertService {
     }
 
     private boolean shouldSendLowStockNotification(java.util.UUID userId, InventoryItem item) {
-        OffsetDateTime since = OffsetDateTime.now().minusHours(lowStockRepeatHours);
+        long repeatHours = systemSettingService.getLong("low_stock_repeat_hours", 12L);
+        OffsetDateTime since = OffsetDateTime.now().minusHours(repeatHours);
         return !notificationRepository.existsByUserIdAndTypeAndEntityTypeAndEntityIdAndCreatedAtAfter(
                 userId, LOW_STOCK_TYPE, ENTITY_TYPE, item.getId(), since);
     }

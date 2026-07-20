@@ -204,6 +204,86 @@
   transform: translateY(0) scale(0.97);
 }
 
+.marketplaceGuide {
+  scroll-margin-top: 24px;
+  background:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.96)),
+    #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 20px;
+  box-shadow: 0 16px 36px -18px rgba(37, 99, 235, 0.34);
+  padding: 24px;
+}
+
+.marketplaceGuideHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.marketplaceGuideIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border: 1px solid #bfdbfe;
+  flex-shrink: 0;
+}
+
+.marketplaceGuideHeader h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.marketplaceGuideHeader p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.marketplaceGuideGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.marketplaceGuideItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(191, 219, 254, 0.8);
+  color: #2563eb;
+}
+
+.marketplaceGuideItem div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.marketplaceGuideItem strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.marketplaceGuideItem span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(12px) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -217,4 +297,5 @@
   .page { padding: 24px 16px 48px; }
   .header { align-items: flex-start; padding: 16px; }
   .variantToggleCard { align-items: stretch; flex-direction: column; }
+  .marketplaceGuideGrid { grid-template-columns: 1fr; }
 }

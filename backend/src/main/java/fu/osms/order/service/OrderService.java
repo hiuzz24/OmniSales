@@ -2,13 +2,16 @@ package fu.osms.order.service;
 
 import fu.osms.common.dto.PageResponse;
 import fu.osms.audit.dto.response.AuditLogResponse;
+import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderRequest;
+import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderStats;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.enums.PaymentStatus;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public interface OrderService {
@@ -31,7 +34,9 @@ public interface OrderService {
 
     OrderResponse update(UUID id, OrderRequest request);
 
-    void cancel(UUID id, String reason);
+    void cancel(UUID id, CancelOrderRequest request);
+
+    List<CancelReasonResponse> getCancelReasons(UUID id);
 
     OrderStats getStats();
 

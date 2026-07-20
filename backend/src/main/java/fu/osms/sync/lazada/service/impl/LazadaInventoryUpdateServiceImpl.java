@@ -7,12 +7,13 @@ import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
-import fu.osms.inventory.entity.InventoryTransaction;
 import fu.osms.inventory.entity.Warehouse;
+import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.InventoryItemRepository;
-import fu.osms.inventory.repository.InventoryTransactionRepository;
+import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
-import fu.osms.sync.lazada.service.LazadaApiClient;
+import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
+import fu.osms.channel.token.service.ChannelTokenService;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,17 +41,20 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
     private static final String API_PATH = "/product/stock/sellable/update";
     private static final String WAREHOUSE_CODE_MARKER = "LAZADA_WAREHOUSE_CODE=";
 
-    private final LazadaApiClient lazadaApiClient;
+    private final LazadaAuthorizedApiClient lazadaApiClient;
+    private final ChannelTokenService channelTokenService;
     private final ObjectMapper objectMapper;
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
-    private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final StockReceiveRepository stockReceiveRepository;
+    private final InventoryIssueRepository inventoryIssueRepository;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public LazadaInventorySyncResult syncChangedSellableStock(UUID channelId,
                                                               OffsetDateTime changedSince,
+                                                              OffsetDateTime changedUntil,
                                                               Collection<UUID> productChangedVariantIds) {
         log.info(
                 "[LazadaStockSync] Start channelId={} api={} changedSince={} mode={} productChangedVariantIds={}",
@@ -62,11 +66,14 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         );
         ChannelCredential credential = credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED")
                 .orElseThrow(() -> new IllegalStateException("Kenh Lazada chua co token ket noi."));
+        channelTokenService.getValidToken(channelId);
         if (credential.getAccessToken() == null || credential.getAccessToken().isBlank()) {
             throw new IllegalStateException("Kenh Lazada chua co access_token. Vui long ket noi lai bang OAuth Lazada.");
         }
+        UUID defaultWarehouseId = resolveDefaultWarehouseId(credential);
+        String defaultWarehouseCode = resolveDefaultWarehouseCode(credential, defaultWarehouseId);
 
-        ChangedScope changedScope = resolveChangedScope(changedSince, productChangedVariantIds);
+        ChangedScope changedScope = resolveChangedScope(changedSince, changedUntil, productChangedVariantIds);
         log.info(
                 "[LazadaStockSync] Resolved changed scope channelId={} variantCount={} warehouseCount={} variantIds={} warehouseIds={}",
                 channelId,
@@ -80,7 +87,8 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
             return new LazadaInventorySyncResult(0, 0, 0);
         }
 
-        List<ChannelProductVariant> mappings = changedSince == null
+        boolean scopedFullSync = changedSince == null && !changedScope.variantIds().isEmpty();
+        List<ChannelProductVariant> mappings = changedSince == null && !scopedFullSync
                 ? channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId)
                 : channelProductVariantRepository.findActiveByChannelIdAndVariantIdInWithVariant(
                         channelId,
@@ -102,6 +110,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                 .toList();
         Map<UUID, List<InventoryItem>> inventoryByVariantId = inventoryItemRepository.findByVariantIdIn(variantIds)
                 .stream()
+                .filter(item -> matchesDefaultWarehouse(item, defaultWarehouseId))
                 .collect(Collectors.groupingBy(item -> item.getVariant().getId()));
 
         int syncedSkuCount = 0;
@@ -115,7 +124,13 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                 continue;
             }
 
-            List<InventoryItem> scopedItems = scopeInventoryItems(inventoryItems, changedScope, changedSince);
+            List<InventoryItem> scopedItems = scopeInventoryItems(
+                    inventoryItems,
+                    changedScope,
+                    changedSince,
+                    defaultWarehouseId,
+                    defaultWarehouseCode
+            );
             if (scopedItems.isEmpty()) {
                 log.info(
                         "[LazadaStockSync] Skip variant without scoped inventory channelId={} variantId={} sellerSku={}",
@@ -129,8 +144,8 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
             if (mapping.getVariant().getProduct() != null && mapping.getVariant().getProduct().getId() != null) {
                 affectedProductIds.add(mapping.getVariant().getProduct().getId());
             }
-            logSkuChange(mapping, scopedItems);
-            skuPayloads.add(buildSkuPayload(mapping, scopedItems));
+            logSkuChange(mapping, scopedItems, defaultWarehouseId, defaultWarehouseCode);
+            skuPayloads.add(buildSkuPayload(mapping, scopedItems, defaultWarehouseId, defaultWarehouseCode));
             batchMappings.add(mapping);
 
             if (skuPayloads.size() == SKU_BATCH_SIZE) {
@@ -151,38 +166,43 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         );
     }
 
-    private ChangedScope resolveChangedScope(OffsetDateTime changedSince, Collection<UUID> productChangedVariantIds) {
+    private ChangedScope resolveChangedScope(OffsetDateTime changedSince,
+                                             OffsetDateTime changedUntil,
+                                             Collection<UUID> productChangedVariantIds) {
         if (changedSince == null) {
-            return new ChangedScope(Set.of(), Set.of());
+            return new ChangedScope(
+                    productChangedVariantIds == null ? Set.of() : new HashSet<>(productChangedVariantIds),
+                    Set.of()
+            );
         }
 
-        List<InventoryTransaction> transactions = inventoryTransactionRepository.findStockDocumentChangesSince(changedSince);
         Set<UUID> variantIds = new HashSet<>();
         Set<UUID> warehouseIds = new HashSet<>();
         if (productChangedVariantIds != null) {
             variantIds.addAll(productChangedVariantIds);
         }
 
-        for (InventoryTransaction transaction : transactions) {
-            if (transaction.getVariant() != null && transaction.getVariant().getId() != null) {
-                variantIds.add(transaction.getVariant().getId());
-            }
-            if (transaction.getWarehouse() != null && transaction.getWarehouse().getId() != null) {
-                warehouseIds.add(transaction.getWarehouse().getId());
-            }
-        }
+        OffsetDateTime effectiveChangedUntil = changedUntil == null ? OffsetDateTime.now() : changedUntil;
+        variantIds.addAll(stockReceiveRepository.findChangedConfirmedVariantIdsBetween(changedSince, effectiveChangedUntil));
+        variantIds.addAll(inventoryIssueRepository.findChangedAppliedVariantIdsBetween(changedSince, effectiveChangedUntil));
+        warehouseIds.addAll(stockReceiveRepository.findChangedConfirmedWarehouseIdsBetween(changedSince, effectiveChangedUntil));
+        warehouseIds.addAll(inventoryIssueRepository.findChangedAppliedWarehouseIdsBetween(changedSince, effectiveChangedUntil));
 
         log.info(
-                "[LazadaStockSync] Found inventory transactions since={} transactionCount={}",
+                "[LazadaStockSync] Resolved stock documents changedSince={} changedUntil={} variantCount={} warehouseCount={}",
                 changedSince,
-                transactions.size()
+                effectiveChangedUntil,
+                variantIds.size(),
+                warehouseIds.size()
         );
         return new ChangedScope(variantIds, warehouseIds);
     }
 
     private List<InventoryItem> scopeInventoryItems(List<InventoryItem> inventoryItems,
                                                     ChangedScope changedScope,
-                                                    OffsetDateTime changedSince) {
+                                                    OffsetDateTime changedSince,
+                                                    UUID defaultWarehouseId,
+                                                    String defaultWarehouseCode) {
         if (changedSince == null) {
             return inventoryItems;
         }
@@ -193,7 +213,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                 .toList();
 
         boolean hasWarehouseCode = warehouseScopedItems.stream()
-                .anyMatch(item -> resolveWarehouseCode(item.getWarehouse()) != null);
+                .anyMatch(item -> resolveWarehouseCode(item.getWarehouse(), defaultWarehouseId, defaultWarehouseCode) != null);
         log.info(
                 "[LazadaStockSync] Scoped inventory items changedSince={} originalItemCount={} scopedItemCount={} hasWarehouseCode={}",
                 changedSince,
@@ -228,11 +248,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         );
 
         String response = lazadaApiClient.executePost(
-                API_PATH,
-                params,
-                credential.getAccessToken(),
-                tokenExpiresAt(credential)
-        );
+                credential.getChannel().getId(), API_PATH, params);
         ensureSuccess(response);
         log.info(
                 "[LazadaStockSync] Lazada API success api={} batchSkuCount={} responseLength={}",
@@ -250,7 +266,10 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         return batchMappings.size();
     }
 
-    private void logSkuChange(ChannelProductVariant mapping, List<InventoryItem> inventoryItems) {
+    private void logSkuChange(ChannelProductVariant mapping,
+                              List<InventoryItem> inventoryItems,
+                              UUID defaultWarehouseId,
+                              String defaultWarehouseCode) {
         String productName = mapping.getVariant().getProduct() == null
                 ? null
                 : mapping.getVariant().getProduct().getName();
@@ -266,7 +285,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                         .map(item -> Map.of(
                                 "warehouseId", String.valueOf(item.getWarehouse().getId()),
                                 "warehouseName", item.getWarehouse().getName(),
-                                "warehouseCode", String.valueOf(resolveWarehouseCode(item.getWarehouse())),
+                                "warehouseCode", String.valueOf(resolveWarehouseCode(item.getWarehouse(), defaultWarehouseId, defaultWarehouseCode)),
                                 "quantityOnHand", item.getQuantityOnHand() == null ? 0 : item.getQuantityOnHand(),
                                 "reservedQuantity", item.getReservedQuantity() == null ? 0 : item.getReservedQuantity(),
                                 "sellableQuantity", availableQuantity(item)
@@ -275,7 +294,10 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         );
     }
 
-    private String buildSkuPayload(ChannelProductVariant mapping, List<InventoryItem> inventoryItems) {
+    private String buildSkuPayload(ChannelProductVariant mapping,
+                                   List<InventoryItem> inventoryItems,
+                                   UUID defaultWarehouseId,
+                                   String defaultWarehouseCode) {
         StringBuilder payload = new StringBuilder()
                 .append("<Sku>")
                 .append("<ItemId>").append(escapeXml(mapping.getChannelProduct().getExternalProductId())).append("</ItemId>")
@@ -287,7 +309,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         }
 
         List<WarehouseQuantity> warehouseQuantities = inventoryItems.stream()
-                .map(item -> new WarehouseQuantity(resolveWarehouseCode(item.getWarehouse()), availableQuantity(item)))
+                .map(item -> new WarehouseQuantity(resolveWarehouseCode(item.getWarehouse(), defaultWarehouseId, defaultWarehouseCode), availableQuantity(item)))
                 .filter(item -> item.warehouseCode() != null && !item.warehouseCode().isBlank())
                 .toList();
 
@@ -330,7 +352,14 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         }
     }
 
-    private String resolveWarehouseCode(Warehouse warehouse) {
+    private String resolveWarehouseCode(Warehouse warehouse, UUID defaultWarehouseId, String defaultWarehouseCode) {
+        if (defaultWarehouseCode != null
+                && defaultWarehouseId != null
+                && warehouse != null
+                && defaultWarehouseId.equals(warehouse.getId())) {
+            return defaultWarehouseCode;
+        }
+
         String address = warehouse == null ? null : warehouse.getAddress();
         if (address == null) {
             return null;
@@ -347,6 +376,47 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
             code = code.substring(0, separatorIndex).trim();
         }
         return code.isBlank() ? null : code;
+    }
+
+    private UUID resolveDefaultWarehouseId(ChannelCredential credential) {
+        Object warehouseId = credential.getChannel() == null || credential.getChannel().getMetadata() == null
+                ? null
+                : credential.getChannel().getMetadata().get("defaultWarehouseId");
+        if (warehouseId == null || warehouseId.toString().isBlank()) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(warehouseId.toString());
+        } catch (IllegalArgumentException ignored) {
+            log.warn(
+                    "[LazadaStockSync] Ignore invalid defaultWarehouseId={} channelId={}",
+                    warehouseId,
+                    credential.getChannel() == null ? null : credential.getChannel().getId()
+            );
+            return null;
+        }
+    }
+
+    private String resolveDefaultWarehouseCode(ChannelCredential credential, UUID defaultWarehouseId) {
+        if (defaultWarehouseId == null
+                || credential.getChannel() == null
+                || credential.getChannel().getMetadata() == null) {
+            return null;
+        }
+
+        Object warehouseCode = credential.getChannel().getMetadata().get("lazadaWarehouseCode");
+        if (warehouseCode == null || warehouseCode.toString().isBlank()) {
+            return null;
+        }
+        return warehouseCode.toString().trim();
+    }
+
+    private boolean matchesDefaultWarehouse(InventoryItem item, UUID defaultWarehouseId) {
+        if (defaultWarehouseId == null) {
+            return true;
+        }
+        return item.getWarehouse() != null && defaultWarehouseId.equals(item.getWarehouse().getId());
     }
 
     private int availableQuantity(InventoryItem inventoryItem) {

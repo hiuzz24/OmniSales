@@ -7,9 +7,17 @@
     "test": "playwright test",
     "test:api": "playwright test --project=api",
     "test:e2e": "playwright test --project=chromium",
-    "test:headed": "playwright test --headed"
+    "test:headed": "playwright test --headed",
+    "test:clean": "node scripts/cleanup-test-data.js",
+    "db:backup": "node scripts/backup-db.js",
+    "db:dry-run": "node scripts/dry-run-counts.js",
+    "db:delete-test": "node scripts/delete-test-data.js",
+    "posttest": "node scripts/cleanup-test-data.js"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.61.1",
+    "dotenv": "^17.4.2",
+    "pg": "^8.16.0",
+    "xlsx": "^0.18.5"
   }
 }

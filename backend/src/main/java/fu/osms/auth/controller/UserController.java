@@ -5,10 +5,13 @@ import fu.osms.auth.dto.request.UpdateProfileRequest;
 import fu.osms.auth.dto.request.UserRequest;
 import fu.osms.auth.dto.response.UserProfileResponse;
 import fu.osms.auth.dto.response.UserResponse;
+import fu.osms.auth.dto.response.UserInviteResponse;
 import fu.osms.auth.service.UserService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -89,6 +92,28 @@ public class UserController {
         log.info("Changing password for: {}", email);
         userService.changePassword(email, request.getOldPassword(), request.getNewPassword());
         return ResponseEntity.ok(ApiResponse.success("Đổi mật khẩu thành công", null));
+    }
+
+    @PostMapping("/{id}/cancel-invite")
+    public ResponseEntity<ApiResponse<Void>> cancelInvite(@PathVariable UUID id) {
+        log.info("Cancelling invitation for user ID: {}", id);
+        userService.cancelInvite(id);
+        return ResponseEntity.ok(ApiResponse.success("Hủy lời mời thành công", null));
+    }
+
+    @GetMapping("/invitations")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<List<UserInviteResponse>>> getInvitations() {
+        log.info("Fetching all member invitations");
+        return ResponseEntity.ok(ApiResponse.success(userService.getInvitations()));
+    }
+
+    @PostMapping("/invitations/{id}/cancel")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> cancelInviteByToken(@PathVariable UUID id) {
+        log.info("Cancelling invitation for token ID: {}", id);
+        userService.cancelInviteByTokenId(id);
+        return ResponseEntity.ok(ApiResponse.success("Hủy lời mời thành công", null));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

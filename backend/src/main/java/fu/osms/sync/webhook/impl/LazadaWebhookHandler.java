@@ -13,6 +13,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.List;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
@@ -40,18 +41,17 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
         if (appSecret == null || appSecret.isBlank()) {
             return true;
         }
-        String signature = headers.get("authorization").trim().toLowerCase();
-        log.info("[signature]:{}",signature);
-        if (signature.isBlank()) {
+        String signature = headers.get("authorization");
+        if (signature == null || signature.isBlank()) {
             return false;
         }
         try {
+            String normalizedSignature = normalizeAuthorizationSignature(signature);
             String base = appKey + rawBody;
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(appSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             String calculated = HexFormat.of().formatHex(mac.doFinal(base.getBytes(StandardCharsets.UTF_8))).toLowerCase();
-            log.info("[calculated]:{}",calculated);
-            return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8));
+            return MessageDigest.isEqual(calculated.getBytes(StandardCharsets.UTF_8), normalizedSignature.getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             return false;
         }
@@ -59,32 +59,118 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public String extractEventType(Map<String, String> headers, Map<String, Object> payload) {
-        Object type = firstPresent(payload, "message_type", "event_type", "type", "topic");
-        return type != null ? type.toString().toUpperCase() : "UNKNOWN";
+        Object messageType = firstPresent(payload, "message_type");
+        if (messageType == null) {
+            Map<String, Object> data = dataPayload(payload);
+            if (firstPresent(data, "sellableQuantity", "sellableStock", "availableStock", "quantity", "stock") != null) {
+                return "INVENTORY_UPDATE";
+            }
+            if (firstPresent(data, "item_id", "itemId", "product_id", "productId", "sku_id", "seller_sku") != null) {
+                return "PRODUCT_UPDATE";
+            }
+            return "UNKNOWN";
+        }
+        String type = messageType.toString();
+        if ("0".equals(type)) {
+            return "TRADE_ORDER";
+        }
+        if ("10".equals(type)) {
+            return "REVERSE_ORDER";
+        }
+        if ("3".equals(type)) {
+            return "PRODUCT_CREATE";
+        }
+        if ("4".equals(type)) {
+            return "PRODUCT_UPDATE";
+        }
+        if ("5".equals(type)) {
+            return "PRODUCT_DELETE";
+        }
+        if ("6".equals(type)) {
+            return "INVENTORY_UPDATE";
+        }
+        return type;
     }
 
     @Override
     public String extractExternalEventId(Map<String, String> headers, Map<String, Object> payload, String rawBody) {
-        Object eventId = firstPresent(payload, "message_id", "event_id", "id", "order_id", "trade_order_id");
-        if (eventId != null && !eventId.toString().isBlank()) {
-            return eventId.toString();
-        }
         return "lazada-" + sha256(rawBody);
     }
 
     @Override
+    public boolean shouldIgnore(Map<String, Object> payload) {
+        Object sellerId = firstPresent(payload, "seller_id", "sellerId");
+        if (sellerId == null) {
+            sellerId = firstPresent(dataPayload(payload), "seller_id", "sellerId");
+        }
+        return "200185074242".equals(String.valueOf(sellerId));
+    }
+
+    @Override
     public Optional<Channel> resolveChannel(Map<String, String> headers, Map<String, Object> payload) {
-        Object accountId = firstPresent(payload, "account_id", "seller_id", "user_id");
+        Object accountId = firstPresent(payload, "seller_id", "sellerId", "account_id", "accountId");
+        if (accountId == null) {
+            accountId = firstPresent(dataPayload(payload), "seller_id", "sellerId", "account_id", "accountId");
+        }
         if (accountId == null) {
             return Optional.empty();
         }
-        return channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA).stream()
-                .filter(channel -> channel.getMetadata() != null
-                        && accountId.toString().equals(String.valueOf(channel.getMetadata().get("accountId"))))
+        if(accountId.equals("200185074242")){
+            return Optional.empty();
+        }
+        String resolvedAccountId = accountId.toString().trim();
+        List<Channel> lazadaChannels = channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA);
+        Optional<Channel> matchedChannel = lazadaChannels.stream()
+                .filter(channel -> matchesLazadaChannel(channel, resolvedAccountId))
                 .findFirst();
+        if (matchedChannel.isPresent()) {
+            return matchedChannel;
+        }
+        if (lazadaChannels.size() == 1) {
+            Channel fallbackChannel = lazadaChannels.get(0);
+            log.warn("[LazadaWebhook] Cannot match seller_id={} to channel metadata, fallback to only active Lazada channelId={}",
+                    resolvedAccountId, fallbackChannel.getId());
+            return Optional.of(fallbackChannel);
+        }
+        log.warn("[LazadaWebhook] Cannot resolve channel for seller_id={} activeLazadaChannelCount={}",
+                resolvedAccountId, lazadaChannels.size());
+        return Optional.empty();
+    }
+
+    private boolean matchesLazadaChannel(Channel channel, String resolvedAccountId) {
+        if (channel.getMetadata() == null || resolvedAccountId == null || resolvedAccountId.isBlank()) {
+            return false;
+        }
+        Object accountId = channel.getMetadata().get("accountId");
+        Object accountName = channel.getMetadata().get("accountName");
+        return resolvedAccountId.equals(String.valueOf(accountId))
+                || resolvedAccountId.equals(String.valueOf(accountName))
+                || ("Lazada-" + resolvedAccountId).equals(channel.getDisplayName());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> dataPayload(Map<String, Object> payload) {
+        Object data = payload == null ? null : payload.get("data");
+        if (data instanceof Map<?, ?> dataMap) {
+            return (Map<String, Object>) dataMap;
+        }
+        return Map.of();
+    }
+
+    private String normalizeAuthorizationSignature(String signature) {
+        String normalized = signature.trim()
+                .toLowerCase()
+                .replace("sha256=", "");
+        String[] tokens = normalized.split("\\s+");
+        String candidate = tokens.length == 0 ? normalized : tokens[tokens.length - 1];
+        String hexOnly = candidate.replaceAll("[^0-9a-f]", "");
+        return hexOnly.length() > 64 ? hexOnly.substring(hexOnly.length() - 64) : hexOnly;
     }
 
     private Object firstPresent(Map<String, Object> payload, String... keys) {
+        if (payload == null) {
+            return null;
+        }
         for (String key : keys) {
             Object value = payload.get(key);
             if (value != null) {

@@ -9,8 +9,8 @@ import fu.osms.channel.dto.response.ChannelResponse;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
-import fu.osms.sync.lazada.dto.LazadaSyncTask;
-import fu.osms.sync.lazada.service.LazadaSyncTaskDispatcher;
+import fu.osms.sync.service.ChannelLocalSyncService;
+import fu.osms.sync.service.ChannelRemoteSyncService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,7 +26,8 @@ import java.util.UUID;
 public class ChannelController {
 
     private final ChannelService channelService;
-    private final LazadaSyncTaskDispatcher lazadaSyncTaskDispatcher;
+    private final ChannelLocalSyncService channelLocalSyncService;
+    private final ChannelRemoteSyncService channelRemoteSyncService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ChannelResponse>> create(@Valid @RequestBody ChannelRequest request) {
@@ -71,7 +72,19 @@ public class ChannelController {
     }
     @PostMapping("/{id}/sync")
     public ResponseEntity<ApiResponse<ChannelImportSyncResponse>> sync(@PathVariable UUID id) {
-        ChannelImportSyncResponse response = lazadaSyncTaskDispatcher.dispatch(LazadaSyncTask.localChanges(id));
-        return ResponseEntity.ok(ApiResponse.success("Đồng bộ kênh thành công", response));
+        ChannelImportSyncResponse response = channelLocalSyncService.syncLocalChanges(id);
+        return ResponseEntity.ok(ApiResponse.success("Đồng bộ từ ứng dụng lên sàn thành công", response));
+    }
+
+    @PostMapping("/{id}/sync/from-app")
+    public ResponseEntity<ApiResponse<ChannelImportSyncResponse>> syncFromApp(@PathVariable UUID id) {
+        ChannelImportSyncResponse response = channelLocalSyncService.syncLocalChanges(id);
+        return ResponseEntity.ok(ApiResponse.success("Đồng bộ từ ứng dụng lên sàn thành công", response));
+    }
+
+    @PostMapping("/{id}/sync/from-marketplace")
+    public ResponseEntity<ApiResponse<ChannelImportSyncResponse>> syncFromMarketplace(@PathVariable UUID id) {
+        ChannelImportSyncResponse response = channelRemoteSyncService.syncRemoteChanges(id);
+        return ResponseEntity.ok(ApiResponse.success("Đồng bộ từ sàn về ứng dụng thành công", response));
     }
 }

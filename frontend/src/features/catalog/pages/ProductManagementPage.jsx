@@ -8,7 +8,25 @@ import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';
 import ExportProductsModal from '../components/ExportProductsModal';
 import ImportProductsModal from '../components/ImportProductsModal';
+import MarketplaceSyncButton from '../../inventory/pages/components/MarketplaceSyncButton';
 import styles from './ProductManagementPage.module.css';
+
+const PLATFORM_LABELS = {
+  LAZADA: 'Lazada',
+  SHOPIFY: 'Shopify',
+  TIKTOK: 'TikTok Shop',
+};
+
+const formatCount = (value) => Number(value ?? 0).toLocaleString('vi-VN');
+
+const buildProductSyncMessage = ({ channel, direction, result }) => {
+  const channelLabel = `${PLATFORM_LABELS[channel.platform] ?? channel.platform} - ${channel.displayName ?? 'Chưa đặt tên'}`;
+  if (direction === 'from-marketplace') {
+    return `Đã đồng bộ ${channelLabel}: lấy được ${formatCount(result?.productCount)} sản phẩm và ${formatCount(result?.variantCount)} sản phẩm con từ sàn.`;
+  }
+
+  return `Đã đồng bộ ${channelLabel}: đẩy ${formatCount(result?.productCount)} sản phẩm và ${formatCount(result?.pushedVariantCount)} SKU tồn kho lên sàn.`;
+};
 
 const ProductManagementPage = () => {
   const [searchInput, setSearchInput] = useState('');
@@ -23,6 +41,10 @@ const ProductManagementPage = () => {
 
   const actions = (
     <>
+      <MarketplaceSyncButton
+        getSuccessMessage={buildProductSyncMessage}
+        onSynced={() => setTableRefreshKey((k) => k + 1)}
+      />
       <button
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.SYNC_HISTORY)}
@@ -75,7 +97,7 @@ const ProductManagementPage = () => {
         onPlatformChange={setPlatformFilter}
       />
       <ProductTable
-        key={tableRefreshKey}
+        key={`${tableRefreshKey}-${debouncedKeyword}-${statusFilter}-${platformFilter}`}
         keyword={debouncedKeyword}
         statusFilter={statusFilter}
         platformFilter={platformFilter}

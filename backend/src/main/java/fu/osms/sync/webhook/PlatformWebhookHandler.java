@@ -15,5 +15,9 @@ public interface PlatformWebhookHandler {
 
     String extractExternalEventId(Map<String, String> headers, Map<String, Object> payload, String rawBody);
 
+    default boolean shouldIgnore(Map<String, Object> payload) {
+        return false;
+    }
+
     Optional<Channel> resolveChannel(Map<String, String> headers, Map<String, Object> payload);
 }

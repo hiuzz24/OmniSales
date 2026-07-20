@@ -4,6 +4,8 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.channel.entity.Channel;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.inventory.mapper.InventoryTransactionDTOMapper;
+import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.sync.dto.SyncLogResponse;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.mapper.SyncLogMapper;
@@ -30,6 +32,8 @@ public class SyncLogServiceImpl implements SyncLogService {
 
     private final SyncLogRepository syncLogRepository;
     private final SyncLogMapper syncLogMapper;
+    private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final InventoryTransactionDTOMapper inventoryTransactionDTOMapper;
 
     @Override
     public PageResponse<SyncLogResponse> search(SyncStatus status, UUID channelId, int page, int size) {
@@ -49,7 +53,7 @@ public class SyncLogServiceImpl implements SyncLogService {
         Page<SyncLog> syncLogPage = syncLogRepository.findAll(spec, pageable);
 
         List<SyncLogResponse> content = syncLogPage.getContent().stream()
-                .map(syncLogMapper::toResponse)
+                .map(this::toResponseWithInventoryChanges)
                 .collect(Collectors.toList());
 
         return PageResponse.<SyncLogResponse>builder()
@@ -61,5 +65,17 @@ public class SyncLogServiceImpl implements SyncLogService {
                 .first(syncLogPage.isFirst())
                 .last(syncLogPage.isLast())
                 .build();
+    }
+
+    private SyncLogResponse toResponseWithInventoryChanges(SyncLog syncLog) {
+        SyncLogResponse response = syncLogMapper.toResponse(syncLog);
+        response.setInventoryChanges(
+                inventoryTransactionRepository
+                        .findByReferenceTypeAndReferenceIdWithDetails("ADJUSTMENT", syncLog.getId())
+                        .stream()
+                        .map(inventoryTransactionDTOMapper::toDto)
+                        .toList()
+        );
+        return response;
     }
 }

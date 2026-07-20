@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   PackagePlus,
   Printer,
+  RefreshCw,
   Save,
   Undo2,
 } from 'lucide-react';
@@ -32,6 +33,7 @@ import {
 } from '../components/inventoryDocumentListUtils';
 import InventoryExportModal from '../components/InventoryExportModal';
 import { formatExportDateTime, getStatusLabel } from '../components/inventoryExcelExport';
+import { printStockReceiveReceipt } from './stockReceivePrintTemplate';
 
 const STATUS_CONFIG = {
   CONFIRMED: { label: 'Hoàn thành', icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
@@ -119,7 +121,7 @@ const StatusBadge = ({ status }) => {
   return <Badge {...config} />;
 };
 
-const ActionMenu = ({ receipt, onComplete, onRefresh, confirm }) => {
+const ActionMenu = ({ receipt, onComplete, onRefresh, confirm, onPrint }) => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -167,7 +169,7 @@ const ActionMenu = ({ receipt, onComplete, onRefresh, confirm }) => {
           </ActionMenuItem>
         </>
       )}
-      <ActionMenuItem onClick={() => { setOpen(false); toast.info('In phiếu đang được phát triển'); }}>
+      <ActionMenuItem onClick={() => { setOpen(false); onPrint(receipt); }}>
         <Printer size={14} /> In phiếu
       </ActionMenuItem>
     </ActionMenuShell>
@@ -184,6 +186,7 @@ export default function StockReceivePage() {
   const [statistics, setStatistics] = useState({ totalCount: 0, confirmedCount: 0, draftCount: 0, cancelledCount: 0 });
   const [pagination, setPagination] = useState({ page: 0, size: 10, totalPages: 1, totalElements: 0 });
   const [exportOpen, setExportOpen] = useState(false);
+  const [syncingMarketplace, setSyncingMarketplace] = useState(false);
 
   const fetchStatistics = async () => {
     try {
@@ -225,7 +228,8 @@ export default function StockReceivePage() {
   };
 
   useEffect(() => {
-    refreshData();
+    const timer = window.setTimeout(refreshData, 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page]);
 
@@ -247,6 +251,41 @@ export default function StockReceivePage() {
     return filterReceiptRows(Array.isArray(data.content) ? data.content : []);
   };
 
+  const handlePrintReceipt = async (receipt) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Không thể mở cửa sổ in. Vui lòng cho phép popup cho trang này.');
+      return;
+    }
+
+    printWindow.document.write('<p style="font-family: Arial, sans-serif; padding: 24px;">Đang tải dữ liệu phiếu nhập...</p>');
+    try {
+      const response = await stockReceiveService.getReceiptById(receipt.id);
+      printStockReceiveReceipt(getResponseData(response), printWindow);
+    } catch (error) {
+      printWindow?.close();
+      toast.error(error?.response?.data?.message || error?.message || 'Không thể tải dữ liệu in phiếu nhập.');
+    }
+  };
+
+  const handleSyncMarketplaceInventory = async () => {
+    if (syncingMarketplace) return;
+    setSyncingMarketplace(true);
+    try {
+      const response = await stockReceiveService.syncPendingMarketplaceInventory();
+      const data = getResponseData(response);
+      const count = Number(data.syncedVariantCount ?? 0);
+      toast.success(count > 0
+        ? `Đã đồng bộ tồn kho ${formatNumber(count)} SKU từ phiếu nhập lên các sàn liên kết.`
+        : 'Không có SKU phiếu nhập nào cần đồng bộ.');
+      await refreshData();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || 'Không thể đồng bộ tồn kho phiếu nhập lên sàn.');
+    } finally {
+      setSyncingMarketplace(false);
+    }
+  };
+
   const stats = [
     { key: 'total', label: 'Tổng phiếu', value: statistics.totalCount, icon: FileText, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
     { key: 'confirmed', label: 'Hoàn thành', value: statistics.confirmedCount, icon: CheckCircle2, color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
@@ -266,7 +305,7 @@ export default function StockReceivePage() {
       <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
       <td style={tableCellStyle}>{formatDate(receipt.createdAt)}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right' }}>
-        <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} />
+        <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} onPrint={handlePrintReceipt} />
       </td>
     </tr>
   ));
@@ -286,6 +325,31 @@ export default function StockReceivePage() {
         createLabel="Tạo phiếu nhập"
         onCreate={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
         onExport={() => setExportOpen(true)}
+        extraActions={(
+          <button
+            type="button"
+            onClick={handleSyncMarketplaceInventory}
+            disabled={syncingMarketplace}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              height: 40,
+              padding: '0 14px',
+              border: '1px solid #bfdbfe',
+              borderRadius: 12,
+              background: syncingMarketplace ? '#eff6ff' : '#2563eb',
+              color: syncingMarketplace ? '#1d4ed8' : '#ffffff',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: syncingMarketplace ? 'not-allowed' : 'pointer',
+              boxShadow: syncingMarketplace ? 'none' : '0 8px 18px rgba(37, 99, 235, 0.22)',
+            }}
+          >
+            <RefreshCw size={15} style={{ animation: syncingMarketplace ? 'spin 1s linear infinite' : undefined }} />
+            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn kho'}
+          </button>
+        )}
         stats={stats}
         filters={(
           <>

@@ -15,7 +15,7 @@ import java.util.UUID;
 @Builder
 public class SupplierRequest {
 
-    @NotNull(message = "Shop ID must not be null")
+//    @NotNull(message = "Shop ID must not be null")
 
     @NotBlank(message = "Supplier name must not be blank")
     @Size(max = 255)

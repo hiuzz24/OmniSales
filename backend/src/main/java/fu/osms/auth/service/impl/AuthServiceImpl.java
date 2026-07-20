@@ -5,6 +5,7 @@ import fu.osms.audit.repository.AuditLogRepository;
 import fu.osms.auth.dto.request.LoginRequest;
 import fu.osms.auth.dto.request.ChangePasswordRequest;
 import fu.osms.auth.dto.request.ResetPasswordRequest;
+import fu.osms.auth.dto.request.AcceptInviteRequest;
 import fu.osms.auth.dto.response.AuthResponse;
 import fu.osms.auth.dto.response.ResetPasswordResponse;
 import fu.osms.auth.dto.response.TokenPairDTO;
@@ -17,6 +18,7 @@ import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.EmailService;
 import fu.osms.config.CustomUserDetailService;
+import fu.osms.system.service.SystemSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,8 +58,8 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuditLogRepository auditLogRepository;
     private final RoleRepository roleRepository;
-    @Value("${app.security.max-failed-attempts}")
-    private int maxFailedAttempts;
+    private final UserInviteTokenRepository userInviteTokenRepository;
+    private final SystemSettingService systemSettingService;
 
     @Value("${app.security.lock-time-duration}")
     private int lockTimeDuration;
@@ -91,14 +93,16 @@ public class AuthServiceImpl implements AuthService {
             int attempts = user.getFailedLoginAttempts() + 1;
             user.setFailedLoginAttempts(attempts);
 
-            if(attempts >= maxFailedAttempts){
+            int maxFailed = systemSettingService.getInteger("max_failed_login_attempts", 5);
+
+            if(attempts >= maxFailed){
                 user.setLockedUntil(OffsetDateTime.now().plusMinutes(lockTimeDuration));
                 user.setStatus(UserStatus.LOCKED);
                 userRepository.save(user);
-                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Bạn đã nhập sai " + maxFailedAttempts + " lần. Tài khoản bị khóa " + lockTimeDuration + " phút.");
+                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Bạn đã nhập sai " + maxFailed + " lần. Tài khoản bị khóa " + lockTimeDuration + " phút.");
             }else{
                 userRepository.save(user);
-                throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai mật khẩu. Bạn còn " + (maxFailedAttempts - attempts) + " lần thử.");
+                throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai mật khẩu. Bạn còn " + (maxFailed - attempts) + " lần thử.");
             }
         }
 
@@ -197,9 +201,184 @@ public class AuthServiceImpl implements AuthService {
         emailService.sendForgetPasswordEmail(user.getEmail(), tokenStr);
 
     }
+    @Override
+    @Transactional
+    public void processInviteUser(String email, String roleName) {
+        String normRole = roleName.trim().toUpperCase();
+        if ("SALES STAFF".equals(normRole)) {
+            normRole = "SALES";
+        } else if ("OPERATIONS STAFF".equals(normRole)) {
+            normRole = "OPERATIONS";
+        }
+
+        if (!"SALES".equals(normRole) && !"OPERATIONS".equals(normRole)) {
+            throw new IllegalArgumentException("Vai trò mời không hợp lệ. Chỉ có thể mời vai trò Sales Staff hoặc Operations Staff");
+        }
+
+        // Validate based on invitation status history
+        List<UserInviteToken> tokens = userInviteTokenRepository.findByEmailIgnoreCase(email);
+        for (UserInviteToken t : tokens) {
+            String status = t.getStatus();
+            boolean isAccepted = "ACCEPTED".equalsIgnoreCase(status) || t.getUsedAt() != null;
+            boolean isPending = !"CANCELLED".equalsIgnoreCase(status) && t.getUsedAt() == null && t.getExpiresAt().isAfter(OffsetDateTime.now());
+
+            if (isAccepted) {
+                throw new IllegalArgumentException("Email này đã được mời và đã chấp nhận lời mời (Accepted)");
+            }
+            if (isPending) {
+                throw new IllegalArgumentException("Email này đang có một lời mời chưa xác nhận (Pending)");
+            }
+        }
+
+        Optional<User> existingUser = userRepository.findByEmail(email);
+        User user;
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+            if (user.getStatus() == UserStatus.ACTIVE) {
+                throw new IllegalArgumentException("Email này đã được sử dụng bởi một tài khoản đang hoạt động");
+            }
+            user.setFullName("Chờ kích hoạt");
+            user.setDeletedAt(null);
+            userRepository.save(user);
+        } else {
+            user = User.builder()
+                    .email(email)
+                    .fullName("Chờ kích hoạt")
+                    .passwordHash(passwordEncoder.encode(java.util.UUID.randomUUID().toString()))
+                    .status(UserStatus.INACTIVE)
+                    .build();
+            userRepository.save(user);
+        }
+
+        Role dbRole = roleRepository.findByName(normRole)
+                .orElseThrow(() -> new IllegalArgumentException("Vai trò không tồn tại trong hệ thống: " + roleName));
+
+        // Ensure user role matches dbRole
+        List<UserRole> existingRoles = userRoleRepository.findByUserId(user.getId());
+        if (!existingRoles.isEmpty()) {
+            UserRole ur = existingRoles.get(0);
+            ur.setRole(dbRole);
+            ur.setGrantedAt(OffsetDateTime.now());
+            userRoleRepository.save(ur);
+        } else {
+            UserRole userRole = UserRole.builder()
+                    .user(user)
+                    .role(dbRole)
+                    .grantedAt(OffsetDateTime.now())
+                    .build();
+            userRoleRepository.save(userRole);
+        }
+
+        String tokenStr = UUID.randomUUID().toString();
+
+        UserInviteToken inviteToken = UserInviteToken.builder()
+                .email(email)
+                .roleName(normRole)
+                .token(tokenStr)
+                .expiresAt(OffsetDateTime.now().plusMinutes(15))
+                .status("PENDING")
+                .build();
+        userInviteTokenRepository.save(inviteToken);
+        
+        log.info("INVITATION TOKEN GENERATED: {}", tokenStr);
+        System.out.println("INVITATION LINK: http://localhost:5174/inviteUser?token=" + tokenStr);
+
+        emailService.sendInviteEmail(email, tokenStr);
+    }
 
     @Override
-    public void validateResetToken(String tokenStr) {
+    public UserInviteToken validateInviteToken(String tokenStr) {
+        UserInviteToken inviteToken = userInviteTokenRepository.findByToken(tokenStr)
+                .orElseThrow(() -> new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng"));
+
+        if (inviteToken.getUsedAt() != null) {
+            throw new IllegalArgumentException("Liên kết đã được sử dụng");
+        }
+
+        if ("CANCELLED".equalsIgnoreCase(inviteToken.getStatus())) {
+            throw new IllegalArgumentException("Liên kết mời này đã bị hủy bởi quản trị viên");
+        }
+
+        if (inviteToken.getExpiresAt().isBefore(OffsetDateTime.now())) {
+            throw new IllegalArgumentException("Liên kết mời đã hết hạn (15 phút)");
+        }
+
+        return inviteToken;
+    }
+
+    @Override
+    @Transactional
+    public void acceptInvite(AcceptInviteRequest request) {
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException("Mật khẩu xác nhận không khớp");
+        }
+
+        if (!isValidPasswordFormat(request.getPassword())) {
+            throw new IllegalArgumentException("Mật khẩu mới không đúng định dạng quy định");
+        }
+
+        UserInviteToken inviteToken = validateInviteToken(request.getToken());
+
+        User user = userRepository.findByEmail(inviteToken.getEmail()).orElse(null);
+        if (user != null) {
+            if (user.getStatus() == UserStatus.ACTIVE) {
+                throw new IllegalArgumentException("Tài khoản với email này đã tồn tại và đang hoạt động");
+            }
+            user.setFullName(request.getFullName().trim());
+            user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+            user.setStatus(UserStatus.ACTIVE);
+            user.setDeletedAt(null);
+            user.setUpdatedAt(OffsetDateTime.now());
+            userRepository.save(user);
+        } else {
+            user = User.builder()
+                    .email(inviteToken.getEmail())
+                    .fullName(request.getFullName().trim())
+                    .passwordHash(passwordEncoder.encode(request.getPassword()))
+                    .status(UserStatus.ACTIVE)
+                    .build();
+            userRepository.save(user);
+        }
+
+        Role role = roleRepository.findByName(inviteToken.getRoleName())
+                .orElseThrow(() -> new IllegalArgumentException("Vai trò không tồn tại: " + inviteToken.getRoleName()));
+
+        List<UserRole> existingRoles = userRoleRepository.findByUserId(user.getId());
+        UserRole userRole;
+        if (!existingRoles.isEmpty()) {
+            userRole = existingRoles.get(0);
+            userRole.setRole(role);
+            userRole.setGrantedAt(OffsetDateTime.now());
+        } else {
+            userRole = UserRole.builder()
+                    .user(user)
+                    .role(role)
+                    .grantedAt(OffsetDateTime.now())
+                    .build();
+        }
+        userRoleRepository.save(userRole);
+
+        inviteToken.setUsedAt(OffsetDateTime.now());
+        inviteToken.setStatus("ACCEPTED");
+        userInviteTokenRepository.save(inviteToken);
+
+        AuditLog auditLog = new AuditLog();
+        auditLog.setActor(user);
+        auditLog.setActorEmail(user.getEmail());
+        auditLog.setAction("CREATE");
+        auditLog.setEntityType("USER");
+        auditLog.setEntityId(user.getId());
+        auditLog.setEntityName(user.getFullName());
+        Map<String, Object> changes = new HashMap<>();
+        changes.put("action", "ACCEPT_INVITE");
+        changes.put("role", role.getName());
+        auditLog.setChanges(changes);
+        auditLog.setPerformedAt(OffsetDateTime.now());
+        auditLogRepository.save(auditLog);
+    }
+
+    @Override
+    public void validateToken(String tokenStr) {
         PasswordResetToken token = tokenRepository.findByToken(tokenStr)
                 .orElseThrow(() -> new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng"));
 
@@ -410,4 +589,6 @@ public class AuthServiceImpl implements AuthService {
 
         refreshTokenRepository.revokeAllByUserId(userId);
     }
+
+
 }

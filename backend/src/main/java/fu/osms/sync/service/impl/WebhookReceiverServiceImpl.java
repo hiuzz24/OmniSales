@@ -10,11 +10,12 @@ import fu.osms.sync.dto.WebhookReceiveResult;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.mapper.WebhookEventMapper;
 import fu.osms.sync.repository.WebhookEventRepository;
-import fu.osms.sync.service.WebhookBusinessProcessor;
 import fu.osms.sync.service.WebhookReceiverService;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +24,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
@@ -33,6 +36,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WebhookReceiverServiceImpl implements WebhookReceiverService {
@@ -40,7 +44,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
     private final List<PlatformWebhookHandler> handlers;
     private final WebhookEventRepository webhookEventRepository;
     private final WebhookEventMapper webhookEventMapper;
-    private final WebhookBusinessProcessor webhookBusinessProcessor;
+    private final WebhookEventProcessingService webhookEventProcessingService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -55,18 +59,18 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
         }
 
         Map<String, Object> payload = parsePayload(rawBody);
+        if (handler.shouldIgnore(payload)) {
+            return WebhookReceiveResult.builder()
+                    .status("IGNORED")
+                    .message("Webhook ignored by handler rule")
+                    .build();
+        }
+
         String eventType = handler.extractEventType(headers, payload);
         String externalEventId = handler.extractExternalEventId(headers, payload, rawBody);
-
-        if (externalEventId != null) {
-            WebhookEvent existing = webhookEventRepository.findByPlatformAndExternalEventId(platform, externalEventId).orElse(null);
-            if (existing != null) {
-                return WebhookReceiveResult.builder()
-                        .webhookEventId(existing.getId())
-                        .status(existing.getStatus())
-                        .message("Duplicate webhook ignored")
-                        .build();
-            }
+        WebhookEvent existing = findExisting(platform, externalEventId);
+        if (existing != null) {
+            return duplicateResult(existing);
         }
 
         Channel channel = handler.resolveChannel(headers, payload).orElse(null);
@@ -78,7 +82,18 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                 .status("RECEIVED")
                 .rawPayload(payload)
                 .build();
-        event = webhookEventRepository.save(event);
+
+        try {
+            event = webhookEventRepository.saveAndFlush(event);
+        } catch (DataIntegrityViolationException e) {
+            if (externalEventId != null) {
+                return duplicateResult(platform, externalEventId);
+            }
+            throw e;
+        }
+
+        log.info("[WebhookReceiver] Persisted eventId={}, platform={}, eventType={}, channelId={}",
+                event.getId(), platform, eventType, channel == null ? null : channel.getId());
 
         if (channel == null) {
             event.setStatus("FAILED");
@@ -92,32 +107,35 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                     .build();
         }
 
-        try {
-            String resultStatus = webhookBusinessProcessor.process(event);
-            event.setStatus(resultStatus);
-            event.setProcessedAt(OffsetDateTime.now());
-            webhookEventRepository.save(event);
-            return WebhookReceiveResult.builder()
-                    .webhookEventId(event.getId())
-                    .status(event.getStatus())
-                    .message("Webhook processed")
-                    .build();
-        } catch (Exception e) {
-            event.setStatus("FAILED");
-            event.setErrorMessage(e.getMessage());
-            event.setProcessedAt(OffsetDateTime.now());
-            webhookEventRepository.save(event);
-            return WebhookReceiveResult.builder()
-                    .webhookEventId(event.getId())
-                    .status(event.getStatus())
-                    .message(e.getMessage())
-                    .build();
+        processAsyncAfterCommit(event.getId());
+        return WebhookReceiveResult.builder()
+                .webhookEventId(event.getId())
+                .status(event.getStatus())
+                .message("Webhook queued")
+                .build();
+    }
+
+    private void processAsyncAfterCommit(UUID eventId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            webhookEventProcessingService.processAsync(eventId);
+            return;
         }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                webhookEventProcessingService.processAsync(eventId);
+            }
+        });
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<WebhookEventResponse> search(PlatformType platform, String status, String eventType, UUID channelId, int page, int size) {
+    public PageResponse<WebhookEventResponse> search(PlatformType platform,
+                                                     String status,
+                                                     String eventType,
+                                                     UUID channelId,
+                                                     int page,
+                                                     int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "receivedAt"));
         Specification<WebhookEvent> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -141,6 +159,30 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
 
     private Map<PlatformType, PlatformWebhookHandler> handlerMap() {
         return handlers.stream().collect(Collectors.toMap(PlatformWebhookHandler::getPlatform, Function.identity()));
+    }
+
+    private WebhookEvent findExisting(PlatformType platform, String externalEventId) {
+        if (externalEventId == null) {
+            return null;
+        }
+        return webhookEventRepository.findByPlatformAndExternalEventId(platform, externalEventId).orElse(null);
+    }
+
+    private WebhookReceiveResult duplicateResult(WebhookEvent existing) {
+        return WebhookReceiveResult.builder()
+                .webhookEventId(existing.getId())
+                .status(existing.getStatus())
+                .message("Duplicate webhook ignored")
+                .build();
+    }
+
+    private WebhookReceiveResult duplicateResult(PlatformType platform, String externalEventId) {
+        return webhookEventRepository.findByPlatformAndExternalEventId(platform, externalEventId)
+                .map(this::duplicateResult)
+                .orElseGet(() -> WebhookReceiveResult.builder()
+                        .status("IGNORED")
+                        .message("Duplicate webhook ignored")
+                        .build());
     }
 
     private Map<String, Object> parsePayload(String rawBody) {

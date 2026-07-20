@@ -18,7 +18,6 @@ public class LazadaSignatureUtil {
                 query.append(key).append(value);
             }
         }
-
         return signWithHmacSha256(query.toString(), appSecret);
     }
 

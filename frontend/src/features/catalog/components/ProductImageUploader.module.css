@@ -277,6 +277,11 @@
   font-size: 13px;
 }
 
+.emptyState .errorText {
+  color: #dc2626;
+  font-weight: 500;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

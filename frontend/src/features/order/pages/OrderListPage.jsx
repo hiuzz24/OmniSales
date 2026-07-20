@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '../../../app/router/routes';
 import {
@@ -14,13 +14,14 @@ import channelApi from '../../../api/channelApi';
 import ExportOrdersModal from '../components/ExportOrdersModal';
 import styles from './OrderListPage.module.css';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',  icon: Clock,       color: 'orange'    },
   CONFIRMED:  { label: 'Đã xác nhận', icon: CheckCircle, color: 'blue'     },
   PROCESSING: { label: 'Đang xử lý',  icon: Package,     color: 'amber'    },
-  SHIPPED:    { label: 'Đang giao',    icon: Truck,       color: 'teal'    },
+  SHIPPED:    { label: 'Sẵn sàng giao', icon: Truck,       color: 'teal'    },
+  IN_TRANSIT: { label: 'Đang vận chuyển', icon: Truck,    color: 'sky'     },
   DELIVERED:  { label: 'Đã giao',      icon: CheckCircle, color: 'green'    },
   CANCELLED:  { label: 'Đã hủy',       icon: XCircle,     color: 'red'      },
 };
@@ -80,8 +81,8 @@ const OrderListPage = () => {
     }
   }, []);
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
+  const fetchOrders = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const params = {
         page,
@@ -100,7 +101,7 @@ const OrderListPage = () => {
       console.error('Failed to fetch orders:', error);
       setOrders([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [page, keyword, statusFilter, channelFilter, fromDate, toDate]);
 
@@ -116,6 +117,17 @@ const OrderListPage = () => {
   useEffect(() => { fetchChannels(); }, [fetchChannels]);
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  useEffect(() => {
+    const refreshInterval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchOrders({ silent: true });
+        fetchStats();
+      }
+    }, 15_000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [fetchOrders, fetchStats]);
 
   useEffect(() => { setPage(0); }, [keyword, statusFilter, channelFilter, fromDate, toDate]);
 
@@ -143,6 +155,10 @@ const OrderListPage = () => {
   };
 
   const getStatusConfig = (status) => STATUS_CONFIG[status] || { label: status, color: 'slate' };
+  const getStatusClassName = (status) => {
+    if (status === 'IN_TRANSIT') return 'statusInTransit';
+    return `status${status.charAt(0) + status.slice(1).toLowerCase()}`;
+  };
   const getPaymentConfig = (status) => PAYMENT_CONFIG[status] || { label: status, className: 'payUnpaid' };
 
   const getItemsSummary = (items) => {
@@ -224,7 +240,9 @@ const OrderListPage = () => {
           <select className={styles.select} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
             <option value="">Tất cả kênh</option>
             {channels.map((ch) => (
-              <option key={ch.id} value={ch.id}>{ch.name}</option>
+              <option key={ch.id} value={ch.id}>
+                {ch.name || ch.displayName || ch.platform || 'Kênh không tên'}
+              </option>
             ))}
           </select>
           <input
@@ -263,7 +281,7 @@ const OrderListPage = () => {
               <th style={{ textAlign: 'center' }}>Tổng tiền</th>
               <th>Trạng thái</th>
               <th>Thanh toán</th>
-              <th className={styles.thAction}></th>
+              <th className={styles.thAction}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -333,7 +351,7 @@ const OrderListPage = () => {
                       {formatCurrency(order.totalAmount)}
                     </td>
                     <td>
-                      <span className={`${styles.statusBadge} ${styles[`status${order.status.charAt(0) + order.status.slice(1).toLowerCase()}`]}`}>
+                      <span className={`${styles.statusBadge} ${styles[getStatusClassName(order.status)]}`}>
                         <StatusIcon size={11} />
                         {sc.label}
                       </span>

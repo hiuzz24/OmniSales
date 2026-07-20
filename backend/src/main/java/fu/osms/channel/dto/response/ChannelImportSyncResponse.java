@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -23,4 +24,5 @@ public class ChannelImportSyncResponse {
     private int pushedVariantCount;
     private String status;
     private String message;
+    private List<ChannelSyncDetailResponse> details;
 }

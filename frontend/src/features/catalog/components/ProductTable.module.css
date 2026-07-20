@@ -312,6 +312,66 @@
   font-size: 13px;
 }
 
+.marketplaceCell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 154px;
+}
+
+.marketplaceLinkBtn,
+.marketplaceLinkedBtn {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.marketplaceLinkBtn {
+  color: #075985;
+  background: linear-gradient(180deg, #f0f9ff, #e0f2fe);
+  border: 1px solid #bae6fd;
+  box-shadow: 0 8px 18px rgba(14, 165, 233, 0.12);
+}
+
+.marketplaceLinkedBtn {
+  color: #065f46;
+  background: linear-gradient(180deg, #ecfdf5, #d1fae5);
+  border: 1px solid #a7f3d0;
+  box-shadow: 0 8px 18px rgba(16, 185, 129, 0.12);
+}
+
+.marketplaceLinkBtn:hover,
+.marketplaceLinkedBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+.marketplaceLinkBtn:focus-visible,
+.marketplaceLinkedBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+}
+
+.marketplaceHint {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .statusWrapper {
   display: inline-block;
 }

@@ -40,6 +40,7 @@ public class OrderResponse {
     private UUID cancelledById;
     private String cancelledByName;
     private String cancelReason;
+    private Map<String, Object> platformMetadata;
     private Long version;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;

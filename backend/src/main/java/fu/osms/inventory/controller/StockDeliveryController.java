@@ -17,6 +17,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -124,5 +125,15 @@ public class StockDeliveryController {
     public ResponseEntity<ApiResponse<Object>> getDeliveryStatistics() {
         Object statistics = stockDeliveryService.getDeliveryStatistics();
         return ResponseEntity.ok(ApiResponse.success("Statistics retrieved successfully", statistics));
+    }
+
+    @PostMapping("/sync-marketplace-inventory")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> syncPendingMarketplaceInventory() {
+        int syncedVariantCount = stockDeliveryService.syncPendingMarketplaceInventory();
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đồng bộ tồn kho phiếu xuất lên các sàn thành công",
+                Map.of("syncedVariantCount", syncedVariantCount)
+        ));
     }
 }

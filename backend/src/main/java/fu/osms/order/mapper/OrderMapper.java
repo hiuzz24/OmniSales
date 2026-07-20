@@ -19,6 +19,7 @@ public interface OrderMapper {
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "cancelledBy", ignore = true)
     @Mapping(target = "cancelReason", ignore = true)
+    @Mapping(target = "platformMetadata", ignore = true)
     Order toEntity(OrderRequest request);
 
     @Mapping(target = "channelId", source = "channel.id")
@@ -47,5 +48,6 @@ public interface OrderMapper {
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "cancelledBy", ignore = true)
     @Mapping(target = "cancelReason", ignore = true)
+    @Mapping(target = "platformMetadata", ignore = true)
     void updateEntityFromRequest(OrderRequest request, @MappingTarget Order order);
 }

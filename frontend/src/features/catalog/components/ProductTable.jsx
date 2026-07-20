@@ -1,8 +1,8 @@
-import { Eye } from 'lucide-react';
+import { Eye, Link2, Settings2 } from 'lucide-react';
 import Badge from '../../../shared/components/Badge';
 import Pagination from '../../../shared/components/Pagination';
 import styles from './ProductTable.module.css';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import productApi from '../../../api/productApi';
 
@@ -25,6 +25,8 @@ const getStatusBadge = (status) => {
   }
 };
 
+const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN');
+
 const ActionButton = ({ product }) => {
   const navigate = useNavigate();
   return (
@@ -32,9 +34,27 @@ const ActionButton = ({ product }) => {
       className={styles.viewBtn}
       onClick={() => navigate(`/products/${product.id}`)}
       title="Xem chi tiết"
+      type="button"
     >
       <Eye size={16} />
       <span>Chi tiết</span>
+    </button>
+  );
+};
+
+const MarketplaceLinkButton = ({ product }) => {
+  const navigate = useNavigate();
+  const linkedCount = product.channels?.length || 0;
+  return (
+    <button
+      type="button"
+      className={linkedCount > 0 ? styles.marketplaceLinkedBtn : styles.marketplaceLinkBtn}
+      onClick={() => navigate(`/products/${product.id}/edit`, { state: { focusMarketplace: true } })}
+      aria-label={`Sửa liên kết sàn cho ${product.name || 'sản phẩm'}`}
+      title="Sửa liên kết sàn và cấu hình dữ liệu bắt buộc theo từng sàn"
+    >
+      {linkedCount > 0 ? <Settings2 size={15} /> : <Link2 size={15} />}
+      <span>{linkedCount > 0 ? `Sửa liên kết (${linkedCount})` : 'Liên kết sàn'}</span>
     </button>
   );
 };
@@ -54,37 +74,22 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
         setLoading(true);
         const response = await productApi.getAll(page, size, keyword, statusFilter, platformFilter);
         const responseData = response.data?.data || response.data || response;
-        if (responseData.content) {
-          setProducts(responseData.content);
-          const nextTotalElements = responseData.totalElements ?? responseData.total ?? responseData.content.length ?? 0;
-          setTotalElements(nextTotalElements);
-          setTotalPages(responseData.totalPages ?? Math.ceil(nextTotalElements / size));
-        } else if (Array.isArray(responseData)) {
-          setProducts(responseData);
-          setTotalElements(responseData.length);
-          setTotalPages(Math.ceil(responseData.length / size));
-        } else if (responseData.data) {
-          setProducts(responseData.data);
-          const nextTotalElements = responseData.totalElements ?? responseData.total ?? responseData.data.length ?? 0;
-          setTotalElements(nextTotalElements);
-          setTotalPages(responseData.totalPages ?? Math.ceil(nextTotalElements / size));
-        } else {
-          setProducts([]);
-          setTotalElements(0);
-          setTotalPages(0);
-        }
+        const content = responseData.content || responseData.data || (Array.isArray(responseData) ? responseData : []);
+        const nextTotalElements = responseData.totalElements ?? responseData.total ?? content.length ?? 0;
+        setProducts(content);
+        setTotalElements(nextTotalElements);
+        setTotalPages(responseData.totalPages ?? Math.ceil(nextTotalElements / size));
       } catch (error) {
-        console.error("Failed to fetch products:", error);
+        console.error('Failed to fetch products:', error);
+        setProducts([]);
+        setTotalElements(0);
+        setTotalPages(0);
       } finally {
         setLoading(false);
       }
     };
     fetchProducts();
   }, [page, size, keyword, statusFilter, platformFilter]);
-
-  useEffect(() => {
-    setPage(0);
-  }, [keyword, statusFilter, platformFilter]);
 
   const getStockClass = (totalStock) => {
     if (totalStock === 0) return styles.stockEmpty;
@@ -105,7 +110,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
           Danh sách sản phẩm
           <span className={styles.tableCount}>({totalElements})</span>
         </h3>
-        <button className={styles.addBtn} onClick={() => navigate('/products/create')}>
+        <button className={styles.addBtn} onClick={() => navigate('/products/create')} type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M12 5v14M5 12h14"/>
           </svg>
@@ -121,6 +126,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
               <th scope="col" className={styles.th}>SKU</th>
               <th scope="col" className={styles.th}>Danh mục</th>
               <th scope="col" className={styles.th}>Kênh bán</th>
+              <th scope="col" className={styles.th}>Liên kết sàn</th>
               <th scope="col" className={styles.th}>Giá bán</th>
               <th scope="col" className={`${styles.th} ${styles.thCenter}`}>Tồn kho</th>
               <th scope="col" className={styles.th}>Trạng thái</th>
@@ -130,7 +136,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
           <tbody className={styles.tbody}>
             {loading ? (
               <tr>
-                <td colSpan="8" className={styles.loadingCell}>
+                <td colSpan="9" className={styles.loadingCell}>
                   <div className={styles.loadingDots}>
                     <span/><span/><span/>
                   </div>
@@ -138,40 +144,38 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
               </tr>
             ) : products.length === 0 ? (
               <tr>
-                <td colSpan="8" className={styles.emptyCell}>
+                <td colSpan="9" className={styles.emptyCell}>
                   <div className={styles.emptyIcon}>
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                     </svg>
                   </div>
                   <p>Không có sản phẩm nào</p>
-                  <button onClick={() => navigate('/products/create')}>Thêm sản phẩm đầu tiên</button>
+                  <button onClick={() => navigate('/products/create')} type="button">Thêm sản phẩm đầu tiên</button>
                 </td>
               </tr>
             ) : (
-              products.map((product) => {
+              products.map((product, index) => {
                 const totalStock = product.variants?.reduce((sum, v) => sum + (v.availableQuantity || v.quantityOnHand || 0), 0) || 0;
+                const imageUrl = product.images?.find((img) => img.isPrimary)?.url
+                  || product.variants?.[0]?.images?.[0]?.url
+                  || product.images?.[0]?.url;
                 return (
-                  <tr key={product.id || Math.random()} className={styles.tr}>
+                  <tr key={product.id || product.sku || `product-${page}-${index}`} className={styles.tr}>
                     <td className={styles.td}>
                       <div className={styles.productCell}>
                         <div className={styles.productImage}>
-                          {(() => {
-                            const imgUrl = product.images?.find(img => img.isPrimary)?.url
-                              || product.variants?.[0]?.images?.[0]?.url
-                              || product.images?.[0]?.url;
-                            return imgUrl ? (
-                              <img src={imgUrl} alt={product.name} />
-                            ) : (
-                              <div className={styles.imagePlaceholder}>
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                  <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                                  <path d="M21 15l-5-5L5 21"/>
-                                </svg>
-                              </div>
-                            );
-                          })()}
+                          {imageUrl ? (
+                            <img src={imageUrl} alt={product.name || 'Sản phẩm'} />
+                          ) : (
+                            <div className={styles.imagePlaceholder}>
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                <circle cx="8.5" cy="8.5" r="1.5"/>
+                                <path d="M21 15l-5-5L5 21"/>
+                              </svg>
+                            </div>
+                          )}
                         </div>
                         <div className={styles.productInfo}>
                           <div className={styles.productName}>{product.name || 'N/A'}</div>
@@ -195,21 +199,29 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                     <td className={styles.td}>
                       <div className={styles.channels}>
                         {product.channels && product.channels.length > 0
-                          ? product.channels.map(channel => <span key={channel}>{getChannelBadge(channel)}</span>)
+                          ? product.channels.map((channel) => <span key={channel}>{getChannelBadge(channel)}</span>)
                           : <span className={styles.noChannel}>—</span>}
+                      </div>
+                    </td>
+                    <td className={styles.td}>
+                      <div className={styles.marketplaceCell}>
+                        <MarketplaceLinkButton product={product} />
+                        <span className={styles.marketplaceHint}>
+                          {product.channels?.length > 0 ? 'Dùng chung tồn kho' : 'Chọn sàn để bán'}
+                        </span>
                       </div>
                     </td>
                     <td className={styles.td}>
                       <div className={styles.price}>
                         {(() => {
                           if (!product.variants || product.variants.length === 0) return <span className={styles.priceNone}>—</span>;
-                          const prices = product.variants.map(v => v.price).filter(p => p != null);
+                          const prices = product.variants.map((v) => v.price).filter((p) => p != null);
                           if (prices.length === 0) return <span className={styles.priceNone}>—</span>;
                           const min = Math.min(...prices);
                           const max = Math.max(...prices);
                           return min === max
-                            ? <span>{min.toLocaleString('vi-VN')}đ</span>
-                            : <span>{min.toLocaleString('vi-VN')}đ — {max.toLocaleString('vi-VN')}đ</span>;
+                            ? <span>{formatMoney(min)}đ</span>
+                            : <span>{formatMoney(min)}đ — {formatMoney(max)}đ</span>;
                         })()}
                       </div>
                     </td>
@@ -219,7 +231,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                         <span className={styles.stockBar}>
                           <span
                             className={styles.stockBarFill}
-                            style={{ width: `${Math.min(100, (totalStock / 100) * 100)}%` }}
+                            style={{ width: `${Math.min(100, totalStock)}%` }}
                           />
                         </span>
                       </div>
@@ -249,46 +261,6 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
         itemLabel="sản phẩm"
         onPageChange={setPage}
       />
-      <div className={styles.tableFooter} hidden>
-        <div className={styles.paginationInfo}>
-          <span>Hiển thị </span>
-          <strong>{products.length > 0 ? (page * size) + 1 : 0}–{Math.min((page + 1) * size, totalElements)}</strong>
-          <span> / {totalElements} sản phẩm</span>
-        </div>
-        <div className={styles.paginationControls}>
-          <button
-            className={`${styles.pageBtn} ${styles.pageBtnNav}`}
-            disabled={page === 0}
-            onClick={() => setPage(prev => Math.max(0, prev - 1))}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-            Trước
-          </button>
-          <div className={styles.pageNumbers}>
-            {Array.from({ length: Math.min(5, Math.ceil(totalElements / size)) }, (_, i) => {
-              const pageNum = Math.max(0, Math.min(Math.ceil(totalElements / size) - 5, page - 2)) + i;
-              if (pageNum >= Math.ceil(totalElements / size)) return null;
-              return (
-                <button
-                  key={pageNum}
-                  className={`${styles.pageNumBtn} ${pageNum === page ? styles.pageNumActive : ''}`}
-                  onClick={() => setPage(pageNum)}
-                >
-                  {pageNum + 1}
-                </button>
-              );
-            })}
-          </div>
-          <button
-            className={`${styles.pageBtn} ${styles.pageBtnNav}`}
-            disabled={(page + 1) * size >= totalElements}
-            onClick={() => setPage(prev => prev + 1)}
-          >
-            Sau
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-        </div>
-      </div>
     </div>
   );
 };

@@ -1,5 +1,8 @@
 import axiosClient from "./axiosClient"
 
+const SYNC_TIMEOUT_MS = Number(import.meta.env.VITE_SYNC_API_TIMEOUT) || 300000;
+const syncRequestConfig = { timeout: SYNC_TIMEOUT_MS };
+
 const channelApi = {
     getAll: async () => {
         const data = await axiosClient.get('/channels');
@@ -26,7 +29,15 @@ const channelApi = {
         return data;
     },
     sync: async (id) => {
-        const data = await axiosClient.post(`/channels/${id}/sync`);
+        const data = await axiosClient.post(`/channels/${id}/sync`, null, syncRequestConfig);
+        return data;
+    },
+    syncFromApp: async (id) => {
+        const data = await axiosClient.post(`/channels/${id}/sync/from-app`, null, syncRequestConfig);
+        return data;
+    },
+    syncFromMarketplace: async (id) => {
+        const data = await axiosClient.post(`/channels/${id}/sync/from-marketplace`, null, syncRequestConfig);
         return data;
     },
 }

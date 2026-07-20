@@ -7,10 +7,8 @@ import channelApi from '../../../api/channelApi';
 import { ROUTES } from '../../../app/router/routes';
 import styles from './ProductDetailPage.module.css';
 import ProductDetailHeader from '../components/ProductDetailHeader';
-import ProductStatsGrid from '../components/ProductStatsGrid';
 import ProductDetailTabs from '../components/ProductDetailTabs';
 import TabOverview from '../components/TabOverview';
-import TabInventory from '../components/TabInventory';
 import TabPlatform from '../components/TabPlatform';
 import TabImages from '../components/TabImages';
 import TabVariants from '../components/TabVariants';
@@ -65,7 +63,17 @@ const ProductDetailPage = () => {
       const data = res.data?.data || res.data || res;
 
       if (data && data.failedCount > 0) {
-        toast.warning(`Đồng bộ xong nhưng có ${data.failedCount} kênh thất bại! Vui lòng kiểm tra Lịch sử đồng bộ.`);
+        const failedChannels = (data.details || [])
+          .filter((detail) => !detail.success)
+          .map((detail) => detail.channelName || detail.platform)
+          .filter(Boolean);
+        const failedLabel = failedChannels.length > 0
+          ? ` Kênh lỗi: ${failedChannels.join(', ')}.`
+          : '';
+
+        toast.warning(
+          `Đã đồng bộ thành công ${data.successCount || 0}/${data.totalChannels || 0} kênh.${failedLabel}`,
+        );
       } else {
         toast.success('Đồng bộ thành công lên tất cả các kênh!');
       }
@@ -101,8 +109,6 @@ const ProductDetailPage = () => {
       />
 
       <div className={styles.mainContent}>
-        <ProductStatsGrid product={product} />
-
         <div className={styles.tabsSection}>
           <ProductDetailTabs
             activeTab={activeTab}
@@ -112,8 +118,7 @@ const ProductDetailPage = () => {
 
           <div className={styles.tabContent}>
             {activeTab === 'overview' && <TabOverview product={product} />}
-            {activeTab === 'inventory' && <TabInventory product={product} />}
-            {activeTab === 'platform' && <TabPlatform product={product} channels={channels} />}
+            {activeTab === 'platform' && <TabPlatform product={product} onRefresh={fetchProduct} />}
             {activeTab === 'images' && <TabImages product={product} />}
             {activeTab === 'variants' && <TabVariants product={product} />}
           </div>

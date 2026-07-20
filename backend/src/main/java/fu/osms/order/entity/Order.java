@@ -100,6 +100,10 @@ public class Order {
     @Column(name = "cancel_reason", length = 255)
     private String cancelReason;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "platform_metadata", columnDefinition = "jsonb")
+    private Map<String, Object> platformMetadata;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cancelled_by")
     private User cancelledBy;

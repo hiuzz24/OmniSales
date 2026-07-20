@@ -30,6 +30,25 @@
   line-height: 1.5;
 }
 
+.channelSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  font-size: 12px;
+}
+
+.channelSummary strong {
+  font-weight: 800;
+  color: #1d4ed8;
+}
+
 /* Channel list */
 .channelList {
   display: flex;
@@ -41,12 +60,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
+  padding: 12px;
+  border-radius: 12px;
   border-bottom: 1px solid var(--catalog-line-soft, #edf1f7);
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .channelItem:last-child {
   border-bottom: none;
+}
+
+.channelItemActive {
+  background: #f8fafc;
+  border: 1px solid #dbeafe;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.04);
 }
 
 .channelInfo {
@@ -79,6 +106,10 @@
   background: linear-gradient(135deg, #0f146d, #1a1f87);
 }
 
+.channelIconShopify {
+  background: linear-gradient(135deg, #5e8e2e, #86bf4a);
+}
+
 .channelIconDefault {
   background: linear-gradient(135deg, #6b7280, #9ca3af);
 }
@@ -98,6 +129,14 @@
   font-size: 12px;
   color: var(--catalog-muted, #667085);
   margin-top: 2px;
+}
+
+.configurationStatus {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--catalog-muted, #667085);
 }
 
 .suggestedPrice {
@@ -160,6 +199,24 @@
   color: #344054;
 }
 
+.select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--catalog-line, #d8deea);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--catalog-ink, #101828);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.select:focus {
+  border-color: var(--catalog-accent, #0756c7);
+  box-shadow: 0 0 0 4px rgba(7, 86, 199, 0.12);
+}
+
 /* Action buttons */
 .actions {
   display: flex;
@@ -207,6 +264,39 @@
 .submitIcon {
   width: 16px;
   height: 16px;
+}
+
+.syncBtn {
+  width: 100%;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #075985;
+  background: linear-gradient(180deg, #f0f9ff, #e0f2fe);
+  border: 1px solid #bae6fd;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+  box-shadow: 0 10px 22px rgba(14, 165, 233, 0.14);
+}
+
+.syncBtn:hover:not(:disabled) {
+  border-color: #7dd3fc;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(14, 165, 233, 0.2);
+}
+
+.syncBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .cancelBtn {

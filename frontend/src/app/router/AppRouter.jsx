@@ -10,8 +10,16 @@ import ChangePasswordPage from '../../features/auth/pages/ChangePasswordPage';
 import HomePage from '../../features/auth/pages/HomePage';
 import AboutPage from '../../features/auth/pages/AboutPage';
 import AdminPage from '../../features/system/pages/AdminPage';
+import SystemLogPage from '../../features/system/pages/SystemLogPage';
+import BackupPage from '../../features/system/pages/BackupPage';
+import ApiMonitorPage from '../../features/system/pages/ApiMonitorPage';
+import SystemSettingsPage from '../../features/system/pages/SystemSettingsPage';
 import DashboardPage from '../../features/dashboard/pages/DashboardPage';
 import ProfilePage from '../../features/user/pages/ProfilePage';
+import UserListPage from '../../features/user/pages/UserListPage';
+import UserInviteListPage from '../../features/user/pages/UserInviteListPage';
+import UserDetailPage from '../../features/user/pages/UserDetailPage';
+import InviteRegisterPage from '../../features/auth/pages/InviteRegisterPage';
 import ProductManagementPage from '../../features/catalog/pages/ProductManagementPage';
 import ProductCreatePage from '../../features/catalog/pages/ProductCreatePage';
 import ProductEditPage from '../../features/catalog/pages/ProductEditPage';
@@ -46,8 +54,10 @@ import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
 import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
+import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
+import NotificationListPage from '../../features/user/pages/NotificationListPage';
 
 const AppRouter = () => {
   return (
@@ -62,6 +72,7 @@ const AppRouter = () => {
           <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPassword />} />
           <Route path={ROUTES.CHANGE_PASSWORD} element={<ChangePasswordPage />} />
           <Route path={ROUTES.RESET_PASSWORD} element={<ChangePasswordPage />} />
+          <Route path={ROUTES.INVITE_USER} element={<InviteRegisterPage />} />
         </Route>
 
         <Route element={<PrivateRoute />}>
@@ -76,6 +87,19 @@ const AppRouter = () => {
 
             <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
 
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.USERS} element={<UserListPage />} />
+              <Route path={ROUTES.USER_INVITATIONS} element={<UserInviteListPage />} />
+              <Route path={ROUTES.USER_DETAIL} element={<UserDetailPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.SYSTEM_LOGS} element={<SystemLogPage />} />
+              <Route path={ROUTES.BACKUP} element={<BackupPage />} />
+              <Route path={ROUTES.API_MONITOR} element={<ApiMonitorPage />} />
+              <Route path={ROUTES.SYSTEM_SETTINGS} element={<SystemSettingsPage />} />
+            </Route>
+
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
@@ -89,7 +113,7 @@ const AppRouter = () => {
               <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
             </Route>
 
-            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER]} />}>
+            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
               <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
               <Route path={ROUTES.PRODUCT_LOGS} element={<ProductLogPage />} />
               <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
@@ -109,6 +133,7 @@ const AppRouter = () => {
               <Route path={ROUTES.INVENTORY} element={<InventoryPage />} />
               <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
               <Route path={ROUTES.INVENTORY_LOGS} element={<InventoryLogPage />} />
+              <Route path={ROUTES.SUPPLIERS} element={<SupplierPage />} />
               {/* <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} /> */}
               <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
               <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
@@ -116,6 +141,7 @@ const AppRouter = () => {
               <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
               <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
               <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
+              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationListPage />} />
             </Route>
           </Route>
         </Route>

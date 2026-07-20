@@ -9,7 +9,6 @@ import org.mapstruct.*;
 public interface SupplierMapper {
 
     @Mapping(target = "id", ignore = true)
-
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Supplier toEntity(SupplierRequest request);
@@ -17,8 +16,10 @@ public interface SupplierMapper {
     SupplierResponse toResponse(Supplier supplier);
 
     @Mapping(target = "id", ignore = true)
-
+    @Mapping(target = "isActive", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     void updateEntityFromRequest(SupplierRequest request, @MappingTarget Supplier supplier);
+
+
 }

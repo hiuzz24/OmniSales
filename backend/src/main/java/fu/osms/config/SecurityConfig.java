@@ -30,6 +30,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final ApiUsageFilter apiUsageFilter;
     private final UserDetailsService userDetailsService;
 
     @Bean
@@ -38,10 +39,23 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
+                        // Auth sub-paths that must remain public (no session required)
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/refresh",
+                                "/api/auth/logout",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password",
+                                "/api/auth/accept-invite",
+                                "/api/auth/accept-invite/**",
+                                "/api/auth/change-password/validate",
+                                "/api/auth/change-password/validate/**",
+                                "/api/auth/changes-password-after-login")
+                        .permitAll()
                         .requestMatchers("/api/categories").permitAll()
                         .requestMatchers("/api/channels/shopify/callback").permitAll()
                         .requestMatchers("/api/channels/lazada/callback").permitAll()
+                        .requestMatchers("/api/channels/tiktok/callback").permitAll()
                         .requestMatchers("/api/webhooks/**").permitAll()
                         .requestMatchers("/api/products/**").authenticated()
                         .requestMatchers("/api/address/**").permitAll()
@@ -49,6 +63,7 @@ public class SecurityConfig {
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(apiUsageFilter, JwtAuthenticationFilter.class)
                 .authenticationProvider(authenticationProvider());
 
 
@@ -78,7 +93,15 @@ public class SecurityConfig {
         corsConfiguration.setAllowCredentials(true);
         corsConfiguration.setAllowedHeaders(List.of("*"));
         corsConfiguration.setAllowedMethods(List.of("GET","PATCH","DELETE","PUT","POST","OPTIONS"));
-        corsConfiguration.setAllowedOriginPatterns(List.of("http://localhost:517*", "http://localhost:300*"));
+        // Allow both localhost and 127.0.0.1 on the standard dev ports.
+        // Vite, browsers and proxies all treat these as different origins
+        // even though they point to the same machine, so we need both.
+        corsConfiguration.setAllowedOriginPatterns(List.of(
+                "http://localhost:517*",
+                "http://localhost:300*",
+                "http://127.0.0.1:517*",
+                "http://127.0.0.1:300*"
+        ));
         corsConfiguration.addExposedHeader("Authorization");
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

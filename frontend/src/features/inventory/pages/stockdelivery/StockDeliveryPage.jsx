@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Package,
   Pencil,
+  RefreshCw,
   RotateCcw,
   ShoppingCart,
   Trash2,
@@ -233,6 +234,7 @@ export default function StockDeliveryPage() {
   const [completingId, setCompletingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [syncingMarketplace, setSyncingMarketplace] = useState(false);
   const isOwner = user?.role === ROLES.OWNER;
   const canComplete = user?.role === ROLES.OWNER || user?.role === ROLES.OPERATIONS;
 
@@ -383,6 +385,24 @@ export default function StockDeliveryPage() {
     }
   };
 
+  const handleSyncMarketplaceInventory = async () => {
+    if (syncingMarketplace) return;
+    setSyncingMarketplace(true);
+    try {
+      const response = await stockDeliveryService.syncPendingMarketplaceInventory();
+      const data = getResponseData(response);
+      const count = Number(data.syncedVariantCount ?? 0);
+      toast.success(count > 0
+        ? `Đã đồng bộ tồn kho ${formatNumber(count)} SKU từ phiếu xuất lên các sàn liên kết.`
+        : 'Không có SKU phiếu xuất nào cần đồng bộ.');
+      await Promise.all([fetchDeliveries(), fetchStatistics()]);
+    } catch (error) {
+      toast.error(error?.message || 'Không thể đồng bộ tồn kho phiếu xuất lên sàn.');
+    } finally {
+      setSyncingMarketplace(false);
+    }
+  };
+
   const stats = Object.entries(ISSUE_TYPES).map(([type, config]) => ({
     key: type,
     label: config.label,
@@ -439,6 +459,31 @@ export default function StockDeliveryPage() {
       createLabel="Tạo phiếu xuất"
       onCreate={() => navigate(ROUTES.STOCK_DELIVERY_CREATE)}
       onExport={() => setExportOpen(true)}
+      extraActions={(
+        <button
+          type="button"
+          onClick={handleSyncMarketplaceInventory}
+          disabled={syncingMarketplace}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            height: 40,
+            padding: '0 14px',
+            border: '1px solid #fed7aa',
+            borderRadius: 12,
+            background: syncingMarketplace ? '#fff7ed' : '#f97316',
+            color: syncingMarketplace ? '#c2410c' : '#ffffff',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: syncingMarketplace ? 'not-allowed' : 'pointer',
+            boxShadow: syncingMarketplace ? 'none' : '0 8px 18px rgba(249, 115, 22, 0.22)',
+          }}
+        >
+          <RefreshCw size={15} style={{ animation: syncingMarketplace ? 'spin 1s linear infinite' : undefined }} />
+          {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn kho'}
+        </button>
+      )}
       stats={stats}
       filters={(
         <>

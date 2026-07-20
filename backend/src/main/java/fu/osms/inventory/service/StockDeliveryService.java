@@ -71,4 +71,6 @@ public interface StockDeliveryService {
      * @return Delivery statistics
      */
     Object getDeliveryStatistics();
+
+    int syncPendingMarketplaceInventory();
 }

@@ -24,4 +24,6 @@ public interface ProductService {
     void delete(UUID id);
 
     SyncResult syncProductToAllChannels(UUID productId);
+
+    SyncResult syncProductToChannel(UUID productId, UUID channelId);
 }

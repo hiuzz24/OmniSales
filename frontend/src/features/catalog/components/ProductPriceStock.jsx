@@ -52,7 +52,7 @@ const ProductPriceStock = ({
             disabled={disablePrice}
           />
           {renderSuggestedPrices()}
-          {errors.price && <span className={styles.errorText}>{errors.price}</span>}
+          {errors.price && <span className={styles.errorText}>{errors.price.message}</span>}
         </div>
         <div className={styles.field}>
           <label className={styles.label}>Giá vốn (đ)</label>

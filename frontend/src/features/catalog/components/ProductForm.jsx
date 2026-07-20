@@ -1,10 +1,10 @@
 import { ChevronDown } from 'lucide-react';
+import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductForm.module.css';
 
-const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrders = false, hasVariants = false }) => {
-  const handleChange = (field, value) => {
-    onChange({ ...formData, [field]: value });
-  };
+const ProductForm = ({ categories = [] }) => {
+  const { register, formState: { errors } } = useFormContext();
+  const [hasOrders, hasVariants] = useWatch({ name: ['hasOrders', 'hasVariants'] });
 
   return (
     <div className={styles.card}>
@@ -22,10 +22,9 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             type="text"
             className={`${styles.input} ${errors.name ? styles.inputError : ''}`}
             placeholder="Áo thun nam basic"
-            value={formData.name || ''}
-            onChange={(e) => handleChange('name', e.target.value)}
+            {...register('name')}
           />
-          {errors.name && <span className={styles.errorText}>{errors.name}</span>}
+          {errors.name && <span className={styles.errorText}>{errors.name.message}</span>}
         </div>
       </div>
 
@@ -40,11 +39,10 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             type="text"
             className={`${styles.input} ${errors.sku ? styles.inputError : ''}`}
             placeholder="ATN-001"
-            value={formData.sku || ''}
-            onChange={(e) => handleChange('sku', e.target.value)}
+            {...register('sku')}
             disabled={hasOrders}
           />
-          {errors.sku && <span className={styles.errorText}>{errors.sku}</span>}
+          {errors.sku && <span className={styles.errorText}>{errors.sku.message}</span>}
         </div>
         {!hasVariants && (
           <div className={styles.field}>
@@ -54,8 +52,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
               type="text"
               className={styles.input}
               placeholder="8936012345678"
-              value={formData.barcode || ''}
-              onChange={(e) => handleChange('barcode', e.target.value)}
+            {...register('barcode')}
             />
           </div>
         )}
@@ -71,8 +68,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
               type="text"
               className={styles.input}
               placeholder="Ví dụ: Freesize"
-              value={formData.size || ''}
-              onChange={(e) => handleChange('size', e.target.value)}
+            {...register('size')}
             />
           </div>
           <div className={styles.field}>
@@ -82,8 +78,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
               type="text"
               className={styles.input}
               placeholder="Ví dụ: Đen"
-              value={formData.color || ''}
-              onChange={(e) => handleChange('color', e.target.value)}
+            {...register('color')}
             />
           </div>
         </div>
@@ -97,8 +92,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             id="product-description"
             className={styles.textarea}
             placeholder="Mô tả chi tiết về sản phẩm..."
-            value={formData.description || ''}
-            onChange={(e) => handleChange('description', e.target.value)}
+            {...register('description')}
             rows={3}
           />
         </div>
@@ -114,8 +108,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             <select
               id="product-category"
               className={`${styles.select} ${errors.categoryId ? styles.inputError : ''}`}
-              value={formData.categoryId || ''}
-              onChange={(e) => handleChange('categoryId', e.target.value)}
+              {...register('categoryId')}
             >
               <option value="">Chọn danh mục</option>
               {categories.map((cat) => (
@@ -126,7 +119,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             </select>
             <ChevronDown className={styles.selectArrow} />
           </div>
-          {errors.categoryId && <span className={styles.errorText}>{errors.categoryId}</span>}
+          {errors.categoryId && <span className={styles.errorText}>{errors.categoryId.message}</span>}
         </div>
         <div className={styles.field}>
           <label className={styles.label}>Thương hiệu</label>
@@ -135,8 +128,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             type="text"
             className={styles.input}
             placeholder="Basic Wear"
-            value={formData.brand || ''}
-            onChange={(e) => handleChange('brand', e.target.value)}
+            {...register('brand')}
           />
         </div>
       </div>
@@ -150,8 +142,7 @@ const ProductForm = ({ formData, onChange, categories = [], errors = {}, hasOrde
             type="text"
             className={styles.input}
             placeholder="Cái, Hộp, Chiếc..."
-            value={formData.unit || ''}
-            onChange={(e) => handleChange('unit', e.target.value)}
+            {...register('unit')}
           />
         </div>
       </div>

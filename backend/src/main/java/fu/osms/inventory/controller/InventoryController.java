@@ -2,6 +2,7 @@ package fu.osms.inventory.controller;
 
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryItemUpdateRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
@@ -9,6 +10,7 @@ import fu.osms.inventory.dto.response.InventoryDetailDTO;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionDTO;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
+import fu.osms.inventory.dto.response.AvailableVariantDTO;
 import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.InventoryTransactionService;
@@ -21,10 +23,14 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/inventory")
@@ -40,14 +46,20 @@ public class InventoryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "updatedAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) UUID channelId,
+            @RequestParam(defaultValue = "false") boolean localOnly,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String platforms) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId, parsePlatforms(platforms));
 
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
@@ -73,13 +85,19 @@ public class InventoryController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "updatedAt") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) UUID channelId,
+            @RequestParam(defaultValue = "false") boolean localOnly,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String platforms) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId, parsePlatforms(platforms));
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
                 .message("Tải danh sách tồn kho thành công")
@@ -87,6 +105,24 @@ public class InventoryController {
                 .build();
 
         return ResponseEntity.ok(response);
+    }
+
+    private Collection<PlatformType> parsePlatforms(String platforms) {
+        if (platforms == null || platforms.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(platforms.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> {
+                    try {
+                        return PlatformType.valueOf(value.toUpperCase());
+                    } catch (IllegalArgumentException ex) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
 
@@ -131,6 +167,7 @@ public class InventoryController {
     }
 
     @PutMapping("/detail/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<InventoryDetailDTO>> updateInventoryItemDetail(
             @PathVariable UUID id,
             @Valid @RequestBody InventoryItemUpdateRequest request) {
@@ -161,6 +198,13 @@ public class InventoryController {
             @RequestParam(defaultValue = "10") int size) {
         PageResponse<InventoryItemResponse> response = inventoryService.getItems(warehouseId, page, size);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/warehouses/{warehouseId}/available-variants")
+    public ResponseEntity<ApiResponse<List<AvailableVariantDTO>>> getAvailableVariantsByWarehouse(
+            @PathVariable UUID warehouseId) {
+        List<AvailableVariantDTO> response = inventoryService.getAvailableVariantsByWarehouse(warehouseId);
+        return ResponseEntity.ok(ApiResponse.success("Tải sản phẩm thuộc kho thành công", response));
     }
 
     @GetMapping("/warehouses/{warehouseId}/variants/{variantId}")

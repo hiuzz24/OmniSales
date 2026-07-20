@@ -19,19 +19,29 @@ public class NotificationController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getNotifications(
-            @RequestParam UUID userId,
+            @RequestParam(required = false) UUID userId,
             @RequestParam(required = false, defaultValue = "false") boolean unreadOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResponse<NotificationResponse> response = unreadOnly
-                ? notificationService.getUnread(userId, page, size)
-                : notificationService.getByUser(userId, page, size);
+        PageResponse<NotificationResponse> response;
+        if (userId == null) {
+            response = unreadOnly
+                    ? notificationService.getAllUnread(page, size)
+                    : notificationService.getAll(page, size);
+        } else {
+            response = unreadOnly
+                    ? notificationService.getUnread(userId, page, size)
+                    : notificationService.getByUser(userId, page, size);
+        }
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/unread-count")
-    public ResponseEntity<ApiResponse<Long>> countUnread(@RequestParam UUID userId) {
-        return ResponseEntity.ok(ApiResponse.success(notificationService.countUnread(userId)));
+    public ResponseEntity<ApiResponse<Long>> countUnread(@RequestParam(required = false) UUID userId) {
+        long count = (userId == null)
+                ? notificationService.countAllUnread()
+                : notificationService.countUnread(userId);
+        return ResponseEntity.ok(ApiResponse.success(count));
     }
 
     @PatchMapping("/{id}/read")

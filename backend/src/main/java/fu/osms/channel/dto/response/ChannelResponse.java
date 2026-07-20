@@ -20,6 +20,10 @@ public class ChannelResponse {
     private PlatformType platform;
     private String displayName;
     private String status;
+    private String connectionState;
+    private OffsetDateTime tokenExpiresAt;
+    private OffsetDateTime refreshTokenExpiresAt;
+    private String refreshError;
     private String region;
     private Map<String, Object> metadata;
     private Boolean syncEnabled;
