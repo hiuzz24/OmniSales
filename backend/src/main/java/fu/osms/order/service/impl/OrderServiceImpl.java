@@ -111,6 +111,7 @@ public class OrderServiceImpl implements OrderService {
                     .quantity(itemReq.getQuantity())
                     .unitPrice(itemReq.getUnitPrice())
                     .discountAmount(itemReq.getDiscountAmount() != null ? itemReq.getDiscountAmount() : BigDecimal.ZERO)
+                    .costPrice(variant != null ? variant.getCostPrice() : null)
                     .build();
             orderItemRepository.save(item);
 

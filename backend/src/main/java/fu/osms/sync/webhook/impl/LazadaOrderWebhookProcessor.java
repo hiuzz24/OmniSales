@@ -72,7 +72,8 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         order.setPlatform(event.getPlatform());
         order.setChannel(event.getChannel());
         order.setChannelName(event.getChannel().getDisplayName());
-        order.setStatus(resolveStatus(payload, orderItemsData));
+        OrderStatus resolvedStatus = resolveStatus(payload, orderItemsData);
+        order.setStatus(resolvedStatus);
         order.setPaymentStatus(resolvePaymentStatus(payload, orderData, orderItemsData));
         order.setBuyerName(resolveBuyerName(orderData));
         order.setBuyerPhone(resolveBuyerPhone(orderData));
@@ -83,7 +84,9 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         order.setCurrency(resolveCurrency(orderData, orderItemsData));
         order.setNote(resolveNote(orderData));
         resolveTrackingNumber(orderItemsData).ifPresent(order::setTrackingNumber);
-        order.setStatusChangedAt(OffsetDateTime.now());
+        if (oldStatus != resolvedStatus) {
+            order.setStatusChangedAt(OffsetDateTime.now());
+        }
 
         Order savedOrder = orderRepository.save(order);
         syncOrderItems(savedOrder, orderItemsData);
@@ -169,6 +172,7 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
                 .quantity(1)
                 .unitPrice(unitPrice)
                 .discountAmount(discountAmount)
+                .costPrice(channelVariant != null ? channelVariant.getVariant().getCostPrice() : null)
                 .build();
     }
 

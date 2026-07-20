@@ -61,7 +61,6 @@ public class LazadaApiClientImpl implements LazadaApiClient {
         HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
 
         try {
-            log.info("[LazadaApiClient] Calling POST {}, params: {}", fullUrl, allParams.keySet());
             ResponseEntity<String> response = restTemplate.postForEntity(fullUrl, request, String.class);
             return validateAccessTokenResponse(response.getBody());
         } catch (RestClientResponseException e) {
@@ -86,7 +85,6 @@ public class LazadaApiClientImpl implements LazadaApiClient {
 //        String fullUrl = builder.build().encode().toUriString();
         URI fullUrl = builder.build().encode().toUri();
         try {
-            log.info("[LazadaApiClient] Calling GET {}, params: {}", apiUrl + apiPath, allParams.keySet());
             ResponseEntity<String> response = restTemplate.getForEntity(fullUrl, String.class);
             return validateAccessTokenResponse(response.getBody());
         } catch (RestClientResponseException e) {
@@ -119,7 +117,6 @@ public class LazadaApiClientImpl implements LazadaApiClient {
             allParams.put("access_token", accessToken);
         }
 
-        log.info("[LazadaApiClient] sign apiPath={}", apiPath);
         String signature = LazadaSignatureUtil.generateSignature(apiPath, allParams, appSecret);
         allParams.put("sign", signature);
         return allParams;

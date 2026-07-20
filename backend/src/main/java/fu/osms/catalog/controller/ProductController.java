@@ -3,13 +3,17 @@ package fu.osms.catalog.controller;
 import fu.osms.catalog.dto.request.ProductRequest;
 import fu.osms.catalog.dto.response.ProductImportResult;
 import fu.osms.catalog.dto.response.ProductResponse;
+import fu.osms.catalog.dto.response.ProductInsightsResponse;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.service.ProductImportService;
 import fu.osms.catalog.service.ProductService;
+import fu.osms.catalog.service.ProductInsightsService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.dto.SyncResult;
+import fu.osms.inventory.dto.response.InventoryTransactionDTO;
+import fu.osms.inventory.service.InventoryTransactionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +24,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @Slf4j
 @RestController
@@ -29,6 +35,8 @@ public class ProductController {
 
     private final ProductService productService;
     private final ProductImportService productImportService;
+    private final ProductInsightsService productInsightsService;
+    private final InventoryTransactionService inventoryTransactionService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductRequest request) {
@@ -40,6 +48,27 @@ public class ProductController {
     public ResponseEntity<ApiResponse<ProductResponse>> getById(@PathVariable UUID id) {
         ProductResponse response = productService.getById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @GetMapping("/{id}/insights")
+    public ResponseEntity<ApiResponse<ProductInsightsResponse>> getInsights(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(productInsightsService.getInsights(id)));
+    }
+
+    @GetMapping("/{id}/inventory-transactions")
+    public ResponseEntity<ApiResponse<PageResponse<InventoryTransactionDTO>>> getInventoryTransactions(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "30") int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        PageRequest pageRequest = PageRequest.of(
+                safePage,
+                safeSize,
+                Sort.by(Sort.Direction.DESC, "performedAt")
+        );
+        return ResponseEntity.ok(ApiResponse.success(
+                inventoryTransactionService.getTransactionsDTOByProduct(id, pageRequest)));
     }
 
     @GetMapping

@@ -181,7 +181,6 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
         Map<String, String> params = new HashMap<>();
         params.put("order_id", order.getExternalOrderId());
         params.put("order_item_id_list", toJson(orderItemIds));
-        log.info("[Laz params] {}",params);
         return executeGet(order, "/order/reverse/cancel/validate", params,
                 "Lazada cancel validate API returned error");
     }
@@ -189,7 +188,6 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
     private Map<String, Object> executeGet(Order order, String apiPath, Map<String, String> params,
                                            String errorMessage) {
         String response = lazadaApiClient.executeGet(order.getChannel().getId(), apiPath, params);
-        log.info("[LazadaOrderStatusPush] Raw response for {}: {}", apiPath, response);
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, errorMessage);
         assertLazadaSuccess(body, errorMessage);
         return body;
@@ -198,7 +196,6 @@ public class LazadaOrderStatusPusher implements PlatformOrderStatusPusher {
     private Map<String, Object> executePost(Order order, String apiPath, Map<String, String> params,
                                             String errorMessage) {
         String response = lazadaApiClient.executePost(order.getChannel().getId(), apiPath, params);
-        log.info("[LazadaOrderStatusPush] Raw response for {}: {}", apiPath, response);
         Map<String, Object> body = WebhookPayloadUtils.parseObject(response, errorMessage);
         assertLazadaSuccess(body, errorMessage);
         return body;

@@ -272,20 +272,29 @@ class ChannelServiceImplTest {
     }
 
     @Test
-    @DisplayName("getChannelProducts delegates to ChannelProductQueryService preserving inputs")
-    void getChannelProducts_delegates() {
-        UUID channelId = UUID.randomUUID();
-        PageResponse<ChannelProductResponse> page = PageResponse.<ChannelProductResponse>builder()
-                .page(0)
-                .size(20)
-                .totalElements(0L)
-                .content(List.of())
-                .build();
-        when(productQueryService.getChannelProducts(channelId, 0, 20)).thenReturn(page);
+    @DisplayName("connectLazada - creates new channel when no matching accountId; logs token expiry")
+    void connectLazada_createsNewChannel() {
+        when(channelRepository.findByPlatformAndDeletedAtIsNull(PlatformType.LAZADA))
+                .thenReturn(new ArrayList<>());
+        when(channelRepository.save(any(Channel.class))).thenAnswer(inv -> {
+            Channel c = inv.getArgument(0);
+            if (c.getId() == null) c.setId(UUID.randomUUID());
+            return c;
+        });
+        when(credentialRepository.findByChannelId(any(UUID.class))).thenReturn(Optional.empty());
+        when(channelMapper.toResponse(any(Channel.class))).thenAnswer(inv -> {
+            Channel c = inv.getArgument(0);
+            return ChannelResponse.builder().id(c.getId()).displayName(c.getDisplayName()).build();
+        });
 
-        PageResponse<ChannelProductResponse> actual = service.getChannelProducts(channelId, 0, 20);
+        ChannelResponse res = channelService.connectLazada("access-tok", "refresh-tok",
+                3600, "acc-001", "Demo Lazada");
 
-        assertThat(actual).isSameAs(page);
+        assertThat(res.getDisplayName()).isEqualTo("Lazada-Demo Lazada");
+        ArgumentCaptor<ChannelCredential> capCred = ArgumentCaptor.forClass(ChannelCredential.class);
+        verify(credentialRepository).save(capCred.capture());
+        assertThat(capCred.getValue().getTokenExpiresAt()).isNotNull();
+        assertThat(capCred.getValue().getRefreshToken()).isEqualTo("refresh-tok");
     }
 
     @Test

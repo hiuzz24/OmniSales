@@ -74,7 +74,6 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
             String apiPath = isNew ? "/product/create" : "/product/update";
 
             String responseStr = lazadaApiClient.executePost(channel.getId(), apiPath, params);
-            log.error("[LazadaSync] Raw Lazada response for {}: {}", apiPath, responseStr);
             JsonNode root = objectMapper.readTree(responseStr);
 
             if (root.has("code") && "0".equals(root.get("code").asText())) {
@@ -138,8 +137,6 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
                 channelProductRepository.save(channelProduct);
                 return true;
             } else {
-                log.error("[LazadaSync] Lazada create/update failed. apiPath={}, payload={}, response={}",
-                        apiPath, xmlPayload, responseStr);
                 String errorMsg = resolveLazadaErrorMessage(root);
                 throw new RuntimeException("Lazada API returned error: " + errorMsg);
             }
