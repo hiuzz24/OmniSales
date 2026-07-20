@@ -64,8 +64,7 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
         order.setPlatform(event.getPlatform());
         order.setChannel(event.getChannel());
         order.setChannelName(event.getChannel().getDisplayName());
-        OrderStatus resolvedStatus = resolveStatus(event.getEventType(), payload);
-        order.setStatus(resolvedStatus);
+        order.setStatus(resolveStatus(event.getEventType(), payload));
         order.setPaymentStatus(resolvePaymentStatus(payload));
         order.setBuyerName(resolveBuyerName(payload));
         order.setBuyerPhone(resolveBuyerPhone(payload));
@@ -77,9 +76,7 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
         order.setNote(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(payload, "note", "remarks")));
         order.setTrackingNumber(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(payload, "tracking_number", "tracking_code")));
         order.setCancelReason(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(payload, "cancel_reason", "cancelReason")));
-        if (oldStatus != resolvedStatus) {
-            order.setStatusChangedAt(OffsetDateTime.now());
-        }
+        order.setStatusChangedAt(OffsetDateTime.now());
 
         Order savedOrder = orderRepository.save(order);
         syncOrderItems(savedOrder, payload);
