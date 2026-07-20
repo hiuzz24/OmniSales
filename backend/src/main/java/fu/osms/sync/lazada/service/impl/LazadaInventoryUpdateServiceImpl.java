@@ -87,7 +87,8 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
             return new LazadaInventorySyncResult(0, 0, 0);
         }
 
-        List<ChannelProductVariant> mappings = changedSince == null
+        boolean scopedFullSync = changedSince == null && !changedScope.variantIds().isEmpty();
+        List<ChannelProductVariant> mappings = changedSince == null && !scopedFullSync
                 ? channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId)
                 : channelProductVariantRepository.findActiveByChannelIdAndVariantIdInWithVariant(
                         channelId,
@@ -169,7 +170,10 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                                              OffsetDateTime changedUntil,
                                              Collection<UUID> productChangedVariantIds) {
         if (changedSince == null) {
-            return new ChangedScope(Set.of(), Set.of());
+            return new ChangedScope(
+                    productChangedVariantIds == null ? Set.of() : new HashSet<>(productChangedVariantIds),
+                    Set.of()
+            );
         }
 
         Set<UUID> variantIds = new HashSet<>();

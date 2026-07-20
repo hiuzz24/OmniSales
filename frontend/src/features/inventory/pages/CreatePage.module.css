@@ -676,3 +676,419 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+.readonlyInput {
+  background: #f8fafc;
+  color: #475569;
+}
+
+.stocktakeInfoGrid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(160px, 1fr) minmax(130px, 0.75fr) minmax(260px, 1.4fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.defaultWarehouseCard {
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #99f6e4;
+  background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 100%);
+  box-shadow: 0 10px 24px rgba(13, 148, 136, 0.1);
+}
+
+.defaultWarehouseIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #0f766e;
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+}
+
+.defaultWarehouseContent {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.defaultWarehouseLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f766e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.defaultWarehouseContent strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.defaultWarehouseContent small {
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lockedPill,
+.warningPill {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.lockedPill {
+  color: #0f766e;
+  background: #ccfbf1;
+  border: 1px solid #99f6e4;
+}
+
+.warningPill {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+.formActionsRight {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.tableScrollX {
+  overflow-x: auto;
+}
+
+.shortageRow {
+  background: #fff5f5;
+}
+
+.surplusRow {
+  background: #f0fdfa;
+}
+
+.mutedCell {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.productNameCell {
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 220px;
+}
+
+.stocktakeQuantityInput {
+  width: 104px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  text-align: center;
+  outline: none;
+}
+
+.stocktakeQuantityInput:focus {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+.diffPositive,
+.diffNegative {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 800;
+}
+
+.diffPositive {
+  color: #0d9488;
+}
+
+.diffNegative {
+  color: #dc2626;
+}
+
+.mutedDash {
+  color: #94a3b8;
+}
+
+.sidebarActionStack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebarWarehouseBox {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f0fdfa;
+  border: 1px solid #ccfbf1;
+  color: #0f766e;
+}
+
+.sidebarWarehouseBox div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sidebarWarehouseBox strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sidebarWarehouseBox span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(3px);
+}
+
+.stocktakeModal {
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.modalTitle {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.modalSubtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.modalCloseBtn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 0;
+  background: #f8fafc;
+  color: #64748b;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.modalCloseBtn:hover {
+  background: #eef2ff;
+  color: #2563eb;
+}
+
+.modalSearchRow {
+  position: relative;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.modalSearchIcon {
+  position: absolute;
+  left: 32px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+}
+
+.modalSearchInput {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px 9px 38px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.modalSearchInput:focus {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+.modalList {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.modalLoading,
+.modalEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 42px 20px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.modalProductRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border: 0;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.modalProductRow:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.modalProductRowDisabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f8fafc;
+}
+
+.modalProductIndex {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: #f0fdfa;
+  color: #0d9488;
+  display: grid;
+  place-items: center;
+  font: 800 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  flex-shrink: 0;
+}
+
+.modalProductInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.modalProductInfo strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modalProductInfo small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.modalAdded {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.modalAddIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: #f0fdfa;
+  color: #0d9488;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.spinIcon {
+  animation: spin 1s linear infinite;
+}
+
+@media (max-width: 1180px) {
+  .stocktakeInfoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .defaultWarehouseCard {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .stocktakeInfoGrid,
+  .summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .formActionsRight,
+  .tableCardActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .formActionsRight .actionBtn,
+  .tableCardActions .actionBtn {
+    justify-content: center;
+    width: 100%;
+  }
+}

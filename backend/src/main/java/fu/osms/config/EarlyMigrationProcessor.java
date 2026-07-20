@@ -29,6 +29,11 @@ public class EarlyMigrationProcessor implements EnvironmentPostProcessor {
                     ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true
                 """);
                 log.info("EarlyMigration: added is_active column to customers table");
+                stmt.execute("""
+                    ALTER TABLE channel_products
+                    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'
+                """);
+                log.info("EarlyMigration: added metadata column to channel_products table");
             }
         } catch (Exception e) {
             log.warn("EarlyMigration: failed or column already exists: {}", e.getMessage());

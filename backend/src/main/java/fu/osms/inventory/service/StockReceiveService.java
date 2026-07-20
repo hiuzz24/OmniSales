@@ -14,4 +14,5 @@ public interface StockReceiveService {
     StockReceiveResponse completeReceipt(UUID receiptId, UUID approvedByUserId);
     Object getReceiptStatistics();
     String getNextReceiptCode();
+    int syncPendingMarketplaceInventory();
 }

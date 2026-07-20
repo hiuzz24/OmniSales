@@ -49,6 +49,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     name: ['name', 'description', 'images', 'sku', 'variants', 'hasVariants'],
   });
   const platformChannels = channels.filter((channel) => ['LAZADA', 'TIKTOK'].includes(channel.platform));
+  const shopifyChannels = channels.filter((channel) => channel.platform === 'SHOPIFY');
   const [openChannelId, setOpenChannelId] = useState(null);
   const [categoryState, setCategoryState] = useState({});
   const [suggestionState, setSuggestionState] = useState({});
@@ -236,10 +237,6 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     return () => clearTimeout(timer);
   }, [openChannelId, brandSearchValues]);
 
-  useEffect(() => {
-    setSuggestionState({});
-  }, [productName, productDescription, productImages?.[0]?.url]);
-
   const updateConfig = (channel, patch) => {
     const channelId = channel.channelId || channel.id;
     setValue(`channelConfigs.${channelId}`, { ...configFor(channel), ...patch }, { shouldDirty: true });
@@ -425,9 +422,19 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     </label>;
   };
 
-  if (platformChannels.length === 0) return null;
+  if (platformChannels.length === 0 && shopifyChannels.length === 0) return null;
   return <section className={styles.section}>
     <div className={styles.header}><h3>Cấu hình theo sàn</h3><p>Chỉ cần cấu hình một lần cho mỗi sàn để chuẩn bị đồng bộ dữ liệu.</p></div>
+    {shopifyChannels.map((channel) => {
+      const channelId = channel.channelId || channel.id;
+      return <div className={styles.shopifyReadyCard} key={channelId}>
+        <div>
+          <strong>{channel.channelName || channel.displayName || 'Shopify'}</strong>
+          <span>Đã active Shopify. Khi đồng bộ, hệ thống dùng tên sản phẩm, ảnh, SKU/variant, giá và tồn kho khả dụng từ kho mặc định.</span>
+        </div>
+        <span className={styles.statusReady}>Sẵn sàng</span>
+      </div>;
+    })}
     {platformChannels.map((channel) => {
       const channelId = channel.channelId || channel.id;
       const config = configFor(channel);
@@ -437,7 +444,6 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
       const isManualBrowserOpen = Boolean(manualBrowser[channelId]);
       const configurableAttributes = (attributeState[channelId] || []).filter((attribute) =>
         !isSystemManaged(attribute));
-      const productAttributes = configurableAttributes.filter((attribute) => !attribute.saleProperty);
       const requiredAttributes = configurableAttributes.filter((attribute) =>
         attribute.required && !(channel.platform === 'TIKTOK' && attribute.saleProperty));
       const optionalAttributes = configurableAttributes.filter((attribute) =>

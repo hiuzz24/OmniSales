@@ -13,6 +13,8 @@ public interface WarehouseService {
 
     WarehouseResponse getById(UUID id);
 
+    WarehouseResponse getMaster();
+
     List<WarehouseResponse> getAll();
 
     WarehouseResponse update(UUID id, WarehouseRequest request);

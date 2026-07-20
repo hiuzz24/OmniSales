@@ -38,6 +38,8 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
 
     Optional<Product> findFirstBySkuAndDeletedAtIsNull(String sku);
 
+    Optional<Product> findFirstByNameIgnoreCaseAndDeletedAtIsNullOrderByCreatedAtAsc(String name);
+
     long count();
 
     @Query("""

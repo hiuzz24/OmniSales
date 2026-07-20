@@ -71,7 +71,7 @@ public class SyncLogServiceImpl implements SyncLogService {
         SyncLogResponse response = syncLogMapper.toResponse(syncLog);
         response.setInventoryChanges(
                 inventoryTransactionRepository
-                        .findByReferenceTypeAndReferenceIdWithDetails("SYNC", syncLog.getId())
+                        .findByReferenceTypeAndReferenceIdWithDetails("ADJUSTMENT", syncLog.getId())
                         .stream()
                         .map(inventoryTransactionDTOMapper::toDto)
                         .toList()

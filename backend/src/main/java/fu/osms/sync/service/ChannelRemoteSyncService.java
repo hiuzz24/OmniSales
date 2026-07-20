@@ -7,4 +7,6 @@ import java.util.UUID;
 public interface ChannelRemoteSyncService {
 
     ChannelImportSyncResponse syncRemoteChanges(UUID channelId);
+
+    ChannelImportSyncResponse syncAllRemoteChanges(UUID requestedChannelId);
 }

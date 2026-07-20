@@ -10,6 +10,7 @@ import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
@@ -22,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -37,6 +40,7 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final InventoryAlertService inventoryAlertService;
+    private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
     @Override
     @Transactional
@@ -56,6 +60,7 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
         }
 
         List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
+        Set<UUID> changedVariantIds = new HashSet<>();
         for (OrderItem orderItem : orderItems) {
             ProductVariant variant = resolveVariant(orderItem);
             if (variant == null) {
@@ -64,7 +69,9 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
                 continue;
             }
             reserveVariant(order, orderItem, variant);
+            changedVariantIds.add(variant.getId());
         }
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
     }
 
     private void reserveVariant(Order order, OrderItem orderItem, ProductVariant variant) {
@@ -173,6 +180,12 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
                             .note("Platform order cancelled: " + order.getExternalOrderId())
                             .build());
                 });
+        Set<UUID> changedVariantIds = transactions.stream()
+                .filter(transaction -> transaction.getType() == InvTxnType.ORDER_DEDUCT)
+                .map(transaction -> transaction.getVariant() == null ? null : transaction.getVariant().getId())
+                .filter(id -> id != null)
+                .collect(java.util.stream.Collectors.toSet());
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
     }
 
     private boolean hasOrderDeductTransactions(UUID orderId) {
