@@ -38,6 +38,7 @@ import fu.osms.sync.order.OrderStatusPushContext;
 import fu.osms.sync.order.OrderStatusPushResult;
 import fu.osms.sync.order.OrderStatusPushService;
 import fu.osms.sync.order.OrderStatusPushStatus;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -98,6 +99,8 @@ class OrderServiceImplTest {
     private OrderStatusPushService orderStatusPushService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -116,6 +119,8 @@ class OrderServiceImplTest {
     private ProductVariant variant;
     private OrderItem orderItem;
     private InventoryItem inventoryItem;
+
+    private OrderStatusPushResult successPushResult;
 
     @BeforeEach
     void setUp() {
@@ -226,16 +231,17 @@ class OrderServiceImplTest {
                 .items(new ArrayList<>())
                 .build();
 
-        // Default stubs so tests that don't explicitly care about push still get a
-        // benign "no-op success" result instead of an NPE on the collaborator.
-        OrderStatusPushResult defaultPushResult = OrderStatusPushResult.builder()
+        // Default success push result
+        successPushResult = OrderStatusPushResult.builder()
                 .status(OrderStatusPushStatus.SUCCESS)
-                .message("noop")
+                .message("Success")
                 .build();
+
+        // Setup default mocks
         lenient().when(orderStatusPushService.push(any(Order.class), any(OrderStatus.class), any()))
-                .thenReturn(defaultPushResult);
+                .thenReturn(successPushResult);
         lenient().when(orderStatusPushService.push(any(Order.class), any(OrderStatus.class), any(OrderStatusPushContext.class)))
-                .thenReturn(defaultPushResult);
+                .thenReturn(successPushResult);
         lenient().doNothing().when(eventPublisher).publishEvent(any());
     }
 
@@ -286,24 +292,28 @@ class OrderServiceImplTest {
         @Test
         @DisplayName("Should throw EntityNotFoundException when channel does not exist")
         void shouldThrowWhenChannelNotFound() {
-            when(orderMapper.toEntity(orderRequest)).thenReturn(order);
-            when(channelRepository.findById(channelId)).thenReturn(Optional.empty());
+            try (MockedStatic<SecurityUtils> mocked = mockSecurityUtils()) {
+                when(orderMapper.toEntity(orderRequest)).thenReturn(order);
+                when(channelRepository.findById(channelId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.create(orderRequest))
-                    .isInstanceOf(EntityNotFoundException.class)
-                    .hasMessageContaining("Channel not found");
+                assertThatThrownBy(() -> orderService.create(orderRequest))
+                        .isInstanceOf(EntityNotFoundException.class)
+                        .hasMessageContaining("Channel not found");
+            }
         }
 
         @Test
         @DisplayName("Should throw EntityNotFoundException when customer does not exist")
         void shouldThrowWhenCustomerNotFound() {
-            when(orderMapper.toEntity(orderRequest)).thenReturn(order);
-            when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
-            when(customerRepository.findById(customerId)).thenReturn(Optional.empty());
+            try (MockedStatic<SecurityUtils> mocked = mockSecurityUtils()) {
+                when(orderMapper.toEntity(orderRequest)).thenReturn(order);
+                when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
+                when(customerRepository.findById(customerId)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> orderService.create(orderRequest))
-                    .isInstanceOf(EntityNotFoundException.class)
-                    .hasMessageContaining("Customer not found");
+                assertThatThrownBy(() -> orderService.create(orderRequest))
+                        .isInstanceOf(EntityNotFoundException.class)
+                        .hasMessageContaining("Customer not found");
+            }
         }
     }
 
@@ -730,7 +740,7 @@ class OrderServiceImplTest {
                         eq(orderId.toString()),
                         argThat(map -> {
                             if (map instanceof Map) {
-                                return "UNPAID".equals(((Map<?, ?>) map).get("oldPaymentStatus")) 
+                                return "UNPAID".equals(((Map<?, ?>) map).get("oldPaymentStatus"))
                                     && "PAID".equals(((Map<?, ?>) map).get("newPaymentStatus"));
                             }
                             return false;
