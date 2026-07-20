@@ -6,10 +6,12 @@ import fu.osms.auth.dto.response.UserProfileResponse;
 import fu.osms.auth.dto.response.UserResponse;
 import fu.osms.auth.entity.Role;
 import fu.osms.auth.entity.User;
+import fu.osms.auth.entity.UserInviteToken;
 import fu.osms.auth.entity.UserRole;
 import fu.osms.auth.enums.UserStatus;
 import fu.osms.auth.mapper.UserMapper;
 import fu.osms.auth.repository.RoleRepository;
+import fu.osms.auth.repository.UserInviteTokenRepository;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.auth.repository.UserRoleRepository;
 import fu.osms.common.dto.PageResponse;
@@ -47,6 +49,7 @@ class UserServiceImplTest {
     @Mock private RoleRepository roleRepository;
     @Mock private UserMapper userMapper;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private UserInviteTokenRepository userInviteTokenRepository;
 
     @InjectMocks private UserServiceImpl userService;
 
@@ -565,6 +568,180 @@ class UserServiceImplTest {
             assertThat(userService.isValidPasswordFormat("NOLOWERCASE1!")).isFalse();
             assertThat(userService.isValidPasswordFormat(null)).isFalse();
             assertThat(userService.isValidPasswordFormat("")).isFalse();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // Cancel Invite
+    // ════════════════════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Cancel Invite")
+    class CancelInviteTests {
+
+        @Test
+        @DisplayName("cancelInvite(userId) - user not found throws USER_NOT_FOUND")
+        void cancelInvite_userNotFound() {
+            UUID fake = UUID.randomUUID();
+            when(userRepository.findById(fake)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.cancelInvite(fake))
+                    .isInstanceOf(AppException.class)
+                    .extracting(e -> ((AppException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("cancelInvite(userId) - ACTIVE user cannot be cancelled")
+        void cancelInvite_userActiveRejected() {
+            testUser.setStatus(UserStatus.ACTIVE);
+            when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+
+            assertThatThrownBy(() -> userService.cancelInvite(testUser.getId()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Chỉ có thể hủy lời mời");
+        }
+
+        @Test
+        @DisplayName("cancelInvite(userId) - INACTIVE with deletedAt cannot be cancelled")
+        void cancelInvite_userDeletedAtRejected() {
+            testUser.setStatus(UserStatus.INACTIVE);
+            testUser.setDeletedAt(OffsetDateTime.now());
+            when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+
+            assertThatThrownBy(() -> userService.cancelInvite(testUser.getId()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Chỉ có thể hủy lời mời");
+        }
+
+        @Test
+        @DisplayName("cancelInvite(userId) - INACTIVE happy: cancels tokens, removes roles, deletes user")
+        void cancelInvite_happy() {
+            testUser.setStatus(UserStatus.INACTIVE);
+            testUser.setDeletedAt(null);
+            UserInviteToken pending = UserInviteToken.builder()
+                    .id(UUID.randomUUID())
+                    .email(testUser.getEmail())
+                    .roleName("SALES")
+                    .token("tok-1")
+                    .expiresAt(OffsetDateTime.now().plusMinutes(15))
+                    .status("PENDING")
+                    .build();
+
+            when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+            when(userInviteTokenRepository.findAll()).thenReturn(List.of(pending));
+            when(userRoleRepository.findByUserId(testUser.getId())).thenReturn(List.of(testUserRole));
+            when(userInviteTokenRepository.save(any(UserInviteToken.class))).thenAnswer(i -> i.getArgument(0));
+
+            userService.cancelInvite(testUser.getId());
+
+            assertThat(pending.getStatus()).isEqualTo("CANCELLED");
+            verify(userInviteTokenRepository).save(pending);
+            verify(userRoleRepository).deleteAll(List.of(testUserRole));
+            verify(userRepository).delete(testUser);
+        }
+
+        @Test
+        @DisplayName("cancelInvite(userId) - skips already-used tokens")
+        void cancelInvite_skipsUsedTokens() {
+            testUser.setStatus(UserStatus.INACTIVE);
+            UserInviteToken used = UserInviteToken.builder()
+                    .id(UUID.randomUUID())
+                    .email(testUser.getEmail())
+                    .roleName("SALES")
+                    .token("tok-used")
+                    .expiresAt(OffsetDateTime.now().plusMinutes(15))
+                    .usedAt(OffsetDateTime.now().minusMinutes(1))
+                    .status("ACCEPTED")
+                    .build();
+
+            when(userRepository.findById(testUser.getId())).thenReturn(Optional.of(testUser));
+            when(userInviteTokenRepository.findAll()).thenReturn(List.of(used));
+            when(userRoleRepository.findByUserId(testUser.getId())).thenReturn(List.of());
+
+            userService.cancelInvite(testUser.getId());
+
+            verify(userInviteTokenRepository, never()).save(any(UserInviteToken.class));
+            verify(userRepository).delete(testUser);
+        }
+
+        @Test
+        @DisplayName("cancelInviteByTokenId - token not found throws")
+        void cancelInviteByTokenId_notFound() {
+            UUID fake = UUID.randomUUID();
+            when(userInviteTokenRepository.findById(fake)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> userService.cancelInviteByTokenId(fake))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Không tìm thấy");
+        }
+
+        @Test
+        @DisplayName("cancelInviteByTokenId - already accepted token throws")
+        void cancelInviteByTokenId_alreadyUsed() {
+            UserInviteToken used = UserInviteToken.builder()
+                    .id(UUID.randomUUID())
+                    .email("x@y.vn")
+                    .token("t")
+                    .expiresAt(OffsetDateTime.now().plusMinutes(15))
+                    .usedAt(OffsetDateTime.now().minusMinutes(1))
+                    .status("ACCEPTED")
+                    .build();
+            when(userInviteTokenRepository.findById(used.getId())).thenReturn(Optional.of(used));
+
+            assertThatThrownBy(() -> userService.cancelInviteByTokenId(used.getId()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("đã được chấp nhận");
+        }
+
+        @Test
+        @DisplayName("cancelInviteByTokenId - happy: cancels token and removes the linked INACTIVE user")
+        void cancelInviteByTokenId_happy_removesInactiveUser() {
+            UserInviteToken ok = UserInviteToken.builder()
+                    .id(UUID.randomUUID())
+                    .email(testUser.getEmail())
+                    .roleName("SALES")
+                    .token("tok")
+                    .expiresAt(OffsetDateTime.now().plusMinutes(15))
+                    .status("PENDING")
+                    .build();
+            testUser.setStatus(UserStatus.INACTIVE);
+            testUser.setFullName("Chờ kích hoạt");
+
+            when(userInviteTokenRepository.findById(ok.getId())).thenReturn(Optional.of(ok));
+            when(userInviteTokenRepository.save(any(UserInviteToken.class))).thenAnswer(i -> i.getArgument(0));
+            when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+            when(userRoleRepository.findByUserId(testUser.getId())).thenReturn(List.of(testUserRole));
+
+            userService.cancelInviteByTokenId(ok.getId());
+
+            assertThat(ok.getStatus()).isEqualTo("CANCELLED");
+            verify(userInviteTokenRepository).save(ok);
+            verify(userRoleRepository).deleteAll(List.of(testUserRole));
+            verify(userRepository).delete(testUser);
+        }
+
+        @Test
+        @DisplayName("cancelInviteByTokenId - keeps user if status != INACTIVE")
+        void cancelInviteByTokenId_keepsUserIfActive() {
+            UserInviteToken ok = UserInviteToken.builder()
+                    .id(UUID.randomUUID())
+                    .email(testUser.getEmail())
+                    .roleName("SALES")
+                    .token("tok")
+                    .expiresAt(OffsetDateTime.now().plusMinutes(15))
+                    .status("PENDING")
+                    .build();
+            testUser.setStatus(UserStatus.ACTIVE);
+
+            when(userInviteTokenRepository.findById(ok.getId())).thenReturn(Optional.of(ok));
+            when(userInviteTokenRepository.save(any(UserInviteToken.class))).thenAnswer(i -> i.getArgument(0));
+            when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+
+            userService.cancelInviteByTokenId(ok.getId());
+
+            assertThat(ok.getStatus()).isEqualTo("CANCELLED");
+            verify(userRepository, never()).delete(testUser);
         }
     }
 }

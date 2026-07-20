@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -153,10 +154,18 @@ public class ChannelConnectionServiceImpl implements ChannelConnectionService {
                         && (Objects.equals(resolvedId, value.getMetadata().get("accountId"))
                         || Objects.equals(resolvedId, value.getMetadata().get("openId"))))
                 .findFirst()
-                .orElseGet(() -> Channel.builder()
-                        .platform(PlatformType.TIKTOK)
-                        .displayName(displayName)
-                        .build());
+                .orElseGet(() -> {
+                    Optional<Channel> deletedChannel = channelRepository.findTikTokByAccountId(resolvedId);
+                    if (deletedChannel.isPresent()) {
+                        Channel restored = deletedChannel.get();
+                        restored.setDeletedAt(null);
+                        return restored;
+                    }
+                    return Channel.builder()
+                            .platform(PlatformType.TIKTOK)
+                            .displayName(displayName)
+                            .build();
+                });
         ChannelConnectionAction action = connectionAction(channel);
 
         Map<String, Object> persistedMetadata = mutableMetadata(channel);

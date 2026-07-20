@@ -4,6 +4,7 @@ const {
   getFirstWarehouseVariantId,
   API_BASE,
   cleanupTestData,
+  addInventory,
 } = require('../../utils/inventory-helpers');
 
 function todayIso() {
@@ -143,6 +144,10 @@ test.describe('Stock Delivery API Tests', () => {
 
   test('D-12 - POST /api/stock-deliveries - Create DISPOSAL delivery', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
+    // Ensure there is at least one unit of stock so DISPOSAL can take it.
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    await addInventory(request, authToken, warehouseId, variantId, 5);
+
     const response = await request.post(`${API_BASE}/stock-deliveries`, {
       headers: {
         ...managerHeaders,

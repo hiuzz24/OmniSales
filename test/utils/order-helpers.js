@@ -81,15 +81,26 @@ async function createTestOrder(request, token, overrides = {}) {
 }
 
 /**
- * Delete test order (cancel it)
+ * Cancel a test order. The backend does not expose DELETE /api/orders/{id};
+ * the canonical cleanup path is POST /api/orders/{id}/cancel.
  */
 async function deleteTestOrder(request, token, orderId) {
+  if (!orderId) return;
   try {
-    await request.delete(`${API_BASE}/orders/${orderId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const resp = await request.post(`${API_BASE}/orders/${orderId}/cancel`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
+    // Fallback: try old DELETE endpoint in case backend implements it.
+    if (resp.status() === 404 || resp.status() === 405) {
+      await request.delete(`${API_BASE}/orders/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
   } catch (e) {
-    // Ignore errors during cleanup
+    // best-effort
   }
 }
 

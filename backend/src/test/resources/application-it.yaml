@@ -84,6 +84,11 @@ shopify:
   scopes: write_products,read_products
   webhook-callback-url: https://test.example.com/api/webhooks/shopify
 
+tiktok:
+  app-key: test-tiktok-app-key
+  app-secret: test-tiktok-app-secret
+  token-url: https://open.tiktokapis.com/v2/oauth/token/
+
 logging:
   level:
     root: WARN

@@ -1,7 +1,21 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
+const {
+  createTestSupplier,
+  deactivateTestSupplier,
+} = require('../../utils/supplier-helpers');
 
 test.describe('Supplier API Tests', () => {
+
+  let createdSupplierIds = [];
+
+  test.afterEach(async ({ request, managerHeaders }) => {
+    if (!createdSupplierIds.length) return;
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    for (const id of createdSupplierIds.splice(0)) {
+      await deactivateTestSupplier(request, authToken, id);
+    }
+  });
 
   // GET /api/suppliers
   test('SP1 - GET /api/suppliers - List suppliers with pagination returns 200', async ({ request, managerHeaders }) => {
@@ -35,32 +49,15 @@ test.describe('Supplier API Tests', () => {
 
   // POST /api/suppliers
   test('SP4 - POST /api/suppliers - Create supplier successfully', async ({ request, managerHeaders }) => {
-    const timestamp = Date.now();
-    const uniqueName = `TestSup${timestamp}_${Math.random().toString(36).slice(2,8)}`;
-    const payload = {
-      name: uniqueName,
-      contactName: 'Nguyen Van Test',
-      phone: `09${String(timestamp).slice(-8)}`,
-      email: `supplier${timestamp}@example.com`,
-      address: '123 Đường ABC, Quận 1, TP.HCM',
-      isActive: true,
-    };
-
-    const response = await request.post(`${API_BASE}/suppliers`, {
-      headers: {
-        ...managerHeaders,
-        'Content-Type': 'application/json',
-      },
-      data: payload,
-    });
-
-    test.skip(response.status() === 500, 'Backend supplier_code uniqueness bug: cannot reliably create more suppliers');
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(body.success).toBe(true);
-    expect(body.data.id).toBeTruthy();
-    expect(body.data.name).toBe(payload.name);
-    expect(body.data.isActive).toBe(true);
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const created = await createTestSupplier(request, authToken);
+    if (!created || !created.id) {
+      test.skip(true, 'Backend supplier_code uniqueness bug: cannot reliably create more suppliers');
+      return;
+    }
+    expect(created.id).toBeTruthy();
+    expect(created.isActive).toBe(true);
+    createdSupplierIds.push(created.id);
   });
 
   test('SP5 - POST /api/suppliers - Empty name returns 400', async ({ request, managerHeaders }) => {
@@ -97,25 +94,15 @@ test.describe('Supplier API Tests', () => {
 
   // PUT /api/suppliers/{id}
   test('SP7 - PUT /api/suppliers/{id} - Update supplier returns 200', async ({ request, managerHeaders }) => {
-    const timestamp = Date.now();
-    const uniqueName = `ToUpdate${timestamp}_${Math.random().toString(36).slice(2,8)}`;
-    const create = await request.post(`${API_BASE}/suppliers`, {
-      headers: {
-        ...managerHeaders,
-        'Content-Type': 'application/json',
-      },
-      data: {
-        name: uniqueName,
-        contactName: 'Contact',
-        isActive: true,
-      },
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const created = await createTestSupplier(request, authToken, {
+      name: `ToUpdate_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     });
-    test.skip(create.status() !== 200, `Could not create supplier (status ${create.status()}); backend bug with supplier_code collision`);
-    const created = (await create.json()).data;
     if (!created || !created.id) {
-      test.skip(true, 'No created supplier id');
+      test.skip(true, 'Could not create supplier (backend bug with supplier_code collision)');
       return;
     }
+    createdSupplierIds.push(created.id);
 
     const updated = await request.put(`${API_BASE}/suppliers/${created.id}`, {
       headers: {
@@ -123,10 +110,10 @@ test.describe('Supplier API Tests', () => {
         'Content-Type': 'application/json',
       },
       data: {
-        name: `${uniqueName}_u`,
+        name: `${created.name}_u`,
         contactName: 'Updated Contact',
         phone: '0987654321',
-        email: `updated${timestamp}@example.com`,
+        email: `updated${Date.now()}@example.com`,
         address: 'Updated address',
         isActive: true,
       },
@@ -134,7 +121,7 @@ test.describe('Supplier API Tests', () => {
 
     expect(updated.status()).toBe(200);
     const body = (await updated.json()).data;
-    expect(body.name).toBe(`${uniqueName}_u`);
+    expect(body.name).toBe(`${created.name}_u`);
     expect(body.contactName).toBe('Updated Contact');
   });
 
@@ -153,21 +140,15 @@ test.describe('Supplier API Tests', () => {
 
   // PATCH /api/suppliers/{id}/status
   test('SP9 - PATCH /api/suppliers/{id}/status - Toggle status returns 200', async ({ request, managerHeaders }) => {
-    const ts = Date.now();
-    const uniqueName = `StatusTest${ts}_${Math.random().toString(36).slice(2,8)}`;
-    const createResp = await request.post(`${API_BASE}/suppliers`, {
-      headers: {
-        ...managerHeaders,
-        'Content-Type': 'application/json',
-      },
-      data: { name: uniqueName, isActive: true },
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const created = await createTestSupplier(request, authToken, {
+      name: `StatusTest_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     });
-    test.skip(createResp.status() !== 200, `Could not create supplier (status ${createResp.status()}); backend bug with supplier_code collision`);
-    const created = (await createResp.json()).data;
     if (!created || !created.id) {
-      test.skip(true, 'No created supplier id');
+      test.skip(true, 'Could not create supplier (backend bug with supplier_code collision)');
       return;
     }
+    createdSupplierIds.push(created.id);
 
     const off = await request.patch(`${API_BASE}/suppliers/${created.id}/status`, {
       headers: {

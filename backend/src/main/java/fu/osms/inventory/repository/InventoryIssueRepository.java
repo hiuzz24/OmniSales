@@ -36,6 +36,8 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
     @Query(value = "SELECT COUNT(*) FROM inventory_issues WHERE EXTRACT(YEAR FROM created_at) = :year", nativeQuery = true)
     long countByCreatedYear(@Param("year") int year);
 
+    Optional<InventoryIssue> findTopByIssueCodeStartingWithOrderByIssueCodeDesc(String prefix);
+
     @Query("SELECT COUNT(ii) FROM InventoryIssue ii " +
             "WHERE ii.issueType IN ('ORDER', 'ADJUSTMENT', 'DISPOSAL', 'TRANSFER')")
     Long countDeliveries();

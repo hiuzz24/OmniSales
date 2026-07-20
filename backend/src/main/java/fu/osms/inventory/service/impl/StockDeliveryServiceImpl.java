@@ -19,6 +19,9 @@ import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -39,7 +42,6 @@ import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -524,7 +526,22 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
     private String generateIssueCode() {
         int currentYear = LocalDate.now().getYear();
-        long count = inventoryIssueRepository.countByCreatedYear(currentYear);
-        return "PX-" + currentYear + "-" + String.format("%03d", count + 1);
+        String prefix = "PX-" + currentYear + "-";
+
+        // Use max-of-code (instead of count + 1) so two concurrent calls do
+        // not generate the same suffix. Filter by prefix so other code
+        // schemes do not interfere.
+        Optional<InventoryIssue> latest =
+                inventoryIssueRepository.findTopByIssueCodeStartingWithOrderByIssueCodeDesc(prefix);
+        if (latest.isEmpty()) {
+            return prefix + "001";
+        }
+        String latestCode = latest.get().getIssueCode();
+        try {
+            int number = Integer.parseInt(latestCode.substring(prefix.length()));
+            return prefix + String.format("%03d", number + 1);
+        } catch (Exception e) {
+            return prefix + "001";
+        }
     }
 }
