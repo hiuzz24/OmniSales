@@ -42,6 +42,7 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
     private static final String DEFAULT_CATEGORY_VERSION = "v2";
     private static final int PRODUCT_NAME_MIN_LENGTH = 25;
     private static final int PRODUCT_NAME_MAX_LENGTH = 255;
+    private static final Set<String> FREE_TEXT_ATTRIBUTE_IDS = Set.of("101489", "101490");
 
     private final TikTokAuthorizedApiClient tikTokApiClient;
     private final ChannelRepository channelRepository;
@@ -296,10 +297,11 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
     }
 
     private PlatformAttributeResponse toAttribute(JsonNode attribute) {
+        String attributeId = text(attribute, "id", "attribute_id");
         List<PlatformAttributeOptionResponse> options = new ArrayList<>();
         JsonNode rawOptions = attribute.path("values");
         if (!rawOptions.isArray()) rawOptions = attribute.path("options");
-        if (rawOptions.isArray()) {
+        if (rawOptions.isArray() && !FREE_TEXT_ATTRIBUTE_IDS.contains(attributeId)) {
             rawOptions.forEach(option -> options.add(PlatformAttributeOptionResponse.builder()
                     .id(text(option, "id"))
                     .name(text(option, "name", "local_name"))
@@ -314,7 +316,7 @@ public class TikTokPlatformLookupService implements PlatformLookupService {
         boolean required = attribute.path("is_required").asBoolean(false)
                 || attribute.path("is_requried").asBoolean(false);
         return PlatformAttributeResponse.builder()
-                .id(text(attribute, "id", "attribute_id"))
+                .id(attributeId)
                 .name(text(attribute, "name", "attribute_name", "id"))
                 .label(text(attribute, "local_name", "name", "attribute_name"))
                 .inputType(attributeType)

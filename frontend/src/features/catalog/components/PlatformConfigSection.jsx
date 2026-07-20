@@ -16,6 +16,7 @@ const OPTIONAL_LAZADA_SPECIFICATIONS = new Set([
   'sleeves_type', 'sleeve_type',
 ]);
 const TIKTOK_LISTING_ATTRIBUTE_IDS = new Set(['100149', '101489', '101490']);
+const TIKTOK_FREE_TEXT_ATTRIBUTE_IDS = new Set(['101489', '101490']);
 const TIKTOK_PRODUCT_NAME_MIN_LENGTH = 25;
 const TIKTOK_PRODUCT_NAME_MAX_LENGTH = 255;
 const extractData = (response) => response?.data?.data || response?.data || response || [];
@@ -375,7 +376,10 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
       }
       return null;
     }
-    const options = attribute.options || [];
+    const options = channel.platform === 'TIKTOK'
+      && TIKTOK_FREE_TEXT_ATTRIBUTE_IDS.has(String(attribute.id))
+      ? []
+      : attribute.options || [];
     const selectedOption = options.find((option) => String(option.id) === String(value)
       || String(option.name) === String(value)
       || String(option.platformValue) === String(value));
