@@ -23,6 +23,7 @@ import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.PlatformCatalogWebhookProcessor;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
@@ -60,6 +61,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final LazadaAuthorizedApiClient lazadaApiClient;
     private final ObjectMapper objectMapper;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @Override
     public PlatformType getPlatform() {
@@ -159,12 +161,19 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         updateVariant(variant, skuPayload);
         variant = productVariantRepository.save(variant);
 
+        ChannelProductVariant variantMapping = channelProductVariantRepository
+                .findByChannelProductIdAndVariantId(channelProduct.getId(), variant.getId())
+                .orElse(null);
         if (mapping == null) {
-            mapping = ChannelProductVariant.builder()
+            mapping = variantMapping == null
+                    ? ChannelProductVariant.builder()
                     .channelProduct(channelProduct)
                     .variant(variant)
                     .externalVariantId(firstNonBlank(externalVariantId, sellerSku))
-                    .build();
+                    .build()
+                    : variantMapping;
+        } else if (variantMapping != null && !Objects.equals(mapping.getId(), variantMapping.getId())) {
+            mapping = variantMapping;
         } else {
             mapping.setVariant(variant);
         }
@@ -282,7 +291,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                                           String sellerSku,
                                           String externalProductId,
                                           String externalVariantId) {
-        String fallbackSku = "LAZADA-" + firstNonBlank(externalProductId, "PRODUCT") + "-" + firstNonBlank(externalVariantId, "SKU");
+        String fallbackSku = fallbackSku(firstNonBlank(externalVariantId, externalProductId));
         String baseSku = truncateSku(firstNonBlank(sellerSku, fallbackSku));
         if (isSkuUsableForExternalVariant(channelProduct, baseSku, externalVariantId)) {
             return baseSku;
@@ -367,6 +376,10 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         return truncateSku(sku, MAX_VARIANT_SKU_LENGTH);
     }
 
+    private String fallbackSku(String externalId) {
+        return "EXT-" + firstNonBlank(externalId, java.util.UUID.randomUUID().toString());
+    }
+
     private String truncateSku(String sku, int maxLength) {
         String normalized = sku == null ? "" : sku.trim();
         if (normalized.length() <= maxLength) {
@@ -403,7 +416,22 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
 
     private void updateMapping(ChannelProductVariant mapping, Map<String, Object> payload) {
         String externalVariantId = firstNonBlank(directExternalVariantId(payload), mapping.getExternalVariantId());
-        mapping.setExternalVariantId(externalVariantId);
+        if (externalVariantId != null && !externalVariantId.isBlank()) {
+            channelProductVariantRepository
+                    .findByChannelProductIdAndExternalVariantId(mapping.getChannelProduct().getId(), externalVariantId)
+                    .filter(existing -> mapping.getId() != null && !Objects.equals(existing.getId(), mapping.getId()))
+                    .ifPresentOrElse(
+                            existing -> {
+                                Map<String, Object> metadata = mapping.getMetadata() == null
+                                        ? new HashMap<>()
+                                        : new HashMap<>(mapping.getMetadata());
+                                metadata.put("conflictingLazadaWebhookExternalVariantId", externalVariantId);
+                                metadata.put("conflictingChannelProductVariantId", existing.getId().toString());
+                                mapping.setMetadata(metadata);
+                            },
+                            () -> mapping.setExternalVariantId(externalVariantId)
+                    );
+        }
         mapping.setExternalSku(firstNonBlank(resolveSellerSku(payload), mapping.getVariant().getSku()));
         mapping.setExternalPrice(mapping.getVariant().getPrice());
         mapping.setSyncStatus(SyncStatus.SYNCED);
@@ -421,6 +449,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         if (variant == null) {
             return;
         }
+        Warehouse masterWarehouse = marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(event.getChannel());
 
         boolean processedWarehouseList = false;
         for (String key : List.of("multiWarehouseInventories", "channelInventories", "fblWarehouseInventories",
@@ -430,7 +459,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                 for (Object item : list) {
                     if (item instanceof Map<?, ?> stockMap) {
                         Map<String, Object> stockPayload = WebhookPayloadUtils.copyMap(stockMap);
-                        upsertInventoryItem(event, resolveLazadaWarehouse(stockPayload), variant,
+                        upsertInventoryItem(event, masterWarehouse, variant,
                                 quantityFrom(stockPayload), reservedFrom(stockPayload));
                         processedWarehouseList = true;
                     }
@@ -441,7 +470,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         if (!processedWarehouseList) {
             Integer quantity = quantityFrom(payload);
             if (quantity != null) {
-                upsertInventoryItem(event, resolveLazadaWarehouse(payload), variant, quantity, reservedFrom(payload));
+                upsertInventoryItem(event, masterWarehouse, variant, quantity, reservedFrom(payload));
             }
         }
     }
@@ -475,7 +504,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                     .warehouse(warehouse)
                     .variant(variant)
                     .type(InvTxnType.ADJUSTMENT)
-                    .referenceType("SYNC")
+                    .referenceType("ADJUSTMENT")
                     .referenceId(event.getId())
                     .quantityChange(delta)
                     .quantityBefore(before)

@@ -36,6 +36,10 @@ const stockDeliveryApi = {
   getDeliveryStatistics: () => {
     return axiosClient.get('/stock-deliveries/statistics');
   },
+
+  syncPendingMarketplaceInventory: () => {
+    return axiosClient.post('/stock-deliveries/sync-marketplace-inventory');
+  },
 };
 
 export default stockDeliveryApi;

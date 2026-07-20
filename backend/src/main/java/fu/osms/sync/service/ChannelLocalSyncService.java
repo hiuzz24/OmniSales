@@ -7,4 +7,6 @@ import java.util.UUID;
 public interface ChannelLocalSyncService {
 
     ChannelImportSyncResponse syncLocalChanges(UUID channelId);
+
+    ChannelImportSyncResponse syncAllLocalChanges(UUID requestedChannelId);
 }

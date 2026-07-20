@@ -2,6 +2,7 @@ package fu.osms.inventory.controller;
 
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryItemUpdateRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
@@ -25,8 +26,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/inventory")
@@ -47,14 +51,15 @@ public class InventoryController {
             @RequestParam(defaultValue = "false") boolean localOnly,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID warehouseId) {
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String platforms) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
 
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getInventoryByCategoryId(id, pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId, parsePlatforms(platforms));
 
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
@@ -85,13 +90,14 @@ public class InventoryController {
             @RequestParam(defaultValue = "false") boolean localOnly,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID warehouseId) {
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) String platforms) {
         Sort sort = sortDir.equalsIgnoreCase(Sort.Direction.ASC.name())
                 ? Sort.by(sortBy).ascending()
                 : Sort.by(sortBy).descending();
 
         PageRequest pageRequest = PageRequest.of(page, size, sort);
-        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId);
+        PageResponse<InventoryItemResponse> inventoryPage = inventoryService.getAllInventoryItems(pageRequest, page, size, channelId, localOnly, keyword, status, warehouseId, parsePlatforms(platforms));
         ApiResponse<PageResponse<InventoryItemResponse>> response = ApiResponse.<PageResponse<InventoryItemResponse>>builder()
                 .success(true)
                 .message("Tải danh sách tồn kho thành công")
@@ -99,6 +105,24 @@ public class InventoryController {
                 .build();
 
         return ResponseEntity.ok(response);
+    }
+
+    private Collection<PlatformType> parsePlatforms(String platforms) {
+        if (platforms == null || platforms.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(platforms.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> {
+                    try {
+                        return PlatformType.valueOf(value.toUpperCase());
+                    } catch (IllegalArgumentException ex) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
 

@@ -1,4 +1,4 @@
-import { Save } from 'lucide-react';
+import { Save, Send } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductChannelSidebar.module.css';
 
@@ -12,6 +12,7 @@ const PLATFORM_ICONS = {
 const ProductChannelSidebar = ({
   channels = [],
   onSubmit,
+  onSubmitAndSync,
   onInvalid,
   onCancel,
   warehouses = [],
@@ -20,18 +21,36 @@ const ProductChannelSidebar = ({
   isEditMode = false,
 }) => {
   const { control, setValue, handleSubmit, formState: { isSubmitting } } = useFormContext();
-  const [selectedChannels = [], showProduct, channelConfigs = {}] = useWatch({ control, name: ['channelIds', 'status', 'channelConfigs'] });
-  const getIcon = (platform) => {
-    const icon = PLATFORM_ICONS[platform?.toUpperCase()] || { label: '?', className: 'channelIconDefault' };
-    return icon;
+  const [selectedChannels = [], showProduct, channelConfigs = {}] = useWatch({
+    control,
+    name: ['channelIds', 'status', 'channelConfigs'],
+  });
+  const selectedCount = selectedChannels.length;
+  const getIcon = (platform) => PLATFORM_ICONS[platform?.toUpperCase()] || { label: '?', className: 'channelIconDefault' };
+
+  const toggleChannel = (channelId, isSelected) => {
+    setValue(
+      'channelIds',
+      isSelected
+        ? selectedChannels.filter((id) => id !== channelId)
+        : [...selectedChannels, channelId],
+      { shouldDirty: true },
+    );
   };
 
   return (
     <div className={styles.sidebar}>
-      {/* Kênh bán hàng */}
       <div className={styles.card}>
-        <div className={styles.cardTitle}>Kênh bán hàng</div>
-        <div className={styles.cardSubtitle}>Chọn kênh để đồng bộ sản phẩm</div>
+        <div className={styles.cardTitle}>{isEditMode ? 'Liên kết sàn bán' : 'Kênh bán hàng'}</div>
+        <div className={styles.cardSubtitle}>
+          {isEditMode
+            ? 'Bật các sàn muốn liên kết. Các sàn này sẽ dùng chung tồn kho mặc định của sản phẩm.'
+            : 'Chọn kênh để đồng bộ sản phẩm'}
+        </div>
+        <div className={styles.channelSummary}>
+          <span>{selectedCount} sàn đang active</span>
+          <strong>{selectedCount > 0 ? 'Dùng chung tồn kho' : 'Chưa chọn sàn'}</strong>
+        </div>
 
         {channels.length === 0 ? (
           <div className={styles.emptyChannels}>Chưa có kênh nào được thiết lập</div>
@@ -39,20 +58,20 @@ const ProductChannelSidebar = ({
           <div className={styles.channelList}>
             {channels.map((channel, index) => {
               const icon = getIcon(channel.platform);
-              const channelId = channel.id || channel._id || (channel.platform + index);
-              const isSelected = selectedChannels.includes(channelId);
+              const id = channel.id || channel._id || `${channel.platform}${index}`;
+              const isSelected = selectedChannels.includes(id);
               const commissionRate = channel.commissionRate || 0;
-              const config = channelConfigs[channelId];
+              const config = channelConfigs[id];
               const configurationLabel = !isSelected
                 ? null
                 : channel.platform === 'SHOPIFY'
-                  ? 'Ready'
+                  ? 'Sẵn sàng đồng bộ'
                   : config?.categoryId
-                    ? 'Đã chọn danh mục'
-                    : 'Cấu hình sau';
+                    ? 'Đã có danh mục'
+                    : 'Cần cấu hình danh mục';
 
               return (
-                <div key={channelId} className={styles.channelItem}>
+                <div key={id} className={`${styles.channelItem} ${isSelected ? styles.channelItemActive : ''}`}>
                   <div className={styles.channelInfo}>
                     <div className={`${styles.channelIcon} ${styles[icon.className]}`}>
                       {icon.label}
@@ -62,7 +81,7 @@ const ProductChannelSidebar = ({
                         {channel.displayName || channel.platform}
                       </span>
                       <span className={styles.commissionRate}>
-                        % hoa hồng: {commissionRate}%
+                        {channel.platform} · hoa hồng {commissionRate}%
                       </span>
                       {configurationLabel && <span className={styles.configurationStatus}>{configurationLabel}</span>}
                     </div>
@@ -71,7 +90,8 @@ const ProductChannelSidebar = ({
                     type="checkbox"
                     className={styles.toggle}
                     checked={isSelected}
-                    onChange={() => setValue('channelIds', isSelected ? selectedChannels.filter((id) => id !== channelId) : [...selectedChannels, channelId], { shouldDirty: true })}
+                    aria-label={`Bật liên kết ${channel.displayName || channel.platform}`}
+                    onChange={() => toggleChannel(id, isSelected)}
                   />
                 </div>
               );
@@ -80,7 +100,6 @@ const ProductChannelSidebar = ({
         )}
       </div>
 
-      {/* Trạng thái */}
       <div className={styles.card}>
         <div className={styles.cardTitle}>Trạng thái</div>
         <div className={styles.statusItem}>
@@ -98,7 +117,7 @@ const ProductChannelSidebar = ({
         <div className={styles.card}>
           <div className={styles.cardTitle}>Kho nguồn tồn kho</div>
           <div className={styles.cardSubtitle}>
-            Kho được dùng để tạo tồn ban đầu và làm nguồn đồng bộ cho các kênh đã chọn
+            Kho được dùng để tạo tồn ban đầu và làm nguồn đồng bộ cho các kênh đã chọn.
           </div>
           <select
             className={styles.select}
@@ -114,7 +133,6 @@ const ProductChannelSidebar = ({
         </div>
       )}
 
-      {/* Action buttons */}
       <div className={styles.actions}>
         <button
           type="button"
@@ -122,13 +140,23 @@ const ProductChannelSidebar = ({
           onClick={handleSubmit(onSubmit, onInvalid)}
           disabled={isSubmitting}
         >
-          {isSubmitting ? (
-            <div className={styles.spinner} />
-          ) : (
-            <Save className={styles.submitIcon} />
-          )}
+          {isSubmitting ? <div className={styles.spinner} /> : <Save className={styles.submitIcon} />}
           {isSubmitting ? (isEditMode ? 'Đang cập nhật...' : 'Đang tạo...') : (isEditMode ? 'Cập nhật' : 'Tạo sản phẩm')}
         </button>
+
+        {isEditMode && onSubmitAndSync && (
+          <button
+            type="button"
+            className={styles.syncBtn}
+            onClick={handleSubmit(onSubmitAndSync, onInvalid)}
+            disabled={isSubmitting || selectedCount === 0}
+            title={selectedCount === 0 ? 'Hãy active ít nhất một sàn trước khi đồng bộ' : 'Lưu cấu hình rồi đồng bộ sản phẩm lên các sàn active'}
+          >
+            <Send className={styles.submitIcon} />
+            Cập nhật & đồng bộ sàn
+          </button>
+        )}
+
         <button
           type="button"
           className={styles.cancelBtn}

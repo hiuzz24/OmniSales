@@ -70,6 +70,15 @@ const stockDeliveryService = {
       throw error.response?.data || error.message;
     }
   },
+
+  syncPendingMarketplaceInventory: async () => {
+    try {
+      const response = await stockDeliveryApi.syncPendingMarketplaceInventory();
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
 };
 
 export default stockDeliveryService;

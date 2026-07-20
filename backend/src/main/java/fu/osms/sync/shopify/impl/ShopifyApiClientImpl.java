@@ -29,7 +29,7 @@ import fu.osms.sync.shopify.ShopifyApiClient;
 @RequiredArgsConstructor
 public class ShopifyApiClientImpl implements ShopifyApiClient {
 
-    private static final String API_VERSION = "2026-04";
+    private static final String API_VERSION = "2026-07";
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 

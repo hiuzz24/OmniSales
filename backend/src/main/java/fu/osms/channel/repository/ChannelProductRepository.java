@@ -31,6 +31,18 @@ public interface ChannelProductRepository extends JpaRepository<ChannelProduct, 
 
     List<ChannelProduct> findByProductIdAndMappingState(UUID productId, String mappingState);
 
+    @Query("SELECT cp FROM ChannelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cp.product p " +
+            "WHERE ch.id = :channelId " +
+            "AND p.id = :productId " +
+            "AND cp.mappingState = :mappingState " +
+            "ORDER BY cp.createdAt ASC, cp.updatedAt ASC")
+    List<ChannelProduct> findByChannelIdAndProductIdAndMappingStateWithRefs(
+            @Param("channelId") UUID channelId,
+            @Param("productId") UUID productId,
+            @Param("mappingState") String mappingState);
+
     List<ChannelProduct> findByChannelIdAndSyncStatus(UUID channelId, SyncStatus syncStatus);
 
     List<ChannelProduct> findByProductIdInAndMappingState(Collection<UUID> productIds, String mappingState);

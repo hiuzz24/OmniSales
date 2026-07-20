@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   PackagePlus,
   Printer,
+  RefreshCw,
   Save,
   Undo2,
 } from 'lucide-react';
@@ -32,7 +33,6 @@ import {
 } from '../components/inventoryDocumentListUtils';
 import InventoryExportModal from '../components/InventoryExportModal';
 import { formatExportDateTime, getStatusLabel } from '../components/inventoryExcelExport';
-import MarketplaceSyncButton from '../components/MarketplaceSyncButton';
 import { printStockReceiveReceipt } from './stockReceivePrintTemplate';
 
 const STATUS_CONFIG = {
@@ -186,6 +186,7 @@ export default function StockReceivePage() {
   const [statistics, setStatistics] = useState({ totalCount: 0, confirmedCount: 0, draftCount: 0, cancelledCount: 0 });
   const [pagination, setPagination] = useState({ page: 0, size: 10, totalPages: 1, totalElements: 0 });
   const [exportOpen, setExportOpen] = useState(false);
+  const [syncingMarketplace, setSyncingMarketplace] = useState(false);
 
   const fetchStatistics = async () => {
     try {
@@ -227,7 +228,8 @@ export default function StockReceivePage() {
   };
 
   useEffect(() => {
-    refreshData();
+    const timer = window.setTimeout(refreshData, 0);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page]);
 
@@ -263,6 +265,24 @@ export default function StockReceivePage() {
     } catch (error) {
       printWindow?.close();
       toast.error(error?.response?.data?.message || error?.message || 'Không thể tải dữ liệu in phiếu nhập.');
+    }
+  };
+
+  const handleSyncMarketplaceInventory = async () => {
+    if (syncingMarketplace) return;
+    setSyncingMarketplace(true);
+    try {
+      const response = await stockReceiveService.syncPendingMarketplaceInventory();
+      const data = getResponseData(response);
+      const count = Number(data.syncedVariantCount ?? 0);
+      toast.success(count > 0
+        ? `Đã đồng bộ tồn kho ${formatNumber(count)} SKU từ phiếu nhập lên các sàn liên kết.`
+        : 'Không có SKU phiếu nhập nào cần đồng bộ.');
+      await refreshData();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || 'Không thể đồng bộ tồn kho phiếu nhập lên sàn.');
+    } finally {
+      setSyncingMarketplace(false);
     }
   };
 
@@ -305,7 +325,31 @@ export default function StockReceivePage() {
         createLabel="Tạo phiếu nhập"
         onCreate={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
         onExport={() => setExportOpen(true)}
-        extraActions={<MarketplaceSyncButton allowedDirections={['from-app']} onSynced={refreshData} />}
+        extraActions={(
+          <button
+            type="button"
+            onClick={handleSyncMarketplaceInventory}
+            disabled={syncingMarketplace}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              height: 40,
+              padding: '0 14px',
+              border: '1px solid #bfdbfe',
+              borderRadius: 12,
+              background: syncingMarketplace ? '#eff6ff' : '#2563eb',
+              color: syncingMarketplace ? '#1d4ed8' : '#ffffff',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: syncingMarketplace ? 'not-allowed' : 'pointer',
+              boxShadow: syncingMarketplace ? 'none' : '0 8px 18px rgba(37, 99, 235, 0.22)',
+            }}
+          >
+            <RefreshCw size={15} style={{ animation: syncingMarketplace ? 'spin 1s linear infinite' : undefined }} />
+            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn kho'}
+          </button>
+        )}
         stats={stats}
         filters={(
           <>

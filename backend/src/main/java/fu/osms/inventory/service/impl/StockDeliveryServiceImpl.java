@@ -15,6 +15,8 @@ import fu.osms.inventory.mapper.StockDeliveryMapper;
 import fu.osms.inventory.repository.*;
 import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.inventory.service.StockDeliveryService;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -33,9 +35,11 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -52,6 +56,8 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     private final UserRepository userRepository;
     private final StockDeliveryMapper stockDeliveryMapper;
     private final InventoryAlertService inventoryAlertService;
+    private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @Override
     @Transactional
@@ -214,14 +220,17 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         }
 
         User currentUser = getCurrentUser();
+        Set<UUID> changedVariantIds = new HashSet<>();
         for (InventoryIssueItem item : inventoryIssue.getItems()) {
             commitDraftReservation(inventoryIssue, item, currentUser);
+            changedVariantIds.add(item.getProductVariant().getId());
         }
         inventoryIssue.setStatus("CONFIRMED");
         inventoryIssue.setApprovedBy(currentUser);
         inventoryIssue.setConfirmedAt(java.time.OffsetDateTime.now());
 
         InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
         log.info("Stock delivery confirmed successfully: {}", id);
         return stockDeliveryMapper.toResponse(updatedIssue);
     }
@@ -239,6 +248,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         }
 
         User currentUser = getCurrentUser();
+        Set<UUID> changedVariantIds = new HashSet<>();
 
         if ("DRAFT".equals(inventoryIssue.getStatus())) {
             releaseDraftReservations(inventoryIssue, currentUser, "Stock delivery draft cancelled - reservation released");
@@ -270,12 +280,16 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                         .build();
 
                 inventoryTransactionRepository.save(reversalTransaction);
+                changedVariantIds.add(item.getProductVariant().getId());
             }
         }
 
         inventoryIssue.setStatus("CANCELLED");
         inventoryIssue.setApprovedBy(currentUser);
         InventoryIssue updatedIssue = inventoryIssueRepository.save(inventoryIssue);
+        if (!changedVariantIds.isEmpty()) {
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        }
         log.info("Stock delivery cancelled successfully: {}", id);
         return stockDeliveryMapper.toResponse(updatedIssue);
     }
@@ -299,6 +313,17 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         return statistics;
     }
 
+    @Override
+    @Transactional
+    public int syncPendingMarketplaceInventory() {
+        List<UUID> variantIds = inventoryIssueRepository.findConfirmedVariantIdsPendingMarketplaceSync();
+        if (variantIds.isEmpty()) {
+            return 0;
+        }
+        marketplaceInventoryPropagationService.pushAvailableStock(variantIds);
+        return variantIds.size();
+    }
+
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
@@ -307,14 +332,8 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     }
 
     private Warehouse getActiveWarehouse(UUID warehouseId) {
-        if (warehouseId == null) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "Please select a delivery warehouse.");
-        }
-
-        Warehouse warehouse = warehouseRepository.findById(warehouseId)
-                .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
-
-        if (!warehouse.getIsActive()) {
+        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
+        if (!Boolean.TRUE.equals(warehouse.getIsActive())) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "Please select a delivery warehouse.");
         }
         return warehouse;

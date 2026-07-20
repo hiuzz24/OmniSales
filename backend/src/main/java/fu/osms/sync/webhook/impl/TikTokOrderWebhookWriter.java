@@ -3,6 +3,7 @@ package fu.osms.sync.webhook.impl;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
@@ -34,6 +35,7 @@ public class TikTokOrderWebhookWriter {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
+    private final PlatformOrderInventoryService platformOrderInventoryService;
 
     @Transactional
     public void write(UUID eventId, Map<String, Object> detail) {
@@ -117,6 +119,7 @@ public class TikTokOrderWebhookWriter {
 
         Order savedOrder = orderRepository.save(order);
         replaceItems(savedOrder, items);
+        platformOrderInventoryService.syncReservations(savedOrder);
         complete(event);
     }
 
