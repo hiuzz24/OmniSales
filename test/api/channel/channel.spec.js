@@ -1,9 +1,21 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
+const {
+  createTestChannel,
+  deleteTestChannel,
+} = require('../../utils/channel-helpers');
 
 test.describe('Channel API Tests', () => {
 
-  let createdChannelId;
+  let createdChannelIds = [];
+
+  test.afterEach(async ({ request, managerHeaders }) => {
+    if (!createdChannelIds.length) return;
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    for (const id of createdChannelIds.splice(0)) {
+      await deleteTestChannel(request, authToken, id);
+    }
+  });
 
   // GET /api/channels
   test('CH1 - GET /api/channels - List channels returns 200', async ({ request, managerHeaders }) => {
@@ -50,7 +62,7 @@ test.describe('Channel API Tests', () => {
     expect(body.data.displayName).toBe(payload.displayName);
     expect(body.data.status).toBe('CONNECTED');
 
-    createdChannelId = body.data.id;
+    createdChannelIds.push(body.data.id);
   });
 
   test('CH4 - POST /api/channels - Empty displayName returns 400', async ({ request, managerHeaders }) => {
@@ -102,14 +114,15 @@ test.describe('Channel API Tests', () => {
 
   // GET /api/channels/{id}
   test('CH7 - GET /api/channels/{id} - Get by id returns 200', async ({ request, managerHeaders }) => {
-    test.skip(!createdChannelId, 'No channel created yet');
-    const response = await request.get(`${API_BASE}/channels/${createdChannelId}`, {
+    const ch7 = createdChannelIds[createdChannelIds.length - 1];
+    test.skip(!ch7, 'No channel created yet');
+    const response = await request.get(`${API_BASE}/channels/${ch7}`, {
       headers: managerHeaders,
     });
 
     expect(response.status()).toBe(200);
     const body = await response.json();
-    expect(body.data.id).toBe(createdChannelId);
+    expect(body.data.id).toBe(ch7);
     expect(body.data).toHaveProperty('metadata');
     expect(body.data.metadata).toHaveProperty('productCount');
   });
@@ -124,9 +137,10 @@ test.describe('Channel API Tests', () => {
 
   // PUT /api/channels/{id}
   test('CH9 - PUT /api/channels/{id} - Update returns 200', async ({ request, managerHeaders }) => {
-    test.skip(!createdChannelId, 'No channel created yet');
+    const ch9 = createdChannelIds[createdChannelIds.length - 1];
+    test.skip(!ch9, 'No channel created yet');
     const newName = `Updated Manual Channel ${Date.now()}`;
-    const response = await request.put(`${API_BASE}/channels/${createdChannelId}`, {
+    const response = await request.put(`${API_BASE}/channels/${ch9}`, {
       headers: {
         ...managerHeaders,
         'Content-Type': 'application/json',
@@ -174,8 +188,9 @@ test.describe('Channel API Tests', () => {
 
   // GET /api/channels/{id}/products - currently throws NotImplemented
   test('CH11 - GET /api/channels/{id}/products - Not implemented (500)', async ({ request, managerHeaders }) => {
-    test.skip(!createdChannelId, 'No channel created yet');
-    const response = await request.get(`${API_BASE}/channels/${createdChannelId}/products`, {
+    const ch11 = createdChannelIds[createdChannelIds.length - 1];
+    test.skip(!ch11, 'No channel created yet');
+    const response = await request.get(`${API_BASE}/channels/${ch11}/products`, {
       headers: managerHeaders,
     });
 
@@ -206,17 +221,7 @@ test.describe('Channel API Tests', () => {
 
     expect([409, 500]).toContain(dup.status());
 
-    await request.delete(`${API_BASE}/channels/${id}`, {
-      headers: managerHeaders,
-    });
+    createdChannelIds.push(id);
   });
 
-  // Cleanup
-  test.afterAll(async ({ request, managerHeaders }) => {
-    if (createdChannelId) {
-      await request.delete(`${API_BASE}/channels/${createdChannelId}`, {
-        headers: managerHeaders,
-      });
-    }
-  });
 });

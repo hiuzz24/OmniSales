@@ -49,7 +49,7 @@ public class SupplierServiceImpl implements SupplierService {
     private String generateSupplierCode() {
 
         Optional<Supplier> latestSupplier =
-                supplierRepository.findTopByOrderBySupplierCodeDesc();
+                supplierRepository.findTopBySupplierCodeStartingWithOrderBySupplierCodeDesc("NCC");
 
         if (latestSupplier.isEmpty()) {
             return "NCC0001";

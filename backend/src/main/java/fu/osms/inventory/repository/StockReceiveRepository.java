@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -17,6 +18,8 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
 
     @Query("SELECT COUNT(r) FROM InventoryReceipt r WHERE YEAR(r.createdAt) = :year")
     long countByYear(@Param("year") int year);
+
+    Optional<InventoryReceipt> findTopByReceiptCodeStartingWithOrderByReceiptCodeDesc(String prefix);
 
     Page<InventoryReceipt> findAllByOrderByCreatedAtDesc(Pageable pageable);
 

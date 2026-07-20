@@ -937,16 +937,16 @@ const InventoryPage = () => {
                       <td className={styles.td}>
                         {isProductRow ? (
                           <div className={styles.productInfo}>
-                            <span className={styles.productName}>{row.productName}</span>
+                            <span className={styles.productName} title={row.productName}>{row.productName}</span>
                             <span className={styles.productMeta}>{row.items.length} sản phẩm con</span>
                           </div>
                         ) : (
                           <div className={styles.variantInfo}>
                             <span className={styles.variantIndent} />
                             <div>
-                              <div className={styles.variantName}>{row.variantName || row.productName}</div>
+                              <div className={styles.variantName} title={row.variantName || row.productName}>{row.variantName || row.productName}</div>
                               {row.productName && row.productName !== row.variantName && (
-                                <div className={styles.variantMeta}>{row.productName}</div>
+                                <div className={styles.variantMeta} title={row.productName}>{row.productName}</div>
                               )}
                             </div>
                           </div>

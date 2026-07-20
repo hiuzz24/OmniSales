@@ -32,6 +32,7 @@ import fu.osms.inventory.service.InventoryService;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.sync.dto.SyncResult;
 import fu.osms.sync.service.ProductSyncOrchestratorService;
+import fu.osms.catalog.service.ProductChannelConfigService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -89,6 +90,8 @@ class ProductServiceImplTest {
     private ProductLogRepository productLogRepository;
     @Mock
     private ProductSyncOrchestratorService productSyncOrchestratorService;
+    @Mock
+    private ProductChannelConfigService productChannelConfigService;
 
     @InjectMocks
     private ProductServiceImpl productService;

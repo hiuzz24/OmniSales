@@ -39,7 +39,19 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
+                        // Auth sub-paths that must remain public (no session required)
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/refresh",
+                                "/api/auth/logout",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password",
+                                "/api/auth/accept-invite",
+                                "/api/auth/accept-invite/**",
+                                "/api/auth/change-password/validate",
+                                "/api/auth/change-password/validate/**",
+                                "/api/auth/changes-password-after-login")
+                        .permitAll()
                         .requestMatchers("/api/categories").permitAll()
                         .requestMatchers("/api/channels/shopify/callback").permitAll()
                         .requestMatchers("/api/channels/lazada/callback").permitAll()

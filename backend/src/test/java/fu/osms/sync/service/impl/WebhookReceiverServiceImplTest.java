@@ -138,15 +138,10 @@ class WebhookReceiverServiceImplTest {
     }
 
     @Test
-    @DisplayName("receive - shopify processes synchronously")
+    @DisplayName("receive - shopify queues async processing via TransactionSynchronization fallback")
     void receive_shopify_success() {
         Map<String, String> headers = Map.of("X-Shopify-Shop-Domain", "test.myshopify.com");
         String rawBody = "{\"id\": 123}";
-
-        WebhookEvent processedEvent = WebhookEvent.builder()
-                .id(eventId)
-                .status("COMPLETED")
-                .build();
 
         when(shopifyHandler.getPlatform()).thenReturn(PlatformType.SHOPIFY);
         when(shopifyHandler.verify(any(), any())).thenReturn(true);
@@ -159,12 +154,14 @@ class WebhookReceiverServiceImplTest {
             e.setId(eventId);
             return e;
         });
-        when(webhookEventProcessingService.processSavedEvent(any())).thenReturn(processedEvent);
 
         WebhookReceiveResult result = webhookReceiverService.receive(PlatformType.SHOPIFY, headers, rawBody);
 
-        assertThat(result.getStatus()).isEqualTo("COMPLETED");
-        verify(webhookEventProcessingService).processSavedEvent(any());
+        // Outside a real transaction the service falls back to a synchronous
+        // processAsync call so the work is still triggered from the unit test.
+        assertThat(result.getStatus()).isEqualTo("RECEIVED");
+        assertThat(result.getMessage()).isEqualTo("Webhook queued");
+        verify(webhookEventProcessingService).processAsync(eventId);
     }
 
     @Test

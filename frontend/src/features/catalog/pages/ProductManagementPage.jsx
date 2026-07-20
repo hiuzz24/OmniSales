@@ -8,7 +8,6 @@ import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';
 import ExportProductsModal from '../components/ExportProductsModal';
 import ImportProductsModal from '../components/ImportProductsModal';
-import MarketplaceSyncButton from '../../inventory/pages/components/MarketplaceSyncButton';
 import styles from './ProductManagementPage.module.css';
 
 const PLATFORM_LABELS = {
@@ -41,10 +40,6 @@ const ProductManagementPage = () => {
 
   const actions = (
     <>
-      <MarketplaceSyncButton
-        getSuccessMessage={buildProductSyncMessage}
-        onSynced={() => setTableRefreshKey((k) => k + 1)}
-      />
       <button
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.SYNC_HISTORY)}

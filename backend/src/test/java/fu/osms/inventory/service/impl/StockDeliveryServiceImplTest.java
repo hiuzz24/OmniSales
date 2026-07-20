@@ -12,6 +12,8 @@ import fu.osms.inventory.entity.*;
 import fu.osms.inventory.mapper.StockDeliveryMapper;
 import fu.osms.inventory.repository.*;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -59,6 +61,10 @@ class StockDeliveryServiceImplTest {
     private StockDeliveryMapper stockDeliveryMapper;
     @Mock
     private InventoryAlertService inventoryAlertService;
+    @Mock
+    private MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    @Mock
+    private MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @InjectMocks
     private StockDeliveryServiceImpl stockDeliveryService;
@@ -71,6 +77,7 @@ class StockDeliveryServiceImplTest {
     private UUID inventoryItemId;
 
     private Warehouse warehouse;
+    private Warehouse inactiveWarehouse;
     private ProductVariant variant;
     private User user;
     private InventoryIssue delivery;
@@ -88,6 +95,12 @@ class StockDeliveryServiceImplTest {
                 .id(warehouseId)
                 .name("Test Warehouse")
                 .isActive(true)
+                .build();
+
+        inactiveWarehouse = Warehouse.builder()
+                .id(warehouseId)
+                .name("Inactive Warehouse")
+                .isActive(false)
                 .build();
 
         variant = ProductVariant.builder()
@@ -132,6 +145,23 @@ class StockDeliveryServiceImplTest {
     class ValidationTests {
 
         @Test
+        @DisplayName("Should throw when warehouse is inactive")
+        void shouldThrowWhenWarehouseInactive() {
+            StockDeliveryRequest request = new StockDeliveryRequest();
+            request.setWarehouseId(warehouseId);
+            request.setDeliveryType("ORDER");
+            request.setIssuedDate(LocalDate.now());
+            request.setItems(List.of());
+
+            when(marketplaceWarehouseConsistencyService.resolveMasterWarehouse())
+                    .thenReturn(inactiveWarehouse);
+
+            assertThatThrownBy(() -> stockDeliveryService.createStockDelivery(request))
+                    .isInstanceOf(AppException.class)
+                    .hasMessageContaining("delivery warehouse");
+        }
+
+        @Test
         @DisplayName("Should throw when warehouse not found")
         void shouldThrowWhenWarehouseNotFound() {
             StockDeliveryRequest request = new StockDeliveryRequest();
@@ -140,23 +170,8 @@ class StockDeliveryServiceImplTest {
             request.setIssuedDate(LocalDate.now());
             request.setItems(List.of());
 
-            when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> stockDeliveryService.createStockDelivery(request))
-                    .isInstanceOf(AppException.class);
-        }
-
-        @Test
-        @DisplayName("Should throw when warehouse is inactive")
-        void shouldThrowWhenWarehouseInactive() {
-            warehouse.setIsActive(false);
-            StockDeliveryRequest request = new StockDeliveryRequest();
-            request.setWarehouseId(warehouseId);
-            request.setDeliveryType("ORDER");
-            request.setIssuedDate(LocalDate.now());
-            request.setItems(List.of());
-
-            when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(warehouse));
+            when(marketplaceWarehouseConsistencyService.resolveMasterWarehouse())
+                    .thenThrow(new AppException(fu.osms.common.exception.ErrorCode.WAREHOUSE_NOT_FOUND));
 
             assertThatThrownBy(() -> stockDeliveryService.createStockDelivery(request))
                     .isInstanceOf(AppException.class);
@@ -260,6 +275,11 @@ class StockDeliveryServiceImplTest {
             when(inventoryIssueRepository.countByStatus("CONFIRMED")).thenReturn(5L);
             when(inventoryIssueRepository.countByStatus("DRAFT")).thenReturn(3L);
             when(inventoryIssueRepository.countByStatus("CANCELLED")).thenReturn(2L);
+            when(inventoryIssueRepository.countByIssueType("ORDER")).thenReturn(5L);
+            when(inventoryIssueRepository.countByIssueType("ADJUSTMENT")).thenReturn(2L);
+            when(inventoryIssueRepository.countByIssueType("DISPOSAL")).thenReturn(1L);
+            when(inventoryIssueRepository.countByIssueType("TRANSFER")).thenReturn(2L);
+            when(inventoryIssueRepository.countDeliveries()).thenReturn(10L);
             when(inventoryIssueRepository.sumTotalCost()).thenReturn(BigDecimal.valueOf(1000000));
 
             Object result = stockDeliveryService.getDeliveryStatistics();
