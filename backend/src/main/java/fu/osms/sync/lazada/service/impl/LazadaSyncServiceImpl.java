@@ -15,6 +15,7 @@ import fu.osms.common.enums.SyncStatus;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;
 import fu.osms.sync.lazada.service.LazadaPayloadBuilder;
+import fu.osms.sync.lazada.dto.LazadaMigratedImages;
 import fu.osms.sync.lazada.dto.LazadaProductConfig;
 import fu.osms.catalog.service.ProductChannelConfigService;
 import fu.osms.sync.service.PlatformSyncService;
@@ -54,7 +55,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
 
             LazadaProductConfig config = resolveProductConfig(channelProduct);
             validateSyncPrerequisites(product, variants, config);
-            List<String> migratedImageUrls = lazadaImageService.migrateImages(images, channel.getId());
+            LazadaMigratedImages migratedImages = lazadaImageService.migrateImages(images, channel.getId());
             migrateSizeChartImage(config, channel.getId());
 
             boolean isNew = (channelProduct.getExternalProductId() == null);
@@ -62,7 +63,7 @@ public class LazadaSyncServiceImpl implements PlatformSyncService {
             String xmlPayload = lazadaPayloadBuilder.buildPayload(
                     product,
                     variants,
-                    migratedImageUrls,
+                    migratedImages,
                     externalSkuIdBySku,
                     config,
                     isNew

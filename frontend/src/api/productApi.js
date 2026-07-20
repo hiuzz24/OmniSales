@@ -20,18 +20,6 @@ const productApi = {
         return response;
     },
 
-    getInsights: async (id) => {
-        const response = await axiosClient.get(`/products/${id}/insights`);
-        return response;
-    },
-
-    getInventoryTransactions: async (id, page = 0, size = 30) => {
-        const response = await axiosClient.get(`/products/${id}/inventory-transactions`, {
-            params: { page, size },
-        });
-        return response;
-    },
-
     update: async (id, data) => {
         const response = await axiosClient.put(`/products/${id}`, data);
         return response;

@@ -75,7 +75,6 @@ public class TikTokOrderWebhookWriter {
         order.setPlatform(PlatformType.TIKTOK);
         order.setChannel(event.getChannel());
         order.setChannelName(event.getChannel().getDisplayName());
-        OrderStatus oldStatus = order.getStatus();
         Optional<OrderStatus> mappedStatus = resolveStatus(rawStatus);
         mappedStatus.ifPresent(order::setStatus);
         order.setPaymentStatus(resolvePaymentStatus(rawStatus, payment));
@@ -94,7 +93,7 @@ public class TikTokOrderWebhookWriter {
             order.setCancelReason(platformCancelReason);
         }
         firstTrackingNumber(packages, items, detail).ifPresent(order::setTrackingNumber);
-        if (mappedStatus.isPresent() && oldStatus != mappedStatus.get()) {
+        if (mappedStatus.isPresent()) {
             order.setStatusChangedAt(OffsetDateTime.now());
         }
 

@@ -77,26 +77,6 @@ public class InventoryTransactionServiceImpl implements InventoryTransactionServ
     }
 
     @Override
-    @Transactional(readOnly = true)
-    public PageResponse<InventoryTransactionDTO> getTransactionsDTOByProduct(UUID productId, PageRequest pageRequest) {
-        Page<InventoryTransaction> transactionPage =
-                inventoryTransactionRepository.findByProductIdWithDetails(productId, pageRequest);
-        List<InventoryTransactionDTO> content = transactionPage.getContent().stream()
-                .map(inventoryTransactionDTOMapper::toDto)
-                .toList();
-
-        return PageResponse.<InventoryTransactionDTO>builder()
-                .content(content)
-                .page(transactionPage.getNumber())
-                .size(transactionPage.getSize())
-                .totalElements(transactionPage.getTotalElements())
-                .totalPages(transactionPage.getTotalPages())
-                .first(transactionPage.isFirst())
-                .last(transactionPage.isLast())
-                .build();
-    }
-
-    @Override
     public Page<InventoryTransactionResponse> getInventoryLogs(UUID warehouseId, String productSearch, InvTxnType type, OffsetDateTime startDate, OffsetDateTime endDate, UUID performedById, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "performedAt"));
 

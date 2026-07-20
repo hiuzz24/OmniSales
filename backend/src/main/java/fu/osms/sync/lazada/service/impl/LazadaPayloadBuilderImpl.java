@@ -3,6 +3,7 @@ package fu.osms.sync.lazada.service.impl;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.sync.lazada.service.LazadaPayloadBuilder;
+import fu.osms.sync.lazada.dto.LazadaMigratedImages;
 import fu.osms.sync.lazada.dto.LazadaProductConfig;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
@@ -21,10 +22,13 @@ import java.util.Map;
 @Service
 public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
 
+    private static final int MAX_PRODUCT_IMAGES = 3;
+    private static final int MAX_DESCRIPTION_LENGTH = 25_000;
+
     @Override
     public String buildPayload(Product product,
                                List<ProductVariant> variants,
-                              List<String> lazadaImageUrls,
+                              LazadaMigratedImages migratedImages,
                               Map<String, String> externalSkuIdBySku,
                               LazadaProductConfig config,
                               boolean isCreate) {
@@ -41,17 +45,20 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
                 appendTextElement(document, productElement, "PrimaryCategory", config.getCategoryId());
             }
 
+            List<String> productImageUrls = migratedImages == null
+                    ? List.of()
+                    : migratedImages.productImageUrls().stream().limit(MAX_PRODUCT_IMAGES).toList();
             Element attributes = appendElement(document, productElement, "Attributes");
             appendCdataElement(document, attributes, "name", product.getName());
             appendTextElement(document, attributes, "brand_id", config.getBrandId());
-            if (product.getDescription() != null && !product.getDescription().isBlank()) {
-                appendCdataElement(document, attributes, "description", product.getDescription());
-            }
+            appendCdataElement(document, attributes, "description", buildDescription(product, productImageUrls));
             appendConfiguredAttributes(document, attributes, config);
 
-            if (lazadaImageUrls != null && !lazadaImageUrls.isEmpty()) {
+            if (!productImageUrls.isEmpty()) {
                 Element productImages = appendElement(document, productElement, "Images");
-                appendTextElement(document, productImages, "Image", lazadaImageUrls.get(0));
+                for (String imageUrl : productImageUrls) {
+                    appendTextElement(document, productImages, "Image", imageUrl);
+                }
             }
 
             Element skus = appendElement(document, productElement, "Skus");
@@ -72,7 +79,10 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
                 appendTextElement(document, sku, "package_height", requiredAttribute(product, "packageHeightCm"));
 
                 appendVariantAttributes(document, sku, variant, config);
-                appendSkuImages(document, sku, lazadaImageUrls);
+                List<String> skuImageUrls = migratedImages == null || variant.getId() == null
+                        ? List.of()
+                        : migratedImages.variantImageUrls().getOrDefault(variant.getId(), List.of());
+                appendSkuImages(document, sku, skuImageUrls);
             }
 
             return toXml(document);
@@ -152,6 +162,39 @@ public class LazadaPayloadBuilderImpl implements LazadaPayloadBuilder {
         for (String url : lazadaImageUrls) {
             appendTextElement(document, images, "Image", url);
         }
+    }
+
+    private String buildDescription(Product product, List<String> imageUrls) {
+        String description = product.getDescription() == null ? "" : product.getDescription().trim();
+
+        StringBuilder result = new StringBuilder(description);
+        if (!description.isBlank()) {
+            result.append('\n');
+        }
+        result.append("<div class=\"osms-product-images\">");
+        String alt = escapeHtmlAttribute(product.getName());
+        for (String imageUrl : imageUrls) {
+            result.append("<img src=\"")
+                    .append(escapeHtmlAttribute(imageUrl))
+                    .append("\" alt=\"")
+                    .append(alt)
+                    .append("\" />");
+        }
+        result.append("</div>");
+
+        if (result.length() > MAX_DESCRIPTION_LENGTH) {
+            throw new IllegalStateException("Lazada description exceeds 25000 characters after adding product images");
+        }
+        return result.toString();
+    }
+
+    private String escapeHtmlAttribute(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
     }
 
     private String toXml(Document document) throws Exception {
