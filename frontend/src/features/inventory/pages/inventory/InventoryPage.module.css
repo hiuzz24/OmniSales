@@ -1535,6 +1535,86 @@
   background: #fafbfc;
 }
 
+/* Compact single-line inventory table */
+.table {
+  table-layout: fixed;
+}
+
+.td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.td:last-child {
+  overflow: visible;
+}
+
+.productInfo,
+.variantInfo {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.variantInfo > div {
+  min-width: 0;
+  max-width: calc(100% - 32px);
+}
+
+.productName,
+.variantName,
+.variantMeta,
+.warehouseLink,
+.productActionHint {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.productMeta {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channelCell {
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.channelBadge {
+  flex: 0 0 auto;
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channelSub {
+  display: none;
+}
+
+.skuChip,
+.productSkuSummary {
+  max-width: 86px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusCell {
+  min-width: 0;
+  max-width: 100%;
+}
+
 @media (max-width: 1100px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(180px, 1fr));

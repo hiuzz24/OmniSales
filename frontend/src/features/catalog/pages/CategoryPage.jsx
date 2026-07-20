@@ -396,7 +396,7 @@ const CategoryPage = () => {
                             className={styles.inlineEditInput}
                           />
                         ) : (
-                          <span className={styles.categoryName}>{category.name}</span>
+                          <span className={styles.categoryName} title={category.name}>{category.name}</span>
                         )}
                       </td>
 
@@ -421,7 +421,7 @@ const CategoryPage = () => {
                             <ChevronDown size={14} className={styles.selectChevron} />
                           </div>
                         ) : (
-                          <span className={isParentRoot ? styles.parentMuted : styles.parentActive}>
+                          <span className={isParentRoot ? styles.parentMuted : styles.parentActive} title={category.parentCategoryName}>
                             {category.parentCategoryName}
                           </span>
                         )}
@@ -437,7 +437,7 @@ const CategoryPage = () => {
                             className={styles.inlineEditInput}
                           />
                         ) : (
-                          getDescription(category)
+                          <span className={styles.descriptionText} title={getDescription(category)}>{getDescription(category)}</span>
                         )}
                       </td>
 

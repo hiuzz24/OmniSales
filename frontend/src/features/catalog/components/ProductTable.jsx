@@ -110,12 +110,6 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
           Danh sách sản phẩm
           <span className={styles.tableCount}>({totalElements})</span>
         </h3>
-        <button className={styles.addBtn} onClick={() => navigate('/products/create')} type="button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          Thêm sản phẩm
-        </button>
       </div>
 
       <div className={styles.tableResponsive}>
@@ -178,9 +172,9 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                           )}
                         </div>
                         <div className={styles.productInfo}>
-                          <div className={styles.productName}>{product.name || 'N/A'}</div>
+                          <div className={styles.productName} title={product.name || 'N/A'}>{product.name || 'N/A'}</div>
                           {product.brand && (
-                            <div className={styles.productMeta}>
+                            <div className={styles.productMeta} title={product.brand}>
                               <span className={styles.metaDot}></span>
                               {product.brand}
                             </div>
@@ -192,7 +186,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                       <code className={styles.skuText}>{product.sku || product.variants?.[0]?.sku || '—'}</code>
                     </td>
                     <td className={styles.td}>
-                      <div className={styles.categoryTag}>
+                      <div className={styles.categoryTag} title={product.categoryName || 'Chưa phân loại'}>
                         {product.categoryName || 'Chưa phân loại'}
                       </div>
                     </td>
