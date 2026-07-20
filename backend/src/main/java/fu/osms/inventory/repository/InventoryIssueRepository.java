@@ -55,4 +55,14 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
             "AND item.inventoryIssue.updatedAt <= :changedUntil")
     List<UUID> findChangedAppliedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                      @Param("changedUntil") OffsetDateTime changedUntil);
+
+    @Query("SELECT DISTINCT item.productVariant.id FROM InventoryIssueItem item " +
+            "JOIN ChannelProductVariant cpv ON cpv.variant.id = item.productVariant.id " +
+            "JOIN cpv.channelProduct cp " +
+            "JOIN cp.channel ch " +
+            "WHERE item.inventoryIssue.status = 'CONFIRMED' " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND (cpv.lastSyncedAt IS NULL OR cpv.lastSyncedAt < item.inventoryIssue.createdAt)")
+    List<UUID> findConfirmedVariantIdsPendingMarketplaceSync();
 }

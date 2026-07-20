@@ -19,6 +19,7 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
 import fu.osms.order.dto.request.OrderRequest;
@@ -57,8 +58,10 @@ import fu.osms.common.utils.SecurityUtils;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -80,6 +83,7 @@ public class OrderServiceImpl implements OrderService {
     private final InventoryAlertService inventoryAlertService;
     private final OrderStatusPushService orderStatusPushService;
     private final ApplicationEventPublisher eventPublisher;
+    private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
     @Override
     @Transactional
@@ -101,6 +105,7 @@ public class OrderServiceImpl implements OrderService {
         order.setStatusChangedAt(OffsetDateTime.now());
         Order savedOrder = orderRepository.save(order);
 
+        Set<UUID> changedVariantIds = new HashSet<>();
         for (OrderItemRequest itemReq : request.getItems()) {
             ProductVariant variant = resolveVariant(itemReq);
             OrderItem item = OrderItem.builder()
@@ -111,14 +116,16 @@ public class OrderServiceImpl implements OrderService {
                     .quantity(itemReq.getQuantity())
                     .unitPrice(itemReq.getUnitPrice())
                     .discountAmount(itemReq.getDiscountAmount() != null ? itemReq.getDiscountAmount() : BigDecimal.ZERO)
-                    .costPrice(variant != null ? variant.getCostPrice() : null)
                     .build();
             orderItemRepository.save(item);
 
             if (variant != null) {
-                reserveInventory(variant, itemReq.getQuantity());
+                if (reserveInventory(variant, itemReq.getQuantity())) {
+                    changedVariantIds.add(variant.getId());
+                }
             }
         }
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
 
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
@@ -177,7 +184,7 @@ public class OrderServiceImpl implements OrderService {
 
         if (status == OrderStatus.CANCELLED) {
             order.setStatus(OrderStatus.CANCELLED);
-            releaseReservedInventory(order);
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(releaseReservedInventory(order));
         } else {
             order.setStatus(status);
         }
@@ -340,7 +347,7 @@ public class OrderServiceImpl implements OrderService {
             return;
         }
 
-        releaseReservedInventory(order);
+        Set<UUID> changedVariantIds = releaseReservedInventory(order);
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
         order.setStatusChangedAt(OffsetDateTime.now());
@@ -367,6 +374,7 @@ public class OrderServiceImpl implements OrderService {
         auditService.record(actorId, actorEmail, "ORDER_CANCEL", "ORDER", id,
                 order.getId().toString(), auditChanges);
 
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
         eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
     }
 
@@ -588,7 +596,7 @@ public class OrderServiceImpl implements OrderService {
         return productVariantRepository.findBySkuAndDeletedAtIsNull(itemReq.getSku()).orElse(null);
     }
 
-    private void reserveInventory(ProductVariant variant, int quantity) {
+    private boolean reserveInventory(ProductVariant variant, int quantity) {
         List<InventoryItem> inventoryItems = inventoryItemRepository.findByVariantIdWithLock(variant.getId());
         if (inventoryItems.isEmpty()) {
             throw new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND,
@@ -615,9 +623,11 @@ public class OrderServiceImpl implements OrderService {
 
         inventoryItemRepository.saveAll(changedItems);
         changedItems.forEach(inventoryAlertService::notifyLowStockAfterStockChange);
+        return !changedItems.isEmpty();
     }
 
-    private void releaseReservedInventory(Order order) {
+    private Set<UUID> releaseReservedInventory(Order order) {
+        Set<UUID> changedVariantIds = new HashSet<>();
         List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
         for (OrderItem orderItem : orderItems) {
             ProductVariant variant = orderItem.getVariant();
@@ -642,8 +652,10 @@ public class OrderServiceImpl implements OrderService {
 
             if (!changedItems.isEmpty()) {
                 inventoryItemRepository.saveAll(changedItems);
+                changedVariantIds.add(variant.getId());
             }
         }
+        return changedVariantIds;
     }
 
     private ProductVariant resolveVariantBySku(String sku) {

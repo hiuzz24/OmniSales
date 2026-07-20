@@ -2,6 +2,7 @@ package fu.osms.inventory.dto.response;
 
 import fu.osms.common.enums.PlatformType;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import lombok.*;
 
@@ -21,4 +22,8 @@ public class AvailableVariantDTO {
     private UUID channelId;
     private String channelName;
     private PlatformType platform;
+    private List<UUID> channelIds;
+    private List<String> channelNames;
+    private List<PlatformType> platforms;
+    private Integer mergedVariantCount;
 }

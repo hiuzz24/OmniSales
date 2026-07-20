@@ -1,12 +1,12 @@
 package fu.osms.channel.dto.response;
 
+import fu.osms.common.enums.PlatformType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.util.List;
 import java.util.UUID;
 
 @Getter
@@ -14,15 +14,19 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ChannelImportSyncResponse {
+public class ChannelSyncDetailResponse {
 
     private UUID channelId;
-    private UUID syncLogId;
+    private String channelName;
+    private PlatformType platform;
+    private String sellerId;
+    private String shopId;
+    private String shopDomain;
+    private String status;
+    private String message;
     private int productCount;
     private int variantCount;
     private int warehouseCount;
     private int pushedVariantCount;
-    private String status;
-    private String message;
-    private List<ChannelSyncDetailResponse> details;
+    private long durationMs;
 }

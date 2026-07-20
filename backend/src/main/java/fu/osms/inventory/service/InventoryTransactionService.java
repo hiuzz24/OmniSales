@@ -13,7 +13,6 @@ import java.util.UUID;
 public interface InventoryTransactionService {
     PageResponse<InventoryTransactionDTO> getTransactionsDTO(PageRequest pageRequest, int page, int size);
     PageResponse<InventoryTransactionDTO> getTransactionsDTOByVariant(UUID variantId, PageRequest pageRequest, int page, int size);
-    PageResponse<InventoryTransactionDTO> getTransactionsDTOByProduct(UUID productId, PageRequest pageRequest);
 
     public Page<InventoryTransactionResponse> getInventoryLogs(
             UUID warehouseId,

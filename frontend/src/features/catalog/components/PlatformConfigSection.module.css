@@ -78,6 +78,42 @@
   border-top: 1px solid #e2e8f0;
 }
 
+.shopifyReadyCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f0fdf4, #ffffff);
+  border: 1px solid #bbf7d0;
+  box-shadow: 0 8px 22px rgba(22, 163, 74, 0.08);
+}
+
+.shopifyReadyCard div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shopifyReadyCard strong {
+  color: #14532d;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.shopifyReadyCard span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #475569;
+}
+
+.shopifyReadyCard .statusReady {
+  color: #065f46;
+  flex-shrink: 0;
+}
+
 /* Category section */
 .categorySection {
   background: linear-gradient(145deg, #ffffff, #f8fafc);

@@ -11,7 +11,9 @@ import fu.osms.sync.dto.shopify.request.ShopifyOptionPayload;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import fu.osms.sync.shopify.ShopifyPayloadBuilder;
@@ -20,6 +22,7 @@ import fu.osms.sync.shopify.ShopifyPayloadBuilder;
 public class ShopifyPayloadBuilderImpl implements ShopifyPayloadBuilder {
 
     public ShopifyProductPayload buildPayload(Product product, List<ProductVariant> variants, List<ProductImage> images) {
+        List<ProductVariant> syncVariants = dedupeActiveVariantsBySku(variants);
         String tags = null;
         if (product.getAttributes() != null && product.getAttributes().containsKey("tags")) {
             Object tagsObj = product.getAttributes().get("tags");
@@ -31,9 +34,7 @@ public class ShopifyPayloadBuilderImpl implements ShopifyPayloadBuilder {
         }
 
         List<ShopifyVariantPayload> variantPayloads = new ArrayList<>();
-        for (ProductVariant v : variants) {
-            if (!Boolean.TRUE.equals(v.getIsActive()) || v.getDeletedAt() != null) continue;
-
+        for (ProductVariant v : syncVariants) {
             String option1 = null;
             String option2 = null;
             String option3 = null;
@@ -66,15 +67,13 @@ public class ShopifyPayloadBuilderImpl implements ShopifyPayloadBuilder {
         String status = (product.getStatus() == ProductStatus.ACTIVE) ? "active" : "draft";
 
         List<ShopifyOptionPayload> optionPayloads = new ArrayList<>();
-        for (ProductVariant v : variants) {
-            if (Boolean.TRUE.equals(v.getIsActive()) && v.getDeletedAt() == null) {
-                if (v.getOptionValues() != null && !v.getOptionValues().isEmpty()) {
-                    List<String> optionNames = v.getOptionValues().keySet().stream().toList();
-                    if (optionNames.size() > 0) optionPayloads.add(ShopifyOptionPayload.builder().name(optionNames.get(0)).build());
-                    if (optionNames.size() > 1) optionPayloads.add(ShopifyOptionPayload.builder().name(optionNames.get(1)).build());
-                    if (optionNames.size() > 2) optionPayloads.add(ShopifyOptionPayload.builder().name(optionNames.get(2)).build());
-                    break;
-                }
+        for (ProductVariant v : syncVariants) {
+            if (v.getOptionValues() != null && !v.getOptionValues().isEmpty()) {
+                List<String> optionNames = v.getOptionValues().keySet().stream().toList();
+                if (optionNames.size() > 0) optionPayloads.add(ShopifyOptionPayload.builder().name(optionNames.get(0)).build());
+                if (optionNames.size() > 1) optionPayloads.add(ShopifyOptionPayload.builder().name(optionNames.get(1)).build());
+                if (optionNames.size() > 2) optionPayloads.add(ShopifyOptionPayload.builder().name(optionNames.get(2)).build());
+                break;
             }
         }
 
@@ -88,5 +87,19 @@ public class ShopifyPayloadBuilderImpl implements ShopifyPayloadBuilder {
                 .options(optionPayloads.isEmpty() ? null : optionPayloads)
                 .images(imagePayloads)
                 .build();
+    }
+
+    private List<ProductVariant> dedupeActiveVariantsBySku(List<ProductVariant> variants) {
+        Map<String, ProductVariant> bySku = new LinkedHashMap<>();
+        for (ProductVariant variant : variants) {
+            if (!Boolean.TRUE.equals(variant.getIsActive()) || variant.getDeletedAt() != null) {
+                continue;
+            }
+            String key = variant.getSku() == null || variant.getSku().isBlank()
+                    ? "variant:" + variant.getId()
+                    : "sku:" + variant.getSku().trim().toLowerCase();
+            bySku.putIfAbsent(key, variant);
+        }
+        return new ArrayList<>(bySku.values());
     }
 }

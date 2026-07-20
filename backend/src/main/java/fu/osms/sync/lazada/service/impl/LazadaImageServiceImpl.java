@@ -3,6 +3,7 @@ package fu.osms.sync.lazada.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.catalog.entity.ProductImage;
+import fu.osms.sync.lazada.dto.LazadaMigratedImages;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.lazada.service.LazadaImageService;
 import lombok.RequiredArgsConstructor;
@@ -18,10 +19,13 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import java.io.StringWriter;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -29,26 +33,70 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class LazadaImageServiceImpl implements LazadaImageService {
 
+    private static final int MAX_PRODUCT_IMAGES = 3;
+    private static final int MAX_SKU_IMAGES = 8;
+
     private final LazadaAuthorizedApiClient lazadaApiClient;
     private final ObjectMapper objectMapper;
 
     @Override
-    public List<String> migrateImages(List<ProductImage> images, UUID channelId) {
-        List<String> migratedUrls = new ArrayList<>();
-        
+    public LazadaMigratedImages migrateImages(List<ProductImage> images, UUID channelId) {
         if (images == null || images.isEmpty()) {
-            return migratedUrls;
+            throw new IllegalStateException("Missing Lazada main product image");
         }
 
-        for (ProductImage image : images) {
+        List<ProductImage> orderedImages = images.stream()
+                .sorted(Comparator
+                        .comparing((ProductImage image) -> !Boolean.TRUE.equals(image.getIsPrimary()))
+                        .thenComparing(image -> image.getSortOrder() == null ? Short.MAX_VALUE : image.getSortOrder()))
+                .toList();
+
+        Set<String> productSources = new LinkedHashSet<>();
+        Map<UUID, Set<String>> variantSources = new LinkedHashMap<>();
+        for (ProductImage image : orderedImages) {
             String originalUrl = image.getUrl();
             if (originalUrl == null || originalUrl.isBlank()) {
                 continue;
             }
-            migratedUrls.add(migrateImageUrl(originalUrl, channelId));
+            if (image.getVariant() == null) {
+                productSources.add(originalUrl.trim());
+                continue;
+            }
+
+            UUID variantId = image.getVariant().getId();
+            if (variantId != null) {
+                variantSources.computeIfAbsent(variantId, ignored -> new LinkedHashSet<>())
+                        .add(originalUrl.trim());
+            }
         }
 
-        return migratedUrls;
+        List<String> selectedProductSources = productSources.stream().limit(MAX_PRODUCT_IMAGES).toList();
+        if (selectedProductSources.isEmpty()) {
+            throw new IllegalStateException("Missing Lazada main product image");
+        }
+
+        Map<UUID, List<String>> selectedVariantSources = new LinkedHashMap<>();
+        variantSources.forEach((variantId, urls) ->
+                selectedVariantSources.put(variantId, urls.stream().limit(MAX_SKU_IMAGES).toList()));
+
+        Set<String> selectedSources = new LinkedHashSet<>(selectedProductSources);
+        selectedVariantSources.values().forEach(selectedSources::addAll);
+
+        Map<String, String> migratedBySource = new HashMap<>();
+        for (String sourceUrl : selectedSources) {
+            migratedBySource.put(sourceUrl, migrateImageUrl(sourceUrl, channelId));
+        }
+
+        List<String> productImageUrls = selectedProductSources.stream()
+                .map(migratedBySource::get)
+                .toList();
+        Map<UUID, List<String>> variantImageUrls = new LinkedHashMap<>();
+        selectedVariantSources.forEach((variantId, urls) -> variantImageUrls.put(
+                variantId,
+                urls.stream().map(migratedBySource::get).toList()
+        ));
+
+        return new LazadaMigratedImages(productImageUrls, variantImageUrls);
     }
 
     @Override

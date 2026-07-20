@@ -42,4 +42,14 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
             "AND item.receipt.updatedAt <= :changedUntil")
     List<UUID> findChangedConfirmedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                        @Param("changedUntil") OffsetDateTime changedUntil);
+
+    @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
+            "JOIN ChannelProductVariant cpv ON cpv.variant.id = item.variant.id " +
+            "JOIN cpv.channelProduct cp " +
+            "JOIN cp.channel ch " +
+            "WHERE item.receipt.status = 'CONFIRMED' " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND (cpv.lastSyncedAt IS NULL OR cpv.lastSyncedAt < item.receipt.createdAt)")
+    List<UUID> findConfirmedVariantIdsPendingMarketplaceSync();
 }

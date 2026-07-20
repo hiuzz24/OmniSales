@@ -7,10 +7,8 @@ import channelApi from '../../../api/channelApi';
 import { ROUTES } from '../../../app/router/routes';
 import styles from './ProductDetailPage.module.css';
 import ProductDetailHeader from '../components/ProductDetailHeader';
-import ProductStatsGrid from '../components/ProductStatsGrid';
 import ProductDetailTabs from '../components/ProductDetailTabs';
 import TabOverview from '../components/TabOverview';
-import TabInventory from '../components/TabInventory';
 import TabPlatform from '../components/TabPlatform';
 import TabImages from '../components/TabImages';
 import TabVariants from '../components/TabVariants';
@@ -21,62 +19,28 @@ const ProductDetailPage = () => {
   const [product, setProduct] = useState(null);
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [insights, setInsights] = useState(null);
-  const [insightsLoading, setInsightsLoading] = useState(true);
-  const [insightsError, setInsightsError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     fetchProduct();
-    fetchInsights();
   }, [id]);
-
-  useEffect(() => {
-    if (activeTab === 'inventory') {
-      fetchInsights();
-    }
-  }, [activeTab]);
 
   const fetchProduct = async () => {
     try {
       setLoading(true);
-      const [productResult, channelResult] = await Promise.allSettled([
+      const [prodRes, chanRes] = await Promise.all([
         productApi.getById(id),
         channelApi.getAll(),
       ]);
-
-      if (productResult.status === 'rejected') {
-        throw productResult.reason;
-      }
-
-      const prodRes = productResult.value;
       const responseData = prodRes.data?.data || prodRes.data || prodRes;
       setProduct(responseData);
-      if (channelResult.status === 'fulfilled') {
-        const chanRes = channelResult.value;
-        setChannels(chanRes.data?.data || chanRes.data || chanRes);
-      } else {
-        setChannels([]);
-      }
+      setChannels(chanRes.data?.data || chanRes.data || chanRes);
     } catch (error) {
       toast.error('Không thể tải thông tin sản phẩm');
       navigate(ROUTES.PRODUCTS);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchInsights = async () => {
-    try {
-      setInsightsLoading(true);
-      setInsightsError('');
-      const response = await productApi.getInsights(id);
-      setInsights(response.data?.data || response.data || response);
-    } catch (error) {
-      setInsightsError('Không thể tải dữ liệu thống kê sản phẩm.');
-    } finally {
-      setInsightsLoading(false);
     }
   };
 
@@ -114,7 +78,7 @@ const ProductDetailPage = () => {
         toast.success('Đồng bộ thành công lên tất cả các kênh!');
       }
 
-      await Promise.all([fetchProduct(), fetchInsights()]);
+      await fetchProduct();
     } catch (error) {
       toast.error('Đồng bộ thất bại. Vui lòng thử lại.');
     } finally {
@@ -145,13 +109,6 @@ const ProductDetailPage = () => {
       />
 
       <div className={styles.mainContent}>
-        <ProductStatsGrid
-          insights={insights}
-          loading={insightsLoading}
-          error={insightsError}
-          onRetry={fetchInsights}
-        />
-
         <div className={styles.tabsSection}>
           <ProductDetailTabs
             activeTab={activeTab}
@@ -161,15 +118,6 @@ const ProductDetailPage = () => {
 
           <div className={styles.tabContent}>
             {activeTab === 'overview' && <TabOverview product={product} />}
-            {activeTab === 'inventory' && (
-              <TabInventory
-                productId={product.id}
-                insights={insights}
-                insightsLoading={insightsLoading}
-                insightsError={insightsError}
-                onRetryInsights={fetchInsights}
-              />
-            )}
             {activeTab === 'platform' && <TabPlatform product={product} onRefresh={fetchProduct} />}
             {activeTab === 'images' && <TabImages product={product} />}
             {activeTab === 'variants' && <TabVariants product={product} />}

@@ -18,6 +18,7 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.WebhookEvent;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.PlatformCatalogWebhookProcessor;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -45,6 +47,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
     private final WarehouseRepository warehouseRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @Override
     public PlatformType getPlatform() {
@@ -130,7 +133,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
             return "IGNORED";
         }
 
-        Warehouse warehouse = resolveShopifyWarehouse(locationId);
+        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(event.getChannel());
         upsertInventoryItem(event, warehouse, mapping.get().getVariant(), available);
 
         ChannelProductVariant channelVariant = mapping.get();
@@ -180,14 +183,20 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
 
         updateVariant(variant, externalVariantId, variantPayload);
         variant = productVariantRepository.save(variant);
+        ProductVariant savedVariant = variant;
 
         if (mapping == null) {
-            mapping = ChannelProductVariant.builder()
-                    .channelProduct(channelProduct)
-                    .variant(variant)
-                    .externalVariantId(externalVariantId)
-                    .build();
+            mapping = channelProductVariantRepository
+                    .findByChannelProductIdAndVariantId(channelProduct.getId(), savedVariant.getId())
+                    .orElseGet(() -> ChannelProductVariant.builder()
+                            .channelProduct(channelProduct)
+                            .variant(savedVariant)
+                            .externalVariantId(externalVariantId)
+                            .build());
         }
+        mapping.setChannelProduct(channelProduct);
+        mapping.setVariant(savedVariant);
+        applyExternalVariantId(channelProduct, mapping, externalVariantId);
         mapping.setExternalSku(variant.getSku());
         mapping.setExternalPrice(variant.getPrice());
         mapping.setSyncStatus(SyncStatus.SYNCED);
@@ -205,6 +214,25 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         channelProductVariantRepository.save(mapping);
     }
 
+    private void applyExternalVariantId(ChannelProduct channelProduct,
+                                        ChannelProductVariant mapping,
+                                        String externalVariantId) {
+        channelProductVariantRepository
+                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
+                .filter(existing -> mapping.getId() != null && !Objects.equals(existing.getId(), mapping.getId()))
+                .ifPresentOrElse(
+                        existing -> {
+                            Map<String, Object> metadata = mapping.getMetadata() == null
+                                    ? new HashMap<>()
+                                    : new HashMap<>(mapping.getMetadata());
+                            metadata.put("conflictingShopifyWebhookExternalVariantId", externalVariantId);
+                            metadata.put("conflictingChannelProductVariantId", existing.getId().toString());
+                            mapping.setMetadata(metadata);
+                        },
+                        () -> mapping.setExternalVariantId(externalVariantId)
+                );
+    }
+
     private ProductVariant resolveOrCreateVariant(Product product, String externalVariantId, Map<String, Object> variantPayload) {
         String sku = usableSku(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(variantPayload, "sku")));
         if (sku != null) {
@@ -215,7 +243,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         }
         return ProductVariant.builder()
                 .product(product)
-                .sku(firstNonBlank(sku, "SHOPIFY-" + externalVariantId))
+                .sku(firstNonBlank(sku, fallbackSku(externalVariantId)))
                 .price(BigDecimal.ZERO)
                 .costPrice(BigDecimal.ZERO)
                 .isActive(true)
@@ -228,7 +256,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         if (sku != null && canUseSku(variant, sku)) {
             variant.setSku(sku);
         } else if (variant.getSku() == null || variant.getSku().isBlank()) {
-            variant.setSku("SHOPIFY-" + externalVariantId);
+            variant.setSku(fallbackSku(externalVariantId));
         }
 
         String title = WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(variantPayload, "title", "name"));
@@ -278,7 +306,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
                     .warehouse(warehouse)
                     .variant(variant)
                     .type(InvTxnType.ADJUSTMENT)
-                    .referenceType("SYNC")
+                    .referenceType("ADJUSTMENT")
                     .referenceId(event.getId())
                     .quantityChange(delta)
                     .quantityBefore(before)
@@ -361,6 +389,10 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
 
     private String usableSku(String sku) {
         return sku == null || sku.isBlank() ? null : sku.trim();
+    }
+
+    private String fallbackSku(String externalId) {
+        return "EXT-" + firstNonBlank(externalId, java.util.UUID.randomUUID().toString());
     }
 
     private String normalizedEventType(WebhookEvent event) {

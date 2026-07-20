@@ -177,7 +177,7 @@ export default function StockReceiveEditPage() {
     try {
       const [receiptRes, wRes, sRes] = await Promise.all([
         stockReceiveService.getReceiptById(id),
-        warehouseService.getAll(),
+        warehouseService.getMaster(),
         supplierService.getAll(),
       ]);
       
@@ -193,7 +193,8 @@ export default function StockReceiveEditPage() {
       setReceipt(receiptData);
       
       // Set form values
-      setValue('warehouseId', receiptData.warehouseId || '');
+      const masterWarehouse = wRes.data?.data ?? wRes.data;
+      setValue('warehouseId', masterWarehouse?.id ? String(masterWarehouse.id) : receiptData.warehouseId || '');
       setValue('supplierId', receiptData.supplierId || '');
       setValue('invoiceNumber', receiptData.invoiceNumber || '');
       setValue('receivedAt', receiptData.receivedAt ? new Date(receiptData.receivedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
@@ -216,7 +217,7 @@ export default function StockReceiveEditPage() {
         if (d?.content && Array.isArray(d.content)) return d.content;
         return [];
       };
-      setWarehouses(extractData(wRes));
+      setWarehouses(masterWarehouse?.id ? [masterWarehouse] : extractData(wRes));
       setSuppliers(extractData(sRes));
       
     } catch (error) {
@@ -421,7 +422,7 @@ export default function StockReceiveEditPage() {
                 </label>
                 <select {...register('warehouseId')}
                   style={{ width: '100%', padding: '7px 9px', borderRadius: 6, border: `1px solid ${errors.warehouseId ? '#fca5a5' : '#e2e8f0'}`, fontSize: 12, color: '#0f172a', outline: 'none', backgroundColor: '#fff', boxSizing: 'border-box' }}>
-                  <option value="">Chọn kho</option>
+                  {warehouses.length === 0 && <option value="">Chọn kho</option>}
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>{w.name}{w.address ? ` - ${w.address}` : ''}</option>
                   ))}

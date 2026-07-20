@@ -39,15 +39,6 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
             countQuery = "SELECT COUNT(t) FROM InventoryTransaction t WHERE t.variant.id = :variantId")
     Page<InventoryTransaction> findByVariantIdWithDetails(@Param("variantId") UUID variantId, Pageable pageable);
 
-    @Query(value = "SELECT t FROM InventoryTransaction t " +
-            "JOIN FETCH t.warehouse " +
-            "JOIN FETCH t.variant v " +
-            "LEFT JOIN FETCH v.product " +
-            "LEFT JOIN FETCH t.performedBy " +
-            "WHERE v.product.id = :productId",
-            countQuery = "SELECT COUNT(t) FROM InventoryTransaction t WHERE t.variant.product.id = :productId")
-    Page<InventoryTransaction> findByProductIdWithDetails(@Param("productId") UUID productId, Pageable pageable);
-
     List<InventoryTransaction> findByType(InvTxnType type);
 
     @Query(value = "SELECT * FROM inventory_transactions " +

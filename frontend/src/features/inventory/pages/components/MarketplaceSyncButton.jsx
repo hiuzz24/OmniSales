@@ -162,6 +162,22 @@ const defaultSuccessMessage = ({ channel, direction, result }) => {
   return `Đã đồng bộ ${channelLabel}: đẩy ${toCount(result?.productCount)} sản phẩm, ${toCount(result?.pushedVariantCount)} SKU tồn kho lên sàn.`;
 };
 
+const syncIdentity = (detail) => detail?.sellerId || detail?.shopId || detail?.shopDomain || 'chưa có seller/shop id';
+
+const formatDetailLine = (detail) => {
+  const platform = PLATFORM_LABELS[detail?.platform] ?? detail?.platform ?? 'Sàn';
+  const status = String(detail?.status || '').toUpperCase() === 'SYNCED' ? 'OK' : 'Lỗi';
+  return `${platform} (${syncIdentity(detail)}): ${status}, SP ${toCount(detail?.productCount)}, SKU ${toCount(detail?.variantCount || detail?.pushedVariantCount)}`;
+};
+
+const formatSyncResultMessage = (fallbackMessage, result) => {
+  const details = Array.isArray(result?.details) ? result.details : [];
+  if (details.length === 0) {
+    return result?.message || fallbackMessage;
+  }
+  return `${result?.message || fallbackMessage}\n${details.map(formatDetailLine).join('\n')}`;
+};
+
 export default function MarketplaceSyncButton({
   onSynced,
   className,
@@ -236,7 +252,12 @@ export default function MarketplaceSyncButton({
 
       const message = getSuccessMessage?.({ channel, direction, result })
         || defaultSuccessMessage({ channel, direction, result });
-      toast.success(message);
+      const summaryMessage = formatSyncResultMessage(message, result);
+      if (String(result?.status || '').toUpperCase() === 'FAILED') {
+        toast.warn(summaryMessage);
+      } else {
+        toast.success(summaryMessage);
+      }
       await onSynced?.({ channel, direction, result });
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || `Không thể đồng bộ ${channelLabel}.`);

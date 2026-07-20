@@ -3,7 +3,6 @@ import styles from './ProductDetailTabs.module.css';
 const ProductDetailTabs = ({ activeTab, onChange, variantsCount }) => {
   const tabs = [
     { id: 'overview', label: 'Tổng quan' },
-    { id: 'inventory', label: 'Tồn kho' },
     { id: 'platform', label: 'Platform Mapping' },
     { id: 'images', label: 'Hình ảnh' },
     { id: 'variants', label: `Biến thể (${variantsCount})` },

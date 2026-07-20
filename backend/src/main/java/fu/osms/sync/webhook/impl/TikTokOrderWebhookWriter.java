@@ -3,6 +3,7 @@ package fu.osms.sync.webhook.impl;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
@@ -34,6 +35,7 @@ public class TikTokOrderWebhookWriter {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
+    private final PlatformOrderInventoryService platformOrderInventoryService;
 
     @Transactional
     public void write(UUID eventId, Map<String, Object> detail) {
@@ -75,7 +77,6 @@ public class TikTokOrderWebhookWriter {
         order.setPlatform(PlatformType.TIKTOK);
         order.setChannel(event.getChannel());
         order.setChannelName(event.getChannel().getDisplayName());
-        OrderStatus oldStatus = order.getStatus();
         Optional<OrderStatus> mappedStatus = resolveStatus(rawStatus);
         mappedStatus.ifPresent(order::setStatus);
         order.setPaymentStatus(resolvePaymentStatus(rawStatus, payment));
@@ -94,7 +95,7 @@ public class TikTokOrderWebhookWriter {
             order.setCancelReason(platformCancelReason);
         }
         firstTrackingNumber(packages, items, detail).ifPresent(order::setTrackingNumber);
-        if (mappedStatus.isPresent() && oldStatus != mappedStatus.get()) {
+        if (mappedStatus.isPresent()) {
             order.setStatusChangedAt(OffsetDateTime.now());
         }
 
@@ -118,6 +119,7 @@ public class TikTokOrderWebhookWriter {
 
         Order savedOrder = orderRepository.save(order);
         replaceItems(savedOrder, items);
+        platformOrderInventoryService.syncReservations(savedOrder);
         complete(event);
     }
 

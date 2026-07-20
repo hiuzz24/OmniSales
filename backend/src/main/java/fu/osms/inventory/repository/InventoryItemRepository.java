@@ -2,7 +2,6 @@ package fu.osms.inventory.repository;
 
 import fu.osms.common.enums.PlatformType;
 import fu.osms.inventory.entity.InventoryItem;
-import fu.osms.catalog.repository.projection.ProductWarehouseInventoryAggregate;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -79,26 +78,6 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
             "LEFT JOIN FETCH i.variant",
             countQuery = "SELECT COUNT(i) FROM InventoryItem i")
     Page<InventoryItem> findAllWithVariantRelationships(Pageable pageable);
-
-    @Query(value = """
-            SELECT w.id AS "warehouseId",
-                   w.name AS "warehouseName",
-                   COALESCE(SUM(i.quantity_on_hand), 0)::bigint AS "quantityOnHand",
-                   COALESCE(SUM(i.reserved_quantity), 0)::bigint AS "reservedQuantity",
-                   COALESCE(SUM(i.available_quantity), 0)::bigint AS "availableQuantity",
-                   COUNT(*) FILTER (WHERE i.available_quantity <= i.low_stock_threshold)::bigint AS "lowStockCount"
-            FROM inventory_items i
-            JOIN product_variants v ON v.id = i.variant_id
-            JOIN warehouses w ON w.id = i.warehouse_id
-            WHERE v.product_id = :productId
-              AND v.is_active = true
-              AND v.deleted_at IS NULL
-              AND w.is_active = true
-              AND w.deleted_at IS NULL
-            GROUP BY w.id, w.name
-            ORDER BY w.name ASC
-            """, nativeQuery = true)
-    List<ProductWarehouseInventoryAggregate> aggregateByProductAndWarehouse(@Param("productId") UUID productId);
 
     @Query(value = "SELECT DISTINCT i FROM InventoryItem i " +
             "LEFT JOIN FETCH i.warehouse " +

@@ -70,7 +70,8 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
             return 0;
         }
 
-        List<ChannelProductVariant> mappings = changedSince == null
+        boolean scopedFullSync = changedSince == null && !changedScope.variantIds().isEmpty();
+        List<ChannelProductVariant> mappings = changedSince == null && !scopedFullSync
                 ? channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId)
                 : channelProductVariantRepository.findActiveByChannelIdAndVariantIdInWithVariant(
                         channelId,
@@ -140,7 +141,9 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
                                              OffsetDateTime changedUntil,
                                              Collection<UUID> productChangedVariantIds) {
         if (changedSince == null) {
-            return new ChangedScope(Set.of());
+            return new ChangedScope(productChangedVariantIds == null
+                    ? Set.of()
+                    : new HashSet<>(productChangedVariantIds));
         }
 
         Set<UUID> variantIds = new HashSet<>();

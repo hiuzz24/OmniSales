@@ -31,6 +31,12 @@ public class WarehouseController {
         throw new UnsupportedOperationException("Chưa code");
     }
 
+    @GetMapping("/master")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<WarehouseResponse>> getMaster() {
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.getMaster()));
+    }
+
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<List<WarehouseResponse>>> getAll() {
