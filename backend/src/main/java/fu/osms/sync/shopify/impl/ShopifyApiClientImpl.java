@@ -7,6 +7,7 @@ import fu.osms.sync.dto.shopify.request.ShopifyProductPayload;
 import fu.osms.sync.dto.shopify.response.ShopifyProductResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyProductRootResponse;
 import fu.osms.sync.dto.shopify.response.ShopifyWebhookResponse;
+import fu.osms.sync.shopify.ShopifyShopDomainNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -32,6 +33,7 @@ public class ShopifyApiClientImpl implements ShopifyApiClient {
     private static final String API_VERSION = "2026-07";
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final ShopifyShopDomainNormalizer shopDomainNormalizer;
 
     public ShopifyProductResponse createProduct(String shopDomain, String accessToken, ShopifyProductPayload payload) {
         String url = buildUrl(shopDomain, "/products.json");
@@ -315,14 +317,12 @@ public class ShopifyApiClientImpl implements ShopifyApiClient {
     }
 
     private String buildUrl(String shopDomain, String path) {
-        String domain = shopDomain.endsWith(".myshopify.com") ? shopDomain
-                : shopDomain + ".myshopify.com";
+        String domain = shopDomainNormalizer.canonicalDomain(shopDomain);
         return "https://" + domain + "/admin/api/" + API_VERSION + path;
     }
 
     private String buildAdminUrl(String shopDomain, String path) {
-        String domain = shopDomain.endsWith(".myshopify.com") ? shopDomain
-                : shopDomain + ".myshopify.com";
+        String domain = shopDomainNormalizer.canonicalDomain(shopDomain);
         return "https://" + domain + "/admin" + path;
     }
 }

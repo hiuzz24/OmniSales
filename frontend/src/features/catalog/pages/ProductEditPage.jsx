@@ -156,8 +156,10 @@ const ProductEditPage = () => {
 
         <div className={styles.layout}>
           <div className={styles.mainColumn}>
-            <ProductImageUploader />
-            <ProductForm categories={categories} />
+            <section className={styles.productOverview}>
+              <ProductImageUploader />
+              <ProductForm categories={categories} />
+            </section>
 
             <div className={styles.variantToggleCard}>
               <div className={styles.variantToggleInfo}>
@@ -232,7 +234,6 @@ const ProductEditPage = () => {
           <ProductChannelSidebar
             channels={channels}
             onSubmit={(values) => saveProduct(values, false)}
-            onSubmitAndSync={(values) => saveProduct(values, true)}
             onInvalid={() => toast.error('Vui lòng kiểm tra lại thông tin')}
             onCancel={() => navigate(ROUTES.PRODUCT_DETAIL.replace(':id', id))}
             isEditMode

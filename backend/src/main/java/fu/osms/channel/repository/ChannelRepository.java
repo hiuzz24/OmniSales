@@ -22,6 +22,39 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
 
     Optional<Channel> findByPlatformAndDisplayName(PlatformType platform, String displayName);
 
+    @Query(value = """
+            SELECT * FROM channels
+            WHERE platform = 'SHOPIFY'
+              AND regexp_replace(
+                    regexp_replace(
+                      regexp_replace(lower(trim(COALESCE(metadata->>'shopDomain', metadata->>'shop', display_name))),
+                                     '^https?://', '', 'i'),
+                      '[/\\?#].*$', ''),
+                    '\\.myshopify\\.com$', '', 'i') = :handle
+            ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END, created_at
+            """, nativeQuery = true)
+    List<Channel> findShopifyCandidatesByHandle(@Param("handle") String handle);
+
+    @Query(value = """
+            SELECT * FROM channels
+            WHERE platform = 'LAZADA'
+              AND metadata->>'accountId' = :accountId
+            ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END, created_at
+            """, nativeQuery = true)
+    List<Channel> findLazadaCandidatesByAccountId(@Param("accountId") String accountId);
+
+    @Query(value = """
+            SELECT * FROM channels
+            WHERE platform = 'TIKTOK'
+              AND ((:shopId <> '' AND metadata->>'shopId' = :shopId)
+                OR (:openId <> '' AND metadata->>'openId' = :openId)
+                OR (:accountId <> '' AND metadata->>'accountId' = :accountId))
+            ORDER BY CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END, created_at
+            """, nativeQuery = true)
+    List<Channel> findTikTokCandidatesByIdentity(@Param("shopId") String shopId,
+                                                  @Param("openId") String openId,
+                                                  @Param("accountId") String accountId);
+
     @Query(value = "SELECT * FROM channels " +
             "WHERE platform = 'SHOPIFY' " +
             "AND deleted_at IS NULL " +

@@ -55,8 +55,10 @@ const ProductCreatePage = () => {
   return <FormProvider {...methods}><div className={styles.page}>
     <div className={styles.header}><button className={styles.backBtn} onClick={() => navigate(ROUTES.PRODUCTS)}><ArrowLeft className={styles.backIcon} />Quay lại</button><div className={styles.headerText}><h1 className={styles.headerTitle}>Thêm sản phẩm mới</h1><p className={styles.headerSubtitle}>Tạo sản phẩm và đồng bộ lên các kênh bán hàng</p></div></div>
     <div className={styles.layout}><div className={styles.mainColumn}>
-      <ProductImageUploader />
-      <ProductForm categories={categories} />
+      <section className={styles.productOverview}>
+        <ProductImageUploader />
+        <ProductForm categories={categories} />
+      </section>
       <div className={styles.variantToggleCard}><div className={styles.variantToggleInfo}><div className={styles.variantToggleTitle}>Biến thể sản phẩm</div><div className={styles.variantToggleSubtitle}>{hasVariants ? 'Sản phẩm có nhiều biến thể (size, màu...)' : 'Sản phẩm không có biến thể. Nhấn để thêm biến thể.'}</div></div><button type="button" className={`${styles.variantToggleBtn} ${hasVariants ? styles.variantToggleBtnActive : styles.variantToggleBtnInactive}`} onClick={() => setValue('hasVariants', !hasVariants, { shouldValidate: true })}>{hasVariants ? 'Đã bật biến thể' : 'Tạo biến thể'}</button></div>
       {!hasVariants ? <ProductPriceStock price={price} costPrice={costPrice} onChange={(field, value) => setValue(field, value, { shouldDirty: true, shouldValidate: true })} errors={errors} channels={channels} selectedChannels={selectedChannels} disableCostPrice /> : <ProductVariantForm channels={channels} selectedChannels={selectedChannels} disableCostPrice />}
       <ProductShippingInfo />

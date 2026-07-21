@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react';
+import { ChevronDown, Search } from 'lucide-react';
 import styles from './ProductFilterBar.module.css';
 
 const PLATFORM_LABELS = {
@@ -37,7 +37,7 @@ const ProductFilterBar = ({ searchInput, onSearchChange, statusFilter, onStatusC
           ))}
         </select>
         <div className={styles.selectIconWrapper}>
-          <svg className={styles.selectIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          <ChevronDown className={styles.selectIcon} aria-hidden="true" />
         </div>
       </div>
       
@@ -53,7 +53,7 @@ const ProductFilterBar = ({ searchInput, onSearchChange, statusFilter, onStatusC
           <option value="DRAFT">Nháp</option>
         </select>
         <div className={styles.selectIconWrapper}>
-          <svg className={styles.selectIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          <ChevronDown className={styles.selectIcon} aria-hidden="true" />
         </div>
       </div>
     </div>
@@ -61,4 +61,3 @@ const ProductFilterBar = ({ searchInput, onSearchChange, statusFilter, onStatusC
 };
 
 export default ProductFilterBar;
-

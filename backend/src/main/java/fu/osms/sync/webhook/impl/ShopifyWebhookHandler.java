@@ -4,6 +4,7 @@ import fu.osms.channel.entity.Channel;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
+import fu.osms.sync.shopify.ShopifyShopDomainNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +17,7 @@ import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -24,6 +26,7 @@ import java.util.Optional;
 public class ShopifyWebhookHandler implements PlatformWebhookHandler {
 
     private final ChannelRepository channelRepository;
+    private final ShopifyShopDomainNormalizer shopDomainNormalizer;
 
     @Value("${shopify.api-secret:}")
     private String apiSecret;
@@ -79,10 +82,17 @@ public class ShopifyWebhookHandler implements PlatformWebhookHandler {
         if (shopDomain == null || shopDomain.isBlank()) {
             return Optional.empty();
         }
-        String normalized = shopDomain.endsWith(".myshopify.com")
-                ? shopDomain.substring(0, shopDomain.length() - ".myshopify.com".length())
-                : shopDomain;
-        return channelRepository.findActiveShopifyByShopDomain(normalized);
+        String normalized = shopDomainNormalizer.normalizeHandle(shopDomain);
+        List<Channel> activeCandidates = channelRepository.findShopifyCandidatesByHandle(normalized).stream()
+                .filter(channel -> channel.getDeletedAt() == null)
+                .toList();
+        if (activeCandidates.size() != 1) {
+            if (activeCandidates.size() > 1) {
+                log.warn("[ShopifyWebhook] Multiple active channels match shop={}", normalized);
+            }
+            return Optional.empty();
+        }
+        return Optional.of(activeCandidates.get(0));
     }
 
     private String header(Map<String, String> headers, String name) {

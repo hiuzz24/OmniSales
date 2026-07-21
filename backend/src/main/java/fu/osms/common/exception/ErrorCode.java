@@ -29,6 +29,8 @@ public enum ErrorCode {
 
     CHANNEL_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy kênh bán hàng"),
     CHANNEL_ALREADY_EXISTS(HttpStatus.CONFLICT, "Kênh bán hàng đã tồn tại"),
+    CHANNEL_ALREADY_DISCONNECTED(HttpStatus.CONFLICT, "Kênh bán hàng đã bị ngắt kết nối"),
+    CHANNEL_IDENTITY_CONFLICT(HttpStatus.CONFLICT, "Có nhiều kênh trùng danh tính seller/shop"),
     CHANNEL_NOT_CONNECTED(HttpStatus.BAD_REQUEST, "Kênh bán hàng chưa được kết nối"),
 
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy sản phẩm"),

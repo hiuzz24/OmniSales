@@ -1,10 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Plus, Link2Off, Edit2, Wifi, WifiOff, RefreshCw, History } from 'lucide-react';
+import {
+  Cable,
+  CircleCheck,
+  Edit2,
+  History,
+  Layers3,
+  Link2Off,
+  PanelsTopLeft,
+  Plus,
+  RefreshCw,
+  Store,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
 import { toast } from 'react-toastify';
 import channelApi from '../../../api/channelApi';
 import { ROUTES } from '../../../app/router/routes';
 import ChannelFormModal from '../components/ChannelFormModal';
+import DisconnectChannelDialog from '../components/DisconnectChannelDialog';
 import styles from './ChannelConnectionPage.module.css';
 
 const PLATFORM_META = {
@@ -72,9 +86,11 @@ const ChannelConnectionPage = () => {
       navigate('/channels', { replace: true });
       loadChannels();
     } else if (error) {
-      const msg = error === 'tiktok_oauth_failed'
-        ? 'Kết nối TikTok Shop thất bại.'
-        : error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : 'Kết nối kênh thất bại. Vui lòng thử lại.';
+      const msg = error === 'channel_identity_conflict'
+        ? 'Không thể kết nối vì shop này đang thuộc nhiều kênh. Vui lòng kiểm tra dữ liệu kênh trùng.'
+        : error === 'tiktok_oauth_failed'
+          ? 'Kết nối TikTok Shop thất bại.'
+          : error === 'oauth_failed' ? 'Kết nối Shopify thất bại.' : 'Kết nối kênh thất bại. Vui lòng thử lại.';
       toast.error(msg);
       navigate('/channels', { replace: true });
     }
@@ -101,43 +117,62 @@ const ChannelConnectionPage = () => {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <div>
-          <h1 className={styles.title}>Kênh Bán hàng</h1>
-          <p className={styles.subtitle}>Quản lý các kênh thương mại điện tử đã kết nối với hệ thống</p>
+        <div className={styles.headingGroup}>
+          <span className={styles.headerIcon}><Cable aria-hidden="true" /></span>
+          <div>
+            <h1 className={styles.title}>Kênh Bán hàng</h1>
+            <p className={styles.subtitle}>Quản lý các kênh thương mại điện tử đã kết nối với hệ thống</p>
+          </div>
         </div>
         <div className={styles.headerActions}>
-          <button className={`${styles.actionBtn} ${styles.secondaryBtn}`} onClick={() => navigate(ROUTES.CHANNEL_CONNECTION_HISTORY)}>
+          <button type="button" className={`${styles.actionBtn} ${styles.secondaryBtn}`} onClick={() => navigate(ROUTES.CHANNEL_CONNECTION_HISTORY)}>
             <History size={16} />
             Lịch sử kết nối
           </button>
-          <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
-          <Plus size={16} />
-          Thêm kênh mới
-        </button>
-      </div>
-
+          <button type="button" className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
+            <Plus size={16} />
+            Thêm kênh mới
+          </button>
+        </div>
       </div>
 
       <div className={styles.statsRow}>
         <div className={styles.statCard}>
-          <div className={styles.statValue}>{channels.length}</div>
-          <div className={styles.statLabel}>Kênh đã kết nối</div>
+          <span className={`${styles.statIcon} ${styles.statIconBlue}`}><Layers3 aria-hidden="true" /></span>
+          <div>
+            <div className={styles.statValue}>{channels.length}</div>
+            <div className={styles.statLabel}>Kênh đã kết nối</div>
+          </div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statValue}>
-            {channels.filter(c => connectionView(c).connected).length}
+          <span className={`${styles.statIcon} ${styles.statIconGreen}`}><CircleCheck aria-hidden="true" /></span>
+          <div>
+            <div className={styles.statValue}>
+              {channels.filter(c => connectionView(c).connected).length}
+            </div>
+            <div className={styles.statLabel}>Đang hoạt động</div>
           </div>
-          <div className={styles.statLabel}>Đang hoạt động</div>
         </div>
         <div className={styles.statCard}>
-          <div className={styles.statValue}>
-            {[...new Set(channels.map(c => c.platform))].length}
+          <span className={`${styles.statIcon} ${styles.statIconIndigo}`}><PanelsTopLeft aria-hidden="true" /></span>
+          <div>
+            <div className={styles.statValue}>
+              {[...new Set(channels.map(c => c.platform))].length}
+            </div>
+            <div className={styles.statLabel}>Nền tảng</div>
           </div>
-          <div className={styles.statLabel}>Nền tảng</div>
         </div>
       </div>
 
       <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <span className={styles.cardHeaderIcon}><Store aria-hidden="true" /></span>
+          <div>
+            <h2 className={styles.cardTitle}>Danh sách kênh</h2>
+            <p className={styles.cardSubtitle}>Theo dõi kết nối và cấu hình của từng gian hàng.</p>
+          </div>
+          <span className={styles.channelCount}>{channels.length}</span>
+        </div>
         {isLoading ? (
           <div className={styles.loading}>
             <RefreshCw className={styles.loadingIcon} size={24} />
@@ -148,7 +183,7 @@ const ChannelConnectionPage = () => {
             <Wifi size={48} className={styles.emptyIcon} />
             <p className={styles.emptyTitle}>Chưa có kênh nào được kết nối</p>
             <p className={styles.emptyDesc}>Nhấn "Thêm kênh mới" để bắt đầu đồng bộ sản phẩm lên các sàn TMĐT</p>
-            <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
+            <button type="button" className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
               <Plus size={16} /> Thêm kênh mới
             </button>
           </div>
@@ -209,6 +244,7 @@ const ChannelConnectionPage = () => {
                       <td>
                         <div className={styles.actionBtns}>
                           <button
+                            type="button"
                             className={styles.editBtn}
                             onClick={() => openEdit(ch)}
                             title="Chỉnh sửa"
@@ -216,6 +252,7 @@ const ChannelConnectionPage = () => {
                             <Edit2 size={15} />
                           </button>
                           <button
+                            type="button"
                             className={styles.disconnectBtn}
                             onClick={() => setConfirmDisconnect(ch)}
                             title="Ngắt kết nối"
@@ -243,30 +280,12 @@ const ChannelConnectionPage = () => {
         />
       )}
 
-      {/* Confirm Disconnect Dialog */}
-      {confirmDisconnect && (
-        <div className={styles.confirmOverlay} onClick={(e) => e.target === e.currentTarget && setConfirmDisconnect(null)}>
-          <div className={styles.confirmDialog}>
-            <div className={styles.confirmIcon}>
-              <Link2Off size={28} />
-            </div>
-            <h3 className={styles.confirmTitle}>Xác nhận ngắt kết nối</h3>
-            <p className={styles.confirmDesc}>
-              Bạn có chắc muốn ngắt kết nối kênh{' '}
-              <strong>"{confirmDisconnect.displayName}"</strong>?
-              Các sản phẩm đã đồng bộ sẽ không bị ảnh hưởng, nhưng bạn sẽ không thể đồng bộ mới.
-            </p>
-            <div className={styles.confirmActions}>
-              <button className={styles.confirmCancelBtn} onClick={() => setConfirmDisconnect(null)} disabled={isDisconnecting}>
-                Hủy
-              </button>
-              <button className={styles.confirmDestructBtn} onClick={handleDisconnect} disabled={isDisconnecting}>
-                {isDisconnecting ? <><span className={styles.spinner} /> Đang ngắt...</> : 'Ngắt kết nối'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DisconnectChannelDialog
+        channel={confirmDisconnect}
+        isDisconnecting={isDisconnecting}
+        onCancel={() => setConfirmDisconnect(null)}
+        onConfirm={handleDisconnect}
+      />
     </div>
   );
 };

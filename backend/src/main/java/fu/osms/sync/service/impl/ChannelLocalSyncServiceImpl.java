@@ -12,6 +12,7 @@ import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.AppException;
@@ -49,6 +50,7 @@ import java.util.UUID;
 public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
 
     private final ChannelRepository channelRepository;
+    private final ChannelConnectionValidator channelConnectionValidator;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ProductVariantRepository productVariantRepository;
@@ -65,9 +67,7 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
 
     @Override
     public ChannelImportSyncResponse syncAllLocalChanges(UUID requestedChannelId) {
-        channelRepository.findById(requestedChannelId)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+        channelConnectionValidator.requireConnected(requestedChannelId);
 
         marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
 
@@ -125,9 +125,7 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
     @Override
     @Transactional
     public ChannelImportSyncResponse syncLocalChanges(UUID channelId) {
-        Channel channel = channelRepository.findById(channelId)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+        Channel channel = channelConnectionValidator.requireConnected(channelId);
 
         if (!Boolean.TRUE.equals(channel.getSyncEnabled())) {
             throw new IllegalStateException("Kênh đang tắt đồng bộ.");

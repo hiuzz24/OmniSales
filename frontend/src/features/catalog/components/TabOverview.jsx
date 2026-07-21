@@ -1,3 +1,4 @@
+import { AlignLeft, BadgeDollarSign, Info, PackageCheck } from 'lucide-react';
 import styles from './TabOverview.module.css';
 
 const TabOverview = ({ product }) => {
@@ -37,8 +38,11 @@ const TabOverview = ({ product }) => {
     <div className={styles.tabContainer}>
       <div className={styles.grid}>
         {/* Thông tin cơ bản */}
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Thông tin cơ bản</h3>
+        <section className={`${styles.card} ${styles.basicCard}`}>
+          <div className={styles.cardHeading}>
+            <span className={styles.cardIcon}><Info aria-hidden="true" /></span>
+            <h3 className={styles.cardTitle}>Thông tin cơ bản</h3>
+          </div>
           <div className={styles.infoList}>
             <div className={styles.infoRow}>
               <span className={styles.label}>Tên sản phẩm:</span>
@@ -67,11 +71,14 @@ const TabOverview = ({ product }) => {
               </span>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Giá & Chi phí */}
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Giá & Chi phí</h3>
+        <section className={`${styles.card} ${styles.priceCard}`}>
+          <div className={styles.cardHeading}>
+            <span className={styles.cardIcon}><BadgeDollarSign aria-hidden="true" /></span>
+            <h3 className={styles.cardTitle}>Giá & Chi phí</h3>
+          </div>
           <div className={styles.infoList}>
             <div className={styles.infoRow}>
               <span className={styles.label}>Giá bán:</span>
@@ -87,20 +94,26 @@ const TabOverview = ({ product }) => {
               <span className={styles.valueProfit}>{profitDisplay}</span>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       {/* Mô tả sản phẩm */}
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Mô tả sản phẩm</h3>
+      <section className={`${styles.card} ${styles.descriptionCard}`}>
+        <div className={styles.cardHeading}>
+          <span className={styles.cardIcon}><AlignLeft aria-hidden="true" /></span>
+          <h3 className={styles.cardTitle}>Mô tả sản phẩm</h3>
+        </div>
         <p className={styles.description}>
           {product.description || 'Chưa có mô tả.'}
         </p>
-      </div>
+      </section>
 
       {/* Thông tin vận chuyển */}
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Thông tin vận chuyển</h3>
+      <section className={`${styles.card} ${styles.shippingCard}`}>
+        <div className={styles.cardHeading}>
+          <span className={styles.cardIcon}><PackageCheck aria-hidden="true" /></span>
+          <h3 className={styles.cardTitle}>Thông tin vận chuyển</h3>
+        </div>
         <div className={styles.infoList}>
           <div className={styles.infoRow}>
             <span className={styles.label}>Khối lượng:</span>
@@ -115,7 +128,7 @@ const TabOverview = ({ product }) => {
             <span className={styles.value}>{product.lowStockThreshold ?? 5}</span>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

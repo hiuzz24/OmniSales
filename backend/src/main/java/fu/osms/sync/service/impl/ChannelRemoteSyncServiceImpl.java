@@ -4,6 +4,7 @@ import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.dto.response.ChannelSyncDetailResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.AppException;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class ChannelRemoteSyncServiceImpl implements ChannelRemoteSyncService {
 
     private final ChannelRepository channelRepository;
+    private final ChannelConnectionValidator channelConnectionValidator;
     private final LazadaImportSyncService lazadaImportSyncService;
     private final ShopifyImportSyncService shopifyImportSyncService;
     private final TikTokImportSyncService tikTokImportSyncService;
@@ -33,9 +35,7 @@ public class ChannelRemoteSyncServiceImpl implements ChannelRemoteSyncService {
 
     @Override
     public ChannelImportSyncResponse syncAllRemoteChanges(UUID requestedChannelId) {
-        channelRepository.findById(requestedChannelId)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+        channelConnectionValidator.requireConnected(requestedChannelId);
 
         int productCount = 0;
         int variantCount = 0;
@@ -90,9 +90,7 @@ public class ChannelRemoteSyncServiceImpl implements ChannelRemoteSyncService {
     @Override
     @Transactional
     public ChannelImportSyncResponse syncRemoteChanges(UUID channelId) {
-        Channel channel = channelRepository.findById(channelId)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+        Channel channel = channelConnectionValidator.requireConnected(channelId);
 
         if (!Boolean.TRUE.equals(channel.getSyncEnabled())) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Kênh đang tắt đồng bộ.");

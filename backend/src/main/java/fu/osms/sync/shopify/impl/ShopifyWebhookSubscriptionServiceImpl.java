@@ -3,6 +3,7 @@ package fu.osms.sync.shopify.impl;
 import fu.osms.sync.dto.shopify.WebhookRegistrationResult;
 import fu.osms.sync.dto.shopify.response.ShopifyWebhookResponse;
 import fu.osms.sync.shopify.ShopifyApiClient;
+import fu.osms.sync.shopify.ShopifyShopDomainNormalizer;
 import fu.osms.sync.shopify.ShopifyWebhookSubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import java.util.Set;
 public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubscriptionService {
 
     private final ShopifyApiClient shopifyApiClient;
+    private final ShopifyShopDomainNormalizer shopDomainNormalizer;
 
     @Value("${shopify.webhook-callback-url:}")
     private String callbackUrl;
@@ -40,7 +42,7 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
                     .build();
         }
 
-        String normalizedShop = normalizeShop(shopDomain);
+        String normalizedShop = shopDomainNormalizer.normalizeHandle(shopDomain);
         List<Map<String, Object>> registeredWebhooks = new ArrayList<>();
         List<String> errors = new ArrayList<>();
 
@@ -116,7 +118,7 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
             return;
         }
 
-        String normalizedShop = normalizeShop(shopDomain);
+        String normalizedShop = shopDomainNormalizer.normalizeHandle(shopDomain);
         Set<Long> deletedIds = new HashSet<>();
 
         if (savedWebhooks != null) {
@@ -193,12 +195,4 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
         }
     }
 
-    private String normalizeShop(String shop) {
-        if (shop == null || shop.isBlank()) {
-            return shop;
-        }
-        return shop.endsWith(".myshopify.com")
-                ? shop.substring(0, shop.length() - ".myshopify.com".length())
-                : shop;
-    }
 }
