@@ -4,6 +4,16 @@ const numberOrNull = z.union([z.string(), z.number(), z.null(), z.undefined()])
   .transform((value) => value === '' || value == null ? null : Number(value))
   .refine((value) => value == null || (!Number.isNaN(value) && value >= 0), 'Giá trị phải là số không âm');
 
+const requiredText = (message, max = 500) => z.string()
+  .trim()
+  .min(1, message)
+  .max(max, `Tối đa ${max} ký tự`);
+
+const requiredNumber = (message, { positive = false } = {}) => numberOrNull.refine(
+  (value) => value != null && (positive ? value > 0 : value >= 0),
+  message,
+);
+
 const imageUrlSchema = z.string()
   .trim()
   .url('URL ảnh không hợp lệ')
@@ -11,7 +21,7 @@ const imageUrlSchema = z.string()
 
 const variantSchema = z.object({
   id: z.string().nullable().optional(),
-  sku: z.string().min(1, 'SKU không được để trống').max(100, 'SKU tối đa 100 ký tự'),
+  sku: z.string().optional(),
   barcode: z.string().optional(),
   name: z.string().optional(),
   price: numberOrNull,
@@ -24,24 +34,24 @@ const variantSchema = z.object({
 export const productEditorSchema = z.object({
   version: z.number().nullable().optional(),
   hasOrders: z.boolean().optional(),
-  name: z.string().min(1, 'Tên sản phẩm không được để trống').max(500, 'Tên sản phẩm tối đa 500 ký tự'),
-  sku: z.string().min(1, 'SKU không được để trống').max(100, 'SKU tối đa 100 ký tự'),
+  name: requiredText('Tên sản phẩm không được để trống', 500),
+  sku: requiredText('SKU không được để trống', 100),
   barcode: z.string().optional(),
   size: z.string().optional(),
   color: z.string().optional(),
-  description: z.string().optional(),
+  description: requiredText('Mô tả sản phẩm không được để trống', 5000),
   categoryId: z.string().min(1, 'Vui lòng chọn danh mục'),
-  brand: z.string().optional(),
-  unit: z.string().optional(),
+  brand: requiredText('Thương hiệu không được để trống', 255),
+  unit: requiredText('Đơn vị tính không được để trống', 50),
   status: z.enum(['ACTIVE', 'DRAFT']),
   hasVariants: z.boolean(),
   price: numberOrNull,
-  costPrice: numberOrNull,
-  packageWeightKg: numberOrNull,
-  packageWidthCm: numberOrNull,
-  packageHeightCm: numberOrNull,
-  packageLengthCm: numberOrNull,
-  lowStockThreshold: numberOrNull,
+  costPrice: requiredNumber('Giá vốn không được để trống'),
+  packageWeightKg: requiredNumber('Khối lượng phải lớn hơn 0', { positive: true }),
+  packageWidthCm: requiredNumber('Chiều rộng phải lớn hơn 0', { positive: true }),
+  packageHeightCm: requiredNumber('Chiều cao phải lớn hơn 0', { positive: true }),
+  packageLengthCm: requiredNumber('Chiều dài phải lớn hơn 0', { positive: true }),
+  lowStockThreshold: requiredNumber('Ngưỡng tồn kho không được để trống'),
   images: z.array(z.object({ id: z.string().nullable().optional(), url: imageUrlSchema, sortOrder: z.number().optional(), isPrimary: z.boolean().optional() }))
     .min(1, 'Vui lòng thêm ít nhất 1 ảnh sản phẩm'),
   variants: z.array(variantSchema),
@@ -49,6 +59,13 @@ export const productEditorSchema = z.object({
   channelConfigs: z.record(z.string(), z.unknown()),
 }).superRefine((data, ctx) => {
   if (!data.hasVariants) {
+    [
+      ['barcode', data.barcode, 'Barcode không được để trống'],
+      ['size', data.size, 'Size không được để trống'],
+      ['color', data.color, 'Màu sắc không được để trống'],
+    ].forEach(([path, value, message]) => {
+      if (!value?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+    });
     if (data.price == null || data.price <= 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: 'Giá bán phải lớn hơn 0' });
     }
@@ -57,11 +74,33 @@ export const productEditorSchema = z.object({
   if (!data.variants.length) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants'], message: 'Vui lòng thêm ít nhất 1 biến thể' });
   const seen = new Set();
   data.variants.forEach((variant, index) => {
-    if (seen.has(variant.sku)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'sku'], message: 'SKU này bị trùng lặp' });
-    if (variant.isActive !== false && (variant.price == null || variant.price <= 0)) {
+    if (variant.isActive === false) return;
+    if (!variant.sku?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'sku'], message: 'SKU không được để trống' });
+    } else if (variant.sku.length > 100) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'sku'], message: 'SKU tối đa 100 ký tự' });
+    }
+    if (!variant.barcode?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'barcode'], message: 'Barcode không được để trống' });
+    }
+    if (!String(variant.optionValues?.Size || '').trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'optionValues', 'Size'], message: 'Size không được để trống' });
+    }
+    if (!String(variant.optionValues?.['Màu'] || '').trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'optionValues', 'Màu'], message: 'Màu sắc không được để trống' });
+    }
+    if (variant.price == null || variant.price <= 0) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'price'], message: 'Giá bán phải lớn hơn 0' });
     }
-    seen.add(variant.sku);
+    if (variant.costPrice == null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'costPrice'], message: 'Giá vốn không được để trống' });
+    }
+    if (!variant.images?.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'images'], message: 'Vui lòng thêm ảnh cho biến thể' });
+    }
+    const normalizedSku = variant.sku?.trim();
+    if (normalizedSku && seen.has(normalizedSku)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'sku'], message: 'SKU này bị trùng lặp' });
+    if (normalizedSku) seen.add(normalizedSku);
   });
 });
 

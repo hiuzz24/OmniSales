@@ -20,6 +20,10 @@
   font-weight: 700;
 }
 
+.required {
+  color: #dc2626;
+}
+
 .imageCount {
   margin-top: 3px;
   color: var(--editor-muted, #64748b);

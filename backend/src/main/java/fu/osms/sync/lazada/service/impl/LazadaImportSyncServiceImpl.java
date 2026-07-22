@@ -204,6 +204,8 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                     "/products/get",
                     params
             );
+            log.info("[LazadaImportSync] Product response offset={}, limit={}, payload={}",
+                    offset, PRODUCT_PAGE_SIZE, response);
 
             JsonNode root = readTree(response);
             ensureLazadaSuccess(root, "/products/get");
