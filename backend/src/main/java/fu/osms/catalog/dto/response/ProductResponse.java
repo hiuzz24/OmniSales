@@ -18,9 +18,11 @@ import java.util.UUID;
 public class ProductResponse {
 
     private UUID id;
+    private List<UUID> productIds;
     private UUID categoryId;
     private String categoryName;
     private String sku;
+    private String marketplaceSku;
     private String name;
     private String description;
     private String brand;

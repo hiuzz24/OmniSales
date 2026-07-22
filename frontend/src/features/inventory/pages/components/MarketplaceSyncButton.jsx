@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronDown, DownloadCloud, RefreshCw, UploadCloud } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, ChevronDown, DownloadCloud, Link2, Loader2, RefreshCw, UploadCloud } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { ROUTES } from '../../../../app/router/routes';
 import channelSyncService from '../../services/channelSyncService';
 
 const PLATFORM_LABELS = {
@@ -26,19 +28,14 @@ const DIRECTION_OPTIONS = {
   },
   'from-app': {
     title: 'Đồng bộ từ ứng dụng',
-    description: 'Đẩy thay đổi sản phẩm và tồn kho lên từng sàn',
+    description: 'Đẩy các thay đổi lên tất cả sàn đã liên kết',
     icon: UploadCloud,
     color: '#0f766e',
     background: '#ecfdf5',
-    channelTitle: 'Chọn sàn để đẩy dữ liệu lên',
   },
 };
 
-const shellStyle = {
-  position: 'relative',
-  display: 'inline-flex',
-};
-
+const shellStyle = { position: 'relative', display: 'inline-flex' };
 const mainButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -56,13 +53,11 @@ const mainButtonStyle = {
   background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
   boxShadow: '0 4px 14px 0 rgba(13, 148, 136, 0.3)',
 };
-
 const mainButtonHoverStyle = {
   background: 'linear-gradient(135deg, #0f766e 0%, #115e59 100%)',
   transform: 'translateY(-2px)',
   boxShadow: '0 6px 20px rgba(13, 148, 136, 0.4)',
 };
-
 const menuStyle = {
   position: 'absolute',
   top: 'calc(100% + 8px)',
@@ -76,14 +71,7 @@ const menuStyle = {
   background: '#fff',
   boxShadow: '0 18px 38px rgba(15, 23, 42, 0.16)',
 };
-
-const menuTitleStyle = {
-  margin: '2px 4px 10px',
-  color: '#020617',
-  fontSize: 13,
-  fontWeight: 800,
-};
-
+const menuTitleStyle = { margin: '2px 4px 10px', color: '#020617', fontSize: 13, fontWeight: 800 };
 const optionButtonStyle = {
   width: '100%',
   display: 'flex',
@@ -99,20 +87,8 @@ const optionButtonStyle = {
   fontFamily: 'inherit',
   textAlign: 'left',
 };
-
-const optionTitleStyle = {
-  display: 'block',
-  fontSize: 13.5,
-  fontWeight: 800,
-};
-
-const optionSubStyle = {
-  display: 'block',
-  marginTop: 2,
-  fontSize: 12,
-  color: '#64748b',
-};
-
+const optionTitleStyle = { display: 'block', fontSize: 13.5, fontWeight: 800 };
+const optionSubStyle = { display: 'block', marginTop: 2, fontSize: 12, color: '#64748b' };
 const iconWrapStyle = {
   width: 30,
   height: 30,
@@ -122,7 +98,6 @@ const iconWrapStyle = {
   justifyContent: 'center',
   flexShrink: 0,
 };
-
 const backButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -136,7 +111,6 @@ const backButtonStyle = {
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
-
 const emptyStyle = {
   padding: '14px 10px',
   border: '1px dashed #dbe4ef',
@@ -145,23 +119,88 @@ const emptyStyle = {
   fontSize: 13,
   textAlign: 'center',
 };
+const emptyTitleStyle = { display: 'block', color: '#0f172a', fontSize: 13.5, fontWeight: 800 };
+const emptyDescStyle = { display: 'block', marginTop: 4, color: '#64748b', lineHeight: 1.45 };
+const linkButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  minHeight: 36,
+  marginTop: 10,
+  padding: '8px 12px',
+  border: '1px solid #bfdbfe',
+  borderRadius: 8,
+  background: '#eff6ff',
+  color: '#1d4ed8',
+  fontSize: 12.5,
+  fontWeight: 800,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+const toastLinkButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  marginLeft: 4,
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  color: '#fff',
+  fontSize: 'inherit',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  textDecoration: 'underline',
+};
+const progressPanelStyle = {
+  ...menuStyle,
+  position: 'fixed',
+  top: 'auto',
+  right: 24,
+  bottom: 24,
+  zIndex: 1000,
+  width: 420,
+  maxWidth: 'calc(100vw - 32px)',
+  padding: 16,
+  borderRadius: 10,
+  boxShadow: '0 22px 48px rgba(15, 23, 42, 0.22)',
+};
+const progressTrackStyle = {
+  height: 8,
+  marginTop: 10,
+  overflow: 'hidden',
+  borderRadius: 999,
+  background: '#e2e8f0',
+};
+
+const terminalJobStatuses = new Set(['SYNCED', 'FAILED']);
+const wait = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+const remoteSyncJobs = new Map();
+const remoteSyncListeners = new Set();
+
+const emitRemoteSyncJobs = () => {
+  const jobs = Array.from(remoteSyncJobs.values())
+    .sort((first, second) => String(first.startedAt || '').localeCompare(String(second.startedAt || '')));
+  remoteSyncListeners.forEach((listener) => listener(jobs));
+};
+
+const upsertRemoteSyncJob = (job) => {
+  if (!job?.jobId) return;
+  remoteSyncJobs.set(job.jobId, job);
+  emitRemoteSyncJobs();
+};
+
+const subscribeRemoteSyncJobs = (listener) => {
+  remoteSyncListeners.add(listener);
+  listener(Array.from(remoteSyncJobs.values()));
+  return () => remoteSyncListeners.delete(listener);
+};
 
 const getChannelLabel = (channel) => {
   const platformLabel = PLATFORM_LABELS[channel.platform] ?? channel.platform;
   return `${platformLabel} - ${channel.displayName ?? 'Chưa đặt tên'}`;
 };
-
 const toCount = (value) => Number(value ?? 0).toLocaleString('vi-VN');
-
-const defaultSuccessMessage = ({ channel, direction, result }) => {
-  const channelLabel = getChannelLabel(channel);
-  if (direction === 'from-marketplace') {
-    return `Đã đồng bộ ${channelLabel}: lấy ${toCount(result?.productCount)} sản phẩm, ${toCount(result?.variantCount)} sản phẩm con từ sàn về ứng dụng.`;
-  }
-
-  return `Đã đồng bộ ${channelLabel}: đẩy ${toCount(result?.productCount)} sản phẩm, ${toCount(result?.pushedVariantCount)} SKU tồn kho lên sàn.`;
-};
-
 const syncIdentity = (detail) => detail?.sellerId || detail?.shopId || detail?.shopDomain || 'chưa có seller/shop id';
 
 const formatDetailLine = (detail) => {
@@ -172,10 +211,16 @@ const formatDetailLine = (detail) => {
 
 const formatSyncResultMessage = (fallbackMessage, result) => {
   const details = Array.isArray(result?.details) ? result.details : [];
-  if (details.length === 0) {
-    return result?.message || fallbackMessage;
-  }
+  if (details.length === 0) return result?.message || fallbackMessage;
   return `${result?.message || fallbackMessage}\n${details.map(formatDetailLine).join('\n')}`;
+};
+
+const defaultSuccessMessage = ({ channel, direction, result }) => {
+  const channelLabel = getChannelLabel(channel);
+  if (direction === 'from-marketplace') {
+    return `Đã đồng bộ ${channelLabel}: lấy ${toCount(result?.productCount)} sản phẩm, ${toCount(result?.variantCount)} sản phẩm con từ sàn về ứng dụng.`;
+  }
+  return `Đã đồng bộ ${channelLabel}: đẩy ${toCount(result?.productCount)} sản phẩm, ${toCount(result?.pushedVariantCount)} SKU tồn kho lên sàn.`;
 };
 
 export default function MarketplaceSyncButton({
@@ -188,36 +233,75 @@ export default function MarketplaceSyncButton({
   allowedDirections = ['from-marketplace', 'from-app'],
   getSuccessMessage,
 }) {
+  const navigate = useNavigate();
   const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState(null);
   const [channels, setChannels] = useState([]);
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [syncingChannelId, setSyncingChannelId] = useState(null);
+  const [activeJobs, setActiveJobs] = useState([]);
   const [buttonHovered, setButtonHovered] = useState(false);
+
+  useEffect(() => subscribeRemoteSyncJobs(setActiveJobs), []);
 
   useEffect(() => {
     if (!open) return undefined;
-
     const handleClickOutside = (event) => {
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setOpen(false);
         setDirection(null);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
+
+  const runningRemoteJobs = activeJobs.filter((job) => !terminalJobStatuses.has(String(job.status || '').toUpperCase()));
+  const activeJobChannelIds = new Set(runningRemoteJobs.map((job) => job.channelId));
+  const totalRemoteItems = runningRemoteJobs.reduce((sum, job) => sum + Number(job.totalItems || 0), 0);
+  const processedRemoteItems = runningRemoteJobs.reduce((sum, job) => sum + Number(job.processedItems || 0), 0);
+  const remoteProgressPercent = totalRemoteItems > 0
+    ? Math.min(100, Math.round((processedRemoteItems * 100) / totalRemoteItems))
+    : runningRemoteJobs.length > 0 ? 2 : 0;
+  const remoteSuccessCount = runningRemoteJobs.reduce((sum, job) => sum + Number(job.successCount || 0), 0);
+  const remoteFailCount = runningRemoteJobs.reduce((sum, job) => sum + Number(job.failCount || 0), 0);
+
+  const goToChannels = () => {
+    setOpen(false);
+    setDirection(null);
+    navigate(ROUTES.CHANNELS);
+  };
+
+  const showNoChannelToast = () => {
+    toast.error(
+      <span>
+        Chưa kết nối với kênh bán hàng nào.
+        <button
+          type="button"
+          style={toastLinkButtonStyle}
+          onClick={() => {
+            toast.dismiss();
+            goToChannels();
+          }}
+        >
+          Kết nối kênh bán hàng ngay!!!
+        </button>
+      </span>,
+      { autoClose: 6000 }
+    );
+  };
 
   const loadChannels = async () => {
     setLoadingChannels(true);
     try {
       const data = await channelSyncService.getSyncableChannels();
       setChannels(data);
+      return data;
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || 'Không thể tải danh sách sàn đã liên kết.');
       setChannels([]);
+      return [];
     } finally {
       setLoadingChannels(false);
     }
@@ -233,36 +317,88 @@ export default function MarketplaceSyncButton({
   };
 
   const selectDirection = async (nextDirection) => {
-    setDirection(nextDirection);
-    if (channels.length === 0) {
-      await loadChannels();
+    if (nextDirection === 'from-app') {
+      const syncableChannels = channels.length > 0 ? channels : await loadChannels();
+      if (syncableChannels.length === 0) {
+        setOpen(false);
+        setDirection(null);
+        showNoChannelToast();
+        return;
+      }
+
+      setOpen(false);
+      setDirection(null);
+      setSyncingChannelId('all-connected-channels');
+      try {
+        const result = await channelSyncService.syncAllFromApp();
+        const summaryMessage = formatSyncResultMessage(
+          'Đã đẩy các thay đổi từ ứng dụng lên tất cả sàn đã liên kết.',
+          result,
+        );
+        if (String(result?.status || '').toUpperCase() === 'FAILED') toast.warn(summaryMessage);
+        else toast.success(summaryMessage);
+        await onSynced?.({ channel: null, direction: nextDirection, result });
+      } catch (error) {
+        const message = error?.response?.data?.message || error?.message || 'Không thể đồng bộ thay đổi lên các sàn đã liên kết.';
+        const normalizedMessage = message.toLowerCase();
+        if (normalizedMessage.includes('chưa') || normalizedMessage.includes('chua') || normalizedMessage.includes('no channel')) {
+          showNoChannelToast();
+        } else {
+          toast.error(message);
+        }
+      } finally {
+        setSyncingChannelId(null);
+      }
+      return;
     }
+
+    setDirection(nextDirection);
+    if (channels.length === 0) await loadChannels();
   };
 
   const syncChannel = async (channel) => {
-    if (!direction || syncingChannelId) return;
-
-    setSyncingChannelId(channel.id);
+    if (!direction) return;
     const channelLabel = getChannelLabel(channel);
     const isFromMarketplace = direction === 'from-marketplace';
     try {
-      const result = isFromMarketplace
-        ? await channelSyncService.syncChannelFromMarketplace(channel.id)
-        : await channelSyncService.syncChannelFromApp(channel.id);
+      if (isFromMarketplace) {
+        if (activeJobChannelIds.has(channel.id)) {
+          toast.info(`${channelLabel} đang đồng bộ.`);
+          return;
+        }
 
+        let job = await channelSyncService.enqueueSyncFromMarketplace(channel.id);
+        upsertRemoteSyncJob(job);
+        setOpen(false);
+
+        while (!terminalJobStatuses.has(String(job?.status || '').toUpperCase())) {
+          await wait(1200);
+          job = await channelSyncService.getSyncJob(job.jobId);
+          upsertRemoteSyncJob(job);
+        }
+
+        if (String(job.status).toUpperCase() === 'FAILED') {
+          toast.error(job.message || `Đồng bộ ${channelLabel} thất bại.`);
+        } else {
+          toast.success(`Đã đồng bộ ${channelLabel}: ${toCount(job.successCount)} sản phẩm con thành công.`);
+          await onSynced?.({ channel, direction, result: job });
+        }
+        return;
+      }
+
+      if (syncingChannelId) return;
+      setSyncingChannelId(channel.id);
+      const result = await channelSyncService.syncChannelFromApp(channel.id);
       const message = getSuccessMessage?.({ channel, direction, result })
         || defaultSuccessMessage({ channel, direction, result });
       const summaryMessage = formatSyncResultMessage(message, result);
-      if (String(result?.status || '').toUpperCase() === 'FAILED') {
-        toast.warn(summaryMessage);
-      } else {
-        toast.success(summaryMessage);
-      }
+      if (String(result?.status || '').toUpperCase() === 'FAILED') toast.warn(summaryMessage);
+      else toast.success(summaryMessage);
       await onSynced?.({ channel, direction, result });
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || `Không thể đồng bộ ${channelLabel}.`);
     } finally {
-      setSyncingChannelId(null);
+      if (!isFromMarketplace) setSyncingChannelId(null);
     }
   };
 
@@ -292,7 +428,6 @@ export default function MarketplaceSyncButton({
 
   const renderChannelList = () => {
     const title = DIRECTION_OPTIONS[direction]?.channelTitle ?? 'Chọn sàn để đồng bộ';
-
     return (
       <>
         {allowedDirections.length > 1 && (
@@ -305,26 +440,34 @@ export default function MarketplaceSyncButton({
         {loadingChannels ? (
           <div style={emptyStyle}>Đang tải danh sách sàn...</div>
         ) : channels.length === 0 ? (
-          <div style={emptyStyle}>Chưa có kênh Lazada/Shopify đang kết nối để đồng bộ.</div>
+          <div style={emptyStyle}>
+            <span style={emptyTitleStyle}>Chưa có kênh bán hàng đang kết nối</span>
+            <span style={emptyDescStyle}>Kết nối Lazada, Shopify hoặc TikTok Shop để bắt đầu đồng bộ sản phẩm và tồn kho.</span>
+            <button type="button" style={linkButtonStyle} onClick={goToChannels}>
+              <Link2 size={14} />
+              Kết nối kênh bán hàng
+            </button>
+          </div>
         ) : (
           <div style={{ display: 'grid', gap: 8 }}>
             {channels.map((channel) => {
               const platformStyle = PLATFORM_COLORS[channel.platform] ?? { color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
-              const syncing = syncingChannelId === channel.id;
+              const syncing = syncingChannelId === channel.id || activeJobChannelIds.has(channel.id);
+              const disabled = direction === 'from-app' ? Boolean(syncingChannelId) : activeJobChannelIds.has(channel.id);
               return (
                 <button
                   key={channel.id}
                   type="button"
-                  disabled={Boolean(syncingChannelId)}
+                  disabled={disabled}
                   style={{
                     ...optionButtonStyle,
-                    opacity: syncingChannelId && !syncing ? 0.62 : 1,
-                    cursor: syncingChannelId ? 'not-allowed' : 'pointer',
+                    opacity: disabled && !syncing ? 0.62 : 1,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
                   }}
                   onClick={() => syncChannel(channel)}
                 >
                   <span style={{ ...iconWrapStyle, color: platformStyle.color, background: platformStyle.bg, border: `1px solid ${platformStyle.border}` }}>
-                    {syncing ? <RefreshCw size={15} /> : ({ SHOPIFY: 'S', LAZADA: 'L', TIKTOK: 'T' }[channel.platform] ?? '?')}
+                    {syncing ? <Loader2 size={15} className="osms-sync-spin" /> : ({ SHOPIFY: 'S', LAZADA: 'L', TIKTOK: 'T' }[channel.platform] ?? '?')}
                   </span>
                   <span style={{ minWidth: 0 }}>
                     <span style={optionTitleStyle}>{PLATFORM_LABELS[channel.platform] ?? channel.platform}</span>
@@ -343,6 +486,20 @@ export default function MarketplaceSyncButton({
 
   return (
     <div ref={menuRef} className={className} style={{ ...shellStyle, ...style }}>
+      <style>{`
+        @keyframes osms-sync-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .osms-sync-spin {
+          animation: osms-sync-spin 0.9s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .osms-sync-spin {
+            animation: none;
+          }
+        }
+      `}</style>
       <button
         type="button"
         className={buttonClassName}
@@ -350,9 +507,9 @@ export default function MarketplaceSyncButton({
           ...(buttonClassName ? {} : mainButtonStyle),
           ...(!buttonClassName && buttonHovered && !syncingChannelId ? mainButtonHoverStyle : {}),
           ...buttonStyle,
-          opacity: syncingChannelId ? 0.72 : 1,
+          opacity: syncingChannelId === 'all-connected-channels' ? 0.72 : 1,
         }}
-        disabled={Boolean(syncingChannelId)}
+        disabled={syncingChannelId === 'all-connected-channels'}
         onClick={openMenu}
         onMouseEnter={() => setButtonHovered(true)}
         onMouseLeave={() => setButtonHovered(false)}
@@ -362,12 +519,54 @@ export default function MarketplaceSyncButton({
         onMouseUp={() => {
           if (!buttonClassName && !syncingChannelId) setButtonHovered(true);
         }}
-        title="Chọn chiều đồng bộ Lazada/Shopify"
+        title="Chọn chiều đồng bộ dữ liệu"
       >
-        <RefreshCw className={iconClassName} size={16} />
-        Đồng bộ
+        {syncingChannelId === 'all-connected-channels'
+          ? <Loader2 className={`${iconClassName || ''} osms-sync-spin`} size={16} />
+          : <RefreshCw className={iconClassName} size={16} />}
+        {syncingChannelId === 'all-connected-channels'
+          ? 'Đang đẩy thay đổi...'
+          : runningRemoteJobs.length > 0
+            ? `Đồng bộ (${runningRemoteJobs.length})`
+            : 'Đồng bộ'}
         <ChevronDown size={15} />
       </button>
+      {runningRemoteJobs.length > 0 && (
+        <div style={progressPanelStyle} role="status" aria-live="polite">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <span style={menuTitleStyle}>Đang đồng bộ từ sàn</span>
+            <strong style={{ color: '#1d4ed8', fontSize: 13 }}>{remoteProgressPercent}%</strong>
+          </div>
+          <div style={{ marginTop: 8, color: '#475569', fontSize: 12.5, lineHeight: 1.5 }}>
+            Đã xử lý <strong>{toCount(processedRemoteItems)}</strong>
+            {totalRemoteItems > 0 && <> / <strong>{toCount(totalRemoteItems)}</strong></>} sản phẩm con
+          </div>
+          <div style={{ marginTop: 4, color: '#64748b', fontSize: 12 }}>
+            Tác vụ đang chạy nền, bạn có thể tiếp tục thao tác trên trang.
+          </div>
+          <div style={progressTrackStyle} aria-hidden="true">
+            <div style={{
+              width: `${Math.max(remoteProgressPercent || 2, 2)}%`,
+              height: '100%',
+              borderRadius: 999,
+              background: '#2563eb',
+              transition: 'width 200ms ease',
+            }} />
+          </div>
+          <div style={{ display: 'flex', gap: 14, marginTop: 9, color: '#64748b', fontSize: 12 }}>
+            <span>Thành công: <strong style={{ color: '#15803d' }}>{toCount(remoteSuccessCount)}</strong></span>
+            <span>Lỗi: <strong style={{ color: '#b91c1c' }}>{toCount(remoteFailCount)}</strong></span>
+          </div>
+          <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+            {runningRemoteJobs.map((job) => (
+              <div key={job.jobId} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: '#475569', fontSize: 12 }}>
+                <span>{PLATFORM_LABELS[job.platform] ?? 'Sàn'} - {job.channelName ?? job.channelId}</span>
+                <strong style={{ color: '#1d4ed8' }}>{job.progressPercent || 0}%</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {open && (
         <div style={menuStyle}>
           {direction ? renderChannelList() : renderDirectionOptions()}
@@ -376,3 +575,4 @@ export default function MarketplaceSyncButton({
     </div>
   );
 }
+

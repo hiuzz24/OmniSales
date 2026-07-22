@@ -24,6 +24,7 @@ public interface InventoryItemMapper {
 
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "warehouseName", source = "warehouse.name")
+    @Mapping(target = "productId", source = "variant.product.id")
     @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "variantSku", source = "variant.sku")
     @Mapping(target = "productName", source = "variant.product.name")

@@ -19,7 +19,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -47,10 +51,34 @@ public class ProductController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) ProductStatus status,
             @RequestParam(required = false) PlatformType platform,
+            @RequestParam(required = false) String platforms,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "6") int size) {
-        PageResponse<ProductResponse> response = productService.search(keyword, status, platform, page, size);
+        Collection<PlatformType> platformFilters = parsePlatforms(platforms);
+        if (platform != null && !platformFilters.contains(platform)) {
+            platformFilters = new java.util.LinkedHashSet<>(platformFilters);
+            platformFilters.add(platform);
+        }
+        PageResponse<ProductResponse> response = productService.search(keyword, status, platformFilters, page, size);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    private Collection<PlatformType> parsePlatforms(String platforms) {
+        if (platforms == null || platforms.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(platforms.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(value -> {
+                    try {
+                        return PlatformType.valueOf(value.toUpperCase());
+                    } catch (IllegalArgumentException ex) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     @PutMapping("/{id}")

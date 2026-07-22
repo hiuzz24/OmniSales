@@ -69,6 +69,11 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
     public ChannelImportSyncResponse syncAllLocalChanges(UUID requestedChannelId) {
         channelConnectionValidator.requireConnected(requestedChannelId);
 
+        return syncAllLocalChanges();
+    }
+
+    @Override
+    public ChannelImportSyncResponse syncAllLocalChanges() {
         marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
 
         int productCount = 0;
@@ -109,7 +114,7 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
         }
 
         return ChannelImportSyncResponse.builder()
-                .channelId(requestedChannelId)
+                .channelId(null)
                 .productCount(productCount)
                 .variantCount(variantCount)
                 .warehouseCount(warehouseCount)
@@ -155,15 +160,40 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
                 .startedAt(OffsetDateTime.now())
                 .build());
         try {
-            int pushedVariantCount = tikTokInventoryUpdateService.pushAvailableStock(channel.getId());
-            OffsetDateTime syncedAt = OffsetDateTime.now();
-            channel.setLastSyncedAt(syncedAt);
+            OffsetDateTime syncStartedAt = OffsetDateTime.now();
+            OffsetDateTime changedSince = channel.getLastSyncedAt();
+            Set<UUID> stockChangedVariantIds = findStockChangedVariantIds(changedSince, syncStartedAt);
+            if (changedSince != null && stockChangedVariantIds.isEmpty()) {
+                channel.setLastSyncedAt(syncStartedAt);
+                channelRepository.save(channel);
+                syncLog.setStatus(SyncStatus.SYNCED);
+                syncLog.setTotalItems(0);
+                syncLog.setSuccessCount(0);
+                syncLog.setFailCount(0);
+                syncLog.setCompletedAt(syncStartedAt);
+                syncLogRepository.save(syncLog);
+                return ChannelImportSyncResponse.builder()
+                        .channelId(channel.getId())
+                        .syncLogId(syncLog.getId())
+                        .productCount(0)
+                        .variantCount(0)
+                        .warehouseCount(0)
+                        .pushedVariantCount(0)
+                        .status(SyncStatus.SYNCED.name())
+                        .message("Khong co thay doi ton kho can day len TikTok Shop.")
+                        .build();
+            }
+
+            int pushedVariantCount = changedSince == null
+                    ? tikTokInventoryUpdateService.pushAvailableStock(channel.getId())
+                    : tikTokInventoryUpdateService.pushAvailableStock(channel.getId(), stockChangedVariantIds);
+            channel.setLastSyncedAt(syncStartedAt);
             channelRepository.save(channel);
             syncLog.setStatus(SyncStatus.SYNCED);
             syncLog.setTotalItems(pushedVariantCount);
             syncLog.setSuccessCount(pushedVariantCount);
             syncLog.setFailCount(0);
-            syncLog.setCompletedAt(syncedAt);
+            syncLog.setCompletedAt(syncStartedAt);
             syncLogRepository.save(syncLog);
             return ChannelImportSyncResponse.builder()
                     .channelId(channel.getId())
@@ -218,6 +248,13 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
                         .forEach(channelProduct -> scopedProducts.put(channelProduct.getId(), channelProduct));
                 channelProducts = new ArrayList<>(scopedProducts.values());
             }
+            log.info(
+                    "[ShopifyLocalSync] Queued local product changes channelId={} changedSince={} queuedProducts={} stockChangedVariants={}",
+                    channel.getId(),
+                    changedSince,
+                    channelProducts.size(),
+                    stockChangedVariantIds.size()
+            );
 
             PlatformSyncService platformSyncService = platformSyncServiceFactory.getService(channel.getPlatform());
             Set<UUID> changedVariantIds = new HashSet<>(stockChangedVariantIds);

@@ -15,6 +15,7 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.shopify.ShopifyApiClient;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
+import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
     private final InventoryItemRepository inventoryItemRepository;
     private final StockReceiveRepository stockReceiveRepository;
     private final InventoryIssueRepository inventoryIssueRepository;
+    private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
@@ -109,7 +111,8 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
                 continue;
             }
 
-            Map<String, Integer> availableByLocationId = totalAvailableByShopifyLocationId(
+            Map<String, Integer> availableByLocationId = targetAvailableByShopifyLocationId(
+                    mapping,
                     inventoryByVariantId.getOrDefault(mapping.getVariant().getId(), List.of()),
                     defaultLocationId
             );
@@ -499,39 +502,34 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         return "gid://shopify/Location/" + value;
     }
 
-    private Map<String, Integer> totalAvailableByShopifyLocationId(List<InventoryItem> inventoryItems, String defaultLocationId) {
+    private Map<String, Integer> targetAvailableByShopifyLocationId(ChannelProductVariant mapping,
+                                                                    List<InventoryItem> inventoryItems,
+                                                                    String defaultLocationId) {
         Map<String, Integer> availableByLocationId = new HashMap<>();
+        int targetQuantity = marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping);
         if (inventoryItems == null || inventoryItems.isEmpty()) {
-            availableByLocationId.put(defaultLocationId, 0);
+            availableByLocationId.put(defaultLocationId, targetQuantity);
             return availableByLocationId;
         }
 
         for (InventoryItem inventoryItem : inventoryItems) {
             String locationId = extractShopifyLocationId(inventoryItem.getWarehouse());
             if (locationId != null) {
-                availableByLocationId.merge(locationId, availableQuantity(inventoryItem), Integer::sum);
+                availableByLocationId.putIfAbsent(locationId, 0);
             }
         }
 
         if (!availableByLocationId.isEmpty()) {
+            String primaryLocationId = availableByLocationId.containsKey(defaultLocationId)
+                    ? defaultLocationId
+                    : availableByLocationId.keySet().iterator().next();
+            availableByLocationId.replaceAll((locationId, ignored) ->
+                    locationId.equals(primaryLocationId) ? targetQuantity : 0);
             return availableByLocationId;
         }
 
-        int totalAvailableQuantity = 0;
-        for (InventoryItem inventoryItem : inventoryItems) {
-            totalAvailableQuantity += availableQuantity(inventoryItem);
-        }
-        availableByLocationId.put(defaultLocationId, totalAvailableQuantity);
+        availableByLocationId.put(defaultLocationId, targetQuantity);
         return availableByLocationId;
-    }
-
-    private int availableQuantity(InventoryItem inventoryItem) {
-        if (inventoryItem.getAvailableQuantity() != null) {
-            return inventoryItem.getAvailableQuantity();
-        }
-        int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        int reservedQuantity = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-        return quantityOnHand - reservedQuantity;
     }
 
     private String extractShopifyLocationId(Warehouse warehouse) {

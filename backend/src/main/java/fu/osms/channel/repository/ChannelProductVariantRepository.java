@@ -110,6 +110,17 @@ public interface ChannelProductVariantRepository extends JpaRepository<ChannelPr
             "JOIN FETCH cp.channel ch " +
             "JOIN FETCH cpv.variant v " +
             "LEFT JOIN FETCH v.product " +
+            "WHERE LOWER(COALESCE(cpv.externalSku, v.sku)) IN :skus " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "ORDER BY cpv.updatedAt DESC")
+    List<ChannelProductVariant> findActiveByNormalizedSkuInWithVariant(@Param("skus") List<String> skus);
+
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "LEFT JOIN FETCH v.product " +
             "WHERE ch.platform = :platform " +
             "AND ch.deletedAt IS NULL " +
             "AND cp.mappingState = 'ACTIVE' " +

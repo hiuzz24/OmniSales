@@ -25,6 +25,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -79,7 +80,7 @@ public class TikTokApiClientImpl implements TikTokApiClient {
     }
 
     @Override
-    public Map<String, Object> searchProducts(String accessToken, String shopCipher, String pageToken) {
+    public Map<String, Object> searchProducts(String accessToken, String shopCipher, String pageToken, OffsetDateTime changedSince) {
         validateShopCipher(shopCipher);
         String path = "/product/" + productApiVersion + "/products/search";
         Map<String, String> query = commonQuery(shopCipher);
@@ -87,7 +88,16 @@ public class TikTokApiClientImpl implements TikTokApiClient {
         if (pageToken != null && !pageToken.isBlank()) {
             query.put("page_token", pageToken);
         }
-        return executeForMap(path, HttpMethod.POST, query, Map.of("status", "ALL"), accessToken);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "ALL");
+        if (changedSince != null) {
+            body.put("update_time_ge", changedSince.toEpochSecond());
+        }
+        log.info("[TikTokApiClient] Product search request path={}, pageToken={}, body={}",
+                path,
+                pageToken == null || pageToken.isBlank() ? "<none>" : "<present>",
+                body);
+        return executeForMap(path, HttpMethod.POST, query, body, accessToken);
     }
 
     @Override

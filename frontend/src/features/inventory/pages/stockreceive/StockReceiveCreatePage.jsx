@@ -24,6 +24,24 @@ const PLATFORM_LABELS = {
   TIKTOK: 'TikTok Shop',
 };
 const PLATFORM_KEYS = Object.keys(PLATFORM_LABELS);
+const PLATFORM_BADGE_STYLES = {
+  LAZADA: { backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe' },
+  SHOPIFY: { backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' },
+  TIKTOK: { backgroundColor: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1' },
+  LOCAL: { backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
+};
+const platformBadgeBaseStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 20,
+  padding: '2px 7px',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  fontSize: 11,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  whiteSpace: 'nowrap',
+};
 
 const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
 
@@ -36,16 +54,28 @@ const normalizePlatform = (value) => {
   return PLATFORM_KEYS.includes(text) ? text : null;
 };
 
+const extractPlatforms = (value) => {
+  if (Array.isArray(value)) return value.flatMap(extractPlatforms);
+  const text = String(value ?? '').trim().toUpperCase();
+  if (!text) return [];
+  const matches = [];
+  if (text.includes('LAZADA')) matches.push('LAZADA');
+  if (text.includes('SHOPIFY')) matches.push('SHOPIFY');
+  if (text.includes('TIKTOK')) matches.push('TIKTOK');
+  const normalized = normalizePlatform(text);
+  return matches.length > 0 ? matches : (normalized ? [normalized] : []);
+};
+
 const itemPlatforms = (item) => {
-  const platforms = Array.isArray(item?.platforms) ? item.platforms : [];
   return uniqueValues([
-    ...platforms,
-    item?.platform,
-    item?.channelPlatform,
-    item?.salesChannelPlatform,
-    item?.channel?.platform,
-    item?.channelName,
-  ].map(normalizePlatform));
+    ...extractPlatforms(item?.platforms),
+    ...extractPlatforms(item?.platform),
+    ...extractPlatforms(item?.channelPlatform),
+    ...extractPlatforms(item?.salesChannelPlatform),
+    ...extractPlatforms(item?.channel?.platform),
+    ...extractPlatforms(item?.channelName),
+    ...extractPlatforms(item?.channelNames),
+  ]);
 };
 
 const formatPlatforms = (item) => {
@@ -53,11 +83,27 @@ const formatPlatforms = (item) => {
   return platforms.length === 0 ? 'Ứng dụng' : platforms.map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
 };
 
+const renderPlatformBadges = (item) => {
+  const platforms = itemPlatforms(item);
+  const displayPlatforms = platforms.length > 0 ? platforms : ['LOCAL'];
+  return displayPlatforms.map((platform) => (
+    <span
+      key={platform}
+      style={{
+        ...platformBadgeBaseStyle,
+        ...(PLATFORM_BADGE_STYLES[platform] ?? PLATFORM_BADGE_STYLES.LOCAL),
+      }}
+    >
+      {platform === 'LOCAL' ? 'Ứng dụng' : PLATFORM_LABELS[platform] ?? platform}
+    </span>
+  ));
+};
+
 const normalizeWarehouseVariant = (item) => {
   const variantId = item.variantId ?? item.id;
-  const sku = item.sku ?? item.variantSku ?? '';
-  const salePrice = item.salePrice ?? item.price ?? item.currentSalePrice ?? item.unitPrice ?? 0;
-  const unitPrice = item.unitPrice ?? item.price ?? item.currentSalePrice ?? item.salePrice ?? item.averageCost ?? item.costPrice ?? 0;
+  const sku = item.marketplaceSku ?? item.sku ?? item.variantSku ?? '';
+  const salePrice = item.salePrice ?? item.currentSalePrice ?? item.price ?? item.unitPrice ?? 0;
+  const unitPrice = item.unitPrice ?? item.averageCost ?? item.costPrice ?? salePrice ?? 0;
   return {
     id: variantId,
     variantId,
@@ -66,6 +112,7 @@ const normalizeWarehouseVariant = (item) => {
     name: item.variantName ?? item.name ?? '',
     unitPrice,
     salePrice,
+    currentSalePrice: item.currentSalePrice ?? salePrice,
     availableQuantity: item.availableQuantity ?? item.quantityOnHand ?? 0,
     channelId: item.channelId ?? null,
     channelName: item.channelName ?? '',
@@ -101,7 +148,8 @@ const aggregateWarehouseVariantsBySku = (variants) => {
     existing.name = existing.name || item.name;
     existing.unitPrice = Number(existing.unitPrice ?? 0) > 0 ? existing.unitPrice : item.unitPrice;
     existing.salePrice = Number(existing.salePrice ?? 0) > 0 ? existing.salePrice : item.salePrice;
-    existing.availableQuantity = Number(existing.availableQuantity ?? 0) + Number(item.availableQuantity ?? 0);
+    existing.currentSalePrice = Number(existing.currentSalePrice ?? 0) > 0 ? existing.currentSalePrice : item.currentSalePrice;
+    existing.availableQuantity = Math.max(Number(existing.availableQuantity ?? 0), Number(item.availableQuantity ?? 0));
     existing.platforms = uniqueValues([...itemPlatforms(existing), ...itemPlatforms(item)]);
     existing.channelNames = uniqueValues([...(existing.channelNames ?? []), ...(item.channelNames ?? []), item.channelName]);
     existing.channelIds = uniqueValues([...(existing.channelIds ?? []), ...(item.channelIds ?? []), item.channelId]);
@@ -208,7 +256,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center' }}>
                     <span style={{ fontSize: 11, fontFamily: 'monospace', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 4 }}>{item.sku}</span>
-                    <span style={{ fontSize: 11, backgroundColor: '#eef2ff', color: '#3730a3', padding: '1px 6px', borderRadius: 4 }}>{formatPlatforms(item)}</span>
+                    {renderPlatformBadges(item)}
                     {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
                   </div>
                   {Number(item.salePrice) > 0 && (
@@ -296,11 +344,11 @@ export default function StockReceiveCreatePage() {
     let ignore = false;
     const timer = window.setTimeout(() => {
       setLoadingWarehouseVariants(true);
-      inventoryApi.getAvailableVariantsByWarehouse(warehouseId)
+      inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false)
         .then((response) => {
           if (ignore) return;
           const data = getResponseData(response);
-          const variants = Array.isArray(data) ? data : [];
+          const variants = Array.isArray(data) ? data : (data.content ?? []);
           const normalizedVariants = aggregateWarehouseVariantsBySku(variants
             .map(normalizeWarehouseVariant)
             .filter((item) => item.id)
