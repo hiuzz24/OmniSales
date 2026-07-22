@@ -136,6 +136,8 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                         variables,
                         includeLocationDetails
                 );
+                log.info("[ShopifyImportSync] Product variants response cursor={}, pageSize={}, payload={}",
+                        cursor, VARIANT_PAGE_SIZE, response);
 
                 Map<String, Object> productVariants = nestedMap(response, "data", "productVariants");
                 List<Map<String, Object>> nodes = list(productVariants, "nodes");

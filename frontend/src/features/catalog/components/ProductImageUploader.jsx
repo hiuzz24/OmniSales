@@ -76,7 +76,7 @@ const ProductImageUploader = () => {
     <div className={styles.card}>
       <div className={styles.cardHeader}>
         <div>
-          <div className={styles.cardTitle}>Hình ảnh sản phẩm</div>
+          <div className={styles.cardTitle}>Hình ảnh sản phẩm <span className={styles.required}>*</span></div>
           {images.length > 0 && (
             <div className={styles.imageCount}>
               {images.length} ảnh (Ảnh đầu tiên là ảnh chính)

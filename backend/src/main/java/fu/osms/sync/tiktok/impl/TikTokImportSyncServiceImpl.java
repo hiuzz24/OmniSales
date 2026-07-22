@@ -195,6 +195,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         for (int from = 0; from < productIds.size(); from += INVENTORY_BATCH_SIZE) {
             List<String> batch = productIds.subList(from, Math.min(productIds.size(), from + INVENTORY_BATCH_SIZE));
             Map<String, Object> response = tikTokApiClient.searchInventory(channelId, shopCipher, batch);
+            log.info("[TikTokImportSync] Inventory response productIds={}, payload={}", batch, response);
             for (Map<String, Object> inventory : listOfMaps(map(response.get("data")).get("inventory"))) {
                 String productId = stringValue(inventory.get("product_id"));
                 if (hasText(productId)) {
@@ -234,6 +235,8 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                                                    String externalProductId,
                                                    Map<String, Object> fallback) {
         Map<String, Object> response = tikTokApiClient.getProduct(channelId, shopCipher, externalProductId);
+        log.info("[TikTokImportSync] Product detail response productId={}, payload={}",
+                externalProductId, response);
         Map<String, Object> data = map(response.get("data"));
         Map<String, Object> product = map(data.get("product"));
         return product.isEmpty() ? (data.isEmpty() ? fallback : data) : product;
