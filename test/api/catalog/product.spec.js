@@ -6,6 +6,7 @@ const {
   createTestProduct,
   API_BASE,
 } = require('../../utils/product-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Product API Tests', () => {
 
@@ -13,6 +14,11 @@ test.describe('Product API Tests', () => {
 
   test.beforeAll(async ({ request, managerHeaders }) => {
     categoryId = await getFirstCategoryId(request, managerHeaders.Authorization.replace('Bearer ', ''));
+  });
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // P1: Auth - Login

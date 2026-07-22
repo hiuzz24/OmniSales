@@ -1,5 +1,6 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Stocktake API Tests', () => {
 
@@ -16,6 +17,11 @@ test.describe('Stocktake API Tests', () => {
         warehouseId = data[0].id;
       }
     }
+  });
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/stocktakes/statistics

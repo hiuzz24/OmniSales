@@ -2,9 +2,11 @@
  * Global teardown — runs once after all Playwright tests finish.
  *
  * Responsibilities:
- *   1. API cleanup via cleanup-helpers (works on any DB).
- *   2. SQL cleanup — optional, enabled only when TEST_DB_SQL_CLEANUP=true.
- *      WARNING: never enable on a shared dev DB; designed for dedicated test DBs.
+ *   1. API cleanup via cleanup-helpers (always runs).
+ *   2. SQL cleanup — runs by default; opt-out via TEST_DB_SQL_CLEANUP=false.
+ *      The SQL cleanup only removes rows whose names/SKUs/codes match known
+ *      test markers (TEST-*, TestMC_*, KK-*, CK-*, TestSup%, ...), so it is
+ *      safe to run on a shared dev DB.
  *
  * The globalTeardown runs outside the test context, so it creates its own
  * Playwright request context via @playwright/test's request API.
@@ -30,13 +32,16 @@ module.exports = async () => {
     console.warn('[teardown] API cleanup failed:', e.message);
   }
 
-  // ── SQL cleanup (opt-in) ──────────────────────────────────────────────
-  if (process.env.TEST_DB_SQL_CLEANUP === 'true') {
+  // ── SQL cleanup (default ON, opt-out via TEST_DB_SQL_CLEANUP=false) ──
+  const skipSql = process.env.TEST_DB_SQL_CLEANUP === 'false';
+  if (skipSql) {
+    console.log('[teardown] TEST_DB_SQL_CLEANUP=false — skipping SQL cleanup');
+  } else {
     const DATABASE_URL =
       process.env.DATABASE_URL ||
       `postgresql://${process.env.DB_USERNAME || 'postgres'}:${process.env.DB_PASSWORD || '123'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'OSMS'}`;
 
-    console.log('[teardown] TEST_DB_SQL_CLEANUP=true — starting SQL cleanup');
+    console.log('[teardown] SQL cleanup starting (marker-only delete, safe for shared DB)');
     const client = new pg.Client({ connectionString: DATABASE_URL });
     try {
       await client.connect();
@@ -47,8 +52,6 @@ module.exports = async () => {
     } finally {
       await client.end();
     }
-  } else {
-    console.log('[teardown] TEST_DB_SQL_CLEANUP not set — skipping SQL cleanup');
   }
 
   console.log('[teardown] finished at', new Date().toISOString());

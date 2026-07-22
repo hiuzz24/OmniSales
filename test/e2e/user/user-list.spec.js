@@ -1,6 +1,12 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('User List E2E Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // USR-E2E-1
   test('USR-E2E-1 - Navigate to /users - Stats cards are visible', async ({ managerPage }) => {

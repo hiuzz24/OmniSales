@@ -1,5 +1,6 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE, FRONTEND_URL, TEST_EMAIL, TEST_PASSWORD } = require('../../utils/env-config');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 /**
  * Playwright E2E tests for the Invite Staff flow.
@@ -36,6 +37,11 @@ async function getLatestInviteToken(request, headers) {
 test.describe('Invite Staff E2E Tests', () => {
 
   const uniqueEmail = () => `invitee+e2e-${Date.now()}-${Math.floor(Math.random() * 9999)}@osms-test.vn`;
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   test('USR-INV-1 — Owner invites SALES staff from /users, sees toast confirmation', async ({ managerPage }) => {
     await managerPage.goto('/users');

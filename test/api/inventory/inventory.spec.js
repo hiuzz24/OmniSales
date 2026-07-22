@@ -4,6 +4,7 @@ const {
   getFirstWarehouseVariantId,
   API_BASE,
 } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthToken } = require('../../utils/cleanup-helpers');
 
 test.describe('Inventory API Tests', () => {
 

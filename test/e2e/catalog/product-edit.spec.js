@@ -1,4 +1,5 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Product Edit E2E Tests', () => {
 
@@ -6,6 +7,11 @@ test.describe('Product Edit E2E Tests', () => {
     await managerPage.goto('/products');
     await managerPage.waitForLoadState('domcontentloaded');
     await managerPage.waitForTimeout(2000);
+  });
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   test('D1 - Edit page pre-fills form with existing data', async ({ managerPage }) => {

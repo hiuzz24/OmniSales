@@ -4,6 +4,7 @@ const {
   getSupplierId,
 } = require('../../utils/warehouse-helpers');
 const { FRONTEND_URL } = require('../../utils/env-config');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 const BASE_URL = process.env.BASE_URL || process.env.FRONTEND_URL || FRONTEND_URL;
 
@@ -14,7 +15,7 @@ test.describe('Warehouse E2E Tests', () => {
 
   test.beforeAll(async ({ request }) => {
     const { getAuthToken } = require('../../utils/warehouse-helpers');
-    const token = await getAuthToken(request);
+    const token = await getAuthTokenCached(request);
     warehouseId = await getWarehouseId(request, token);
     supplierId = await getSupplierId(request, token);
   });

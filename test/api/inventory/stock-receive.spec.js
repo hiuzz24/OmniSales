@@ -6,6 +6,7 @@ const {
   cleanupTestData,
   API_BASE,
 } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 function todayIso() {
   return new Date().toISOString().split('T')[0];
@@ -27,11 +28,15 @@ test.describe('Stock Receive API Tests', () => {
     }
   });
 
-  test.afterAll(async ({ request, managerHeaders }) => {
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdReceipts) {
-      await cleanupTestData(request, authToken, 'receipt', id);
+  test.afterEach(async ({ request }) => {
+    if (createdReceipts.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdReceipts.splice(0)) {
+        await cleanupTestData(request, authToken, 'receipt', id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/receipts

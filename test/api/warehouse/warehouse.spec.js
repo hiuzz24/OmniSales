@@ -14,6 +14,12 @@ const {
 
 test.describe('Warehouse API Tests', () => {
 
+  test.afterEach(async ({ request }) => {
+    const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
+
   test.describe('Warehouse', () => {
 
     test('API-W1 - GET /api/warehouses - List warehouses', async ({ request, managerHeaders }) => {

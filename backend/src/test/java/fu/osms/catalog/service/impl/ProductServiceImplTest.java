@@ -22,12 +22,15 @@ import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.service.ChannelService;
+import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.channel.dto.response.ChannelSyncResponse;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.common.utils.SecurityUtils;
 import fu.osms.inventory.dto.response.StockSummaryDTO;
+import fu.osms.inventory.repository.InventoryItemRepository;
+import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.sync.dto.SyncResult;
@@ -92,6 +95,12 @@ class ProductServiceImplTest {
     private ProductSyncOrchestratorService productSyncOrchestratorService;
     @Mock
     private ProductChannelConfigService productChannelConfigService;
+    @Mock
+    private ChannelConnectionValidator channelConnectionValidator;
+    @Mock
+    private WarehouseRepository warehouseRepository;
+    @Mock
+    private InventoryItemRepository inventoryItemRepository;
 
     @InjectMocks
     private ProductServiceImpl productService;

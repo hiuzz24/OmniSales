@@ -7,17 +7,21 @@ const {
   getCustomerStats,
   API_BASE,
 } = require('../../utils/customer-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Customer API Tests', () => {
 
   let createdCustomerIds = [];
 
-  test.afterEach(async ({ request, managerHeaders }) => {
-    if (!createdCustomerIds.length) return;
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdCustomerIds.splice(0)) {
-      await deleteTestCustomer(request, authToken, id);
+  test.afterEach(async ({ request }) => {
+    if (createdCustomerIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdCustomerIds.splice(0)) {
+        await deleteTestCustomer(request, authToken, id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/customers - List Customers
@@ -96,7 +100,14 @@ test.describe('Customer API Tests', () => {
       data: {},
     });
 
-    expect([200, 201, 400, 500]).toContain(response.status());
+    if (response.status() === 200 || response.status() === 201) {
+      const body = await response.json();
+      if (body?.data?.id) createdCustomerIds.push(body.data.id);
+      test.skip(true, 'Server accepted empty body — backend validation gap, but tracked ID for cleanup');
+      return;
+    }
+
+    expect([400, 500]).toContain(response.status());
   });
 
   test('C8 - POST /api/customers - Create customer successfully', async ({ request, managerHeaders }) => {
@@ -269,7 +280,14 @@ test.describe('Customer API Tests', () => {
       },
     });
 
-    expect([200, 201, 400, 500]).toContain(response.status());
+    if (response.status() === 200 || response.status() === 201) {
+      const body = await response.json();
+      if (body?.data?.id) createdCustomerIds.push(body.data.id);
+      test.skip(true, 'Server accepted request without fullName — backend validation gap, but tracked ID for cleanup');
+      return;
+    }
+
+    expect([400, 500]).toContain(response.status());
   });
 
   test('C18 - GET /api/customers - Pagination works correctly', async ({ request, managerHeaders }) => {

@@ -20,6 +20,12 @@ test.describe('Inventory Transactions API Tests', () => {
     }
   });
 
+  test.afterEach(async ({ request }) => {
+    const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
+
   // POST /api/inventory/transactions
   test('INV-11 - POST /api/inventory/transactions - Record ADJUSTMENT transaction', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing data');

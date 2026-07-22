@@ -4,17 +4,21 @@ const {
   cleanupTestUser,
   API_BASE,
 } = require('../../utils/user-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('User API Tests', () => {
 
   let createdUserIds = [];
 
-  test.afterEach(async ({ request, managerHeaders }) => {
-    if (!createdUserIds.length) return;
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdUserIds.splice(0)) {
-      await cleanupTestUser(request, authToken, id);
+  test.afterEach(async ({ request }) => {
+    if (createdUserIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdUserIds.splice(0)) {
+        await cleanupTestUser(request, authToken, id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // POST /users
