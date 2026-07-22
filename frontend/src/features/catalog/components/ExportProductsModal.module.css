@@ -534,3 +534,76 @@
   transform: none;
   box-shadow: none;
 }
+
+/* Soft catalog visual system */
+.overlay { padding: 20px; background: rgba(15, 23, 42, 0.32); backdrop-filter: blur(3px); }
+.modal {
+  border: 1px solid #dce4ec;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
+  box-shadow: 0 22px 54px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(51, 78, 111, 0.06);
+  animation: fadeIn 0.16s ease;
+}
+.header {
+  padding: 18px 22px;
+  border-bottom-color: #e1e8ef;
+  background: linear-gradient(135deg, #edf6fc 0%, #f8fafc 62%, #f2f8f5 100%);
+}
+.title { color: #172033; font-weight: 700; }
+.subtitle { color: #718096; }
+.closeBtn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #d9e2eb;
+  border-radius: 10px;
+  color: #718096;
+  background: rgba(255, 255, 255, 0.82);
+}
+.toolbar {
+  padding: 12px 22px;
+  border-bottom-color: #e3e9ef;
+  background: linear-gradient(135deg, #f4f8fb 0%, #f9fbfc 70%);
+}
+.searchInput,
+.columnPickerBtn,
+.selectAllBtn,
+.cancelBtn,
+.exportBtn { border-radius: 10px; }
+.searchInput,
+.columnPickerBtn,
+.selectAllBtn { border-color: #d3dde7; background: #ffffff; }
+.searchInput:focus,
+.columnPickerBtn:focus-visible,
+.selectAllBtn:focus-visible,
+.cancelBtn:focus-visible,
+.exportBtn:focus-visible {
+  outline: none;
+  border-color: #8faccc;
+  box-shadow: 0 0 0 3px rgba(63, 115, 189, 0.13);
+}
+.columnMenu { border-color: #dce5ed; border-radius: 12px; box-shadow: 0 14px 34px rgba(51, 78, 111, 0.14); }
+.columnMenuHeader,
+.table thead th { background: #f3f7fa; }
+.columnMenuItem { border-radius: 8px; }
+.columnMenuItemChecked { background: #f0f6fb; }
+.tr:hover { background: #f4f9fc; }
+.trSelected,
+.trSelected:hover { background: #edf6fb; }
+.footer {
+  border-top-color: #e1e8ef;
+  background: linear-gradient(135deg, #f7f9fb 0%, #fbfcfd 100%);
+}
+.cancelBtn { border: 1px solid #d9e2ea; color: #526173; background: #f5f7f9; }
+.exportBtn {
+  border: 1px solid #6d9d86;
+  color: #ffffff;
+  background: #5f8f78;
+  box-shadow: 0 2px 7px rgba(63, 120, 91, 0.14);
+}
+.exportBtn:hover:not(:disabled) {
+  border-color: #527e69;
+  background: #527e69;
+  box-shadow: 0 3px 9px rgba(63, 120, 91, 0.18);
+  transform: none;
+}

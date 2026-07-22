@@ -1,6 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { ChevronDown, ChevronRight, ChevronLeft, RefreshCw, Loader2, Search, Upload } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  RefreshCw,
+  Loader2,
+  Search,
+  Upload,
+  CircleCheck,
+  FolderTree,
+  Ruler,
+  SlidersHorizontal,
+  Sparkles,
+  Store,
+  Tag,
+} from 'lucide-react';
 import { toast } from 'react-toastify';
 import platformLookupApi from '../../../api/platformLookupApi';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
@@ -16,6 +31,7 @@ const OPTIONAL_LAZADA_SPECIFICATIONS = new Set([
   'sleeves_type', 'sleeve_type',
 ]);
 const TIKTOK_LISTING_ATTRIBUTE_IDS = new Set(['100149', '101489', '101490']);
+const TIKTOK_FREE_TEXT_ATTRIBUTE_IDS = new Set(['101489', '101490']);
 const TIKTOK_PRODUCT_NAME_MIN_LENGTH = 25;
 const TIKTOK_PRODUCT_NAME_MAX_LENGTH = 255;
 const extractData = (response) => response?.data?.data || response?.data || response || [];
@@ -313,8 +329,8 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     if (isLazadaSizeChart) {
       const channelId = channel.channelId || channel.id;
       const invalidUrl = Boolean(value) && !isHttpUrl(String(value));
-      return <div className={styles.field} key={attributeKey}>
-        <span>{attribute.label || attribute.name}{attribute.required ? ' *' : ''}</span>
+      return <div className={`${styles.field} ${styles.fullWidth}`} key={attributeKey}>
+        <span className={styles.fieldLabel}>{attribute.label || attribute.name}{attribute.required ? <span className={styles.requiredMark}> *</span> : null}</span>
         <input
           className={styles.input}
           type="url"
@@ -349,7 +365,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
         const mappings = config.variantAttributeValueMappings?.[attributeKey] || {};
         const options = attribute.options || [];
         return <div className={`${styles.field} ${styles.fullWidth}`} key={attributeKey}>
-          <span>{attribute.label || attribute.name}{attribute.required ? ' *' : ''}</span>
+          <span className={styles.fieldLabel}>{attribute.label || attribute.name}{attribute.required ? <span className={styles.requiredMark}> *</span> : null}</span>
           {uniqueSkus.length === 0
             ? <span className={styles.helperText}>Hãy nhập SKU sản phẩm trước khi map thuộc tính {channel.platform === 'TIKTOK' ? 'TikTok' : 'Lazada'}.</span>
             : <div className={styles.skuMappingContainer}>
@@ -375,7 +391,10 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
       }
       return null;
     }
-    const options = attribute.options || [];
+    const options = channel.platform === 'TIKTOK'
+      && TIKTOK_FREE_TEXT_ATTRIBUTE_IDS.has(String(attribute.id))
+      ? []
+      : attribute.options || [];
     const selectedOption = options.find((option) => String(option.id) === String(value)
       || String(option.name) === String(value)
       || String(option.platformValue) === String(value));
@@ -385,7 +404,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
           : selectedOption.id || selectedOption.name)
       : '';
     return <label className={styles.field} key={attributeKey}>
-      <span>{attribute.label || attribute.name}{attribute.required ? ' *' : ''}</span>
+      <span className={styles.fieldLabel}>{attribute.label || attribute.name}{attribute.required ? <span className={styles.requiredMark}> *</span> : null}</span>
       {options.length > 0 ? <select className={styles.input} value={selectedValue} onChange={(event) => {
         const option = options.find((item) => String(channel.platform === 'LAZADA'
           ? item.platformValue || item.id || item.name
@@ -428,11 +447,13 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     {shopifyChannels.map((channel) => {
       const channelId = channel.channelId || channel.id;
       return <div className={styles.shopifyReadyCard} key={channelId}>
-        <div>
+        <span className={styles.shopifyIcon}><Store size={17} /></span>
+        <div className={styles.shopifyDetails}>
+          <span className={styles.platformBadge}>Shopify</span>
           <strong>{channel.channelName || channel.displayName || 'Shopify'}</strong>
-          <span>Đã active Shopify. Khi đồng bộ, hệ thống dùng tên sản phẩm, ảnh, SKU/variant, giá và tồn kho khả dụng từ kho mặc định.</span>
+          <span>Đã active. Sản phẩm sẽ dùng dữ liệu và tồn kho khả dụng từ OSMS khi đồng bộ.</span>
         </div>
-        <span className={styles.statusReady}>Sẵn sàng</span>
+        <span className={styles.statusReady}><CircleCheck size={13} /> Sẵn sàng</span>
       </div>;
     })}
     {platformChannels.map((channel) => {
@@ -463,18 +484,35 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
           || normalizedProductName.length > TIKTOK_PRODUCT_NAME_MAX_LENGTH);
       const isSuggestionInputMissing = !productId && (!normalizedProductName || !primaryImageUrl);
       const isSizeChartUrlInvalid = Boolean(config.sizeChartImageUrl) && !isHttpUrl(config.sizeChartImageUrl);
-      return <div className={styles.panel} key={channelId}>
+      return <div className={`${styles.panel} ${openChannelId === channelId ? styles.panelOpen : ''}`} key={channelId}>
         <button className={styles.panelHeader} type="button" onClick={() => toggle(channel)}>
-          <span>{openChannelId === channelId ? <ChevronDown size={18} color="#6b7280" /> : <ChevronRight size={18} color="#6b7280" />}</span>
-          <span className={styles.panelTitle}>{channel.channelName || channel.displayName || channel.platform}</span>
-          <span className={config.categoryId ? styles.statusReady : styles.statusPending}>{config.categoryId ? config.categoryName : 'Cấu hình sau'}</span>
+          <span className={styles.panelToggleIcon}>{openChannelId === channelId ? <ChevronDown size={17} /> : <ChevronRight size={17} />}</span>
+          <span className={styles.channelHeading}>
+            <span className={styles.channelTitleRow}>
+              <span className={styles.panelTitle}>{channel.channelName || channel.displayName || channel.platform}</span>
+              <span className={styles.platformBadge}>{platformLabel}</span>
+            </span>
+            <span className={styles.channelMeta}>{config.categoryId ? config.categoryName : 'Chưa chọn danh mục sản phẩm'}</span>
+          </span>
+          <span className={config.categoryId ? styles.statusReady : styles.statusPending}>
+            {config.categoryId ? <CircleCheck size={13} /> : null}
+            {config.categoryId ? 'Đã chọn danh mục' : 'Cấu hình sau'}
+          </span>
         </button>
         {openChannelId === channelId && <div className={styles.panelBody}>
           
-          <div className={styles.categorySection}>
-            <div className={styles.categorySectionTitle}>
-              <span className={styles.sectionIcon}>📁</span> Danh mục sản phẩm *
+          <div className={`${styles.configBlock} ${styles.categoryBlock}`}>
+            <div className={styles.configBlockHeader}>
+              <span className={styles.sectionIcon}><FolderTree size={16} /></span>
+              <div>
+                <div className={styles.configBlockTitle}>Danh mục sản phẩm <span className={styles.requiredMark}>*</span></div>
+                <p className={styles.configBlockDescription}>Chọn danh mục lá phù hợp để tải đúng thuộc tính và thương hiệu của {platformLabel}.</p>
+              </div>
             </div>
+            {config.categoryId && <div className={styles.selectedCategorySummary}>
+              <span className={styles.selectedCategoryLabel}>Danh mục đang chọn</span>
+              <strong>{config.categoryName}</strong>
+            </div>}
             <div className={styles.actions}>
               <button type="button" className={styles.saveButton} onClick={() => suggestCategories(channel)}
                 disabled={isSuggestionInputMissing || isTikTokProductNameInvalid || loading[channelId]}>
@@ -538,23 +576,41 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
             </div>}
           </div>
 
-          {config.categoryId && requiredAttributes.length > 0 && <div className={styles.attributes}>
-            <h4><span className={styles.sectionIcon}>✨</span> Thuộc tính bắt buộc</h4>
-            {requiredAttributes.map((attribute) => renderAttribute(channel, attribute))}
+          {config.categoryId && requiredAttributes.length > 0 && <div className={`${styles.configBlock} ${styles.requiredBlock}`}>
+            <div className={styles.configBlockHeader}>
+              <span className={styles.sectionIcon}><Sparkles size={16} /></span>
+              <div>
+                <div className={styles.configBlockTitle}>Thuộc tính bắt buộc</div>
+                <p className={styles.configBlockDescription}>Hoàn thành các trường do {platformLabel} yêu cầu cho danh mục đã chọn.</p>
+              </div>
+              <span className={styles.fieldCount}>{requiredAttributes.length} trường</span>
+            </div>
+            <div className={styles.attributeGrid}>{requiredAttributes.map((attribute) => renderAttribute(channel, attribute))}</div>
           </div>}
 
-          {config.categoryId && optionalAttributes.length > 0 && <div className={styles.attributes}>
-            <h4><span className={styles.sectionIcon}>⚙️</span> {channel.platform === 'TIKTOK' ? 'Thuộc tính bổ sung TikTok' : 'Thông số hiển thị trên Lazada'}</h4>
-            {optionalAttributes.map((attribute) => renderAttribute(channel, attribute))}
+          {config.categoryId && optionalAttributes.length > 0 && <div className={`${styles.configBlock} ${styles.optionalBlock}`}>
+            <div className={styles.configBlockHeader}>
+              <span className={styles.sectionIcon}><SlidersHorizontal size={16} /></span>
+              <div>
+                <div className={styles.configBlockTitle}>{channel.platform === 'TIKTOK' ? 'Thuộc tính bổ sung TikTok' : 'Thông số hiển thị trên Lazada'}</div>
+                <p className={styles.configBlockDescription}>Thông tin bổ sung giúp nội dung sản phẩm đầy đủ hơn trên gian hàng.</p>
+              </div>
+              <span className={styles.fieldCount}>{optionalAttributes.length} trường</span>
+            </div>
+            <div className={styles.attributeGrid}>{optionalAttributes.map((attribute) => renderAttribute(channel, attribute))}</div>
           </div>}
 
-          {['LAZADA', 'TIKTOK'].includes(channel.platform) && config.categoryId && <div className={styles.brandSection}>
-            <div className={styles.categorySectionTitle}>
-              <span className={styles.sectionIcon}>🏷️</span> Thương hiệu {platformLabel} *
+          {['LAZADA', 'TIKTOK'].includes(channel.platform) && config.categoryId && <div className={`${styles.configBlock} ${styles.brandBlock}`}>
+            <div className={styles.configBlockHeader}>
+              <span className={styles.sectionIcon}><Tag size={16} /></span>
+              <div>
+                <div className={styles.configBlockTitle}>Thương hiệu {platformLabel} <span className={styles.requiredMark}>*</span></div>
+                <p className={styles.configBlockDescription}>Tìm và chọn đúng thương hiệu đã được platform cung cấp.</p>
+              </div>
             </div>
             <div className={styles.brandRow}>
               <div className={styles.field}>
-                <span>Tìm kiếm</span>
+                <span className={styles.fieldLabel}>Tìm kiếm thương hiệu</span>
                 <div className={styles.actions}>
                   <input className={styles.input} placeholder="Nhập tên thương hiệu..." value={brandSearchValues[channelId] || ''}
                     onChange={(event) => searchBrands(channel, event.target.value)}
@@ -571,7 +627,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
                 </div>
               </div>
               <div className={styles.field}>
-                <span>Chọn thương hiệu từ danh sách</span>
+                <span className={styles.fieldLabel}>Thương hiệu đã chọn</span>
                 <select className={styles.input} value={config.brandId || ''} onChange={(event) => {
                   const brand = availableBrands.find((item) => String(item.id) === String(event.target.value));
                   updateConfig(channel, { brandId: event.target.value, brandName: brand?.name || '' });
@@ -597,10 +653,17 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
             </div>
           </div>}
 
-          {channel.platform === 'TIKTOK' && config.categoryId && <div className={styles.attributes}>
-            <h4><span className={styles.sectionIcon}>📏</span> Ảnh bảng size TikTok *</h4>
+          {channel.platform === 'TIKTOK' && config.categoryId && <div className={`${styles.configBlock} ${styles.sizeChartBlock}`}>
+            <div className={styles.configBlockHeader}>
+              <span className={styles.sectionIcon}><Ruler size={16} /></span>
+              <div>
+                <div className={styles.configBlockTitle}>Ảnh bảng size TikTok <span className={styles.requiredMark}>*</span></div>
+                <p className={styles.configBlockDescription}>Dán URL ảnh hoặc tải ảnh bảng kích thước trực tiếp từ máy.</p>
+              </div>
+            </div>
+            <div className={styles.sizeChartGrid}>
             <label className={styles.field}>
-              <span>URL ảnh bảng size</span>
+              <span className={styles.fieldLabel}>URL ảnh bảng size</span>
               <input
                 className={styles.input}
                 type="url"
@@ -613,7 +676,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
                 : null}
             </label>
             <label className={styles.field}>
-              <span>Hoặc chọn ảnh từ máy</span>
+              <span className={styles.fieldLabel}>Tải ảnh từ máy</span>
               <span className={styles.fileUploadRow}>
                 <input
                   className={styles.fileInput}
@@ -626,6 +689,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
                 {!sizeChartUploading[channelId] && <Upload size={16} />}
               </span>
             </label>
+            </div>
           </div>}
 
           {onSave && <div className={styles.saveRow}>

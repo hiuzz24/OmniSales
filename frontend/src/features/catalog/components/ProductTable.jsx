@@ -1,4 +1,4 @@
-import { Eye, Link2, Settings2 } from 'lucide-react';
+import { Eye, Image, Link2, PackageOpen, PackageSearch, Settings2 } from 'lucide-react';
 import Badge from '../../../shared/components/Badge';
 import Pagination from '../../../shared/components/Pagination';
 import styles from './ProductTable.module.css';
@@ -63,7 +63,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(0);
-  const [size] = useState(6);
+  const [size] = useState(5);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -103,9 +103,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
       <div className={styles.tableHeader}>
         <h3 className={styles.tableTitle}>
           <span className={styles.titleIcon}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            </svg>
+            <PackageOpen aria-hidden="true" />
           </span>
           Danh sách sản phẩm
           <span className={styles.tableCount}>({totalElements})</span>
@@ -113,7 +111,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
       </div>
 
       <div className={styles.tableResponsive}>
-        <table className={styles.table}>
+        <table className={`${styles.table} ${products.length === size ? styles.tableFilled : ''}`}>
           <thead className={styles.thead}>
             <tr>
               <th scope="col" className={`${styles.th} ${styles.thProduct}`}>Sản phẩm</th>
@@ -140,9 +138,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
               <tr>
                 <td colSpan="9" className={styles.emptyCell}>
                   <div className={styles.emptyIcon}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                    </svg>
+                    <PackageSearch aria-hidden="true" />
                   </div>
                   <p>Không có sản phẩm nào</p>
                   <button onClick={() => navigate('/products/create')} type="button">Thêm sản phẩm đầu tiên</button>
@@ -163,11 +159,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                             <img src={imageUrl} alt={product.name || 'Sản phẩm'} />
                           ) : (
                             <div className={styles.imagePlaceholder}>
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                <circle cx="8.5" cy="8.5" r="1.5"/>
-                                <path d="M21 15l-5-5L5 21"/>
-                              </svg>
+                              <Image aria-hidden="true" />
                             </div>
                           )}
                         </div>
@@ -247,6 +239,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
       </div>
 
       <Pagination
+        className={styles.tablePagination}
         currentPage={page}
         totalPages={totalPages}
         totalElements={totalElements}

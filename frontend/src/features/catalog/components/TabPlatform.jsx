@@ -102,7 +102,7 @@ const TabPlatform = ({ product, onRefresh }) => {
     <div className={styles.card}>
       <div className={styles.cardHeader}>
         <div className={styles.titleRow}>
-          <span className={styles.sectionIcon}>🔄</span>
+          <span className={styles.sectionIcon}><RefreshCw aria-hidden="true" /></span>
           <h3 className={styles.cardTitle}>Trạng thái đồng bộ</h3>
         </div>
         <p className={styles.cardSubtitle}>Kiểm tra trạng thái kết nối và đồng bộ của sản phẩm trên các sàn.</p>

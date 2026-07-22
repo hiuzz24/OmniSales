@@ -3,6 +3,8 @@ package fu.osms.channel.controller;
 import fu.osms.channel.enums.ChannelConnectionAction;
 import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 import fu.osms.sync.tiktok.TikTokChannelConnectionService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +66,14 @@ public class TikTokOAuthController {
         try {
             tikTokChannelConnectionService.connect(code, state);
             response.sendRedirect(frontendUrl + "/channels?success=tiktok_connected");
+        } catch (AppException e) {
+            log.error("[TikTokOAuth] Failed to connect channel", e);
+            channelConnectionLogService.logFailure(
+                    PlatformType.TIKTOK, ChannelConnectionAction.CONNECT,
+                    "Failed to connect TikTok channel", e.getMessage(), Map.of("reason", "connection_failed"));
+            String errorCode = e.getErrorCode() == ErrorCode.CHANNEL_IDENTITY_CONFLICT
+                    ? "channel_identity_conflict" : "tiktok_oauth_failed";
+            response.sendRedirect(frontendUrl + "/channels?error=" + errorCode);
         } catch (Exception e) {
             log.error("[TikTokOAuth] Failed to exchange token and connect channel", e);
             channelConnectionLogService.logFailure(

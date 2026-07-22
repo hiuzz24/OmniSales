@@ -41,6 +41,9 @@ const ProductManagementPage = () => {
   const actions = (
     <>
       <button
+        type="button"
+        aria-label="Lịch sử đồng bộ"
+        title="Lịch sử đồng bộ"
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.SYNC_HISTORY)}
       >
@@ -48,6 +51,9 @@ const ProductManagementPage = () => {
         Lịch sử đồng bộ
       </button>
       <button
+        type="button"
+        aria-label="Nhật ký hệ thống"
+        title="Nhật ký hệ thống"
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
       >
@@ -55,6 +61,9 @@ const ProductManagementPage = () => {
         Nhật ký hệ thống
       </button>
       <button
+        type="button"
+        aria-label="Nhập Excel"
+        title="Nhập Excel"
         className={`${styles.actionBtn} ${styles.importBtn}`}
         onClick={() => setIsImportModalOpen(true)}
       >
@@ -62,13 +71,22 @@ const ProductManagementPage = () => {
         Nhập Excel
       </button>
       <button
+        type="button"
+        aria-label="Xuất Excel"
+        title="Xuất Excel"
         className={`${styles.actionBtn} ${styles.exportBtn}`}
         onClick={() => setIsExportModalOpen(true)}
       >
         <FileDown className={styles.exportIcon} />
         Xuất Excel
       </button>
-      <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={() => navigate(ROUTES.PRODUCT_CREATE)}>
+      <button
+        type="button"
+        aria-label="Thêm sản phẩm mới"
+        title="Thêm sản phẩm mới"
+        className={`${styles.actionBtn} ${styles.primaryBtn}`}
+        onClick={() => navigate(ROUTES.PRODUCT_CREATE)}
+      >
         <Plus className={styles.primaryIcon} />
         Thêm sản phẩm mới
       </button>
@@ -77,12 +95,14 @@ const ProductManagementPage = () => {
 
   return (
     <div className={styles.page}>
-      <PageHeader
-        title="Sản phẩm"
-        subtitle="Quản lý kho hàng và các sản phẩm trên hệ thống"
-        icon={() => <Package size={20}/>}
-        actions={actions}
-      />
+      <div className={styles.pageHeader}>
+        <PageHeader
+          title="Sản phẩm"
+          subtitle="Quản lý kho hàng và các sản phẩm trên hệ thống"
+          icon={() => <Package size={20} />}
+          actions={actions}
+        />
+      </div>
       <ProductFilterBar
         searchInput={searchInput}
         onSearchChange={setSearchInput}

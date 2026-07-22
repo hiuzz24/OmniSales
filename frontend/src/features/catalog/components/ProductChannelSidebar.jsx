@@ -1,4 +1,4 @@
-import { Save, Send } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductChannelSidebar.module.css';
 
@@ -12,7 +12,6 @@ const PLATFORM_ICONS = {
 const ProductChannelSidebar = ({
   channels = [],
   onSubmit,
-  onSubmitAndSync,
   onInvalid,
   onCancel,
   warehouses = [],
@@ -143,19 +142,6 @@ const ProductChannelSidebar = ({
           {isSubmitting ? <div className={styles.spinner} /> : <Save className={styles.submitIcon} />}
           {isSubmitting ? (isEditMode ? 'Đang cập nhật...' : 'Đang tạo...') : (isEditMode ? 'Cập nhật' : 'Tạo sản phẩm')}
         </button>
-
-        {isEditMode && onSubmitAndSync && (
-          <button
-            type="button"
-            className={styles.syncBtn}
-            onClick={handleSubmit(onSubmitAndSync, onInvalid)}
-            disabled={isSubmitting || selectedCount === 0}
-            title={selectedCount === 0 ? 'Hãy active ít nhất một sàn trước khi đồng bộ' : 'Lưu cấu hình rồi đồng bộ sản phẩm lên các sàn active'}
-          >
-            <Send className={styles.submitIcon} />
-            Cập nhật & đồng bộ sàn
-          </button>
-        )}
 
         <button
           type="button"

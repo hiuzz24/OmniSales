@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { ROUTES } from '../../../app/router/routes';
 import {
   ShoppingCart, FileDown, Eye, Search,
   TrendingUp, Clock, CheckCircle, Package, Truck, XCircle,
-  Store, ShoppingBag, PenTool, History,
+  Store, ShoppingBag, PenTool, History, CloudDownload,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import Pagination from '../../../shared/components/Pagination';
@@ -12,9 +13,11 @@ import orderService from '../services/orderService';
 import orderApi from '../../../api/orderApi';
 import channelApi from '../../../api/channelApi';
 import ExportOrdersModal from '../components/ExportOrdersModal';
+import PullOrdersModal from '../components/PullOrdersModal';
 import styles from './OrderListPage.module.css';
 
 const PAGE_SIZE = 5;
+const PULL_JOB_STORAGE_KEY = 'osms.orderPullJobIds';
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',  icon: Clock,       color: 'orange'    },
@@ -71,6 +74,11 @@ const OrderListPage = () => {
 
   const [stats, setStats] = useState(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isPullModalOpen, setIsPullModalOpen] = useState(false);
+  const [isStartingPull, setIsStartingPull] = useState(false);
+  const [pullJobs, setPullJobs] = useState([]);
+  const pullFailuresRef = useRef(0);
+  const pullStartedAtRef = useRef(Date.now());
 
   const fetchChannels = useCallback(async () => {
     try {
@@ -131,6 +139,69 @@ const OrderListPage = () => {
 
   useEffect(() => { setPage(0); }, [keyword, statusFilter, channelFilter, fromDate, toDate]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const recover = async () => {
+      try {
+        const storedIds = JSON.parse(sessionStorage.getItem(PULL_JOB_STORAGE_KEY) || '[]');
+        const active = await orderApi.getActivePullJobs();
+        const activeIds = new Set((active || []).map((job) => job.id));
+        const recovered = await Promise.all(storedIds.filter((id) => !activeIds.has(id))
+          .map((id) => orderApi.getPullJob(id).catch(() => null)));
+        if (!cancelled) setPullJobs([...(active || []), ...recovered.filter(Boolean)]);
+      } catch {
+        if (!cancelled) setPullJobs([]);
+      }
+    };
+    recover();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const pendingIds = pullJobs.filter((job) => job.status === 'PENDING').map((job) => job.id);
+    sessionStorage.setItem(PULL_JOB_STORAGE_KEY, JSON.stringify(pendingIds));
+    if (pendingIds.length === 0 || pullFailuresRef.current >= 3) return undefined;
+    if (Date.now() - pullStartedAtRef.current > 35 * 60 * 1000) return undefined;
+    const timer = window.setInterval(async () => {
+      try {
+        const updates = await Promise.all(pendingIds.map((id) => orderApi.getPullJob(id)));
+        pullFailuresRef.current = 0;
+        const completed = updates.some((job) => job.status !== 'PENDING');
+        setPullJobs((current) => current.map((job) => updates.find((value) => value.id === job.id) || job));
+        if (completed) {
+          updates.filter((job) => job.status !== 'PENDING').forEach((job) => {
+            if (job.status === 'SYNCED') {
+              toast.success(`Đã kéo ${job.successCount || 0} đơn từ ${job.channelName || job.platform}`);
+            } else {
+              toast.error(`Kéo đơn từ ${job.channelName || job.platform} chưa hoàn tất`);
+            }
+          });
+          fetchOrders({ silent: true });
+          fetchStats();
+        }
+      } catch {
+        pullFailuresRef.current += 1;
+      }
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [pullJobs, fetchOrders, fetchStats]);
+
+  const handlePullOrders = async (payload) => {
+    setIsStartingPull(true);
+    try {
+      const jobs = await orderApi.pullOrders(payload);
+      setPullJobs((current) => [...current.filter((job) => !jobs.some((next) => next.id === job.id)), ...jobs]);
+      pullFailuresRef.current = 0;
+      pullStartedAtRef.current = Date.now();
+      setIsPullModalOpen(false);
+      toast.success('Đã bắt đầu kéo đơn. Job sẽ tiếp tục chạy ở nền.');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể bắt đầu kéo đơn');
+    } finally {
+      setIsStartingPull(false);
+    }
+  };
+
   const handleReset = () => {
     setKeyword('');
     setStatusFilter('');
@@ -180,6 +251,14 @@ const OrderListPage = () => {
     <>
       <button
         className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
+        onClick={() => setIsPullModalOpen(true)}
+        title="Kéo đơn từ sàn"
+      >
+        <CloudDownload size={15} />
+        Kéo đơn{pullJobs.some((job) => job.status === 'PENDING') ? ` (${pullJobs.filter((job) => job.status === 'PENDING').length})` : ''}
+      </button>
+      <button
+        className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.ORDER_LOGS)}
       >
         <History size={15} />
@@ -194,12 +273,14 @@ const OrderListPage = () => {
 
   return (
     <div className={styles.page}>
-      <PageHeader
-        title="Đơn hàng"
-        subtitle="Quản lý và theo dõi đơn hàng theo kênh bán hàng"
-        icon={<ShoppingCart size={20} />}
-        actions={actions}
-      />
+      <div className={styles.pageHeaderShell}>
+        <PageHeader
+          title="Đơn hàng"
+          subtitle="Quản lý và theo dõi đơn hàng theo kênh bán hàng"
+          icon={<ShoppingCart size={20} />}
+          actions={actions}
+        />
+      </div>
 
       {/* Stats */}
       {stats && (
@@ -251,18 +332,18 @@ const OrderListPage = () => {
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
           />
-          <span style={{ color: '#94a3b8', fontSize: 13 }}>—</span>
+          <span className={styles.dateSeparator}>—</span>
           <input
             type="date"
             className={styles.dateInput}
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
           />
-          <button className={styles.filterBtn} onClick={() => fetchOrders()}>
+          <button type="button" className={styles.filterBtn} onClick={() => fetchOrders()}>
             <Search size={14} />
             Lọc
           </button>
-          <button className={styles.resetBtn} onClick={handleReset}>
+          <button type="button" className={styles.resetBtn} onClick={handleReset}>
             Reset
           </button>
         </div>
@@ -270,7 +351,18 @@ const OrderListPage = () => {
 
       {/* Table */}
       <div className={styles.tableCard}>
-        <table className={styles.table}>
+        <div className={styles.tableHeader}>
+          <div className={styles.tableHeadingGroup}>
+            <span className={styles.tableHeadingIcon}><ShoppingCart aria-hidden="true" /></span>
+            <div>
+              <h2 className={styles.tableTitle}>Danh sách đơn hàng</h2>
+              <p className={styles.tableSubtitle}>Theo dõi trạng thái và thanh toán theo từng kênh.</p>
+            </div>
+          </div>
+          <span className={styles.tableCount}>{totalElements}</span>
+        </div>
+        <div className={styles.tableResponsive}>
+          <table className={`${styles.table} ${orders.length === PAGE_SIZE ? styles.tableFilled : ''}`}>
           <thead>
             <tr>
               <th className={styles.thPl}>Mã đơn</th>
@@ -307,7 +399,7 @@ const OrderListPage = () => {
                     <td className={styles.thPl}>
                       <span className={styles.orderCode}>{order.externalOrderId}</span>
                     </td>
-                    <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
+                    <td className={styles.orderDate}>
                       {formatDate(order.createdAt)}
                     </td>
                     <td>
@@ -315,29 +407,24 @@ const OrderListPage = () => {
                         const ch = getChannelIcon(order.channelName);
                         const Icon = ch.icon;
                         return (
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                          }}>
-                            <div style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              width: 24, height: 24, borderRadius: 6,
-                              background: ch.bg, color: ch.color,
-                            }}>
+                          <div className={styles.channelCell}>
+                            <div
+                              className={styles.channelIcon}
+                              style={{ '--channel-bg': ch.bg, '--channel-color': ch.color }}
+                            >
                               <Icon size={13} />
                             </div>
-                            <span style={{
-                              fontSize: 12.5, fontWeight: 600, color: ch.color,
-                            }}>
+                            <span className={styles.channelLabel} style={{ '--channel-color': ch.color }}>
                               {ch.label}
                             </span>
                           </div>
                         );
                       })()}
                     </td>
-                    <td style={{ fontWeight: 600, color: '#0f172a', fontSize: 13.5 }}>
+                    <td className={styles.customerCell}>
                       {order.buyerName || '-'}
                       {order.buyerPhone && (
-                        <span style={{ display: 'block', fontSize: 11.5, color: '#94a3b8', fontWeight: 400 }}>
+                        <span className={styles.customerPhone}>
                           {order.buyerPhone}
                         </span>
                       )}
@@ -347,7 +434,7 @@ const OrderListPage = () => {
                         {getItemsSummary(order.items)}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'center', color: '#059669', fontWeight: 700 }}>
+                    <td className={styles.totalCell}>
                       {formatCurrency(order.totalAmount)}
                     </td>
                     <td>
@@ -369,10 +456,7 @@ const OrderListPage = () => {
                           title="Xem chi tiết"
                           className={styles.detailBtn}
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                          </svg>
+                          <Eye size={16} />
                         </button>
                       </div>
                     </td>
@@ -381,8 +465,10 @@ const OrderListPage = () => {
               })
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
         <Pagination
+          className={styles.tablePagination}
           currentPage={page}
           totalPages={totalPages}
           totalElements={totalElements}
@@ -397,6 +483,13 @@ const OrderListPage = () => {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         currentFilters={{ keyword, status: statusFilter, channelId: channelFilter, from: fromDate, to: toDate }}
+      />
+      <PullOrdersModal
+        open={isPullModalOpen}
+        channels={channels}
+        submitting={isStartingPull}
+        onClose={() => setIsPullModalOpen(false)}
+        onSubmit={handlePullOrders}
       />
     </div>
   );

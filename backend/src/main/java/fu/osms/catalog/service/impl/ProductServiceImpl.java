@@ -36,6 +36,7 @@ import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.service.ChannelService;
+import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.SyncStatus;
@@ -77,6 +78,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductImageRepository productImageRepository;
     private final InventoryService inventoryService;
     private final ChannelService channelService;
+    private final ChannelConnectionValidator channelConnectionValidator;
     private final ChannelRepository channelRepository;
     private final ChannelProductRepository channelProductRepository;
     private final OrderItemRepository orderItemRepository;
@@ -196,6 +198,7 @@ public class ProductServiceImpl implements ProductService {
 
         if (request.getChannelIds() != null && !request.getChannelIds().isEmpty()) {
             List<Channel> channels = channelRepository.findAllById(request.getChannelIds());
+            channels.forEach(channelConnectionValidator::validateConnected);
             List<ChannelProduct> channelProducts = channels.stream()
                     .map(channel -> {
                         ChannelProduct mapping = ChannelProduct.builder()
@@ -515,6 +518,7 @@ public class ProductServiceImpl implements ProductService {
 
                 if (!incomingChannelIds.isEmpty()) {
                     List<Channel> channels = channelRepository.findAllById(incomingChannelIds);
+                    channels.forEach(channelConnectionValidator::validateConnected);
                     for (Channel channel : channels) {
                         ChannelProduct existingCp = existingChannelProductMap.get(channel.getId());
                         if (existingCp != null) {
