@@ -129,7 +129,7 @@ export function buildProductRequest(values, { mode, existingAttributes = {} }) {
       costPrice: isCreate ? 0 : (values.costPrice ?? null), optionValues: optionValues({ Size: values.size, Màu: values.color }), images: [],
     }];
   return {
-    ...(isCreate ? {} : { version: values.version }), name: values.name, sku: values.sku, description: values.description || null,
+    ...(isCreate ? {} : { version: values.version }), hasVariants: values.hasVariants, name: values.name, sku: values.sku, description: values.description || null,
     categoryId: values.categoryId || null, brand: values.brand || null, unit: values.unit || null, status: values.status,
     weightGrams: values.packageWeightKg == null ? null : Math.round(Number(values.packageWeightKg) * 1000),
     lowStockThreshold: values.lowStockThreshold == null ? 5 : Number(values.lowStockThreshold),
