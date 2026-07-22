@@ -55,17 +55,18 @@ const ProductPriceStock = ({
           {errors.price && <span className={styles.errorText}>{errors.price.message}</span>}
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Giá vốn (đ)</label>
+          <label className={styles.label}>Giá vốn (đ) <span className={styles.required}>*</span></label>
           <input
             id="product-cost-price"
             type="number"
-            className={styles.input}
+            className={`${styles.input} ${errors.costPrice ? styles.inputError : ''}`}
             placeholder="80000"
             value={disableCostPrice ? (costPrice ?? '0') : (costPrice ?? '')}
             onChange={(e) => onChange('costPrice', disableCostPrice ? (costPrice ?? '0') : e.target.value)}
             min="0"
             disabled={disableCostPrice}
           />
+          {errors.costPrice && <span className={styles.errorText}>{errors.costPrice.message}</span>}
         </div>
       </div>
 
