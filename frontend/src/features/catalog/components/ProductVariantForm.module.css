@@ -1,9 +1,9 @@
 .card {
   padding: 20px;
-  border: 1px solid #c7d2fe;
+  border: 1px solid #dde2f1;
   border-radius: 8px;
-  background: linear-gradient(180deg, #e0e7ff 0, #eef2ff 78px, #ffffff 78px);
-  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.1), 0 1px 3px rgba(15, 23, 42, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  background: linear-gradient(180deg, #f0f2f9 0, #f7f8fb 78px, #ffffff 78px);
+  box-shadow: 0 5px 15px rgba(74, 78, 116, 0.05), 0 1px 3px rgba(15, 23, 42, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .cardHeader {
@@ -84,7 +84,7 @@
   padding: 9px 10px;
   border-bottom: 1px solid #c7d2fe;
   color: #3730a3;
-  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  background: linear-gradient(135deg, #f5f6fa 0%, #eef1f8 100%);
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0;

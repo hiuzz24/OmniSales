@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { ROUTES } from '../../../app/router/routes';
 import {
   ShoppingCart, FileDown, Eye, Search,
   TrendingUp, Clock, CheckCircle, Package, Truck, XCircle,
-  Store, ShoppingBag, PenTool, History,
+  Store, ShoppingBag, PenTool, History, CloudDownload,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import Pagination from '../../../shared/components/Pagination';
@@ -12,9 +13,11 @@ import orderService from '../services/orderService';
 import orderApi from '../../../api/orderApi';
 import channelApi from '../../../api/channelApi';
 import ExportOrdersModal from '../components/ExportOrdersModal';
+import PullOrdersModal from '../components/PullOrdersModal';
 import styles from './OrderListPage.module.css';
 
 const PAGE_SIZE = 5;
+const PULL_JOB_STORAGE_KEY = 'osms.orderPullJobIds';
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',  icon: Clock,       color: 'orange'    },
@@ -71,6 +74,11 @@ const OrderListPage = () => {
 
   const [stats, setStats] = useState(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isPullModalOpen, setIsPullModalOpen] = useState(false);
+  const [isStartingPull, setIsStartingPull] = useState(false);
+  const [pullJobs, setPullJobs] = useState([]);
+  const pullFailuresRef = useRef(0);
+  const pullStartedAtRef = useRef(Date.now());
 
   const fetchChannels = useCallback(async () => {
     try {
@@ -131,6 +139,69 @@ const OrderListPage = () => {
 
   useEffect(() => { setPage(0); }, [keyword, statusFilter, channelFilter, fromDate, toDate]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const recover = async () => {
+      try {
+        const storedIds = JSON.parse(sessionStorage.getItem(PULL_JOB_STORAGE_KEY) || '[]');
+        const active = await orderApi.getActivePullJobs();
+        const activeIds = new Set((active || []).map((job) => job.id));
+        const recovered = await Promise.all(storedIds.filter((id) => !activeIds.has(id))
+          .map((id) => orderApi.getPullJob(id).catch(() => null)));
+        if (!cancelled) setPullJobs([...(active || []), ...recovered.filter(Boolean)]);
+      } catch {
+        if (!cancelled) setPullJobs([]);
+      }
+    };
+    recover();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const pendingIds = pullJobs.filter((job) => job.status === 'PENDING').map((job) => job.id);
+    sessionStorage.setItem(PULL_JOB_STORAGE_KEY, JSON.stringify(pendingIds));
+    if (pendingIds.length === 0 || pullFailuresRef.current >= 3) return undefined;
+    if (Date.now() - pullStartedAtRef.current > 35 * 60 * 1000) return undefined;
+    const timer = window.setInterval(async () => {
+      try {
+        const updates = await Promise.all(pendingIds.map((id) => orderApi.getPullJob(id)));
+        pullFailuresRef.current = 0;
+        const completed = updates.some((job) => job.status !== 'PENDING');
+        setPullJobs((current) => current.map((job) => updates.find((value) => value.id === job.id) || job));
+        if (completed) {
+          updates.filter((job) => job.status !== 'PENDING').forEach((job) => {
+            if (job.status === 'SYNCED') {
+              toast.success(`Đã kéo ${job.successCount || 0} đơn từ ${job.channelName || job.platform}`);
+            } else {
+              toast.error(`Kéo đơn từ ${job.channelName || job.platform} chưa hoàn tất`);
+            }
+          });
+          fetchOrders({ silent: true });
+          fetchStats();
+        }
+      } catch {
+        pullFailuresRef.current += 1;
+      }
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [pullJobs, fetchOrders, fetchStats]);
+
+  const handlePullOrders = async (payload) => {
+    setIsStartingPull(true);
+    try {
+      const jobs = await orderApi.pullOrders(payload);
+      setPullJobs((current) => [...current.filter((job) => !jobs.some((next) => next.id === job.id)), ...jobs]);
+      pullFailuresRef.current = 0;
+      pullStartedAtRef.current = Date.now();
+      setIsPullModalOpen(false);
+      toast.success('Đã bắt đầu kéo đơn. Job sẽ tiếp tục chạy ở nền.');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể bắt đầu kéo đơn');
+    } finally {
+      setIsStartingPull(false);
+    }
+  };
+
   const handleReset = () => {
     setKeyword('');
     setStatusFilter('');
@@ -178,6 +249,14 @@ const OrderListPage = () => {
 
   const actions = (
     <>
+      <button
+        className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
+        onClick={() => setIsPullModalOpen(true)}
+        title="Kéo đơn từ sàn"
+      >
+        <CloudDownload size={15} />
+        Kéo đơn{pullJobs.some((job) => job.status === 'PENDING') ? ` (${pullJobs.filter((job) => job.status === 'PENDING').length})` : ''}
+      </button>
       <button
         className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.ORDER_LOGS)}
@@ -404,6 +483,13 @@ const OrderListPage = () => {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
         currentFilters={{ keyword, status: statusFilter, channelId: channelFilter, from: fromDate, to: toDate }}
+      />
+      <PullOrdersModal
+        open={isPullModalOpen}
+        channels={channels}
+        submitting={isStartingPull}
+        onClose={() => setIsPullModalOpen(false)}
+        onSubmit={handlePullOrders}
       />
     </div>
   );

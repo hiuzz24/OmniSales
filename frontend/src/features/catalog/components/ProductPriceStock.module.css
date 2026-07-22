@@ -1,9 +1,9 @@
 .card {
   padding: 20px;
-  border: 1px solid #a7f3d0;
+  border: 1px solid #d7e9df;
   border-radius: 8px;
-  background: linear-gradient(180deg, #d1fae5 0, #ecfdf5 60px, #ffffff 60px);
-  box-shadow: 0 6px 18px rgba(5, 150, 105, 0.1), 0 1px 3px rgba(15, 23, 42, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  background: linear-gradient(180deg, #edf7f1 0, #f6faf8 60px, #ffffff 60px);
+  box-shadow: 0 5px 15px rgba(52, 105, 80, 0.05), 0 1px 3px rgba(15, 23, 42, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .cardTitle {
@@ -56,7 +56,7 @@
 
 .input:focus {
   border-color: #059669;
-  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18), 0 4px 12px rgba(5, 150, 105, 0.09);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12), 0 3px 9px rgba(5, 150, 105, 0.055);
 }
 
 .input::placeholder {

@@ -17,10 +17,11 @@
   --catalog-line-soft: #edf0f3;
   --catalog-card: var(--editor-surface);
   --catalog-shadow: 0 5px 16px rgba(37, 99, 235, 0.06), 0 1px 3px rgba(15, 23, 42, 0.06);
-  width: 100%;
+  width: calc(100% + 48px);
   max-width: none;
-  margin: 0 auto;
-  padding: 0;
+  min-height: calc(100dvh - 64px);
+  margin: -24px;
+  padding: 24px;
   box-sizing: border-box;
   color: var(--editor-text);
   background: linear-gradient(180deg, #f1f6fb 0%, #f6f7f9 310px);
@@ -53,13 +54,18 @@
 }
 
 .loadingContainer {
-  min-height: 60dvh;
+  width: calc(100% + 48px);
+  min-height: calc(100dvh - 64px);
+  margin: -24px;
+  padding: 24px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 14px;
   color: var(--editor-muted, #64748b);
+  background: linear-gradient(180deg, #f1f6fb 0%, #f6f7f9 310px);
   text-align: center;
 }
 
@@ -83,10 +89,6 @@
 }
 
 @media (max-width: 768px) {
-  .page {
-    padding: 0;
-  }
-
   .tabsSection {
     box-shadow: 0 3px 10px rgba(37, 99, 235, 0.05), 0 1px 2px rgba(15, 23, 42, 0.05);
   }
@@ -97,10 +99,6 @@
 }
 
 @media (max-width: 480px) {
-  .page {
-    padding-inline: 0;
-  }
-
   .tabContent {
     padding: 12px;
   }

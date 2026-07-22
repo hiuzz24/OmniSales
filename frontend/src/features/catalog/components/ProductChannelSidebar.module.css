@@ -8,10 +8,10 @@
 
 .card {
   padding: 18px;
-  border: 1px solid #c4d6eb;
+  border: 1px solid #d9e2ec;
   border-radius: 8px;
-  background: linear-gradient(180deg, #e8f2ff 0, #f1f5f9 72px, #ffffff 72px);
-  box-shadow: 0 7px 20px rgba(30, 64, 175, 0.1), 0 1px 3px rgba(15, 23, 42, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  background: linear-gradient(180deg, #f0f5fa 0, #f7f9fb 72px, #ffffff 72px);
+  box-shadow: 0 5px 15px rgba(61, 91, 126, 0.05), 0 1px 3px rgba(15, 23, 42, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .cardTitle {
@@ -35,11 +35,11 @@
   gap: 10px;
   margin-bottom: 10px;
   padding: 9px 10px;
-  border: 1px solid #93c5fd;
+  border: 1px solid #cdddec;
   border-radius: 6px;
   color: #1e40af;
-  background: linear-gradient(135deg, #dbeafe 0%, #eef2ff 100%);
-  box-shadow: 0 3px 9px rgba(37, 99, 235, 0.1);
+  background: linear-gradient(135deg, #edf4fa 0%, #f4f5fa 100%);
+  box-shadow: 0 2px 7px rgba(61, 91, 126, 0.05);
   font-size: 11px;
 }
 

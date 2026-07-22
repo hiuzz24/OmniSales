@@ -74,7 +74,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
             WHERE channel_id IS NOT NULL
             DO NOTHING
             """, nativeQuery = true)
-    void insertWebhookOrderIfAbsent(@Param("id") UUID id,
+    int insertPlatformOrderIfAbsent(@Param("id") UUID id,
                                     @Param("channelId") UUID channelId,
                                     @Param("platform") String platform,
                                     @Param("channelName") String channelName,

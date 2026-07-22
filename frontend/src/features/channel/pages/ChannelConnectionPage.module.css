@@ -9,10 +9,11 @@
   --channel-blue-hover: #3569b2;
   --channel-focus: rgba(63, 115, 189, 0.14);
   --channel-shadow: 0 10px 28px rgba(61, 91, 126, 0.065), 0 2px 5px rgba(15, 23, 42, 0.03);
-  width: 100%;
+  width: calc(100% + 48px);
   max-width: none;
-  margin: 0 auto;
-  padding: 0;
+  min-height: calc(100dvh - 64px);
+  margin: -24px;
+  padding: 24px;
   box-sizing: border-box;
   color: var(--channel-ink);
   background:
@@ -631,10 +632,6 @@
 }
 
 @media (max-width: 700px) {
-  .page {
-    padding: 0;
-  }
-
   .header {
     padding: 16px;
   }
@@ -662,10 +659,6 @@
 }
 
 @media (max-width: 480px) {
-  .page {
-    padding-inline: 0;
-  }
-
   .headingGroup {
     align-items: flex-start;
   }

@@ -1,6 +1,6 @@
 .section {
-  --panel-border: #cbd8e6;
-  --panel-shadow: 0 3px 10px rgba(30, 64, 175, 0.07), 0 1px 3px rgba(15, 23, 42, 0.07);
+  --panel-border: #d9e2eb;
+  --panel-shadow: 0 3px 10px rgba(61, 91, 126, 0.045), 0 1px 3px rgba(15, 23, 42, 0.04);
   padding: 20px;
   border: 1px solid var(--editor-border, #dfe4ea);
   border-radius: 8px;
@@ -42,12 +42,12 @@
 }
 
 .panelOpen {
-  border-color: #8bb8f8;
-  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.14), 0 2px 6px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  border-color: #b9cee5;
+  box-shadow: 0 7px 20px rgba(61, 91, 126, 0.07), 0 2px 5px rgba(15, 23, 42, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .panelOpen .panelHeader {
-  background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
+  background: linear-gradient(135deg, #f3f7fb 0%, #f5f6fa 100%);
 }
 
 .panelHeader {
@@ -254,11 +254,11 @@
 }
 
 .categoryBlock {
-  --block-accent: #3b82f6;
-  --block-border: #bfdbfe;
-  --block-gradient-start: #dbeafe;
-  --block-gradient-end: #ecfeff;
-  --block-shadow: rgba(37, 99, 235, 0.11);
+  --block-accent: #74a3d8;
+  --block-border: #d7e4f0;
+  --block-gradient-start: #eef5fa;
+  --block-gradient-end: #f3faf9;
+  --block-shadow: rgba(61, 91, 126, 0.055);
 }
 
 .categoryBlock .sectionIcon {
@@ -269,11 +269,11 @@
 }
 
 .requiredBlock {
-  --block-accent: #f43f5e;
-  --block-border: #fecdd3;
-  --block-gradient-start: #ffe4e6;
-  --block-gradient-end: #fff1f2;
-  --block-shadow: rgba(225, 29, 72, 0.1);
+  --block-accent: #d88494;
+  --block-border: #efdee2;
+  --block-gradient-start: #faf0f2;
+  --block-gradient-end: #fcf6f7;
+  --block-shadow: rgba(139, 73, 87, 0.05);
 }
 
 .requiredBlock .sectionIcon {
@@ -284,11 +284,11 @@
 }
 
 .optionalBlock {
-  --block-accent: #14b8a6;
-  --block-border: #99f6e4;
-  --block-gradient-start: #ccfbf1;
-  --block-gradient-end: #ecfdf5;
-  --block-shadow: rgba(13, 148, 136, 0.1);
+  --block-accent: #67aa9f;
+  --block-border: #d3e8e3;
+  --block-gradient-start: #edf7f5;
+  --block-gradient-end: #f4faf7;
+  --block-shadow: rgba(55, 111, 102, 0.05);
 }
 
 .optionalBlock .sectionIcon {
@@ -299,11 +299,11 @@
 }
 
 .brandBlock {
-  --block-accent: #f59e0b;
-  --block-border: #fde68a;
-  --block-gradient-start: #fef3c7;
-  --block-gradient-end: #fff7ed;
-  --block-shadow: rgba(217, 119, 6, 0.1);
+  --block-accent: #c59a55;
+  --block-border: #ece1cb;
+  --block-gradient-start: #faf5e9;
+  --block-gradient-end: #fcf8f3;
+  --block-shadow: rgba(122, 92, 45, 0.05);
 }
 
 .brandBlock .sectionIcon {
@@ -314,11 +314,11 @@
 }
 
 .sizeChartBlock {
-  --block-accent: #6366f1;
-  --block-border: #c7d2fe;
-  --block-gradient-start: #e0e7ff;
-  --block-gradient-end: #f3e8ff;
-  --block-shadow: rgba(79, 70, 229, 0.1);
+  --block-accent: #8587bd;
+  --block-border: #dfe1ee;
+  --block-gradient-start: #f1f2f8;
+  --block-gradient-end: #f7f4f9;
+  --block-shadow: rgba(74, 78, 116, 0.05);
 }
 
 .sizeChartBlock .sectionIcon {

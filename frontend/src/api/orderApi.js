@@ -56,6 +56,21 @@ const orderApi = {
     const response = await axiosClient.get('/orders/stats');
     return response.data.data;
   },
+
+  pullOrders: async (data) => {
+    const response = await axiosClient.post('/orders/pull', data);
+    return response.data.data;
+  },
+
+  getPullJob: async (id) => {
+    const response = await axiosClient.get(`/orders/pull/${id}`);
+    return response.data.data;
+  },
+
+  getActivePullJobs: async () => {
+    const response = await axiosClient.get('/orders/pull/active');
+    return response.data.data;
+  },
 };
 
 export default orderApi;
