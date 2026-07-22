@@ -18,8 +18,11 @@ public class InventoryItemResponse {
     private UUID id;
     private UUID warehouseId;
     private String warehouseName;
+    private UUID productId;
+    private List<UUID> productIds;
     private UUID variantId;
     private String variantSku;
+    private String marketplaceSku;
     private String productName;
     private String variantName;
     private UUID channelId;

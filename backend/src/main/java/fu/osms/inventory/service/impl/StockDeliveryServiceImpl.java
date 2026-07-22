@@ -40,6 +40,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -224,8 +225,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         User currentUser = getCurrentUser();
         Set<UUID> changedVariantIds = new HashSet<>();
         for (InventoryIssueItem item : inventoryIssue.getItems()) {
-            commitDraftReservation(inventoryIssue, item, currentUser);
-            changedVariantIds.add(item.getProductVariant().getId());
+            changedVariantIds.addAll(commitDraftReservation(inventoryIssue, item, currentUser));
         }
         inventoryIssue.setStatus("CONFIRMED");
         inventoryIssue.setApprovedBy(currentUser);
@@ -256,33 +256,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
             releaseDraftReservations(inventoryIssue, currentUser, "Stock delivery draft cancelled - reservation released");
         } else if ("CONFIRMED".equals(inventoryIssue.getStatus())) {
             for (InventoryIssueItem item : inventoryIssue.getItems()) {
-                InventoryItem inventoryItem = inventoryItemRepository
-                        .findByWarehouseIdAndVariantIdWithLock(
-                                inventoryIssue.getWarehouse().getId(),
-                                item.getProductVariant().getId())
-                        .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
-
-                int quantityBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-                inventoryItem.setQuantityOnHand(quantityBefore + item.getQuantity());
-                inventoryItem.setUpdatedBy(currentUser);
-                inventoryItemRepository.save(inventoryItem);
-
-                InventoryTransaction reversalTransaction = InventoryTransaction.builder()
-                        .warehouse(inventoryIssue.getWarehouse())
-                        .variant(item.getProductVariant())
-                        .type(InvTxnType.ORDER_CANCEL)
-                        .quantityChange(item.getQuantity())
-                        .quantityBefore(quantityBefore)
-                        .quantityAfter(quantityBefore + item.getQuantity())
-                        .unitCost(item.getUnitCost())
-                        .referenceId(inventoryIssue.getId())
-                        .referenceType("ISSUE")
-                        .performedBy(currentUser)
-                        .note("Stock delivery cancelled - inventory restored")
-                        .build();
-
-                inventoryTransactionRepository.save(reversalTransaction);
-                changedVariantIds.add(item.getProductVariant().getId());
+                changedVariantIds.addAll(restoreConfirmedDelivery(inventoryIssue, item, currentUser));
             }
         }
 
@@ -345,14 +319,27 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         ProductVariant productVariant = productVariantRepository.findById(itemRequest.getProductVariantId())
                 .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
 
-        InventoryItem inventoryItem = inventoryItemRepository
-                .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
-                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+        List<InventoryItem> sharedInventoryItems = resolveSharedStockVariants(productVariant).stream()
+                .map(variant -> ensureInventoryItemWithLock(warehouse, variant))
+                .toList();
+        int sharedQuantityOnHand = sharedInventoryItems.stream()
+                .mapToInt(this::quantityOnHand)
+                .max()
+                .orElse(0);
+        int sharedAvailableQuantity = sharedInventoryItems.stream()
+                .mapToInt(this::availableQuantity)
+                .max()
+                .orElse(0);
+        int sharedReservedQuantity = Math.max(0, sharedQuantityOnHand - sharedAvailableQuantity);
 
-        validateAvailableQuantity(inventoryItem, itemRequest.getQuantity());
+        validateAvailableQuantity(sharedQuantityOnHand, sharedReservedQuantity, itemRequest.getQuantity());
 
-        BigDecimal unitCost = inventoryItem.getAverageCost() != null
-                ? inventoryItem.getAverageCost()
+        InventoryItem representativeInventoryItem = sharedInventoryItems.stream()
+                .filter(item -> item.getVariant().getId().equals(productVariant.getId()))
+                .findFirst()
+                .orElse(sharedInventoryItems.get(0));
+        BigDecimal unitCost = representativeInventoryItem.getAverageCost() != null
+                ? representativeInventoryItem.getAverageCost()
                 : BigDecimal.ZERO;
 
         return InventoryIssueItem.builder()
@@ -364,64 +351,26 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     }
 
     private void reserveDraftInventory(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
-        InventoryItem inventoryItem = inventoryItemRepository
-                .findByWarehouseIdAndVariantIdWithLock(
-                        inventoryIssue.getWarehouse().getId(),
-                        item.getProductVariant().getId())
-                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+        List<ProductVariant> sharedVariants = resolveSharedStockVariants(item.getProductVariant());
+        List<InventoryItem> inventoryItems = sharedVariants.stream()
+                .map(variant -> ensureInventoryItemWithLock(inventoryIssue.getWarehouse(), variant))
+                .toList();
+        int sharedQuantityOnHand = inventoryItems.stream()
+                .mapToInt(this::quantityOnHand)
+                .max()
+                .orElse(0);
+        int sharedAvailableQuantity = inventoryItems.stream()
+                .mapToInt(this::availableQuantity)
+                .max()
+                .orElse(0);
+        int sharedReservedQuantity = Math.max(0, sharedQuantityOnHand - sharedAvailableQuantity);
+        validateAvailableQuantity(sharedQuantityOnHand, sharedReservedQuantity, item.getQuantity());
+        int reservedAfter = sharedReservedQuantity + item.getQuantity();
+        int availableBefore = sharedAvailableQuantity;
+        int availableAfter = sharedQuantityOnHand - reservedAfter;
 
-        validateAvailableQuantity(inventoryItem, item.getQuantity());
-
-        int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        int reservedBefore = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-        int availableBefore = quantityOnHand - reservedBefore;
-        int reservedAfter = reservedBefore + item.getQuantity();
-        int availableAfter = quantityOnHand - reservedAfter;
-
-        inventoryItem.setReservedQuantity(reservedAfter);
-        inventoryItem.setUpdatedBy(currentUser);
-        inventoryItemRepository.save(inventoryItem);
-        inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
-
-        inventoryTransactionRepository.save(InventoryTransaction.builder()
-                .warehouse(inventoryIssue.getWarehouse())
-                .variant(item.getProductVariant())
-                .type(InvTxnType.ORDER_DEDUCT)
-                .quantityChange(-item.getQuantity())
-                .quantityBefore(availableBefore)
-                .quantityAfter(availableAfter)
-                .unitCost(item.getUnitCost())
-                .referenceId(inventoryIssue.getId())
-                .referenceType("ISSUE")
-                .performedBy(currentUser)
-                .note("Stock delivery draft reserved: " + inventoryIssue.getIssueType())
-                .build());
-    }
-
-    private void releaseDraftReservations(InventoryIssue inventoryIssue, User currentUser, String note) {
-        for (InventoryIssueItem item : inventoryIssue.getItems()) {
-            InventoryItem inventoryItem = inventoryItemRepository
-                    .findByWarehouseIdAndVariantIdWithLock(
-                            inventoryIssue.getWarehouse().getId(),
-                            item.getProductVariant().getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
-
-            int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-            int reservedBefore = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-            int availableBefore = quantityOnHand - reservedBefore;
-            int requestedReleaseQuantity = item.getQuantity() != null ? item.getQuantity() : 0;
-            int releaseQuantity = Math.min(requestedReleaseQuantity, reservedBefore);
-            if (releaseQuantity <= 0) {
-                log.warn(
-                        "Skipping reservation release for issue {} variant {} because reserved quantity is {}",
-                        inventoryIssue.getId(),
-                        item.getProductVariant().getId(),
-                        reservedBefore);
-                continue;
-            }
-            int reservedAfter = reservedBefore - releaseQuantity;
-            int availableAfter = quantityOnHand - reservedAfter;
-
+        for (InventoryItem inventoryItem : inventoryItems) {
+            inventoryItem.setQuantityOnHand(sharedQuantityOnHand);
             inventoryItem.setReservedQuantity(reservedAfter);
             inventoryItem.setUpdatedBy(currentUser);
             inventoryItemRepository.save(inventoryItem);
@@ -429,32 +378,81 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
             inventoryTransactionRepository.save(InventoryTransaction.builder()
                     .warehouse(inventoryIssue.getWarehouse())
-                    .variant(item.getProductVariant())
-                    .type(InvTxnType.ORDER_CANCEL)
-                    .quantityChange(releaseQuantity)
+                    .variant(inventoryItem.getVariant())
+                    .type(InvTxnType.ORDER_DEDUCT)
+                    .quantityChange(-item.getQuantity())
                     .quantityBefore(availableBefore)
                     .quantityAfter(availableAfter)
                     .unitCost(item.getUnitCost())
                     .referenceId(inventoryIssue.getId())
                     .referenceType("ISSUE")
                     .performedBy(currentUser)
-                    .note(note)
+                    .note(sharedVariants.size() > 1
+                            ? "Stock delivery draft reserved: shared SKU " + inventoryIssue.getIssueType()
+                            : "Stock delivery draft reserved: " + inventoryIssue.getIssueType())
                     .build());
         }
     }
 
-    private void commitDraftReservation(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
-        InventoryItem inventoryItem = inventoryItemRepository
-                .findByWarehouseIdAndVariantIdWithLock(
-                        inventoryIssue.getWarehouse().getId(),
-                        item.getProductVariant().getId())
-                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+    private void releaseDraftReservations(InventoryIssue inventoryIssue, User currentUser, String note) {
+        for (InventoryIssueItem item : inventoryIssue.getItems()) {
+            for (ProductVariant sharedVariant : resolveSharedStockVariants(item.getProductVariant())) {
+                InventoryItem inventoryItem = ensureInventoryItemWithLock(inventoryIssue.getWarehouse(), sharedVariant);
 
+                int quantityOnHand = quantityOnHand(inventoryItem);
+                int reservedBefore = reservedQuantity(inventoryItem);
+                int availableBefore = quantityOnHand - reservedBefore;
+                int requestedReleaseQuantity = item.getQuantity() != null ? item.getQuantity() : 0;
+                int releaseQuantity = Math.min(requestedReleaseQuantity, reservedBefore);
+                if (releaseQuantity <= 0) {
+                    log.warn(
+                            "Skipping reservation release for issue {} variant {} because reserved quantity is {}",
+                            inventoryIssue.getId(),
+                            sharedVariant.getId(),
+                            reservedBefore);
+                    continue;
+                }
+                int reservedAfter = reservedBefore - releaseQuantity;
+                int availableAfter = quantityOnHand - reservedAfter;
+
+                inventoryItem.setReservedQuantity(reservedAfter);
+                inventoryItem.setUpdatedBy(currentUser);
+                inventoryItemRepository.save(inventoryItem);
+                inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
+
+                inventoryTransactionRepository.save(InventoryTransaction.builder()
+                        .warehouse(inventoryIssue.getWarehouse())
+                        .variant(sharedVariant)
+                        .type(InvTxnType.ORDER_CANCEL)
+                        .quantityChange(releaseQuantity)
+                        .quantityBefore(availableBefore)
+                        .quantityAfter(availableAfter)
+                        .unitCost(item.getUnitCost())
+                        .referenceId(inventoryIssue.getId())
+                        .referenceType("ISSUE")
+                        .performedBy(currentUser)
+                        .note(note)
+                        .build());
+            }
+        }
+    }
+
+    private Set<UUID> commitDraftReservation(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
+        Set<UUID> changedVariantIds = new HashSet<>();
+        List<InventoryItem> inventoryItems = resolveSharedStockVariants(item.getProductVariant()).stream()
+                .map(variant -> ensureInventoryItemWithLock(inventoryIssue.getWarehouse(), variant))
+                .toList();
+        int sharedQuantityBefore = inventoryItems.stream()
+                .mapToInt(this::quantityOnHand)
+                .max()
+                .orElse(0);
+        int sharedReservedBefore = inventoryItems.stream()
+                .mapToInt(this::reservedQuantity)
+                .max()
+                .orElse(0);
         int quantity = item.getQuantity() != null ? item.getQuantity() : 0;
-        int quantityBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        int reservedBefore = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-        int quantityAfter = quantityBefore - quantity;
-        int reservedAfter = reservedBefore - quantity;
+        int quantityAfter = sharedQuantityBefore - quantity;
+        int reservedAfter = sharedReservedBefore - quantity;
 
         if (quantityAfter < 0) {
             throw new AppException(
@@ -467,25 +465,31 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                     "Reserved inventory is not enough to confirm this delivery.");
         }
 
-        inventoryItem.setQuantityOnHand(quantityAfter);
-        inventoryItem.setReservedQuantity(reservedAfter);
-        inventoryItem.setUpdatedBy(currentUser);
-        inventoryItem = inventoryItemRepository.save(inventoryItem);
-        inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
+        for (InventoryItem inventoryItem : inventoryItems) {
+            ProductVariant sharedVariant = inventoryItem.getVariant();
 
-        inventoryTransactionRepository.save(InventoryTransaction.builder()
-                .warehouse(inventoryIssue.getWarehouse())
-                .variant(item.getProductVariant())
-                .type(InvTxnType.OUTBOUND)
-                .quantityChange(-quantity)
-                .quantityBefore(quantityBefore)
-                .quantityAfter(quantityAfter)
-                .unitCost(item.getUnitCost())
-                .referenceId(inventoryIssue.getId())
-                .referenceType("ISSUE")
-                .performedBy(currentUser)
-                .note("Stock delivery confirmed: " + inventoryIssue.getIssueType())
-                .build());
+            inventoryItem.setQuantityOnHand(quantityAfter);
+            inventoryItem.setReservedQuantity(reservedAfter);
+            inventoryItem.setUpdatedBy(currentUser);
+            inventoryItem = inventoryItemRepository.save(inventoryItem);
+            inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
+
+            inventoryTransactionRepository.save(InventoryTransaction.builder()
+                    .warehouse(inventoryIssue.getWarehouse())
+                    .variant(sharedVariant)
+                    .type(InvTxnType.OUTBOUND)
+                    .quantityChange(-quantity)
+                    .quantityBefore(sharedQuantityBefore)
+                    .quantityAfter(quantityAfter)
+                    .unitCost(item.getUnitCost())
+                    .referenceId(inventoryIssue.getId())
+                    .referenceType("ISSUE")
+                    .performedBy(currentUser)
+                    .note("Stock delivery confirmed: " + inventoryIssue.getIssueType())
+                    .build());
+            changedVariantIds.add(sharedVariant.getId());
+        }
+        return changedVariantIds;
     }
 
     private void validateAvailableQuantity(InventoryItem inventoryItem, Integer requestedQuantity) {
@@ -509,6 +513,100 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                     ErrorCode.NEGATIVE_STOCK_NOT_ALLOWED,
                     "Delivery quantity exceeds available inventory. Please review the document before saving.");
         }
+    }
+
+    private void validateAvailableQuantity(int quantityOnHand, int reservedQuantity, Integer requestedQuantity) {
+        int quantity = requestedQuantity == null ? 0 : requestedQuantity;
+        if (quantity <= 0) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Delivery quantity must be greater than 0.");
+        }
+
+        int availableQuantity = quantityOnHand - reservedQuantity;
+        if (availableQuantity < quantity) {
+            throw new AppException(
+                    ErrorCode.INSUFFICIENT_STOCK,
+                    "Insufficient inventory to complete delivery.");
+        }
+        if (quantityOnHand - quantity < 0) {
+            throw new AppException(
+                    ErrorCode.NEGATIVE_STOCK_NOT_ALLOWED,
+                    "Delivery quantity exceeds available inventory. Please review the document before saving.");
+        }
+    }
+
+    private Set<UUID> restoreConfirmedDelivery(InventoryIssue inventoryIssue, InventoryIssueItem item, User currentUser) {
+        Set<UUID> changedVariantIds = new HashSet<>();
+        for (ProductVariant sharedVariant : resolveSharedStockVariants(item.getProductVariant())) {
+            InventoryItem inventoryItem = ensureInventoryItemWithLock(inventoryIssue.getWarehouse(), sharedVariant);
+
+            int quantityBefore = quantityOnHand(inventoryItem);
+            int quantityAfter = quantityBefore + item.getQuantity();
+            inventoryItem.setQuantityOnHand(quantityAfter);
+            inventoryItem.setUpdatedBy(currentUser);
+            inventoryItemRepository.save(inventoryItem);
+
+            InventoryTransaction reversalTransaction = InventoryTransaction.builder()
+                    .warehouse(inventoryIssue.getWarehouse())
+                    .variant(sharedVariant)
+                    .type(InvTxnType.ORDER_CANCEL)
+                    .quantityChange(item.getQuantity())
+                    .quantityBefore(quantityBefore)
+                    .quantityAfter(quantityAfter)
+                    .unitCost(item.getUnitCost())
+                    .referenceId(inventoryIssue.getId())
+                    .referenceType("ISSUE")
+                    .performedBy(currentUser)
+                    .note("Stock delivery cancelled - inventory restored")
+                    .build();
+
+            inventoryTransactionRepository.save(reversalTransaction);
+            changedVariantIds.add(sharedVariant.getId());
+        }
+        return changedVariantIds;
+    }
+
+    private InventoryItem ensureInventoryItemWithLock(Warehouse warehouse, ProductVariant productVariant) {
+        inventoryItemRepository.findByWarehouseIdAndVariantId(warehouse.getId(), productVariant.getId())
+                .orElseGet(() -> inventoryItemRepository.save(InventoryItem.builder()
+                        .warehouse(warehouse)
+                        .variant(productVariant)
+                        .quantityOnHand(0)
+                        .reservedQuantity(0)
+                        .averageCost(productVariant.getCostPrice() == null ? BigDecimal.ZERO : productVariant.getCostPrice())
+                        .build()));
+        return inventoryItemRepository
+                .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+    }
+
+    private List<ProductVariant> resolveSharedStockVariants(ProductVariant productVariant) {
+        String normalizedSku = normalizeSku(productVariant.getSku());
+        if (normalizedSku.isBlank()) {
+            return List.of(productVariant);
+        }
+        Map<UUID, ProductVariant> variantsById = new LinkedHashMap<>();
+        variantsById.put(productVariant.getId(), productVariant);
+        productVariantRepository.findActiveMarketplaceMappedSharingSkuWithVariantId(productVariant.getId())
+                .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
+        productVariantRepository.findActiveMarketplaceMappedByNormalizedSku(normalizedSku)
+                .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
+        return new ArrayList<>(variantsById.values());
+    }
+
+    private String normalizeSku(String sku) {
+        return sku == null ? "" : sku.trim().toLowerCase();
+    }
+
+    private int quantityOnHand(InventoryItem inventoryItem) {
+        return inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
+    }
+
+    private int reservedQuantity(InventoryItem inventoryItem) {
+        return inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
+    }
+
+    private int availableQuantity(InventoryItem inventoryItem) {
+        return quantityOnHand(inventoryItem) - reservedQuantity(inventoryItem);
     }
 
     private String normalizeIssueType(String issueType) {

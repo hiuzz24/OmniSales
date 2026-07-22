@@ -9,4 +9,6 @@ public interface ChannelLocalSyncService {
     ChannelImportSyncResponse syncLocalChanges(UUID channelId);
 
     ChannelImportSyncResponse syncAllLocalChanges(UUID requestedChannelId);
+
+    ChannelImportSyncResponse syncAllLocalChanges();
 }

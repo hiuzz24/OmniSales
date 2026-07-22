@@ -145,21 +145,6 @@ const InventoryDetailPage = () => {
 
   const isLowStock = detail.quantityOnHand < detail.lowStockThreshold;
   const progressPercent = Math.min(100, Math.max(0, (detail.quantityOnHand / (detail.lowStockThreshold * 3)) * 100));
-  const handleOpenEditModal = async () => {
-    setEditName(detail.productVariantName);
-    setEditWarehouseId(detail.warehouseId);
-    setEditQty(detail.quantityOnHand);
-    setEditPrice(detail.price);
-    setEditCost(detail.averageCost);
-    setIsEditModalOpen(true);
-
-    try {
-      const res = await warehouseService.getAll();
-      setWarehouses(res.data?.data ?? res.data ?? []);
-    } catch (err) {
-      console.error('Error fetching warehouses:', err);
-    }
-  };
 
   const handleUpdateDetail = async (e) => {
     e.preventDefault();
@@ -230,11 +215,6 @@ const InventoryDetailPage = () => {
           <button className={styles.btnOutline}>
             <ArrowRightLeft size={16} /> Chuyển kho
           </button>
-          {canEdit && (
-            <button className={styles.btnOutline} onClick={handleOpenEditModal}>
-              <Edit2 size={16} /> Sửa
-            </button>
-          )}
         </div>
       </div>
 

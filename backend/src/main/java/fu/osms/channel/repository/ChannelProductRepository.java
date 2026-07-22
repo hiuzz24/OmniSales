@@ -69,13 +69,24 @@ public interface ChannelProductRepository extends JpaRepository<ChannelProduct, 
             "AND p.deletedAt IS NULL " +
             "AND (" +
             "    cp.syncStatus <> :syncedStatus " +
+            "    OR cp.createdAt > :changedSince " +
             "    OR cp.updatedAt > :changedSince " +
+            "    OR p.createdAt > :changedSince " +
             "    OR p.updatedAt > :changedSince " +
             "    OR EXISTS (" +
             "        SELECT 1 FROM ProductVariant v " +
             "        WHERE v.product = p " +
             "        AND v.deletedAt IS NULL " +
-            "        AND v.updatedAt > :changedSince" +
+            "        AND (v.createdAt > :changedSince OR v.updatedAt > :changedSince)" +
+            "    ) " +
+            "    OR EXISTS (" +
+            "        SELECT 1 FROM ChannelProductVariant cpv " +
+            "        WHERE cpv.channelProduct = cp " +
+            "        AND (" +
+            "            cpv.syncStatus <> :syncedStatus " +
+            "            OR cpv.createdAt > :changedSince " +
+            "            OR cpv.updatedAt > :changedSince" +
+            "        )" +
             "    )" +
             ")")
     List<ChannelProduct> findActiveChangedByChannelIdSince(@Param("channelId") UUID channelId,

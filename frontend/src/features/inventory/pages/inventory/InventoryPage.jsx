@@ -143,24 +143,63 @@ const getChannelLabel = (item) => {
   return platforms.map(getPlatformLabel).join(', ');
 };
 
-const matchesSelectedPlatforms = (item, selectedPlatforms) => {
-  if (!selectedPlatforms?.length) return true;
-  const platforms = getItemPlatforms(item);
-  return selectedPlatforms.every((platform) => platforms.includes(platform));
+const getProductDisplayName = (item) => item?.productName || item?.variantName || 'Sản phẩm chưa đặt tên';
+
+const normalizeSkuKey = (value) => String(value ?? '').trim().toLowerCase();
+
+const getProductGroupKeys = (item) => {
+  const keys = [];
+  const productIds = Array.isArray(item?.productIds) ? item.productIds.filter(Boolean) : [];
+  if (item?.productId) productIds.push(item.productId);
+  uniqueValues(productIds).forEach((productId) => keys.push(`product:${productId}`));
+
+  const sku = normalizeSkuKey(item?.marketplaceSku ?? item?.variantSku);
+  if (sku) keys.push(`sku:${sku}`);
+
+  return keys.length > 0 ? keys : [item?.variantId ? `variant:${item.variantId}` : `name:${getProductDisplayName(item)}`];
 };
 
-const getProductDisplayName = (item) => item?.productName || item?.variantName || 'Sản phẩm chưa đặt tên';
+const buildProductGroupKeyResolver = (rows) => {
+  const parent = new Map();
+  const rowKeys = [];
+
+  const find = (key) => {
+    if (!parent.has(key)) parent.set(key, key);
+    const current = parent.get(key);
+    if (current === key) return key;
+    const root = find(current);
+    parent.set(key, root);
+    return root;
+  };
+
+  const union = (a, b) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+
+  rows.forEach((item) => {
+    const keys = getProductGroupKeys(item);
+    rowKeys.push(keys);
+    keys.forEach(find);
+    for (let index = 1; index < keys.length; index += 1) {
+      union(keys[0], keys[index]);
+    }
+  });
+
+  return (index) => find(rowKeys[index][0]);
+};
 
 const buildInventoryGroups = (rows) => {
   const groups = new Map();
-  rows.forEach((item) => {
-    const key = [
-      getProductDisplayName(item),
-    ].join('|');
+  const resolveGroupKey = buildProductGroupKeyResolver(rows);
+  rows.forEach((item, index) => {
+    const key = resolveGroupKey(index);
     if (!groups.has(key)) {
       groups.set(key, {
         type: 'product',
         id: `product-${key}`,
+        productId: item.productId,
         productName: getProductDisplayName(item),
         platforms: [],
         channelNames: [],
@@ -284,11 +323,12 @@ const InventoryPage = () => {
 
   // ── Data state
   const [items, setItems] = useState([]);
-  const [totalElements, setTotalElements] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+  const [backendTotalProducts, setBackendTotalProducts] = useState(0);
+  const [totalSkuElements, setTotalSkuElements] = useState(0);
   const [categoryTree, setCategoryTree] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
   const [summaryStats, setSummaryStats] = useState({
+    totalProducts: 0,
     totalSkus: 0,
     totalQuantity: 0,
     lowStockCount: 0,
@@ -328,15 +368,16 @@ const InventoryPage = () => {
     platforms: selectedPlatformFilters,
   }), [search, statusFilter, selectedPlatformFilters]);
 
-  // ── Fetch filtered rows; pagination size is sent to backend
-  const fetchInventory = useCallback(async (page, size, categoryId, filters = {}) => {
+  // Fetch the complete filtered SKU set, then paginate product groups on the client.
+  // Paginating SKUs before grouping caused a 10-product page to show only 9 groups.
+  const fetchInventory = useCallback(async (categoryId, filters = {}) => {
     setLoading(true);
     setError(null);
     try {
       const { catIdParam, channelIdParam, localOnlyParam } = getInventoryScope(categoryId);
-      const data = await inventoryService.getInventoryList(
-        page,
-        size,
+      const firstPage = await inventoryService.getInventoryList(
+        0,
+        INVENTORY_FETCH_SIZE,
         'updatedAt',
         'desc',
         catIdParam,
@@ -344,15 +385,32 @@ const InventoryPage = () => {
         localOnlyParam,
         filters,
       );
-      setItems(data.content ?? []);
-      setTotalElements(data.totalElements ?? 0);
-      setTotalPages(data.totalPages ?? 0);
+      const allRows = [...(firstPage.content ?? [])];
+      const pageCount = Number(firstPage.totalPages ?? 1);
+
+      for (let page = 1; page < pageCount; page += 1) {
+        const data = await inventoryService.getInventoryList(
+          page,
+          INVENTORY_FETCH_SIZE,
+          'updatedAt',
+          'desc',
+          catIdParam,
+          channelIdParam,
+          localOnlyParam,
+          filters,
+        );
+        allRows.push(...(data.content ?? []));
+      }
+
+      setItems(allRows);
+      setBackendTotalProducts(Number(firstPage.totalProducts ?? buildInventoryGroups(allRows).length));
+      setTotalSkuElements(Number(firstPage.totalSkus ?? firstPage.totalElements ?? allRows.length));
     } catch (err) {
       console.error('Lỗi tải tồn kho:', err);
       setError('Không thể tải dữ liệu tồn kho. Vui lòng thử lại.');
       setItems([]);
-      setTotalElements(0);
-      setTotalPages(0);
+      setBackendTotalProducts(0);
+      setTotalSkuElements(0);
     } finally {
       setLoading(false);
     }
@@ -362,6 +420,7 @@ const InventoryPage = () => {
     try {
       const firstPage = await inventoryService.getInventoryList(0, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc');
       const allRows = [...(firstPage.content ?? [])];
+      console.log('First page of inventory for summary stats:', firstPage);
       const pageCount = Number(firstPage.totalPages ?? 1);
 
       for (let page = 1; page < pageCount; page += 1) {
@@ -370,24 +429,25 @@ const InventoryPage = () => {
       }
 
       setSummaryStats({
-        totalSkus: firstPage.totalElements ?? allRows.length,
+        totalProducts: Number(firstPage.totalProducts ?? buildInventoryGroups(allRows).length),
+        totalSkus: Number(firstPage.totalSkus ?? firstPage.totalElements ?? allRows.length),
         totalQuantity: allRows.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0),
         lowStockCount: allRows.filter((item) => deriveStatus(item) === 'low-stock').length,
         negativeCount: allRows.filter((item) => Number(item.availableQuantity ?? 0) < 0).length,
       });
     } catch (err) {
       console.error('Lỗi tải thống kê tồn kho:', err);
-      setSummaryStats({ totalSkus: 0, totalQuantity: 0, lowStockCount: 0, negativeCount: 0 });
+      setSummaryStats({ totalProducts: 0, totalSkus: 0, totalQuantity: 0, lowStockCount: 0, negativeCount: 0 });
     }
   }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      fetchInventory(currentPage, pageSize, categoryFilter, getInventoryFilters());
+      fetchInventory(categoryFilter, getInventoryFilters());
     }, search.trim() ? 250 : 0);
 
     return () => window.clearTimeout(timer);
-  }, [currentPage, pageSize, categoryFilter, getInventoryFilters, fetchInventory, search]);
+  }, [categoryFilter, getInventoryFilters, fetchInventory, search]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -462,9 +522,20 @@ const InventoryPage = () => {
     return source;
   }, [nameSort, qtySort]);
 
-  const visibleItems = useMemo(() => sortInventoryRows(items), [items, sortInventoryRows]);
-  const productGroups = useMemo(() => sortInventoryGroups(buildInventoryGroups(items)), [items, sortInventoryGroups]);
-  const paginatedProductGroups = productGroups;
+  const productGroups = useMemo(() => {
+    const groups = buildInventoryGroups(items);
+    return sortInventoryGroups(groups);
+  }, [items, sortInventoryGroups]);
+  const visibleItems = useMemo(
+    () => sortInventoryRows(flattenInventoryGroups(productGroups).filter((row) => row.type !== 'product')),
+    [productGroups, sortInventoryRows]
+  );
+  const totalProducts = backendTotalProducts || productGroups.length;
+  const totalPages = Math.ceil(totalProducts / pageSize);
+  const paginatedProductGroups = useMemo(() => {
+    const start = currentPage * pageSize;
+    return productGroups.slice(start, start + pageSize);
+  }, [currentPage, pageSize, productGroups]);
   const displayRows = useMemo(() => flattenInventoryGroups(paginatedProductGroups), [paginatedProductGroups]);
   const currentSkuCount = useMemo(
     () => paginatedProductGroups.reduce((sum, group) => sum + group.childRows.length, 0),
@@ -488,7 +559,8 @@ const InventoryPage = () => {
       const data = await inventoryService.getInventoryList(page, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc', catIdParam, channelIdParam, localOnlyParam, getInventoryFilters());
       allRows.push(...(data.content ?? []));
     }
-    return sortInventoryRows(allRows.filter((item) => matchesSelectedPlatforms(item, selectedPlatformFilters)));
+    const groups = buildInventoryGroups(allRows);
+    return sortInventoryRows(flattenInventoryGroups(groups).filter((row) => row.type !== 'product'));
   };
 
   const loadInventoryExportExtraSheets = async ({ fromDate, toDate } = {}) => {
@@ -532,11 +604,11 @@ const InventoryPage = () => {
 
   const handleMarketplaceSynced = useCallback(async () => {
     await Promise.all([
-      fetchInventory(currentPage, pageSize, categoryFilter, getInventoryFilters()),
+      fetchInventory(categoryFilter, getInventoryFilters()),
       fetchSummaryStats(),
       fetchLowStockItems(),
     ]);
-  }, [categoryFilter, currentPage, pageSize, fetchInventory, fetchLowStockItems, fetchSummaryStats, getInventoryFilters]);
+  }, [categoryFilter, fetchInventory, fetchLowStockItems, fetchSummaryStats, getInventoryFilters]);
 
   const actions = (
     <>
@@ -609,8 +681,9 @@ const InventoryPage = () => {
             <Layers size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Tổng sản phẩm SKUs</span>
-            <span className={styles.summaryValue}>{summaryStats.totalSkus}</span>
+            <span className={styles.summaryLabel}>Tổng sản phẩm</span>
+            <span className={styles.summaryValue}>{summaryStats.totalProducts.toLocaleString('vi-VN')}</span>
+            <span className={styles.summaryMeta}>{summaryStats.totalSkus.toLocaleString('vi-VN')} sản phẩm con (SKU)</span>
           </div>
         </div>
         <div className={styles.summaryCard}>
@@ -618,8 +691,9 @@ const InventoryPage = () => {
             <Box size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Tổng số lượng SKUs<br /><small>(Toàn bộ)</small></span>
-            <span className={styles.summaryValue}>{totalQuantityAll}</span>
+            <span className={styles.summaryLabel}>Tổng đơn vị tồn kho</span>
+            <span className={styles.summaryValue}>{totalQuantityAll.toLocaleString('vi-VN')}</span>
+            <span className={styles.summaryMeta}>Trên toàn bộ kho hàng</span>
           </div>
         </div>
         <div className={styles.summaryCard}>
@@ -627,8 +701,9 @@ const InventoryPage = () => {
             <AlertTriangle size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Sản phẩm sắp hết hàng</span>
-            <span className={styles.summaryValue}>{lowStockCount}</span>
+            <span className={styles.summaryLabel}>SKU sắp hết hàng</span>
+            <span className={styles.summaryValue}>{lowStockCount.toLocaleString('vi-VN')}</span>
+            <span className={styles.summaryMeta}>Dưới mức tồn tối thiểu</span>
           </div>
         </div>
         <div className={styles.summaryCard}>
@@ -636,8 +711,9 @@ const InventoryPage = () => {
             <AlertCircle size={20} />
           </div>
           <div className={styles.summaryInfo}>
-            <span className={`${styles.summaryLabel} ${styles.textRed}`}>Sản phẩm tồn kho âm</span>
-            <span className={`${styles.summaryValue} ${styles.textRed}`}>{negativeCount}</span>
+            <span className={`${styles.summaryLabel} ${styles.textRed}`}>SKU tồn kho âm</span>
+            <span className={`${styles.summaryValue} ${styles.textRed}`}>{negativeCount.toLocaleString('vi-VN')}</span>
+            <span className={styles.summaryMeta}>Cần kiểm tra ngay</span>
           </div>
         </div>
       </div>
@@ -755,7 +831,7 @@ const InventoryPage = () => {
           <div className={styles.platformFilterWrap}>
             <div className={styles.platformFilterHeader}>
               <span className={styles.platformFilterLabel}>Kênh bán</span>
-              <span className={styles.platformFilterHint}>Chọn nhiều để lọc sản phẩm có đủ các sàn</span>
+              <span className={styles.platformFilterHint}>Chọn nhiều để xem sản phẩm có đủ các sàn</span>
               {selectedPlatformFilters.length > 0 && (
                 <button
                   type="button"
@@ -851,30 +927,11 @@ const InventoryPage = () => {
         <div className={styles.tableCardHeader}>
           <div>
             <h2 className={styles.tableTitle}>
-              Danh sách tồn kho ({totalElements})
+              Danh sách tồn kho
             </h2>
             <p className={styles.tableSubtitle}>
-              Phân trang theo sản phẩm; mỗi sản phẩm vẫn hiển thị các sản phẩm con tương ứng
+              <strong>{totalProducts.toLocaleString('vi-VN')}</strong> sản phẩm · <strong>{totalSkuElements.toLocaleString('vi-VN')}</strong> sản phẩm con (SKU)
             </p>
-          </div>
-          <div className={styles.pageSizeControl}>
-            <label htmlFor="select-inventory-page-size" className={styles.pageSizeLabel}>Sản phẩm/trang</label>
-            <div className={`${styles.selectWrapper} ${styles.pageSizeSelectWrapper}`}>
-              <select
-                id="select-inventory-page-size"
-                className={styles.select}
-                value={pageSize}
-                onChange={(event) => {
-                  setPageSize(Number(event.target.value));
-                  setCurrentPage(0);
-                }}
-              >
-                {PAGE_SIZE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-              <ChevronDown className={styles.selectIcon} size={14} />
-            </div>
           </div>
         </div>
 
@@ -1014,27 +1071,32 @@ const InventoryPage = () => {
         </div>
 
         <div className={styles.tableFooter}>
-          <span>
-            Đang hiển thị {paginatedProductGroups.length} / {totalElements} sản phẩm
+          <span className={styles.footerMetric}>
+            <span className={styles.footerMetricLabel}>Trang hiện tại</span>
+            <strong>{paginatedProductGroups.length} sản phẩm</strong>
           </span>
-          <span>
-            Dòng bảng: {displayRows.length.toLocaleString('vi-VN')} dòng gồm sản phẩm cha và {currentSkuCount.toLocaleString('vi-VN')} sản phẩm con
-          </span>
-          <span>
-            Tổng tồn kho: {totalQuantityAll.toLocaleString('vi-VN')} đơn vị
+          <span className={styles.footerMetric}>
+            <span className={styles.footerMetricLabel}>Sản phẩm con trên trang</span>
+            <strong>{currentSkuCount.toLocaleString('vi-VN')} SKU</strong>
           </span>
         </div>
-
         {/* ── Product-group Pagination ── */}
         {!loading && (
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            totalElements={totalElements}
+            totalElements={totalProducts}
             pageSize={pageSize}
             currentCount={paginatedProductGroups.length}
             itemLabel="sản phẩm"
             onPageChange={handlePageChange}
+            showPageSizeSelector
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            pageSizeLabel="Số sản phẩm mỗi trang"
+            onPageSizeChange={(nextPageSize) => {
+              setPageSize(nextPageSize);
+              setCurrentPage(0);
+            }}
           />
         )}
       </div>

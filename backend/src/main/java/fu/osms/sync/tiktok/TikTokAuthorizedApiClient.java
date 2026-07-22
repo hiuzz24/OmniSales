@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.OffsetDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -34,9 +35,9 @@ public class TikTokAuthorizedApiClient {
                 token -> apiClient.uploadProductImage(imageUrl, useCase, token.accessToken()));
     }
 
-    public Map<String, Object> searchProducts(UUID channelId, String shopCipher, String pageToken) {
+    public Map<String, Object> searchProducts(UUID channelId, String shopCipher, String pageToken, OffsetDateTime changedSince) {
         return tokenService.execute(channelId,
-                token -> apiClient.searchProducts(token.accessToken(), shopCipher, pageToken));
+                token -> apiClient.searchProducts(token.accessToken(), shopCipher, pageToken, changedSince));
     }
 
     public Map<String, Object> getProduct(UUID channelId, String shopCipher, String productId) {

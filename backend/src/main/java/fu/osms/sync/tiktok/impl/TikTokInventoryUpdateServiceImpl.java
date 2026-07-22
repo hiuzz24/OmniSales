@@ -8,8 +8,7 @@ import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
-import fu.osms.inventory.entity.InventoryItem;
-import fu.osms.inventory.repository.InventoryItemRepository;
+import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import fu.osms.sync.tiktok.TikTokInventoryUpdateService;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +31,7 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
 
     private final ChannelRepository channelRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
-    private final InventoryItemRepository inventoryItemRepository;
+    private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
     private final TikTokAuthorizedApiClient tikTokApiClient;
 
     @Override
@@ -52,7 +51,6 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
         }
 
         String shopCipher = requireText(channel.getMetadata(), "shopCipher", "shop_cipher", "cipher");
-        UUID defaultWarehouseId = optionalUuid(channel.getMetadata(), "defaultWarehouseId");
         String configuredTikTokWarehouseId = optionalText(channel.getMetadata(), "tiktokWarehouseId", "defaultTikTokWarehouseId");
 
         Set<UUID> scopedVariantIds = sanitizeVariantIds(variantIds);
@@ -77,7 +75,7 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
         for (Map.Entry<String, List<ChannelProductVariant>> entry : mappingsByProductId.entrySet()) {
             List<Map<String, Object>> skuPayloads = new ArrayList<>();
             for (ChannelProductVariant mapping : entry.getValue()) {
-                int availableQuantity = availableQuantity(mapping, defaultWarehouseId);
+                int availableQuantity = marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping);
                 List<String> warehouseIds = warehouseIds(mapping, configuredTikTokWarehouseId);
                 if (warehouseIds.isEmpty()) {
                     throw new AppException(
@@ -122,17 +120,6 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
             }
         }
         return result;
-    }
-
-    private int availableQuantity(ChannelProductVariant mapping, UUID defaultWarehouseId) {
-        List<InventoryItem> inventoryItems = inventoryItemRepository.findByVariantIdIn(List.of(mapping.getVariant().getId()));
-        return inventoryItems.stream()
-                .filter(item -> defaultWarehouseId == null
-                        || (item.getWarehouse() != null && defaultWarehouseId.equals(item.getWarehouse().getId())))
-                .mapToInt(item -> Math.max(0,
-                        (item.getQuantityOnHand() == null ? 0 : item.getQuantityOnHand())
-                                - (item.getReservedQuantity() == null ? 0 : item.getReservedQuantity())))
-                .sum();
     }
 
     private List<String> warehouseIds(ChannelProductVariant mapping, String configuredWarehouseId) {

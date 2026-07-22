@@ -1,11 +1,15 @@
 import axiosClient from "./axiosClient"
 
 const productApi = {
-    getAll: async (page, size, keyword, status, platform) => {
+    getAll: async (page, size, keyword, status, platforms) => {
         const params = { page, size };
         if (keyword) params.keyword = keyword;
         if (status) params.status = status;
-        if (platform) params.platform = platform;
+        if (Array.isArray(platforms) && platforms.length) {
+            params.platforms = platforms.join(',');
+        } else if (platforms) {
+            params.platform = platforms;
+        }
         const data = await axiosClient.get('/products', { params });
         return data;
     },

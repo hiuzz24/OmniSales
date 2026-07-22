@@ -11,6 +11,8 @@ import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.sync.service.ChannelLocalSyncService;
 import fu.osms.sync.service.ChannelRemoteSyncService;
+import fu.osms.sync.dto.MarketplaceSyncJobResponse;
+import fu.osms.sync.service.MarketplaceSyncJobService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,6 +31,7 @@ public class ChannelController {
     private final ChannelService channelService;
     private final ChannelLocalSyncService channelLocalSyncService;
     private final ChannelRemoteSyncService channelRemoteSyncService;
+    private final MarketplaceSyncJobService marketplaceSyncJobService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
@@ -86,9 +89,27 @@ public class ChannelController {
         return ResponseEntity.ok(ApiResponse.success("Đồng bộ từ ứng dụng lên sàn thành công", response));
     }
 
+    @PostMapping("/sync/from-app")
+    public ResponseEntity<ApiResponse<ChannelImportSyncResponse>> syncAllFromApp() {
+        ChannelImportSyncResponse response = channelLocalSyncService.syncAllLocalChanges();
+        return ResponseEntity.ok(ApiResponse.success("Đã đẩy thay đổi lên tất cả sàn đã liên kết", response));
+    }
+
     @PostMapping("/{id}/sync/from-marketplace")
     public ResponseEntity<ApiResponse<ChannelImportSyncResponse>> syncFromMarketplace(@PathVariable UUID id) {
         ChannelImportSyncResponse response = channelRemoteSyncService.syncRemoteChanges(id);
         return ResponseEntity.ok(ApiResponse.success("Đồng bộ từ sàn về ứng dụng thành công", response));
+    }
+
+    @PostMapping("/{id}/sync/from-marketplace/jobs")
+    public ResponseEntity<ApiResponse<MarketplaceSyncJobResponse>> enqueueSyncFromMarketplace(@PathVariable UUID id) {
+        MarketplaceSyncJobResponse response = marketplaceSyncJobService.enqueueRemoteSync(id);
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.success("Đã bắt đầu đồng bộ", response));
+    }
+
+    @GetMapping("/sync-jobs/{jobId}")
+    public ResponseEntity<ApiResponse<MarketplaceSyncJobResponse>> getSyncJob(@PathVariable UUID jobId) {
+        return ResponseEntity.ok(ApiResponse.success(marketplaceSyncJobService.getJob(jobId)));
     }
 }

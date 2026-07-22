@@ -31,6 +31,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -180,36 +181,48 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
             // b. Only update inventory if status is CONFIRMED
             if ("CONFIRMED".equals(status)) {
-                // Find or create InventoryItem
-                InventoryItem inventoryItem = inventoryItemRepository
-                        .findByWarehouseIdAndVariantId(warehouse.getId(), productVariant.getId())
-                        .orElse(null);
-
-                if (inventoryItem == null) {
-                    // Create new InventoryItem first, then apply pessimistic lock path
-                    inventoryItem = InventoryItem.builder()
-                            .warehouse(warehouse)
-                            .variant(productVariant)
-                            .quantityOnHand(0)
-                            .averageCost(BigDecimal.ZERO)
-                            .build();
-                    inventoryItem = inventoryItemRepository.save(inventoryItem);
-                }
-
-                // Re-fetch with pessimistic lock
-                inventoryItem = inventoryItemRepository
-                        .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
-                        .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
-
                 int quantity = itemReq.getQuantity();
                 BigDecimal unitCost = itemReq.getUnitCost();
+                List<ProductVariant> sharedVariants = resolveSharedStockVariants(productVariant);
+                int sharedQuantityBefore = sharedVariants.stream()
+                        .map(variant -> ensureInventoryItemWithLock(warehouse, variant))
+                        .mapToInt(this::quantityOnHand)
+                        .max()
+                        .orElse(0);
+                int sharedQuantityAfter = sharedQuantityBefore + quantity;
 
-                CostUpdateResult costUpdate = applyReceiptCostAndQuantity(
-                        inventoryItem, productVariant, quantity, unitCost, createdByUser);
+                for (ProductVariant sharedVariant : sharedVariants) {
+                    InventoryItem inventoryItem = ensureInventoryItemWithLock(warehouse, sharedVariant);
+                    int qtyBefore = quantityOnHand(inventoryItem);
+                    CostUpdateResult costUpdate = applyReceiptCostAndQuantityTarget(
+                            inventoryItem,
+                            sharedVariant,
+                            sharedQuantityAfter,
+                            unitCost,
+                            createdByUser);
 
-                receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
-                receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
-                changedVariantIds.add(productVariant.getId());
+                    if (sharedVariant.getId().equals(productVariant.getId())) {
+                        receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
+                        receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
+                    }
+                    changedVariantIds.add(sharedVariant.getId());
+
+                    InventoryTransaction transaction = InventoryTransaction.builder()
+                            .type(InvTxnType.IMPORT)
+                            .referenceType("RECEIPT")
+                            .referenceId(receipt.getId())
+                            .quantityChange(sharedQuantityAfter - qtyBefore)
+                            .quantityBefore(qtyBefore)
+                            .quantityAfter(sharedQuantityAfter)
+                            .unitCost(unitCost)
+                            .warehouse(warehouse)
+                            .variant(sharedVariant)
+                            .performedBy(createdByUser)
+                            .performedAt(OffsetDateTime.now())
+                            .note(sharedVariants.size() > 1 ? "Shared SKU receipt synchronized" : null)
+                            .build();
+                    inventoryTransactionRepository.save(transaction);
+                }
             }
 
             // c. Save receiptItem (for both DRAFT and CONFIRMED)
@@ -223,14 +236,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             int transactionQtyAfter = 0;
             
             if ("CONFIRMED".equals(status)) {
-                // For confirmed receipt, get the actual inventory quantities
-                InventoryItem inventoryItem = inventoryItemRepository
-                        .findByWarehouseIdAndVariantId(warehouse.getId(), productVariant.getId())
-                        .orElse(null);
-                if (inventoryItem != null) {
-                    transactionQtyBefore = inventoryItem.getQuantityOnHand() - itemReq.getQuantity(); // Before the import
-                    transactionQtyAfter = inventoryItem.getQuantityOnHand(); // After the import
-                }
+                continue;
             } else {
                 // For DRAFT, set transaction quantities to reflect the intended change
                 // quantityBefore = 0, quantityAfter = quantity_change (to satisfy constraint)
@@ -518,56 +524,50 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         Set<UUID> changedVariantIds = new HashSet<>();
         for (InventoryReceiptItem receiptItem : receiptItems) {
             ProductVariant productVariant = receiptItem.getVariant();
-
-            // Find or create InventoryItem
-            InventoryItem inventoryItem = inventoryItemRepository
-                    .findByWarehouseIdAndVariantId(warehouse.getId(), productVariant.getId())
-                    .orElse(null);
-
-            if (inventoryItem == null) {
-                inventoryItem = InventoryItem.builder()
-                        .warehouse(warehouse)
-                        .variant(productVariant)
-                        .quantityOnHand(0)
-                        .averageCost(BigDecimal.ZERO)
-                        .build();
-                inventoryItem = inventoryItemRepository.save(inventoryItem);
-            }
-
-            // Re-fetch with pessimistic lock
-            inventoryItem = inventoryItemRepository
-                    .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
-                    .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
-
-            int qtyBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
             int quantity = receiptItem.getQuantity();
             BigDecimal unitCost = receiptItem.getUnitCost();
-            CostUpdateResult costUpdate = applyReceiptCostAndQuantity(
-                    inventoryItem, productVariant, quantity, unitCost, approvedByUser);
+            List<ProductVariant> sharedVariants = resolveSharedStockVariants(productVariant);
+            int sharedQuantityBefore = sharedVariants.stream()
+                    .map(variant -> ensureInventoryItemWithLock(warehouse, variant))
+                    .mapToInt(this::quantityOnHand)
+                    .max()
+                    .orElse(0);
+            int sharedQuantityAfter = sharedQuantityBefore + quantity;
 
-            // Update receiptItem with cost tracking
-            receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
-            receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
+            for (ProductVariant sharedVariant : sharedVariants) {
+                InventoryItem inventoryItem = ensureInventoryItemWithLock(warehouse, sharedVariant);
+                int qtyBefore = quantityOnHand(inventoryItem);
+                CostUpdateResult costUpdate = applyReceiptCostAndQuantityTarget(
+                        inventoryItem,
+                        sharedVariant,
+                        sharedQuantityAfter,
+                        unitCost,
+                        approvedByUser);
+
+                if (sharedVariant.getId().equals(productVariant.getId())) {
+                    receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
+                    receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
+                }
+
+                InventoryTransaction confirmedTransaction = InventoryTransaction.builder()
+                        .type(InvTxnType.IMPORT)
+                        .referenceType("RECEIPT")
+                        .referenceId(receiptId)
+                        .quantityChange(sharedQuantityAfter - qtyBefore)
+                        .quantityBefore(qtyBefore)
+                        .quantityAfter(sharedQuantityAfter)
+                        .unitCost(unitCost)
+                        .warehouse(warehouse)
+                        .variant(sharedVariant)
+                        .performedBy(approvedByUser)
+                        .performedAt(OffsetDateTime.now())
+                        .note(sharedVariants.size() > 1 ? "Completed from DRAFT - shared SKU synchronized" : "Completed from DRAFT")
+                        .build();
+                inventoryTransactionRepository.save(confirmedTransaction);
+                changedVariantIds.add(sharedVariant.getId());
+            }
+
             stockReceiveItemRepository.save(receiptItem);
-
-            // CREATE NEW transaction for CONFIRMED receipt (do NOT update old DRAFT transaction)
-            // The DRAFT transaction remains as audit trail
-            InventoryTransaction confirmedTransaction = InventoryTransaction.builder()
-                    .type(InvTxnType.IMPORT)
-                    .referenceType("RECEIPT")
-                    .referenceId(receiptId)
-                    .quantityChange(quantity)
-                    .quantityBefore(qtyBefore)
-                    .quantityAfter(qtyBefore + quantity)
-                    .unitCost(unitCost)
-                    .warehouse(warehouse)
-                    .variant(productVariant)
-                    .performedBy(approvedByUser)
-                    .performedAt(OffsetDateTime.now())
-                    .note("Completed from DRAFT")
-                    .build();
-            inventoryTransactionRepository.save(confirmedTransaction);
-            changedVariantIds.add(productVariant.getId());
         }
 
         // 7. Update receipt status to CONFIRMED
@@ -671,6 +671,80 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         variantRepository.save(productVariant);
 
         return new CostUpdateResult(avgCostBefore, avgCostAfter, qtyBefore, qtyAfter);
+    }
+
+    private CostUpdateResult applyReceiptCostAndQuantityTarget(
+            InventoryItem inventoryItem,
+            ProductVariant productVariant,
+            int quantityAfter,
+            BigDecimal unitCost,
+            User updatedBy) {
+        int qtyBefore = quantityOnHand(inventoryItem);
+        int quantityDelta = quantityAfter - qtyBefore;
+        BigDecimal avgCostBefore = inventoryItem.getAverageCost() != null
+                ? inventoryItem.getAverageCost()
+                : productVariant.getCostPrice();
+        avgCostBefore = normalizeMoney(avgCostBefore);
+        unitCost = normalizeMoney(unitCost);
+
+        BigDecimal avgCostAfter = avgCostBefore;
+        if (quantityDelta > 0) {
+            BigDecimal existingStockValue = BigDecimal.valueOf(qtyBefore).multiply(avgCostBefore);
+            BigDecimal receivedStockValue = BigDecimal.valueOf(quantityDelta).multiply(unitCost);
+            avgCostAfter = quantityAfter <= 0
+                    ? unitCost
+                    : existingStockValue
+                        .add(receivedStockValue)
+                        .divide(BigDecimal.valueOf(quantityAfter), 2, RoundingMode.HALF_UP);
+        }
+
+        inventoryItem.setQuantityOnHand(quantityAfter);
+        inventoryItem.setAverageCost(avgCostAfter);
+        inventoryItem.setUpdatedBy(updatedBy);
+        inventoryItemRepository.save(inventoryItem);
+
+        productVariant.setCostPrice(avgCostAfter);
+        productVariant.setPrice(avgCostAfter);
+        productVariant.setUpdatedBy(updatedBy);
+        variantRepository.save(productVariant);
+
+        return new CostUpdateResult(avgCostBefore, avgCostAfter, qtyBefore, quantityAfter);
+    }
+
+    private InventoryItem ensureInventoryItemWithLock(Warehouse warehouse, ProductVariant productVariant) {
+        inventoryItemRepository.findByWarehouseIdAndVariantId(warehouse.getId(), productVariant.getId())
+                .orElseGet(() -> inventoryItemRepository.save(InventoryItem.builder()
+                        .warehouse(warehouse)
+                        .variant(productVariant)
+                        .quantityOnHand(0)
+                        .reservedQuantity(0)
+                        .averageCost(productVariant.getCostPrice() == null ? BigDecimal.ZERO : productVariant.getCostPrice())
+                        .build()));
+        return inventoryItemRepository
+                .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
+    }
+
+    private List<ProductVariant> resolveSharedStockVariants(ProductVariant productVariant) {
+        String normalizedSku = normalizeSku(productVariant.getSku());
+        if (normalizedSku.isBlank()) {
+            return List.of(productVariant);
+        }
+        Map<UUID, ProductVariant> variantsById = new LinkedHashMap<>();
+        variantsById.put(productVariant.getId(), productVariant);
+        variantRepository.findActiveMarketplaceMappedSharingSkuWithVariantId(productVariant.getId())
+                .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
+        variantRepository.findActiveMarketplaceMappedByNormalizedSku(normalizedSku)
+                .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
+        return new ArrayList<>(variantsById.values());
+    }
+
+    private String normalizeSku(String sku) {
+        return sku == null ? "" : sku.trim().toLowerCase();
+    }
+
+    private int quantityOnHand(InventoryItem inventoryItem) {
+        return inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
     }
 
     private BigDecimal normalizeMoney(BigDecimal value) {

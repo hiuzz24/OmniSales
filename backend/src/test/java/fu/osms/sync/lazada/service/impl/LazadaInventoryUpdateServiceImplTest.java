@@ -19,6 +19,7 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
+import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,7 @@ class LazadaInventoryUpdateServiceImplTest {
     @Mock private InventoryItemRepository inventoryItemRepository;
     @Mock private StockReceiveRepository stockReceiveRepository;
     @Mock private InventoryIssueRepository inventoryIssueRepository;
+    @Mock private MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private LazadaInventoryUpdateServiceImpl service;
@@ -76,7 +78,8 @@ class LazadaInventoryUpdateServiceImplTest {
                 channelProductVariantRepository,
                 inventoryItemRepository,
                 stockReceiveRepository,
-                inventoryIssueRepository
+                inventoryIssueRepository,
+                marketplaceStockQuantityResolver
         );
 
         channelId = UUID.randomUUID();
@@ -152,6 +155,8 @@ class LazadaInventoryUpdateServiceImplTest {
                 .thenReturn(List.of(mapping));
         when(inventoryItemRepository.findByVariantIdIn(List.of(variant.getId())))
                 .thenReturn(List.of(item));
+        when(marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping))
+                .thenReturn(8);
         when(lazadaApiClient.executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap()))
                 .thenReturn("{\"code\":\"0\"}");
 
@@ -226,6 +231,8 @@ class LazadaInventoryUpdateServiceImplTest {
                 .thenReturn(List.of(mapping));
         when(inventoryItemRepository.findByVariantIdIn(List.of(variant.getId())))
                 .thenReturn(List.of(item));
+        when(marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping))
+                .thenReturn(8);
         when(lazadaApiClient.executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap()))
                 .thenReturn("{\"code\":\"500\",\"message\":\"oops\"}");
 

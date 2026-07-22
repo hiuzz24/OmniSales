@@ -22,6 +22,8 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
 
     Optional<Warehouse> findFirstByNameAndDeletedAtIsNull(String name);
 
+    Optional<Warehouse> findFirstByDeletedAtIsNullAndIsActiveTrueOrderByCreatedAtAsc();
+
     @Query("SELECT w FROM Warehouse w WHERE w.id = (SELECT u.warehouse.id FROM User u WHERE u.id = :userId)")
     Warehouse findWarehouseByUserId(@Param("userId") UUID userId);
 }

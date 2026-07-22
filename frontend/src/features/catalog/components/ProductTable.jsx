@@ -27,6 +27,13 @@ const getStatusBadge = (status) => {
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN');
 
+const getDisplaySku = (product) =>
+  product.marketplaceSku
+  || product.sku
+  || product.variants?.find((variant) => variant.marketplaceSku)?.marketplaceSku
+  || product.variants?.[0]?.sku
+  || '—';
+
 const ActionButton = ({ product }) => {
   const navigate = useNavigate();
   return (
@@ -59,7 +66,7 @@ const MarketplaceLinkButton = ({ product }) => {
   );
 };
 
-const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) => {
+const ProductTable = ({ keyword = '', statusFilter = '', platformFilters = [] }) => {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(0);
@@ -72,10 +79,10 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        const response = await productApi.getAll(page, size, keyword, statusFilter, platformFilter);
+        const response = await productApi.getAll(page, size, keyword, statusFilter, platformFilters);
         const responseData = response.data?.data || response.data || response;
         const content = responseData.content || responseData.data || (Array.isArray(responseData) ? responseData : []);
-        const nextTotalElements = responseData.totalElements ?? responseData.total ?? content.length ?? 0;
+        const nextTotalElements = responseData.totalProducts ?? responseData.totalElements ?? responseData.total ?? content.length ?? 0;
         setProducts(content);
         setTotalElements(nextTotalElements);
         setTotalPages(responseData.totalPages ?? Math.ceil(nextTotalElements / size));
@@ -89,7 +96,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
       }
     };
     fetchProducts();
-  }, [page, size, keyword, statusFilter, platformFilter]);
+  }, [page, size, keyword, statusFilter, platformFilters]);
 
   const getStockClass = (totalStock) => {
     if (totalStock === 0) return styles.stockEmpty;
@@ -175,7 +182,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilter = '' }) 
                       </div>
                     </td>
                     <td className={styles.td}>
-                      <code className={styles.skuText}>{product.sku || product.variants?.[0]?.sku || '—'}</code>
+                      <code className={styles.skuText}>{getDisplaySku(product)}</code>
                     </td>
                     <td className={styles.td}>
                       <div className={styles.categoryTag} title={product.categoryName || 'Chưa phân loại'}>
