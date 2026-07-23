@@ -82,7 +82,6 @@ public class LazadaApiClientImpl implements LazadaApiClient {
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(apiUrl + apiPath);
         allParams.forEach(builder::queryParam);
-//        String fullUrl = builder.build().encode().toUriString();
         URI fullUrl = builder.build().encode().toUri();
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(fullUrl, String.class);

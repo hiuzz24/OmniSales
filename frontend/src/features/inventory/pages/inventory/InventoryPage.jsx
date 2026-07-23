@@ -67,6 +67,8 @@ const INVENTORY_EXPORT_COLUMNS = [
   { key: 'warehouseName', label: 'Kho hàng', width: 24, defaultChecked: true, getValue: (item) => item.warehouseName ?? '' },
   { key: 'channel', label: 'Kênh bán', width: 18, defaultChecked: true, getValue: (item) => getChannelLabel(item) },
   { key: 'quantityOnHand', label: 'Trong kho', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.quantityOnHand ?? 0 },
+  { key: 'incomingQuantity', label: 'Hàng đang nhập', width: 16, type: 'number', defaultChecked: true, getValue: (item) => item.incomingQuantity ?? 0 },
+  { key: 'outgoingQuantity', label: 'Hàng đang xuất', width: 16, type: 'number', defaultChecked: true, getValue: (item) => item.outgoingQuantity ?? 0 },
   { key: 'reservedQuantity', label: 'Giữ hàng', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.reservedQuantity ?? 0 },
   { key: 'availableQuantity', label: 'Có thể bán', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.availableQuantity ?? 0 },
   { key: 'lowStockThreshold', label: 'Tồn tối thiểu', width: 14, type: 'number', defaultChecked: true, getValue: (item) => item.lowStockThreshold ?? 0 },
@@ -216,12 +218,16 @@ const buildInventoryGroups = (rows) => {
 
   return [...groups.values()].map((group) => {
     const quantityOnHand = group.items.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0);
+    const incomingQuantity = group.items.reduce((sum, item) => sum + Number(item.incomingQuantity ?? 0), 0);
+    const outgoingQuantity = group.items.reduce((sum, item) => sum + Number(item.outgoingQuantity ?? 0), 0);
     const reservedQuantity = group.items.reduce((sum, item) => sum + Number(item.reservedQuantity ?? 0), 0);
     const availableQuantity = group.items.reduce((sum, item) => sum + Number(item.availableQuantity ?? 0), 0);
     const lowStockThreshold = group.items.reduce((sum, item) => sum + Number(item.lowStockThreshold ?? 0), 0);
     const parentRow = {
       ...group,
       quantityOnHand,
+      incomingQuantity,
+      outgoingQuantity,
       reservedQuantity,
       availableQuantity,
       lowStockThreshold,
@@ -665,14 +671,16 @@ const InventoryPage = () => {
 
   return (
     <>
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       {/* ── Header ── */}
-      <PageHeader
-        title="Danh sách tồn kho"
-        subtitle="Theo dõi và quản lý tồn kho theo SKU, kho hàng và trạng thái"
-        icon={<Warehouse size={20} />}
-        actions={actions}
-      />
+      <div className={styles.pageHeader}>
+          <PageHeader
+            title="Danh sách tồn kho"
+            subtitle="Theo dõi và quản lý tồn kho theo SKU, kho hàng và trạng thái"
+            icon={<Warehouse size={20} />}
+            actions={actions}
+          />
+      </div>
 
       {/* ── Summary Cards ── */}
       <div className={styles.summaryGrid}>
@@ -968,6 +976,8 @@ const InventoryPage = () => {
                     {qtySort === 'desc' && <ArrowDown10 size={12} style={{ marginLeft: 4 }} />}
                     {qtySort === 'none' && <ArrowUp01 size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
                   </th>
+                  <th className={`${styles.th} ${styles.thRight}`}>Hàng đang nhập</th>
+                  <th className={`${styles.th} ${styles.thRight}`}>Hàng đang xuất</th>
                   <th className={`${styles.th} ${styles.thRight}`}>Giữ hàng</th>
                   <th className={`${styles.th} ${styles.thRight}`}>Có thể bán</th>
                   <th className={`${styles.th} ${styles.thRight}`}>Tồn tối thiểu</th>
@@ -1017,6 +1027,12 @@ const InventoryPage = () => {
                       </td>
                       <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.quantityOnHand)}`}>
                         {row.quantityOnHand}
+                      </td>
+                      <td className={`${styles.td} ${styles.tdRight} ${Number(row.incomingQuantity ?? 0) > 0 ? styles.qtyPositive : styles.cellMuted}`}>
+                        {row.incomingQuantity ?? 0}
+                      </td>
+                      <td className={`${styles.td} ${styles.tdRight} ${Number(row.outgoingQuantity ?? 0) > 0 ? styles.qtyWarning : styles.cellMuted}`}>
+                        {row.outgoingQuantity ?? 0}
                       </td>
                       <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
                         {row.reservedQuantity}

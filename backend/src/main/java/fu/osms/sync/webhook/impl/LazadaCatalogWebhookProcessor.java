@@ -7,6 +7,7 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
@@ -409,6 +410,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         if (price != null) {
             variant.setPrice(WebhookPayloadUtils.decimal(price));
         }
+        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
         variant.setOptionValues(optionValues(payload));
         variant.setIsActive(true);
         variant.setDeletedAt(null);
@@ -485,7 +487,9 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                         .warehouse(warehouse)
                         .variant(variant)
                         .lowStockThreshold(variant.getProduct().getLowStockThreshold())
-                        .averageCost(BigDecimal.ZERO)
+                        .averageCost(ProductCostPolicy.initialCost(
+                                variant.getCostPrice(),
+                                variant.getPrice()))
                         .build());
 
         int before = safeInt(item.getQuantityOnHand());
@@ -493,9 +497,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         item.setQuantityOnHand(after);
         int reserved = reservedQuantity > 0 ? reservedQuantity : safeInt(item.getReservedQuantity());
         item.setReservedQuantity(Math.min(Math.max(reserved, 0), after));
-        if (item.getAverageCost() == null) {
-            item.setAverageCost(BigDecimal.ZERO);
-        }
+        item.setAverageCost(ProductCostPolicy.initialCost(item.getAverageCost(), variant.getCostPrice()));
         inventoryItemRepository.save(item);
 
         int delta = after - before;

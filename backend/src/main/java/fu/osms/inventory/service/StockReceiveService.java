@@ -15,4 +15,5 @@ public interface StockReceiveService {
     Object getReceiptStatistics();
     String getNextReceiptCode();
     int syncPendingMarketplaceInventory();
+    int syncReceiptMarketplaceInventory(UUID receiptId);
 }

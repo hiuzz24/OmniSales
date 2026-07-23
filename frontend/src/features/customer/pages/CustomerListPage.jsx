@@ -119,7 +119,7 @@ const CustomerListPage = () => {
   ];
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       {/* Header */}
       <div className={styles.pageHeader}>
         <div className={styles.headerLeft}>

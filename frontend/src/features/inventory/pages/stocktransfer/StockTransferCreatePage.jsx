@@ -498,7 +498,7 @@ export default function StockTransferCreatePage() {
   const totalAmount = items.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 }}>
+    <div className="product-workspace product-workspace--flow" style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: 32 }}>
 
       {/* ── Header ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

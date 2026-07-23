@@ -8,6 +8,7 @@ import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
@@ -301,10 +302,20 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                 .orElseGet(ProductVariant::new);
         Map<String, Object> optionValues = selectedOptionValues(variantNode);
         String optionName = joinedOptionValueName(optionValues);
+        boolean preserveLocalPrice = shouldPreserveLocalPrice(channelProduct, externalVariantId);
         variant.setProduct(product);
         variant.setSku(sku);
         variant.setName(firstNonBlank(optionName, stringValue(variantNode.get("title")), product.getName()));
-        variant.setPrice(decimalValue(variantNode.get("price")));
+        if (!preserveLocalPrice || variant.getPrice() == null) {
+            variant.setPrice(decimalValue(variantNode.get("price")));
+        }
+        Map<String, Object> inventoryItem = map(variantNode.get("inventoryItem"));
+        Map<String, Object> unitCost = map(inventoryItem.get("unitCost"));
+        BigDecimal importedCost = decimalValue(unitCost.get("amount"));
+        BigDecimal costCandidate = ProductCostPolicy.isPositive(importedCost)
+                ? importedCost
+                : variant.getCostPrice();
+        variant.setCostPrice(ProductCostPolicy.initialCost(costCandidate, variant.getPrice()));
         variant.setIsActive(true);
         variant.setOptionValues(optionValues.isEmpty() ? mapOf("title", variant.getName()) : optionValues);
         return productVariantRepository.save(variant);
@@ -316,18 +327,35 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         channelVariant.setChannelProduct(channelProduct);
         channelVariant.setVariant(variant);
         channelVariant.setExternalSku(firstNonBlank(stringValue(variantNode.get("sku")), variant.getSku()));
-        channelVariant.setExternalPrice(variant.getPrice());
-        channelVariant.setSyncStatus(SyncStatus.SYNCED);
-        channelVariant.setLastSyncedAt(OffsetDateTime.now());
+        channelVariant.setExternalPrice(decimalValue(variantNode.get("price")));
+        if (channelVariant.getSyncStatus() != SyncStatus.OUT_OF_SYNC) {
+            channelVariant.setSyncStatus(SyncStatus.SYNCED);
+            channelVariant.setLastSyncedAt(OffsetDateTime.now());
+        }
 
         Map<String, Object> metadata = mapOf("shopifyVariantGid", stringValue(variantNode.get("id")));
         Map<String, Object> inventoryItem = map(variantNode.get("inventoryItem"));
         if (inventoryItem.get("id") != null) {
             metadata.put("inventory_item_id", numericId(stringValue(inventoryItem.get("id"))));
         }
+        Map<String, Object> unitCost = map(inventoryItem.get("unitCost"));
+        BigDecimal importedCost = decimalValue(unitCost.get("amount"));
+        if (ProductCostPolicy.isPositive(importedCost)) {
+            metadata.put("shopifyUnitCost", importedCost.toPlainString());
+        } else {
+            metadata.remove("shopifyUnitCost");
+        }
         channelVariant.setMetadata(metadata);
         applyExternalVariantId(channelProduct, channelVariant, externalVariantId);
         channelProductVariantRepository.save(channelVariant);
+    }
+
+    private boolean shouldPreserveLocalPrice(ChannelProduct channelProduct, String externalVariantId) {
+        return channelProductVariantRepository
+                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
+                .map(ChannelProductVariant::getSyncStatus)
+                .filter(SyncStatus.OUT_OF_SYNC::equals)
+                .isPresent();
     }
 
     private ChannelProductVariant resolveChannelVariantMapping(ChannelProduct channelProduct,
@@ -526,7 +554,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         int quantityAfter = Math.max(availableQuantity, 0);
         item.setQuantityOnHand(quantityAfter);
         item.setReservedQuantity(Math.min(Math.max(reservedQuantity, 0), quantityAfter));
-        item.setAverageCost(item.getAverageCost() == null ? BigDecimal.ZERO : item.getAverageCost());
+        item.setAverageCost(ProductCostPolicy.initialCost(item.getAverageCost(), variant.getCostPrice()));
         if (item.getLowStockThreshold() == null) {
             item.setLowStockThreshold(variant.getProduct().getLowStockThreshold());
         }
@@ -596,7 +624,10 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                         .name(warehouseName)
                         .isActive(true)
                         .build());
-        warehouse.setAddress(withLocationIdMarker(formatLocationAddress(map(locationNode.get("address"))), locationId));
+        String importedAddress = withLocationIdMarker(formatLocationAddress(map(locationNode.get("address"))), locationId);
+        if (importedAddress != null && !importedAddress.isBlank()) {
+            warehouse.setAddress(importedAddress);
+        }
         warehouse.setIsActive(true);
         warehouse = warehouseRepository.save(warehouse);
         warehouseByLocationId.put(locationId, warehouse);
@@ -651,6 +682,9 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                       }
                       inventoryItem {
                         id
+                        unitCost {
+                          amount
+                        }
                         inventoryLevels(first: %d) {
                           nodes {
                             location {

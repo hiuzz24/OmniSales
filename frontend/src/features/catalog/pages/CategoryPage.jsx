@@ -182,7 +182,7 @@ const CategoryPage = () => {
     // Find parent UUID by searching from options or checking if category already has a parent id
     // We fetch parent categories list so that dropdown options are ready
     loadParentCategories();
-    
+
     // We need to set editParentId. Since backend response list categories doesn't explicitly store parentId,
     // let's fetch categories or match category name with parentOptions. Or wait!
     // In categoryResponse, we have parentCategoryName. But in CategoryResponseDTO, it returns parentCategoryName
@@ -268,13 +268,15 @@ const CategoryPage = () => {
   );
 
   return (
-    <div className={styles.page}>
-      <PageHeader
-        title="Danh mục sản phẩm"
-        subtitle="Phân loại và tổ chức danh mục sản phẩm"
-        icon={() => <Tag size={20} />}
-        actions={actions}
-      />
+    <div className={`${styles.page} product-workspace`}>
+      <div className={styles.pageHeader}>
+        <PageHeader
+          title="Danh mục sản phẩm"
+          subtitle="Phân loại và tổ chức danh mục sản phẩm"
+          icon={() => <Tag size={20} />}
+          actions={actions}
+        />
+      </div>
 
       {/* Summary Cards */}
       <div className={styles.statsGrid}>
@@ -462,11 +464,10 @@ const CategoryPage = () => {
                           </div>
                         ) : (
                           <span
-                            className={`${styles.statusBadge} ${
-                              category.status === 'ACTIVE'
+                            className={`${styles.statusBadge} ${category.status === 'ACTIVE'
                                 ? styles.statusActive
                                 : styles.statusInactive
-                            }`}
+                              }`}
                           >
                             {category.status === 'ACTIVE' ? (
                               <>
@@ -516,7 +517,7 @@ const CategoryPage = () => {
                             >
                               <MoreHorizontal size={16} />
                             </button>
-                            
+
                             {activeMenuId === category.id && (
                               <div className={styles.actionDropdown}>
                                 <button

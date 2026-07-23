@@ -10,6 +10,7 @@ import warehouseService from '../../services/warehouseService';
 import supplierService from '../../services/supplierService';
 import stockReceiveService from '../../services/stockReceiveService';
 import inventoryApi from '../../../../api/inventoryApi';
+import purchaseOrderApi from '../../../../api/purchaseOrderApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
@@ -103,10 +104,11 @@ const normalizeWarehouseVariant = (item) => {
   const variantId = item.variantId ?? item.id;
   const sku = item.marketplaceSku ?? item.sku ?? item.variantSku ?? '';
   const salePrice = item.salePrice ?? item.currentSalePrice ?? item.price ?? item.unitPrice ?? 0;
-  const unitPrice = item.unitPrice ?? item.averageCost ?? item.costPrice ?? salePrice ?? 0;
+  const unitPrice = item.unitPrice ?? item.price ?? 0;
   return {
     id: variantId,
     variantId,
+    variantIds: uniqueValues(item.variantIds ?? [variantId]),
     sku,
     productName: item.productName ?? item.product?.name ?? item.variantName ?? sku,
     name: item.variantName ?? item.name ?? '',
@@ -134,6 +136,7 @@ const aggregateWarehouseVariantsBySku = (variants) => {
         ...item,
         id: item.id ?? item.variantId,
         variantId: item.variantId ?? item.id,
+        variantIds: uniqueValues(item.variantIds ?? [item.variantId ?? item.id]),
         platforms: itemPlatforms(item),
         channelNames: uniqueValues(item.channelNames ?? [item.channelName]),
         channelIds: uniqueValues(item.channelIds ?? [item.channelId]),
@@ -153,10 +156,50 @@ const aggregateWarehouseVariantsBySku = (variants) => {
     existing.platforms = uniqueValues([...itemPlatforms(existing), ...itemPlatforms(item)]);
     existing.channelNames = uniqueValues([...(existing.channelNames ?? []), ...(item.channelNames ?? []), item.channelName]);
     existing.channelIds = uniqueValues([...(existing.channelIds ?? []), ...(item.channelIds ?? []), item.channelId]);
+    existing.variantIds = uniqueValues([...(existing.variantIds ?? []), ...(item.variantIds ?? []), item.variantId]);
     existing.mergedVariantCount = Number(existing.mergedVariantCount ?? 1) + Number(item.mergedVariantCount ?? 1);
   });
   return [...groups.values()];
 };
+
+const groupPurchaseOrderItems = (orderItems = []) => {
+  const groups = new Map();
+  orderItems.forEach((item) => {
+    const sku = item.marketplaceSku || item.sku || '';
+    const groupKey = String(sku).trim().toLowerCase() || `variant:${item.variantId}`;
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        groupKey,
+        variantId: item.variantId,
+        variantIds: [item.variantId],
+        sku,
+        productName: item.productName,
+        variantName: item.variantName,
+        quantity: item.quantity,
+        unitPrice: item.unitCost ?? 0,
+        platforms: uniqueValues(item.platforms),
+        mergedVariantCount: 1,
+        fromPurchaseOrder: true,
+      });
+      return;
+    }
+    const existing = groups.get(groupKey);
+    existing.variantIds = uniqueValues([...existing.variantIds, item.variantId]);
+    existing.platforms = uniqueValues([...existing.platforms, ...(item.platforms ?? [])]);
+    existing.mergedVariantCount += 1;
+  });
+  return [...groups.values()];
+};
+
+const expandReceiptItems = (items) => items.map((item) => ({
+    variantId: item.variantId,
+    quantity: item.quantity === '' || item.quantity === null || item.quantity === undefined
+      ? null
+      : Number(item.quantity),
+    unitCost: item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined
+      ? null
+      : Number(item.unitPrice),
+  }));
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
@@ -273,7 +316,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
           <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}>Hủy</button>
-            <button onClick={() => { onConfirm(Object.values(selected).map((i) => ({ variantId: i.id, sku: i.sku, productName: i.productName, variantName: i.name, quantity: 1, unitPrice: i.unitPrice ?? 0, salePrice: i.salePrice ?? 0, platforms: itemPlatforms(i), channelNames: uniqueValues(i.channelNames ?? [i.channelName]), mergedVariantCount: i.mergedVariantCount ?? 1 }))); }} disabled={count === 0}
+            <button onClick={() => { onConfirm(Object.values(selected).map((i) => ({ variantId: i.id, variantIds: uniqueValues(i.variantIds ?? [i.id]), sku: i.sku, productName: i.productName, variantName: i.name, quantity: 1, unitPrice: i.unitPrice ?? 0, salePrice: i.salePrice ?? 0, platforms: itemPlatforms(i), channelNames: uniqueValues(i.channelNames ?? [i.channelName]), mergedVariantCount: i.mergedVariantCount ?? 1, fromPurchaseOrder: false }))); }} disabled={count === 0}
               style={{ padding: '7px 16px', borderRadius: 8, border: 'none', backgroundColor: count === 0 ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: 13, fontWeight: 500, cursor: count === 0 ? 'not-allowed' : 'pointer' }}>
               Thêm ({count})
             </button>
@@ -298,6 +341,9 @@ export default function StockReceiveCreatePage() {
   const [nextReceiptCode, setNextReceiptCode] = useState('');
   const [warehouseVariants, setWarehouseVariants] = useState([]);
   const [loadingWarehouseVariants, setLoadingWarehouseVariants] = useState(false);
+  const [receivingPurchaseOrders, setReceivingPurchaseOrders] = useState([]);
+  const [purchaseOrderId, setPurchaseOrderId] = useState(searchParams.get('purchaseOrderId') || '');
+  const [purchaseOrderError, setPurchaseOrderError] = useState('');
   const previousWarehouseIdRef = useRef('');
 
   const { register, handleSubmit, setValue, control, formState: { errors, isSubmitting, isDirty } } = useForm({
@@ -311,8 +357,13 @@ export default function StockReceiveCreatePage() {
   const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
   useEffect(() => {
-    Promise.all([warehouseService.getMaster(), supplierService.getAll(), stockReceiveService.getNextReceiptCode()])
-      .then(([wRes, sRes, codeRes]) => {
+    Promise.all([
+      warehouseService.getMaster(),
+      supplierService.getAll(),
+      stockReceiveService.getNextReceiptCode(),
+      purchaseOrderApi.getAll({ size: 100, status: 'RECEIVING' }),
+    ])
+      .then(([wRes, sRes, codeRes, purchasePage]) => {
         const extract = (r) => { const d = r?.data?.data ?? r?.data; if (Array.isArray(d)) return d; if (d?.content && Array.isArray(d.content)) return d.content; return []; };
         const masterWarehouse = getResponseData(wRes);
         setWarehouses(masterWarehouse?.id ? [masterWarehouse] : extract(wRes));
@@ -321,9 +372,33 @@ export default function StockReceiveCreatePage() {
         }
         setSuppliers(extract(sRes));
         setNextReceiptCode(codeRes?.data?.data ?? codeRes?.data ?? '');
+        setReceivingPurchaseOrders(purchasePage?.content ?? []);
       })
       .catch(() => {});
   }, [setValue]);
+
+  useEffect(() => {
+    if (!purchaseOrderId) return;
+    let ignore = false;
+    purchaseOrderApi.getById(purchaseOrderId)
+      .then((order) => {
+        if (ignore) return;
+        if (order.status !== 'RECEIVING') {
+          toast.error('Đơn mua hàng chưa ở trạng thái Đang giao hàng.');
+          setPurchaseOrderId('');
+          return;
+        }
+        setReceivingPurchaseOrders((current) => current.some((item) => item.id === order.id) ? current : [order, ...current]);
+        setValue('warehouseId', String(order.warehouseId), { shouldDirty: true, shouldValidate: true });
+        setValue('supplierId', order.supplierId ? String(order.supplierId) : '', { shouldDirty: true });
+        setItems(groupPurchaseOrderItems(order.items ?? []));
+        setPurchaseOrderError('');
+      })
+      .catch(() => {
+        if (!ignore) toast.error('Không thể tải thông tin đơn mua hàng.');
+      });
+    return () => { ignore = true; };
+  }, [purchaseOrderId, setValue]);
 
   useEffect(() => {
     const warehouseId = selectedWarehouseId || '';
@@ -344,7 +419,7 @@ export default function StockReceiveCreatePage() {
     let ignore = false;
     const timer = window.setTimeout(() => {
       setLoadingWarehouseVariants(true);
-      inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false)
+      inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false, { warehouseId })
         .then((response) => {
           if (ignore) return;
           const data = getResponseData(response);
@@ -401,6 +476,10 @@ export default function StockReceiveCreatePage() {
 
   // ── Item handlers ─────────────────────────────────────────────────────────
   const openAddProducts = () => {
+    if (!purchaseOrderId) {
+      setPurchaseOrderError('Vui lòng chọn đơn mua hàng trước khi thêm sản phẩm.');
+      return;
+    }
     if (!selectedWarehouseId) {
       toast.error('Vui lòng chọn kho nhập trước khi thêm sản phẩm.');
       return;
@@ -472,8 +551,13 @@ export default function StockReceiveCreatePage() {
           const updated = [...prev];
           valid.forEach((p) => {
             const idx2 = updated.findIndex((it) => it.sku === p.sku);
-            if (idx2 >= 0) { updated[idx2] = { ...updated[idx2], quantity: p.quantity, unitPrice: p.unitPrice }; }
-            else updated.push({ variantId: p.id, sku: p.sku, productName: p.productName, variantName: p.name, quantity: p.quantity, unitPrice: p.unitPrice, salePrice: p.salePrice ?? 0, platforms: itemPlatforms(p), channelNames: uniqueValues(p.channelNames ?? [p.channelName]), mergedVariantCount: p.mergedVariantCount ?? 1 });
+            if (idx2 >= 0) {
+              if (!updated[idx2].fromPurchaseOrder) {
+                updated[idx2] = { ...updated[idx2], quantity: p.quantity, unitPrice: p.unitPrice };
+              }
+              return;
+            }
+            updated.push({ variantId: p.id, variantIds: uniqueValues(p.variantIds ?? [p.id]), sku: p.sku, productName: p.productName, variantName: p.name, quantity: p.quantity, unitPrice: p.unitPrice, salePrice: p.salePrice ?? 0, platforms: itemPlatforms(p), channelNames: uniqueValues(p.channelNames ?? [p.channelName]), mergedVariantCount: p.mergedVariantCount ?? 1, fromPurchaseOrder: false });
           });
           return updated;
         });
@@ -484,18 +568,42 @@ export default function StockReceiveCreatePage() {
   };
 
   const onSubmit = handleSubmit(async (data) => {
+    if (!purchaseOrderId) {
+      setPurchaseOrderError('Đơn mua hàng là bắt buộc.');
+      toast.error('Vui lòng chọn đơn mua hàng.');
+      return;
+    }
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
     const invalidQty = items.find((it) => !it.quantity || Number(it.quantity) <= 0);
     if (invalidQty) { toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`); return; }
     const invalidPrice = items.find((it) => { const price = Number(it.unitPrice); return it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || isNaN(price) || price < 0; });
     if (invalidPrice) { toast.error(`Đơn giá của sản phẩm "${invalidPrice.productName}" phải lớn hơn hoặc bằng 0.`); return; }
     try {
-      await stockReceiveService.createReceipt({
+      const response = await stockReceiveService.createReceipt({
+        purchaseOrderId: purchaseOrderId || null,
         warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
         receivedAt: data.receivedAt, notes: data.notes || null,
-        items: items.map((it) => ({ variantId: it.variantId, quantity: Number(it.quantity), unitCost: Number(it.unitPrice) })), isDraft: false,
+        items: expandReceiptItems(items), isDraft: false,
       });
       toast.success('Tạo phiếu nhập thành công.');
+      const receipt = getResponseData(response);
+      if (receipt.marketplaceSyncAvailable) {
+        const platforms = (receipt.marketplacePlatforms ?? []).map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
+        const shouldSync = await confirm({
+          title: 'Đồng bộ tồn kho lên sàn?',
+          message: `Tồn kho đã được cập nhật. Đồng bộ số lượng mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
+          confirmLabel: 'Đồng bộ ngay',
+          cancelLabel: 'Để sau',
+        });
+        if (shouldSync) {
+          try {
+            await stockReceiveService.syncReceiptMarketplaceInventory(receipt.id);
+            toast.success('Đã đồng bộ tồn kho lên các sàn liên quan.');
+          } catch (syncError) {
+            toast.error(syncError?.response?.data?.message || 'Nhập kho thành công nhưng đồng bộ sàn thất bại.');
+          }
+        }
+      }
       runWithoutGuard(() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS));
     } catch (error) {
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') {
@@ -507,12 +615,18 @@ export default function StockReceiveCreatePage() {
   });
 
   const onSaveDraft = handleSubmit(async (data) => {
+    if (!purchaseOrderId) {
+      setPurchaseOrderError('Đơn mua hàng là bắt buộc.');
+      toast.error('Vui lòng chọn đơn mua hàng.');
+      return;
+    }
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
     try {
       await stockReceiveService.createReceipt({
+        purchaseOrderId: purchaseOrderId || null,
         warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
         receivedAt: data.receivedAt, notes: data.notes || null,
-        items: items.map((it) => ({ variantId: it.variantId, quantity: it.quantity ? Number(it.quantity) : null, unitCost: it.unitPrice !== '' && it.unitPrice !== null && it.unitPrice !== undefined ? Number(it.unitPrice) : null })), isDraft: true,
+        items: expandReceiptItems(items), isDraft: true,
       });
       toast.success('Lưu tạm phiếu nhập thành công.');
       runWithoutGuard(() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS));
@@ -528,7 +642,7 @@ export default function StockReceiveCreatePage() {
   const today = new Date().toISOString().split('T')[0];
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
 
       {/* Page Header */}
       <div className={styles.pageHeader}>
@@ -558,10 +672,33 @@ export default function StockReceiveCreatePage() {
                 <div className={styles.sectionTitle}>Thông tin phiếu nhập</div>
               </div>
             </div>
+            <div style={{ marginBottom: 14 }}>
+              <label className={styles.fieldLabel}>Đơn mua hàng <span>*</span></label>
+              <select
+                value={purchaseOrderId}
+                onChange={(event) => {
+                  setPurchaseOrderId(event.target.value);
+                  setPurchaseOrderError(event.target.value ? '' : 'Đơn mua hàng là bắt buộc.');
+                  if (!event.target.value) setItems([]);
+                }}
+                className={`${styles.fieldSelect} ${purchaseOrderError ? styles.fieldError : ''}`}
+                aria-invalid={Boolean(purchaseOrderError)}
+                aria-describedby={purchaseOrderError ? 'purchase-order-error' : undefined}
+              >
+                <option value="">Chọn đơn mua hàng đang nhập</option>
+                {receivingPurchaseOrders.map((order) => (
+                  <option key={order.id} value={order.id}>{order.orderCode} — {order.supplierName}</option>
+                ))}
+              </select>
+              {purchaseOrderError && <p id="purchase-order-error" className={styles.fieldErrorMsg} role="alert">{purchaseOrderError}</p>}
+              <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 11.5 }}>
+                Chỉ hiển thị đơn đang nhập hàng. Sản phẩm trong đơn được điền tự động và bạn vẫn có thể thêm sản phẩm khác.
+              </p>
+            </div>
             <div className={`${styles.formGrid} ${styles.formGrid2}`} style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
               <div>
                 <label className={styles.fieldLabel}>Kho nhập <span>*</span></label>
-                <select {...register('warehouseId')} className={`${styles.fieldSelect} ${errors.warehouseId ? styles.fieldError : ''}`}>
+                <select {...register('warehouseId')} aria-disabled={!!purchaseOrderId} style={purchaseOrderId ? { pointerEvents: 'none', background: '#f8fafc' } : undefined} className={`${styles.fieldSelect} ${errors.warehouseId ? styles.fieldError : ''}`}>
                   {warehouses.length === 0 && <option value="">Chọn kho</option>}
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}{w.address ? ` — ${w.address}` : ''}</option>)}
                 </select>
@@ -569,7 +706,7 @@ export default function StockReceiveCreatePage() {
               </div>
               <div>
                 <label className={styles.fieldLabel}>Nhà cung cấp</label>
-                <select {...register('supplierId')} className={styles.fieldSelect}>
+                <select {...register('supplierId')} aria-disabled={!!purchaseOrderId} style={purchaseOrderId ? { pointerEvents: 'none', background: '#f8fafc' } : undefined} className={styles.fieldSelect}>
                   <option value="">Chọn nhà cung cấp</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
@@ -600,11 +737,11 @@ export default function StockReceiveCreatePage() {
                 </div>
               </div>
               <div className={styles.tableCardActions}>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!selectedWarehouseId || loadingWarehouseVariants}>
+                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
                   <FileSpreadsheet className={styles.importIcon} /> Import Excel
                 </button>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcel} />
-                <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!selectedWarehouseId || loadingWarehouseVariants}>
+                <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
                   {loadingWarehouseVariants ? <Loader2 className={styles.primaryIcon} /> : <Plus className={styles.primaryIcon} />} Thêm sản phẩm
                 </button>
               </div>
@@ -641,15 +778,17 @@ export default function StockReceiveCreatePage() {
                           <td>
                             <div style={{ fontWeight: 600, fontSize: 12 }}>{item.productName}</div>
                             {item.variantName && <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.variantName}</div>}
-                            {itemPlatforms(item).length > 0 && <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{formatPlatforms(item)}</div>}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                              {renderPlatformBadges(item)}
+                            </div>
                           </td>
                           <td><span className={styles.skuTag} style={{ background: '#e0f2fe', color: '#0369a1' }}>{item.sku}</span></td>
                           <td>
-                            <input type="number" min="1" step="1" value={item.quantity} onChange={(e) => onQtyChange(idx, e.target.value)}
+                            <input type="number" min="1" step="1" value={item.quantity} disabled={item.fromPurchaseOrder} onChange={(e) => onQtyChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${qtyBad ? styles.inputError : ''}`} />
                           </td>
                           <td>
-                            <input type="number" min="0" step="1000" value={item.unitPrice} onChange={(e) => onPriceChange(idx, e.target.value)}
+                            <input type="number" min="0" step="1000" value={item.unitPrice} disabled={item.fromPurchaseOrder} onChange={(e) => onPriceChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${priceBad ? styles.inputError : ''}`} />
                             {Number(item.salePrice) > 0 && (
                               <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
@@ -661,9 +800,9 @@ export default function StockReceiveCreatePage() {
                             {line > 0 ? formatVND(line) : '—'}
                           </td>
                           <td>
-                            <button className={styles.removeBtn} onClick={() => onRemove(idx)}>
+                            {!item.fromPurchaseOrder && <button className={styles.removeBtn} onClick={() => onRemove(idx)} aria-label={`Xóa ${item.productName}`}>
                               <Trash2 size={13} />
-                            </button>
+                            </button>}
                           </td>
                         </tr>
                       );

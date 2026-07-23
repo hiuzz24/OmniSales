@@ -5,7 +5,7 @@ import {
   Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User, Tag, Database,
+  ChevronRight, User, Tag, Database, ShoppingBag,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -41,6 +41,7 @@ const NAV_ITEMS = [
       { name: 'Lịch sử thay đổi', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
     ],
   },
+  { name: 'Đơn mua hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
@@ -424,6 +425,14 @@ export default function MainLayout() {
                               } else {
                                 navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
                               }
+                              setNotifOpen(false);
+                            }
+                            if (n.entityType === 'PURCHASE') {
+                              navigate(ROUTES.PURCHASE_ORDERS);
+                              setNotifOpen(false);
+                            }
+                            if (n.entityType === 'RECEIPT' && n.entityId) {
+                              navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL.replace(':id', n.entityId));
                               setNotifOpen(false);
                             }
                             if (n.entityType === 'SYNC') {

@@ -4,6 +4,9 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
+import fu.osms.channel.entity.ChannelProductVariant;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.dto.request.StockDeliveryItemRequest;
@@ -41,7 +44,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -54,6 +59,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     private final InventoryIssueItemRepository inventoryIssueItemRepository;
     private final WarehouseRepository warehouseRepository;
     private final ProductVariantRepository productVariantRepository;
+    private final ChannelProductVariantRepository channelProductVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final UserRepository userRepository;
@@ -338,9 +344,9 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                 .filter(item -> item.getVariant().getId().equals(productVariant.getId()))
                 .findFirst()
                 .orElse(sharedInventoryItems.get(0));
-        BigDecimal unitCost = representativeInventoryItem.getAverageCost() != null
-                ? representativeInventoryItem.getAverageCost()
-                : BigDecimal.ZERO;
+        BigDecimal unitCost = ProductCostPolicy.initialCost(
+                representativeInventoryItem.getAverageCost(),
+                ProductCostPolicy.initialCost(productVariant.getCostPrice(), productVariant.getPrice()));
 
         return InventoryIssueItem.builder()
                 .productVariant(productVariant)
@@ -572,7 +578,9 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
                         .variant(productVariant)
                         .quantityOnHand(0)
                         .reservedQuantity(0)
-                        .averageCost(productVariant.getCostPrice() == null ? BigDecimal.ZERO : productVariant.getCostPrice())
+                        .averageCost(ProductCostPolicy.initialCost(
+                                productVariant.getCostPrice(),
+                                productVariant.getPrice()))
                         .build()));
         return inventoryItemRepository
                 .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
@@ -580,21 +588,37 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     }
 
     private List<ProductVariant> resolveSharedStockVariants(ProductVariant productVariant) {
-        String normalizedSku = normalizeSku(productVariant.getSku());
-        if (normalizedSku.isBlank()) {
+        Set<String> externalSkuKeys = externalSkuKeys(
+                channelProductVariantRepository.findActiveByVariantIdWithChannel(productVariant.getId()));
+        if (externalSkuKeys.size() != 1) {
             return List.of(productVariant);
         }
+
         Map<UUID, ProductVariant> variantsById = new LinkedHashMap<>();
         variantsById.put(productVariant.getId(), productVariant);
-        productVariantRepository.findActiveMarketplaceMappedSharingSkuWithVariantId(productVariant.getId())
-                .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
-        productVariantRepository.findActiveMarketplaceMappedByNormalizedSku(normalizedSku)
+        channelProductVariantRepository.findActiveByNormalizedExternalSkuInWithVariant(
+                        new ArrayList<>(externalSkuKeys)).stream()
+                .map(ChannelProductVariant::getVariant)
                 .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
         return new ArrayList<>(variantsById.values());
     }
 
     private String normalizeSku(String sku) {
-        return sku == null ? "" : sku.trim().toLowerCase();
+        return sku == null ? "" : sku.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Set<String> externalSkuKeys(List<ChannelProductVariant> mappings) {
+        if (mappings == null || mappings.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> keys = new LinkedHashSet<>();
+        for (ChannelProductVariant mapping : mappings) {
+            String key = normalizeSku(mapping.getExternalSku());
+            if (!key.isBlank()) {
+                keys.add(key);
+            }
+        }
+        return keys;
     }
 
     private int quantityOnHand(InventoryItem inventoryItem) {

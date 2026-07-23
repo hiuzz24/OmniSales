@@ -441,28 +441,30 @@ const UserListPage = () => {
   const currentPermissions = ROLE_PERMISSIONS[formRole] || [];
 
   return (
-    <div className={styles.container}>
-      <PageHeader
-        title="Quản lý nhân sự"
-        subtitle="Quản lý tài khoản nội bộ, phân quyền và trạng thái trong tenant"
-        icon={() => <Users size={20} />}
-        actions={
-          <div className={styles.headerActions}>
-            <button className={styles.btnExport} onClick={handleExportUsers}>
-              <Download size={18} />
-              Xuất danh sách
-            </button>
-            <button className={styles.btnInvite} onClick={handleOpenInvite}>
-              <Mail size={18} />
-              Mời thành viên
-            </button>
-            <button className={styles.btnCreate} onClick={() => handleOpenDrawer('create')}>
-              <Plus size={18} />
-              Thêm User mới
-            </button>
-          </div>
-        }
-      />
+    <div className={styles.page}>
+      <div className={styles.pageHeader}>
+        <PageHeader
+          title="Quản lý nhân sự"
+          subtitle="Quản lý tài khoản nội bộ, phân quyền và trạng thái trong tenant"
+          icon={() => <Users size={20} />}
+          actions={
+            <div className={styles.headerActions}>
+              <button className={styles.btnExport} onClick={handleExportUsers}>
+                <Download size={18} />
+                Xuất danh sách
+              </button>
+              <button className={styles.btnInvite} onClick={handleOpenInvite}>
+                <Mail size={18} />
+                Mời thành viên
+              </button>
+              <button className={styles.btnCreate} onClick={() => handleOpenDrawer('create')}>
+                <Plus size={18} />
+                Thêm User mới
+              </button>
+            </div>
+          }
+        />
+      </div>
 
       {/* ── Stats Grid ── */}
       <div className={styles.statsGrid}>

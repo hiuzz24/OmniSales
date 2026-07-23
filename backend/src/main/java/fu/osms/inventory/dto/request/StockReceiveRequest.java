@@ -18,12 +18,13 @@ import java.util.UUID;
 @Builder
 public class StockReceiveRequest {
 
-    @NotNull(message = "Shop ID must not be null")
-
     @NotNull(message = "Warehouse ID must not be null")
     private UUID warehouseId;
 
     private UUID supplierId;
+
+    @NotNull(message = "Đơn mua hàng là bắt buộc")
+    private UUID purchaseOrderId;
 
     @Size(max = 100)
     private String receiptCode;

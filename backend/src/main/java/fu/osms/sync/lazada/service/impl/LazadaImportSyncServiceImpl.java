@@ -13,6 +13,7 @@ import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
@@ -51,6 +52,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -246,9 +250,12 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             params.put("offset", String.valueOf(offset));
             params.put("options", "1");
             if (changedSince != null) {
-                String sinceEpochMillis = String.valueOf(changedSince.toInstant().toEpochMilli());
-                params.put("created_time", sinceEpochMillis);
-                params.put("updated_time", sinceEpochMillis);
+                String lazadaIsoDate = changedSince.truncatedTo(ChronoUnit.SECONDS)
+                        .withOffsetSameInstant(ZoneOffset.ofHours(-7))
+                        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ"));
+
+                params.put("create_after", lazadaIsoDate);
+                params.put("update_after", lazadaIsoDate);
             }
 
             log.info("[LazadaImportSync] Calling /products/get channelId={}, filter={}, offset={}, limit={}, created_time={}, updated_time={}",
@@ -256,8 +263,8 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                     filter == null ? "<none>" : filter,
                     offset,
                     PRODUCT_PAGE_SIZE,
-                    params.get("created_time"),
-                    params.get("updated_time"));
+                    params.get("create_after"),
+                    params.get("update_after"));
             JsonNode root = fetchProductPageWithRetry(credential, params, filter, offset);
 
             List<JsonNode> pageProducts = toList(firstExisting(root,
@@ -288,6 +295,8 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             if (totalProducts >= 0 ? offset >= totalProducts : pageProducts.size() < PRODUCT_PAGE_SIZE) {
                 break;
             }
+
+            sleepBeforeRetry(500L);
         }
     }
 
@@ -341,7 +350,9 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 || message.contains("internal error")
                 || message.contains("timeout")
                 || message.contains("temporarily")
-                || message.contains("failed to execute request to lazada");
+                || message.contains("failed to execute request to lazada")
+                || message.contains("frequency exceeds the limit")
+                || message.contains("system.limit");
     }
 
     private void sleepBeforeRetry(long delayMs) {
@@ -545,7 +556,10 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         String variantName = firstNonBlank(resolveVariantName(skuNode), product.getName());
         variant.setName(variantName);
         variant.setBarcode(firstText(skuNode, "barcode", "BarCode", "bar_code"));
-        variant.setPrice(firstDecimal(skuNode, "price", "special_price", "sale_price", "salePrice"));
+        if (!shouldPreserveLocalPrice(channelProduct, externalVariantId) || variant.getPrice() == null) {
+            variant.setPrice(firstDecimal(skuNode, "price", "special_price", "sale_price", "salePrice"));
+        }
+        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
         variant.setIsActive(true);
         variant.setOptionValues(resolveOptionValues(skuNode, variantName, product.getName()));
         variant.setWeightGrams(firstInteger(skuNode, "package_weight", "packageWeight", "weight"));
@@ -692,11 +706,21 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 "sellerSKU"
         ), variant.getSku()));
         channelVariant.setExternalPrice(firstDecimal(skuNode, "price", "special_price", "sale_price"));
-        channelVariant.setSyncStatus(SyncStatus.SYNCED);
-        channelVariant.setLastSyncedAt(OffsetDateTime.now());
+        if (channelVariant.getSyncStatus() != SyncStatus.OUT_OF_SYNC) {
+            channelVariant.setSyncStatus(SyncStatus.SYNCED);
+            channelVariant.setLastSyncedAt(OffsetDateTime.now());
+        }
         channelVariant.setMetadata(toMap(skuNode));
         applyExternalVariantId(channelProduct, channelVariant, externalVariantId);
         channelProductVariantRepository.save(channelVariant);
+    }
+
+    private boolean shouldPreserveLocalPrice(ChannelProduct channelProduct, String externalVariantId) {
+        return channelProductVariantRepository
+                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
+                .map(ChannelProductVariant::getSyncStatus)
+                .filter(SyncStatus.OUT_OF_SYNC::equals)
+                .isPresent();
     }
 
     private ChannelProductVariant resolveChannelVariantMapping(ChannelProduct channelProduct,
@@ -973,10 +997,13 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         Warehouse warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(name)
                 .orElseGet(Warehouse::new);
         warehouse.setName(name);
-        warehouse.setAddress(withWarehouseCodeMarker(
+        String importedAddress = withWarehouseCodeMarker(
                 firstText(warehouseNode, "detailAddress", "address", "warehouse_address"),
                 externalWarehouseId
-        ));
+        );
+        if (importedAddress != null && !importedAddress.isBlank()) {
+            warehouse.setAddress(importedAddress);
+        }
         String status = firstText(warehouseNode, "status");
         warehouse.setIsActive(status == null || status.equalsIgnoreCase("ACTIVE"));
         warehouseRepository.save(warehouse);
@@ -1134,6 +1161,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         int quantityAfter = Math.max(quantityOnHand, 0);
         item.setQuantityOnHand(quantityAfter);
         item.setReservedQuantity(Math.max(reservedQuantity, 0));
+        item.setAverageCost(ProductCostPolicy.initialCost(item.getAverageCost(), variant.getCostPrice()));
         if (item.getLowStockThreshold() == null) {
             item.setLowStockThreshold(variant.getProduct().getLowStockThreshold());
         }

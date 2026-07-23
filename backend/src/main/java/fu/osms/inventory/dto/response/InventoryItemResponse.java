@@ -33,11 +33,16 @@ public class InventoryItemResponse {
     private List<UUID> channelIds;
     private List<String> channelNames;
     private List<PlatformType> platforms;
+    private BigDecimal unitPrice;
+    private BigDecimal salePrice;
+    private BigDecimal currentSalePrice;
     private Integer mergedInventoryItemCount;
     private Integer mergedVariantCount;
     private Integer quantityOnHand;
     private Integer reservedQuantity;
     private Integer availableQuantity;
+    private Integer incomingQuantity;
+    private Integer outgoingQuantity;
     private BigDecimal averageCost;
     private BigDecimal price;
     private Integer lowStockThreshold;

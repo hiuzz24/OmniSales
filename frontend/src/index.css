@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./shared/styles/productWorkspace.css";
 
 :root {
   --color-primary: #004bca;

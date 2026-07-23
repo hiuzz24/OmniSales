@@ -85,6 +85,8 @@ DECLARE
         'inventory_issues',
         'inventory_receipt_items',
         'inventory_receipts',
+        'purchase_order_items',
+        'purchase_orders',
         'inventory_transactions',
         'inventory_items',
 

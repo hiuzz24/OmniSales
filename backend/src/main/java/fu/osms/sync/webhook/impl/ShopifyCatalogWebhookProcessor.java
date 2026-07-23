@@ -4,6 +4,7 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductRepository;
@@ -197,7 +198,9 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         mapping.setChannelProduct(channelProduct);
         mapping.setVariant(savedVariant);
         applyExternalVariantId(channelProduct, mapping, externalVariantId);
-        mapping.setExternalSku(variant.getSku());
+        String externalSku = usableSku(WebhookPayloadUtils.text(
+                WebhookPayloadUtils.firstPresent(variantPayload, "sku")));
+        mapping.setExternalSku(firstNonBlank(externalSku, mapping.getExternalSku(), variant.getSku()));
         mapping.setExternalPrice(variant.getPrice());
         mapping.setSyncStatus(SyncStatus.SYNCED);
         mapping.setLastSyncedAt(OffsetDateTime.now());
@@ -271,6 +274,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         if (price != null) {
             variant.setPrice(WebhookPayloadUtils.decimal(price));
         }
+        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
         Integer weight = WebhookPayloadUtils.integer(WebhookPayloadUtils.firstPresent(variantPayload, "grams", "weight"), 0);
         if (weight != null && weight > 0) {
             variant.setWeightGrams(weight);
@@ -287,7 +291,9 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
                         .warehouse(warehouse)
                         .variant(variant)
                         .lowStockThreshold(variant.getProduct().getLowStockThreshold())
-                        .averageCost(BigDecimal.ZERO)
+                        .averageCost(ProductCostPolicy.initialCost(
+                                variant.getCostPrice(),
+                                variant.getPrice()))
                         .build());
 
         int before = safeInt(item.getQuantityOnHand());
@@ -295,9 +301,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         int reserved = Math.min(Math.max(safeInt(item.getReservedQuantity()), 0), after);
         item.setQuantityOnHand(after);
         item.setReservedQuantity(reserved);
-        if (item.getAverageCost() == null) {
-            item.setAverageCost(BigDecimal.ZERO);
-        }
+        item.setAverageCost(ProductCostPolicy.initialCost(item.getAverageCost(), variant.getCostPrice()));
         inventoryItemRepository.save(item);
 
         int delta = after - before;

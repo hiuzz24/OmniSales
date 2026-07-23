@@ -22,16 +22,17 @@ public class SupplierController {
     private final SupplierService supplierService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS', 'SALES')")
     public ResponseEntity<ApiResponse<PageResponse<SupplierResponse>>> getAll(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        PageResponse<SupplierResponse> suppliers = supplierService.getAll(page, size);
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "") String keyword) {
+        PageResponse<SupplierResponse> suppliers = supplierService.searchActive(keyword, page, size);
         return ResponseEntity.ok(ApiResponse.success(suppliers));
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS', 'SALES')")
     public ResponseEntity<ApiResponse<SupplierResponse>> create(
             @Valid @RequestBody SupplierRequest request) {
 

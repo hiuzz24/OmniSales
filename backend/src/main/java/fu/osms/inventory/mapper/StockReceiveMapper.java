@@ -15,6 +15,7 @@ public interface StockReceiveMapper {
 
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "supplier", ignore = true)
+    @Mapping(target = "purchaseOrder", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "totalCost", ignore = true)
     @Mapping(target = "receivedAt", ignore = true)
@@ -29,11 +30,15 @@ public interface StockReceiveMapper {
     @Mapping(target = "warehouseName", source = "warehouse.name")
     @Mapping(target = "supplierId", source = "supplier.id")
     @Mapping(target = "supplierName", source = "supplier.name")
+    @Mapping(target = "purchaseOrderId", source = "purchaseOrder.id")
+    @Mapping(target = "purchaseOrderCode", source = "purchaseOrder.orderCode")
     @Mapping(target = "createdById", source = "createdBy.id")
     @Mapping(target = "createdByName", source = "createdBy.fullName")
     @Mapping(target = "approvedById", source = "approvedBy.id")
     @Mapping(target = "approvedByName", source = "approvedBy.fullName")
     @Mapping(target = "items", ignore = true)
+    @Mapping(target = "marketplacePlatforms", ignore = true)
+    @Mapping(target = "marketplaceSyncAvailable", ignore = true)
     StockReceiveResponse toResponse(InventoryReceipt receipt);
 
     @Mapping(target = "id", ignore = true)
@@ -47,7 +52,9 @@ public interface StockReceiveMapper {
     @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "productName", source = "variant.product.name")
     @Mapping(target = "sku", source = "variant.sku")
+    @Mapping(target = "marketplaceSku", ignore = true)
     @Mapping(target = "variantSku", source = "variant.sku")
     @Mapping(target = "variantName", source = "variant.name")
+    @Mapping(target = "platforms", ignore = true)
     StockReceiveItemResponse toItemResponse(InventoryReceiptItem item);
 }

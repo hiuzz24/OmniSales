@@ -80,7 +80,7 @@ const CustomerDetailPage = () => {
 
   if (loading) {
     return (
-      <div className={styles.page}>
+      <div className={`${styles.page} product-workspace`}>
         <div className={styles.pageHeader}>
           <button className={styles.backBtn} onClick={() => navigate(ROUTES.CUSTOMER_LIST)}>
             <ArrowLeft size={16} />
@@ -98,7 +98,7 @@ const CustomerDetailPage = () => {
 
   if (error || !customer) {
     return (
-      <div className={styles.page}>
+      <div className={`${styles.page} product-workspace`}>
         <div className={styles.pageHeader}>
           <button className={styles.backBtn} onClick={() => navigate(ROUTES.CUSTOMER_LIST)}>
             <ArrowLeft size={16} />
@@ -115,7 +115,7 @@ const CustomerDetailPage = () => {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       {/* Page Header */}
       <div className={styles.pageHeader}>
         <button className={styles.backBtn} onClick={() => navigate(ROUTES.CUSTOMER_LIST)}>
