@@ -77,6 +77,7 @@ public class InventoryTransactionServiceImpl implements InventoryTransactionServ
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Page<InventoryTransactionResponse> getInventoryLogs(UUID warehouseId, String productSearch, InvTxnType type, OffsetDateTime startDate, OffsetDateTime endDate, UUID performedById, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "performedAt"));
 

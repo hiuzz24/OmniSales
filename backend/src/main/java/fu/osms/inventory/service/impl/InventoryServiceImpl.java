@@ -378,6 +378,22 @@ public class InventoryServiceImpl implements InventoryService {
                 .max(OffsetDateTime::compareTo)
                 .orElse(first.getUpdatedAt());
 
+        String categoryName = group.stream()
+                .map(InventoryItemResponse::getCategoryName)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(first.getCategoryName());
+        UUID categoryId = group.stream()
+                .map(InventoryItemResponse::getCategoryId)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(first.getCategoryId());
+        BigDecimal price = group.stream()
+                .map(InventoryItemResponse::getPrice)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(first.getPrice());
+
         return InventoryItemResponse.builder()
                 .id(first.getId())
                 .warehouseId(group.stream().map(InventoryItemResponse::getWarehouseId).distinct().count() == 1
@@ -393,6 +409,9 @@ public class InventoryServiceImpl implements InventoryService {
                 .marketplaceSku(marketplaceSku)
                 .productName(firstNonBlank(first.getProductName(), first.getVariantName()))
                 .variantName(first.getVariantName())
+                .categoryId(categoryId)
+                .categoryName(categoryName)
+                .price(price)
                 .channelId(channelIds.size() == 1 ? channelIds.get(0) : null)
                 .channelName(channelNames.size() == 1 ? channelNames.get(0) : String.join(", ", channelNames))
                 .platform(platforms.size() == 1 ? platforms.get(0) : null)

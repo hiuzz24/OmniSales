@@ -25,6 +25,8 @@ public class InventoryItemResponse {
     private String marketplaceSku;
     private String productName;
     private String variantName;
+    private UUID categoryId;
+    private String categoryName;
     private UUID channelId;
     private String channelName;
     private PlatformType platform;
@@ -37,6 +39,7 @@ public class InventoryItemResponse {
     private Integer reservedQuantity;
     private Integer availableQuantity;
     private BigDecimal averageCost;
+    private BigDecimal price;
     private Integer lowStockThreshold;
     private Boolean isLowStock;
     private OffsetDateTime updatedAt;

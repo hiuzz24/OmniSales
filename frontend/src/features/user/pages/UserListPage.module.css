@@ -333,6 +333,16 @@
   color: #0369a1;
 }
 
+.expired {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.cancelled {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
 .roleBadge {
   display: inline-flex;
   align-items: center;
@@ -363,12 +373,13 @@
   border-color: #dbeafe;
 }
 
-/* ── Actions Cell ── */
 .actionsCell {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.actionsCell > button + button {
+  margin-left: 8px;
 }
 
 .btnActionView {

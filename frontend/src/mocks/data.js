@@ -141,17 +141,21 @@ export const MOCK_PRODUCTS = [
 export const MOCK_WAREHOUSES = [
   {
     id: 1,
+    code: 'HCM_MAIN',
     name: 'Kho chính HCM',
     address: '123 Nguyễn Trãi, Quận 1, TP.HCM',
     stock: 3250,
     capacity: 5000,
+    isActive: true,
   },
   {
     id: 2,
+    code: 'HN_SUB',
     name: 'Kho phụ Hà Nội',
     address: '456 Trần Duy Hưng, Cầu Giấy, HN',
     stock: 1800,
     capacity: 3000,
+    isActive: true,
   },
 ];
 

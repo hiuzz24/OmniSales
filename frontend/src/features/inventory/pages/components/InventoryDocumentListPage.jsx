@@ -99,6 +99,7 @@ export default function InventoryDocumentListPage({
   footerLeft,
   footerRight,
   pagination,
+  children,
 }) {
   return (
     <div style={pageStyle}>
@@ -179,108 +180,80 @@ export default function InventoryDocumentListPage({
         </div>
       )}
 
-      {/* â”€â”€ Filter Bar â”€â”€ */}
+      {/* ── Filter Bar ── */}
       <div style={filterBarStyle}>
         {filters}
       </div>
 
-      {/* â”€â”€ Table Card â”€â”€ */}
-      <div style={tableCardStyle}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', minWidth: minTableWidth, borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead>
-              <tr>
-                {columns.map((column) => (
-                  <th
-                    key={column.key ?? column.label}
-                    style={{
-                      padding: '13px 12px',
-                      textAlign: column.align ?? 'left',
-                      color: '#374151',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                      whiteSpace: 'nowrap',
-                      borderBottom: '1px solid #e5e7eb',
-                      background: '#f9fafb',
-                    }}
-                  >
-                    {column.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={colSpan ?? columns.length} style={emptyCellStyle}>Đang tải dữ liệu...</td></tr>
-              ) : rows?.length ? (
-                rows
-              ) : (
-                <tr><td colSpan={colSpan ?? columns.length} style={emptyCellStyle}>{emptyText}</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={footerStyle}>
-          <span>{footerLeft}</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            {footerRight}
+      {/* ── Table Card or Custom Children ── */}
+      {children ? (
+        children
+      ) : (
+        <div style={tableCardStyle}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', minWidth: minTableWidth, borderCollapse: 'collapse', fontSize: 14 }}>
+              <thead>
+                <tr>
+                  {columns.map((column) => (
+                    <th
+                      key={column.key ?? column.label}
+                      style={{
+                        padding: '13px 12px',
+                        textAlign: column.align ?? 'left',
+                        color: '#374151',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        whiteSpace: 'nowrap',
+                        borderBottom: '1px solid #e5e7eb',
+                        background: '#f9fafb',
+                      }}
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={colSpan ?? columns.length} style={emptyCellStyle}>Đang tải dữ liệu...</td></tr>
+                ) : rows?.length ? (
+                  rows
+                ) : (
+                  <tr><td colSpan={colSpan ?? columns.length} style={emptyCellStyle}>{emptyText}</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
 
-        {!loading && pagination && (
-          <Pagination
-            currentPage={pagination.page}
-            totalPages={pagination.totalPages}
-            totalElements={pagination.totalElements}
-            pageSize={pagination.pageSize ?? 10}
-            currentCount={rows?.length ?? 0}
-            itemLabel={pagination.itemLabel ?? 'phiếu'}
-            onPageChange={(nextPage) => {
-              if (pagination.onPageChange) {
-                pagination.onPageChange(nextPage);
-                return;
-              }
-              if (nextPage > pagination.page) pagination.onNext?.();
-              if (nextPage < pagination.page) pagination.onPrevious?.();
-            }}
-          />
-        )}
-        {pagination?.totalPages < 0 && (
-          <div style={paginationStyle}>
-            <span>{pagination.label}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                type="button"
-                disabled={pagination.page <= 0}
-                onClick={pagination.onPrevious}
-                style={{ ...paginationButtonStyle, opacity: pagination.page <= 0 ? 0.4 : 1, cursor: pagination.page <= 0 ? 'not-allowed' : 'pointer' }}
-              >
-                <ChevronLeft size={15} />
-                Trước
-              </button>
-              <span style={{ minWidth: 100, textAlign: 'center', color: '#111827', fontWeight: 700, fontSize: 13 }}>
-                Trang {pagination.page + 1} / {pagination.totalPages}
-              </span>
-              <button
-                type="button"
-                disabled={pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0}
-                onClick={pagination.onNext}
-                style={{
-                  ...paginationButtonStyle,
-                  opacity: pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0 ? 0.4 : 1,
-                  cursor: pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0 ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Sau
-                <ChevronRight size={15} />
-              </button>
+          <div style={footerStyle}>
+            <span>{footerLeft}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              {footerRight}
             </div>
           </div>
-        )}
-      </div>
+
+          {!loading && pagination && (
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              totalElements={pagination.totalElements}
+              pageSize={pagination.pageSize ?? 10}
+              currentCount={rows?.length ?? 0}
+              itemLabel={pagination.itemLabel ?? 'phiếu'}
+              onPageChange={(nextPage) => {
+                if (pagination.onPageChange) {
+                  pagination.onPageChange(nextPage);
+                  return;
+                }
+                if (nextPage > pagination.page) pagination.onNext?.();
+                if (nextPage < pagination.page) pagination.onPrevious?.();
+              }}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
