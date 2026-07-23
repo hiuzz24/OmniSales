@@ -206,7 +206,7 @@ const UserInviteListPage = () => {
                   <th>Thời gian gửi</th>
                   <th>Thời gian hết hạn</th>
                   <th>Trạng thái</th>
-                  <th style={{ textAlign: 'right' }}>Thao tác</th>
+                  <th style={{ textAlign: 'center' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>

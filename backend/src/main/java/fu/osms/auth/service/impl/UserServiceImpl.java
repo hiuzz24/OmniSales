@@ -84,19 +84,14 @@ public class UserServiceImpl implements UserService {
             userRoleRepository.save(userRole);
         }
 
-        UserResponse response = userMapper.toResponse(savedUser);
-        List<UserRole> roles = userRoleRepository.findByUserId(savedUser.getId());
-        if (!roles.isEmpty()) {
-            response.setRole(roles.get(0).getRole().getName());
-        }
-        return response;
+        return convertToUserResponse(savedUser);
     }
 
     @Override
     @Transactional(readOnly = true)
     public UserResponse getById(UUID id) {
         return userRepository.findById(id)
-                .map(userMapper::toResponse)
+                .map(this::convertToUserResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
 
@@ -104,7 +99,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public UserResponse getByEmail(String email) {
         return userRepository.findByEmail(email)
-                .map(userMapper::toResponse)
+                .map(this::convertToUserResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
 
@@ -113,14 +108,8 @@ public class UserServiceImpl implements UserService {
     public PageResponse<UserResponse> getAll(int page, int size) {
         Page<User> pageResult = userRepository.findAll(PageRequest.of(page, size));
         List<UserResponse> content = pageResult.getContent().stream()
-                .map(user -> {
-                    UserResponse res = userMapper.toResponse(user);
-                    List<UserRole> roles = userRoleRepository.findByUserId(user.getId());
-                    if (!roles.isEmpty()) {
-                        res.setRole(roles.get(0).getRole().getName());
-                    }
-                    return res;
-                }).toList();
+                .map(this::convertToUserResponse)
+                .toList();
         return PageResponse.<UserResponse>builder()
                 .content(content)
                 .page(page).size(size)
@@ -182,12 +171,7 @@ public class UserServiceImpl implements UserService {
             userRoleRepository.save(userRole);
         }
 
-        UserResponse response = userMapper.toResponse(savedUser);
-        List<UserRole> roles = userRoleRepository.findByUserId(savedUser.getId());
-        if (!roles.isEmpty()) {
-            response.setRole(roles.get(0).getRole().getName());
-        }
-        return response;
+        return convertToUserResponse(savedUser);
     }
 
     @Override
@@ -384,5 +368,36 @@ public class UserServiceImpl implements UserService {
         });
 
         log.info("Invitation cancelled for token ID: {}", tokenId);
+    }
+
+    private UserResponse convertToUserResponse(User user) {
+        UserResponse res = userMapper.toResponse(user);
+        List<UserRole> roles = userRoleRepository.findByUserId(user.getId());
+        if (!roles.isEmpty()) {
+            res.setRole(roles.get(0).getRole().getName());
+        }
+        
+        if (user.getStatus() == UserStatus.INACTIVE && "Chờ kích hoạt".equals(user.getFullName())) {
+            List<UserInviteToken> tokens = userInviteTokenRepository.findByEmailIgnoreCase(user.getEmail());
+            if (!tokens.isEmpty()) {
+                UserInviteToken latestToken = tokens.stream()
+                        .max((t1, t2) -> t1.getCreatedAt().compareTo(t2.getCreatedAt()))
+                        .orElse(null);
+                if (latestToken != null) {
+                    String tokenStatus = latestToken.getStatus();
+                    if (!"CANCELLED".equalsIgnoreCase(tokenStatus)) {
+                        if (latestToken.getUsedAt() != null) {
+                            tokenStatus = "ACCEPTED";
+                        } else if (latestToken.getExpiresAt().isBefore(java.time.OffsetDateTime.now())) {
+                            tokenStatus = "EXPIRED";
+                        } else {
+                            tokenStatus = "PENDING";
+                        }
+                    }
+                    res.setInviteStatus(tokenStatus);
+                }
+            }
+        }
+        return res;
     }
 }

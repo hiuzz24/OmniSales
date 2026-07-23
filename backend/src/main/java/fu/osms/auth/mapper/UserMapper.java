@@ -21,6 +21,7 @@ public interface UserMapper {
     User toEntity(UserRequest request);
 
     @Mapping(target = "role", ignore = true)
+    @Mapping(target = "inviteStatus", ignore = true)
     @Mapping(target = "createdAt", source = "createdAt")
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "warehouseName", source = "warehouse.name")

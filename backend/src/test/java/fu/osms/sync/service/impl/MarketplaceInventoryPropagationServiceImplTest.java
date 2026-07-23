@@ -44,7 +44,7 @@ class MarketplaceInventoryPropagationServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new MarketplaceInventoryPropagationServiceImpl(
+        service = git checkout -b new MarketplaceInventoryPropagationServiceImpl(
                 channelRepository,
                 credentialRepository,
                 warehouseConsistencyService,

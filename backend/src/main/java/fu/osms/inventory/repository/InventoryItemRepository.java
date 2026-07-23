@@ -83,6 +83,7 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
             "LEFT JOIN FETCH i.warehouse " +
             "LEFT JOIN FETCH i.variant v " +
             "LEFT JOIN FETCH v.product p " +
+            "LEFT JOIN FETCH p.category c " +
             "WHERE (:channelId IS NULL OR EXISTS (" +
             "    SELECT 1 FROM ChannelProductVariant cpv " +
             "    WHERE cpv.variant = v " +
@@ -207,4 +208,10 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
             "LEFT JOIN FETCH p.category c " +
             "WHERE i.id = :id")
     Optional<InventoryItem> findDetailById(@Param("id") UUID id);
+
+    @Query("SELECT COUNT(DISTINCT i.variant.id) FROM InventoryItem i WHERE i.warehouse.id = :warehouseId")
+    Integer countProductTypesByWarehouseId(@Param("warehouseId") UUID warehouseId);
+
+    @Query("SELECT COALESCE(SUM(i.quantityOnHand), 0) FROM InventoryItem i WHERE i.warehouse.id = :warehouseId")
+    Integer sumTotalStockByWarehouseId(@Param("warehouseId") UUID warehouseId);
 }

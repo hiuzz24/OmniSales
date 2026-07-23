@@ -17,6 +17,9 @@ public class WarehouseResponse {
     private String name;
     private String address;
     private Boolean isActive;
+    private Integer staffCount;
+    private Integer productCount;
+    private Integer totalStock;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

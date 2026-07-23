@@ -19,6 +19,7 @@ public class InventoryTransactionResponse {
     private String warehouseName;
     private UUID variantId;
     private String variantSku;
+    private String productName;
     private String variantName;
     private InvTxnType type;
     private String referenceType;
