@@ -20,6 +20,44 @@ import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
 const formatVND = (v) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v ?? 0);
 
+const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
+
+const groupReceiptItems = (receiptItems = []) => {
+  const groups = new Map();
+  receiptItems.forEach((item) => {
+    const groupKey = String(item.marketplaceSku || item.sku || item.variantSku || item.variantId)
+      .trim()
+      .toLowerCase();
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        groupKey,
+        variantId: item.variantId,
+        variantIds: [item.variantId],
+        sku: item.marketplaceSku || item.sku || item.variantSku,
+        productName: item.productName,
+        variantName: item.variantName || '',
+        quantity: item.quantity || 0,
+        unitPrice: item.unitCost ?? item.unitPrice ?? 0,
+        platforms: uniqueValues(item.platforms),
+      });
+      return;
+    }
+    const existing = groups.get(groupKey);
+    existing.variantIds = uniqueValues([...existing.variantIds, item.variantId]);
+    existing.platforms = uniqueValues([...existing.platforms, ...(item.platforms ?? [])]);
+  });
+  return [...groups.values()];
+};
+
+const expandReceiptItems = (items) => items.flatMap((item) =>
+  uniqueValues(item.variantIds?.length ? item.variantIds : [item.variantId]).map((variantId) => ({
+    variantId,
+    quantity: item.quantity ? Number(item.quantity) : null,
+    unitCost: item.unitPrice !== '' && item.unitPrice !== null && item.unitPrice !== undefined
+      ? Number(item.unitPrice)
+      : null,
+  })));
+
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
   warehouseId: z.string().min(1, 'Vui lòng chọn kho nhập.'),
@@ -162,17 +200,7 @@ export default function StockReceiveEditPage() {
   const hasUnsavedChanges = Boolean(receipt);
   const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
-  useEffect(() => {
-    if (!id) {
-      toast.error('ID phiếu nhập không hợp lệ');
-      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
-      return;
-    }
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  const fetchData = async () => {
+  async function fetchData() {
     setLoading(true);
     try {
       const [receiptRes, wRes, sRes] = await Promise.all([
@@ -201,14 +229,7 @@ export default function StockReceiveEditPage() {
       setValue('notes', receiptData.notes || '');
       
       // Set items
-      setItems((receiptData.items || []).map(item => ({
-        variantId: item.variantId,
-        sku: item.sku ?? item.variantSku,
-        productName: item.productName,
-        variantName: item.variantName || '',
-        quantity: item.quantity || 0,
-        unitPrice: item.unitCost ?? item.unitPrice ?? 0,
-      })));
+      setItems(groupReceiptItems(receiptData.items || []));
       
       // Extract data from responses
       const extractData = (r) => {
@@ -230,7 +251,19 @@ export default function StockReceiveEditPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (!id) {
+      toast.error('ID phiếu nhập không hợp lệ');
+      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
+      return;
+    }
+    // Loading data is the external synchronization performed by this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // ── Item handlers ─────────────────────────────────────────────────────────
   const onQtyChange   = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
@@ -238,16 +271,19 @@ export default function StockReceiveEditPage() {
   const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
   const onAddProduct = (item) => {
     setItems((current) => {
-      if (current.some((entry) => entry.variantId === item.id)) return current;
+      if (current.some((entry) => (entry.variantIds ?? [entry.variantId]).includes(item.id))) return current;
       return [
         ...current,
         {
+          groupKey: `variant:${item.id}`,
           variantId: item.id,
+          variantIds: [item.id],
           sku: item.sku,
           productName: item.productName,
           variantName: item.name || '',
           quantity: 1,
           unitPrice: item.costPrice ?? item.price ?? 0,
+          platforms: [],
         },
       ];
     });
@@ -264,14 +300,11 @@ export default function StockReceiveEditPage() {
       await stockReceiveService.updateReceipt(id, {
         warehouseId: data.warehouseId,
         supplierId: data.supplierId || null,
+        purchaseOrderId: receipt.purchaseOrderId,
         invoiceNumber: receipt.receiptCode || null,
         receivedAt: data.receivedAt,
         notes: data.notes || null,
-        items: items.map((it) => ({ 
-          variantId: it.variantId, 
-          quantity: it.quantity ? Number(it.quantity) : null, 
-          unitCost: it.unitPrice !== '' && it.unitPrice !== null && it.unitPrice !== undefined ? Number(it.unitPrice) : null 
-        })),
+        items: expandReceiptItems(items),
         isDraft: true,
       });
       toast.success('Cập nhật phiếu nhập thành công.');
@@ -308,7 +341,7 @@ export default function StockReceiveEditPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="product-workspace product-workspace--flow" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -362,13 +395,18 @@ export default function StockReceiveEditPage() {
                   const priceBad = item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined || Number(item.unitPrice) < 0;
                   const line = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
                   return (
-                    <tr key={item.variantId ?? idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={item.groupKey ?? item.variantId ?? idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '10px 12px' }}>
                         <div style={{ fontWeight: 500, color: '#0f172a', fontSize: 12 }}>{item.productName}</div>
                         {item.variantName && <div style={{ fontSize: 10, color: '#94a3b8' }}>{item.variantName}</div>}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{ fontSize: 10, fontFamily: 'monospace', backgroundColor: '#f1f5f9', color: '#64748b', padding: '2px 6px', borderRadius: 4 }}>{item.sku}</span>
+                        {item.platforms?.length > 0 && (
+                          <span style={{ display: 'block', marginTop: 4, fontSize: 10, color: '#64748b' }}>
+                            {item.platforms.join(' · ')}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '10px 12px', width: 100 }}>
                         <input type="number" min="0" step="1" value={item.quantity} onChange={(e) => onQtyChange(idx, e.target.value)}
@@ -489,7 +527,7 @@ export default function StockReceiveEditPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onAdd={onAddProduct}
-        existingVariantIds={items.map((item) => item.variantId)}
+        existingVariantIds={items.flatMap((item) => item.variantIds ?? [item.variantId])}
       />
       {ConfirmDialog}
     </div>

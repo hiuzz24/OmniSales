@@ -6,6 +6,7 @@ import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
+import fu.osms.common.enums.SyncStatus;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.repository.InventoryIssueRepository;
@@ -261,6 +262,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
 
         OffsetDateTime syncedAt = OffsetDateTime.now();
         for (ChannelProductVariant mapping : batchMappings) {
+            mapping.setSyncStatus(SyncStatus.SYNCED);
             mapping.setLastSyncedAt(syncedAt);
             channelProductVariantRepository.save(mapping);
         }
@@ -288,9 +290,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                                 "warehouseId", String.valueOf(item.getWarehouse().getId()),
                                 "warehouseName", item.getWarehouse().getName(),
                                 "warehouseCode", String.valueOf(resolveWarehouseCode(item.getWarehouse(), defaultWarehouseId, defaultWarehouseCode)),
-                                "quantityOnHand", item.getQuantityOnHand() == null ? 0 : item.getQuantityOnHand(),
-                                "reservedQuantity", item.getReservedQuantity() == null ? 0 : item.getReservedQuantity(),
-                                "sellableQuantity", availableQuantity(item)
+                                "availableQuantity", availableQuantity(item)
                         ))
                         .toList()
         );
@@ -435,9 +435,10 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
     }
 
     private int availableQuantity(InventoryItem inventoryItem) {
-        int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        int reservedQuantity = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-        return Math.max(quantityOnHand - reservedQuantity, 0);
+        if (inventoryItem.getAvailableQuantity() != null) {
+            return Math.max(inventoryItem.getAvailableQuantity(), 0);
+        }
+        return 0;
     }
 
     private Long tokenExpiresAt(ChannelCredential credential) {

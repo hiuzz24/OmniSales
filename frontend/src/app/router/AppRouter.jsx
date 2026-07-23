@@ -60,6 +60,8 @@ import WarehouseDetailPage from '../../features/inventory/pages/WarehouseDetailP
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 import NotificationListPage from '../../features/user/pages/NotificationListPage';
+import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
+import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
 
 const AppRouter = () => {
   return (
@@ -113,6 +115,14 @@ const AppRouter = () => {
               <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
               <Route path={ROUTES.STOCKTAKES} element={<StocktakePage />} />
               <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
+              <Route path={ROUTES.PURCHASE_ORDER_CREATE} element={<PurchaseOrderCreatePage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS]} />}>
+              <Route path={ROUTES.PURCHASE_ORDERS} element={<PurchaseOrderPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN]} />}>

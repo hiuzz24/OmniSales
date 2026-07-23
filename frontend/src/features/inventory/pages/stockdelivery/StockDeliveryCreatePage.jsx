@@ -506,7 +506,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
       const savedResponse = isEdit ? await stockDeliveryService.updateStockDelivery(id, payload) : await stockDeliveryService.createStockDelivery(payload);
       const savedDelivery = getResponseData(savedResponse);
       if (submitAction === 'complete') { await stockDeliveryService.confirmStockDelivery(savedDelivery.id); toast.success('Hoàn thành phiếu xuất kho thành công.'); }
-      else { toast.success(isEdit ? 'Cập nhật phiếu xuất kho thành công.' : 'Lưu tạm phiếu xuất kho thành công.'); }
+      else { toast.success(isEdit ? 'Cập nhật phiếu xuất kho thành công.' : 'Đã tạo phiếu xuất kho ở trạng thái Đang xử lý.'); }
       runWithoutGuard(() => navigate(ROUTES.STOCK_DELIVERIES));
     } catch (error) {
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') { toast.error(Object.values(error.response.data.data)[0] || 'Có lỗi xảy ra.'); }
@@ -519,7 +519,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
 
       {/* Page Header */}
       <div className={styles.pageHeader}>
@@ -689,7 +689,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
           <div className={`${styles.card} ${styles.sidebarCard}`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button className={`${styles.actionBtn} ${styles.backBtn}`} onClick={() => navigate(ROUTES.STOCK_DELIVERIES)}><ArrowLeft size={14} /> Hủy</button>
-              <button className={`${styles.actionBtn} ${styles.tealBtn}`} onClick={submitDelivery('draft')} disabled={isSubmitting}><PackageMinus className={styles.tealIcon} />{isSubmitting ? 'Đang xử lý...' : 'Lưu tạm'}</button>
+              <button className={`${styles.actionBtn} ${styles.tealBtn}`} onClick={submitDelivery('draft')} disabled={isSubmitting}><PackageMinus className={styles.tealIcon} />{isSubmitting ? 'Đang xử lý...' : 'Lưu & xử lý'}</button>
               <button className={`${styles.actionBtn} ${styles.dangerBtn}`} onClick={submitDelivery('complete')} disabled={isSubmitting}><PackageMinus className={styles.dangerIcon} />{isSubmitting ? 'Đang xử lý...' : 'Hoàn thành xuất kho'}</button>
             </div>
           </div>
@@ -708,7 +708,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
               <span className={styles.noteTitle} style={{ color: '#92400e' }}>Lưu ý quan trọng</span>
             </div>
             <ul className={styles.noteList}>
-              {['Số lượng xuất phải nhỏ hơn hoặc bằng tồn kho khả dụng.', 'Kho xuất phải ở trạng thái hoạt động.', 'Sau khi xuất kho, số lượng tồn sẽ tự động giảm.', 'Lưu tạm để tiếp tục chỉnh sửa sau.'].map((note) => (
+              {['Số lượng xuất phải nhỏ hơn hoặc bằng tồn kho khả dụng.', 'Kho xuất phải ở trạng thái hoạt động.', 'Sau khi xuất kho, số lượng tồn sẽ tự động giảm.', 'Phiếu đang xử lý vẫn có thể tiếp tục chỉnh sửa.'].map((note) => (
                 <li key={note} className={styles.noteItem} style={{ color: '#78350f' }}>{note}</li>
               ))}
             </ul>

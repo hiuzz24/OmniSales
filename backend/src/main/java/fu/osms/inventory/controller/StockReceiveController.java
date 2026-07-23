@@ -71,6 +71,16 @@ public class StockReceiveController {
         ));
     }
 
+    @PostMapping("/{id}/sync-marketplace-inventory")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> syncReceiptMarketplaceInventory(@PathVariable UUID id) {
+        int syncedVariantCount = stockReceiveService.syncReceiptMarketplaceInventory(id);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đồng bộ tồn kho phiếu nhập lên các sàn đang bán thành công",
+                Map.of("syncedVariantCount", syncedVariantCount)
+        ));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<StockReceiveResponse>> getReceiptById(@PathVariable UUID id) {

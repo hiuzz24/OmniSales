@@ -146,8 +146,26 @@ const ActionMenu = ({ receipt, onComplete, onRefresh, confirm, onPrint }) => {
     if (!ok) return;
 
     try {
-      await onComplete(receipt.id);
+      const response = await onComplete(receipt.id);
       toast.success('Hoàn thành phiếu nhập thành công.');
+      const completedReceipt = getResponseData(response);
+      if (completedReceipt.marketplaceSyncAvailable) {
+        const platforms = (completedReceipt.marketplacePlatforms ?? []).join(', ');
+        const shouldSync = await confirm({
+          title: 'Đồng bộ tồn kho lên sàn?',
+          message: `Tồn kho đã được cập nhật. Đồng bộ số lượng mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
+          confirmLabel: 'Đồng bộ ngay',
+          cancelLabel: 'Để sau',
+        });
+        if (shouldSync) {
+          try {
+            await stockReceiveService.syncReceiptMarketplaceInventory(receipt.id);
+            toast.success('Đã đồng bộ tồn kho lên các sàn liên quan.');
+          } catch (syncError) {
+            toast.error(syncError?.response?.data?.message || 'Nhập kho thành công nhưng đồng bộ sàn thất bại.');
+          }
+        }
+      }
       onRefresh();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || 'Không thể hoàn thành phiếu nhập. Vui lòng thử lại.');

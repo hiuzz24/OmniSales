@@ -10,6 +10,7 @@ const stockReceiveService = {
   updateReceipt: (id, data) => axiosClient.put(`/receipts/${id}`, data),
   completeReceipt: (id) => axiosClient.patch(`/receipts/${id}/complete`),
   syncPendingMarketplaceInventory: () => axiosClient.post('/receipts/sync-marketplace-inventory'),
+  syncReceiptMarketplaceInventory: (id) => axiosClient.post(`/receipts/${id}/sync-marketplace-inventory`),
 };
 
 export default stockReceiveService;

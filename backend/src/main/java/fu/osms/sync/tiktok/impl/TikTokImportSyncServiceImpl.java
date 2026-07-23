@@ -5,6 +5,7 @@ import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
@@ -86,12 +87,11 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
 
         int productCount = 0;
         int variantCount = 0;
-        Set<String> externalWarehouseIds = new LinkedHashSet<>();
 
         try {
             Map<String, Map<String, Object>> warehousesById = loadWarehousesById(channelId, shopCipher);
             Map<String, Warehouse> localWarehousesByExternalId = syncTikTokWarehouses(warehousesById);
-            externalWarehouseIds.addAll(localWarehousesByExternalId.keySet());
+            Set<String> externalWarehouseIds = new LinkedHashSet<>(localWarehousesByExternalId.keySet());
 
             UUID defaultWarehouseId = resolveDefaultWarehouseId(channel);
             boolean loadFullProductDetail = shouldLoadFullProductDetail(channel);
@@ -351,10 +351,14 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             ));
             variant.setOptionValues(Map.of("source", "TikTok Shop"));
         }
-        BigDecimal externalPrice = moneyAmount(detailSku.get("price"));
-        if (variant.getPrice() == null && externalPrice != null) {
-            variant.setPrice(externalPrice);
+
+        Object priceObject = detailSku.get("price");
+        if ((!shouldPreserveLocalPrice(channelProduct, externalSkuId) || variant.getPrice() == null)
+                && priceObject instanceof Map<?, ?> price) {
+            variant.setPrice(moneyAmount(price.get("tax_exclusive_price")));
         }
+
+        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
         variant.setIsActive(true);
         return productVariantRepository.save(variant);
     }
@@ -369,9 +373,17 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         mapping.setVariant(variant);
         applyExternalVariantId(channelProduct, mapping, externalSkuId);
         mapping.setExternalSku(firstNonBlank(stringValue(inventorySku.get("seller_sku")), variant.getSku()));
-        mapping.setExternalPrice(moneyAmount(detailSku.get("price")));
-        mapping.setSyncStatus(SyncStatus.SYNCED);
-        mapping.setLastSyncedAt(OffsetDateTime.now());
+        Object priceObject = detailSku.get("price");
+
+        if (priceObject instanceof Map<?, ?> price) {
+            mapping.setExternalPrice(
+                    moneyAmount(price.get("tax_exclusive_price"))
+            );
+        }
+        if (mapping.getSyncStatus() != SyncStatus.OUT_OF_SYNC) {
+            mapping.setSyncStatus(SyncStatus.SYNCED);
+            mapping.setLastSyncedAt(OffsetDateTime.now());
+        }
         Map<String, Object> metadata = mutableMap(mapping.getMetadata());
         List<String> warehouseIds = listOfMaps(inventorySku.get("warehouse_inventory")).stream()
                 .map(node -> stringValue(node.get("warehouse_id")))
@@ -382,6 +394,14 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         metadata.put("tiktokAvailableQuantity", intValue(inventorySku.get("total_available_quantity")));
         mapping.setMetadata(metadata);
         channelProductVariantRepository.save(mapping);
+    }
+
+    private boolean shouldPreserveLocalPrice(ChannelProduct channelProduct, String externalVariantId) {
+        return channelProductVariantRepository
+                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
+                .map(ChannelProductVariant::getSyncStatus)
+                .filter(SyncStatus.OUT_OF_SYNC::equals)
+                .isPresent();
     }
 
     private ChannelProductVariant resolveChannelVariantMapping(ChannelProduct channelProduct,
@@ -482,12 +502,29 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         InventoryItem item = inventoryItemRepository
                 .findByWarehouseIdAndVariantId(warehouse.getId(), variant.getId())
                 .orElseGet(InventoryItem::new);
+
+        int newTotalQuantity = Math.max(0, availableQuantity) + Math.max(0, committedQuantity);
+        int previousQuantity = item.getQuantityOnHand() == null ? 0 : item.getQuantityOnHand();
+        int incomingQuantity = Math.max(0, newTotalQuantity - previousQuantity);
+
         item.setWarehouse(warehouse);
         item.setVariant(variant);
-        item.setQuantityOnHand(Math.max(0, availableQuantity) + Math.max(0, committedQuantity));
+        item.setQuantityOnHand(newTotalQuantity);
         item.setReservedQuantity(Math.max(0, committedQuantity));
         item.setLowStockThreshold(item.getLowStockThreshold() == null ? 5 : item.getLowStockThreshold());
-        item.setAverageCost(item.getAverageCost() == null ? BigDecimal.ZERO : item.getAverageCost());
+
+        if (incomingQuantity > 0) {
+            BigDecimal newAvgCost = ProductCostPolicy.weightedAverageCost(
+                    BigDecimal.valueOf(previousQuantity),
+                    item.getAverageCost(),
+                    BigDecimal.valueOf(incomingQuantity),
+                    variant.getCostPrice()
+            );
+            item.setAverageCost(newAvgCost);
+        } else if (item.getAverageCost() == null) {
+            item.setAverageCost(ProductCostPolicy.initialCost(null, variant.getPrice()));
+        }
+
         inventoryItemRepository.save(item);
     }
 
@@ -497,10 +534,13 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         warehouse.setName("TikTok Shop - "
                 + firstNonBlank(stringValue(warehouseNode.get("name")), "Warehouse")
                 + " " + marker);
-        warehouse.setAddress(TikTokWarehouseAddressFormatter.format(
+        String importedAddress = TikTokWarehouseAddressFormatter.format(
                 map(warehouseNode.get("address")),
                 externalWarehouseId
-        ));
+        );
+        if (importedAddress != null && !importedAddress.isBlank()) {
+            warehouse.setAddress(importedAddress);
+        }
         warehouse.setIsActive(!"DISABLED".equalsIgnoreCase(stringValue(warehouseNode.get("effect_status"))));
         warehouse.setDeletedAt(null);
         return warehouseRepository.save(warehouse);

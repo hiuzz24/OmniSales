@@ -363,6 +363,11 @@ public class ProductServiceImpl implements ProductService {
         List<ProductVariant> existingVariants = productVariantRepository.findByProductIdAndDeletedAtIsNull(id);
         Map<UUID, ProductVariant> existingVariantMap = existingVariants.stream()
                 .collect(Collectors.toMap(ProductVariant::getId, v -> v));
+        Map<UUID, VariantSyncSnapshot> existingVariantSnapshots = existingVariants.stream()
+                .collect(Collectors.toMap(
+                        ProductVariant::getId,
+                        variant -> new VariantSyncSnapshot(variant.getSku(), variant.getPrice())
+                ));
 
         if (request.getVariants() != null && !request.getVariants().isEmpty()) {
             List<String> variantSkus = request.getVariants().stream()
@@ -478,6 +483,7 @@ public class ProductServiceImpl implements ProductService {
             }
 
             List<ProductVariant> savedVariantsList = productVariantRepository.saveAll(updatedVariants);
+            markChangedVariantsOutOfSync(savedVariantsList, existingVariantSnapshots);
 
             for (int i = 0; i < request.getVariants().size(); i++) {
                 ProductVariantRequest variantRequest = request.getVariants().get(i);
@@ -600,6 +606,40 @@ public class ProductServiceImpl implements ProductService {
             }
         }
         return result;
+    }
+
+    private void markChangedVariantsOutOfSync(List<ProductVariant> savedVariants,
+                                              Map<UUID, VariantSyncSnapshot> existingVariantSnapshots) {
+        List<UUID> changedVariantIds = savedVariants.stream()
+                .filter(variant -> variant.getId() != null)
+                .filter(variant -> {
+                    VariantSyncSnapshot existing = existingVariantSnapshots.get(variant.getId());
+                    if (existing == null) {
+                        return true;
+                    }
+                    return !Objects.equals(existing.sku(), variant.getSku())
+                            || !sameAmount(existing.price(), variant.getPrice());
+                })
+                .map(ProductVariant::getId)
+                .toList();
+        if (changedVariantIds.isEmpty()) {
+            return;
+        }
+
+        List<ChannelProductVariant> mappings =
+                channelProductVariantRepository.findActiveByVariantIdInWithChannel(changedVariantIds);
+        mappings.forEach(mapping -> mapping.setSyncStatus(SyncStatus.OUT_OF_SYNC));
+        channelProductVariantRepository.saveAll(mappings);
+    }
+
+    private boolean sameAmount(BigDecimal first, BigDecimal second) {
+        if (first == null || second == null) {
+            return first == second;
+        }
+        return first.compareTo(second) == 0;
+    }
+
+    private record VariantSyncSnapshot(String sku, BigDecimal price) {
     }
 
     @Override

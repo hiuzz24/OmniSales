@@ -4,6 +4,10 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
+import fu.osms.channel.entity.ChannelProductVariant;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
@@ -16,6 +20,12 @@ import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.mapper.StockReceiveMapper;
 import fu.osms.inventory.repository.*;
 import fu.osms.inventory.service.StockReceiveService;
+import fu.osms.notification.service.NotificationService;
+import fu.osms.purchase.entity.PurchaseOrder;
+import fu.osms.purchase.entity.PurchaseOrderItem;
+import fu.osms.purchase.enums.PurchaseOrderStatus;
+import fu.osms.purchase.repository.PurchaseOrderRepository;
+import fu.osms.purchase.service.PurchaseOrderService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
@@ -32,11 +42,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -53,24 +67,34 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     private final StockReceiveMapper receiptMapper;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PurchaseOrderService purchaseOrderService;
+    private final NotificationService notificationService;
+    private final ChannelProductVariantRepository channelProductVariantRepository;
 
     @Override
     @Transactional
     public StockReceiveResponse createReceipt(StockReceiveRequest request, UUID createdByUserId) {
-        // 1. Always use the shared marketplace warehouse.
-        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
-
-        // 2. Validate supplier (optional)
-        Supplier supplier = null;
-        if (request.getSupplierId() != null) {
-            supplier = supplierRepository.findById(request.getSupplierId())
-                    .orElseThrow(() -> new AppException(ErrorCode.SUPPLIER_NOT_FOUND));
+        if (request.getPurchaseOrderId() == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Đơn mua hàng là bắt buộc.");
         }
-
-        // 3. Validate items not empty (double-check)
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
+
+        PurchaseOrder purchaseOrder = purchaseOrderRepository.findByIdWithDetails(request.getPurchaseOrderId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn mua hàng."));
+        if (purchaseOrder.getStatus() != PurchaseOrderStatus.RECEIVING) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
+                    "Chỉ đơn ở trạng thái Đang giao hàng mới được tạo phiếu nhập kho.");
+        }
+        if (stockReceiveRepository.existsByPurchaseOrderId(purchaseOrder.getId())) {
+            throw new AppException(ErrorCode.CONFLICT, "Đơn mua hàng đã có phiếu nhập kho.");
+        }
+        validatePurchaseOrderItems(purchaseOrder, request.getItems());
+
+        Warehouse warehouse = purchaseOrder.getWarehouse();
+        Supplier supplier = purchaseOrder.getSupplier();
 
         // 4. Validate based on status (DRAFT vs CONFIRMED)
         boolean isDraft = Boolean.TRUE.equals(request.getIsDraft());
@@ -107,32 +131,14 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             }
         }
 
-        // 5. Validate no duplicate variantId
-        Set<UUID> variantIdSet = new HashSet<>();
-        for (StockReceiveItemRequest item : request.getItems()) {
-            if (!variantIdSet.add(item.getVariantId())) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED, "Duplicate variant in receipt items");
-            }
-        }
-
-        // 6. Load and validate each ProductVariant
-        List<ProductVariant> variants = new ArrayList<>();
-        for (StockReceiveItemRequest item : request.getItems()) {
-            ProductVariant variant = variantRepository.findById(item.getVariantId())
-                    .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
-            if (Boolean.FALSE.equals(variant.getIsActive()) || variant.getDeletedAt() != null) {
-                throw new AppException(ErrorCode.VARIANT_NOT_FOUND);
-            }
-            variants.add(variant);
-        }
+        // 5-6. Persist one business line per marketplace SKU. Linked platform
+        // variants remain separate mappings and are expanded only when stock is applied.
+        ResolvedReceiptLines resolvedLines = resolveLogicalReceiptLines(request.getItems());
+        List<StockReceiveItemRequest> itemRequests = resolvedLines.requests();
+        List<ProductVariant> variants = resolvedLines.variants();
 
         // 7. Calculate totalCost BEFORE creating receipt
-        List<StockReceiveItemRequest> itemRequests = request.getItems();
-        BigDecimal totalCost = BigDecimal.ZERO;
-        for (StockReceiveItemRequest itemReq : itemRequests) {
-            BigDecimal itemTotal = BigDecimal.valueOf(itemReq.getQuantity()).multiply(itemReq.getUnitCost());
-            totalCost = totalCost.add(itemTotal);
-        }
+        BigDecimal totalCost = calculateGroupedReceiptTotal(itemRequests, variants);
 
         // 8. Generate receiptCode: "PN-{YYYY}-{SEQ}"
         String receiptCode = getNextReceiptCode();
@@ -150,6 +156,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         InventoryReceipt receipt = InventoryReceipt.builder()
                 .warehouse(warehouse)
                 .supplier(supplier)
+                .purchaseOrder(purchaseOrder)
                 .receiptCode(receiptCode)
                 .invoiceNumber(receiptCode)
                 .status(status)
@@ -165,6 +172,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         // 11. Process each item
         List<InventoryReceiptItem> savedItems = new ArrayList<>();
         Set<UUID> changedVariantIds = new HashSet<>();
+        Set<String> appliedStockGroups = new HashSet<>();
 
         for (int i = 0; i < itemRequests.size(); i++) {
             StockReceiveItemRequest itemReq = itemRequests.get(i);
@@ -184,44 +192,59 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 int quantity = itemReq.getQuantity();
                 BigDecimal unitCost = itemReq.getUnitCost();
                 List<ProductVariant> sharedVariants = resolveSharedStockVariants(productVariant);
-                int sharedQuantityBefore = sharedVariants.stream()
-                        .map(variant -> ensureInventoryItemWithLock(warehouse, variant))
-                        .mapToInt(this::quantityOnHand)
-                        .max()
-                        .orElse(0);
-                int sharedQuantityAfter = sharedQuantityBefore + quantity;
-
-                for (ProductVariant sharedVariant : sharedVariants) {
-                    InventoryItem inventoryItem = ensureInventoryItemWithLock(warehouse, sharedVariant);
-                    int qtyBefore = quantityOnHand(inventoryItem);
-                    CostUpdateResult costUpdate = applyReceiptCostAndQuantityTarget(
-                            inventoryItem,
-                            sharedVariant,
-                            sharedQuantityAfter,
-                            unitCost,
-                            createdByUser);
-
-                    if (sharedVariant.getId().equals(productVariant.getId())) {
-                        receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
-                        receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
+                if (appliedStockGroups.add(sharedStockGroupKey(sharedVariants))) {
+                    int sharedQuantityBefore = 0;
+                    for (ProductVariant sharedVariant : sharedVariants) {
+                        sharedQuantityBefore = Math.max(
+                                sharedQuantityBefore,
+                                quantityOnHand(ensureInventoryItemWithLock(warehouse, sharedVariant))
+                        );
                     }
-                    changedVariantIds.add(sharedVariant.getId());
+                    int sharedQuantityAfter = sharedQuantityBefore + quantity;
+                    BigDecimal avgCostBefore = resolveSharedCurrentCost(
+                            warehouse,
+                            sharedVariants,
+                            productVariant);
+                    BigDecimal avgCostAfter = calculateWeightedAverageCost(
+                            sharedQuantityBefore,
+                            avgCostBefore,
+                            quantity,
+                            unitCost);
 
-                    InventoryTransaction transaction = InventoryTransaction.builder()
-                            .type(InvTxnType.IMPORT)
-                            .referenceType("RECEIPT")
-                            .referenceId(receipt.getId())
-                            .quantityChange(sharedQuantityAfter - qtyBefore)
-                            .quantityBefore(qtyBefore)
-                            .quantityAfter(sharedQuantityAfter)
-                            .unitCost(unitCost)
-                            .warehouse(warehouse)
-                            .variant(sharedVariant)
-                            .performedBy(createdByUser)
-                            .performedAt(OffsetDateTime.now())
-                            .note(sharedVariants.size() > 1 ? "Shared SKU receipt synchronized" : null)
-                            .build();
-                    inventoryTransactionRepository.save(transaction);
+                    for (ProductVariant sharedVariant : sharedVariants) {
+                        InventoryItem inventoryItem = ensureInventoryItemWithLock(warehouse, sharedVariant);
+                        int qtyBefore = quantityOnHand(inventoryItem);
+                        CostUpdateResult costUpdate = applyReceiptCostAndQuantityTarget(
+                                inventoryItem,
+                                sharedVariant,
+                                sharedQuantityAfter,
+                                avgCostBefore,
+                                avgCostAfter,
+                                unitCost,
+                                createdByUser);
+
+                        if (sharedVariant.getId().equals(productVariant.getId())) {
+                            receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
+                            receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
+                        }
+                        changedVariantIds.add(sharedVariant.getId());
+
+                        InventoryTransaction transaction = InventoryTransaction.builder()
+                                .type(InvTxnType.IMPORT)
+                                .referenceType("RECEIPT")
+                                .referenceId(receipt.getId())
+                                .quantityChange(sharedQuantityAfter - qtyBefore)
+                                .quantityBefore(qtyBefore)
+                                .quantityAfter(sharedQuantityAfter)
+                                .unitCost(unitCost)
+                                .warehouse(warehouse)
+                                .variant(sharedVariant)
+                                .performedBy(createdByUser)
+                                .performedAt(OffsetDateTime.now())
+                                .note(sharedVariants.size() > 1 ? "Shared SKU receipt synchronized" : null)
+                                .build();
+                        inventoryTransactionRepository.save(transaction);
+                    }
                 }
             }
 
@@ -263,21 +286,18 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 12. Build and return response (no need to update totalCost again)
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
-        List<StockReceiveItemResponse> itemResponses = savedItems.stream()
-                .map(receiptMapper::toItemResponse)
-                .toList();
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(savedItems);
         response.setItems(itemResponses);
         
-        // Calculate totalSkuCount and totalQuantity
-        response.setTotalSkuCount(savedItems.size());
-        response.setTotalQuantity(savedItems.stream()
-                .mapToInt(InventoryReceiptItem::getQuantity)
-                .sum());
-        if ("CONFIRMED".equals(status)) {
-            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        ReceiptGroupSummary summary = summarizeReceiptItems(savedItems);
+        response.setTotalSkuCount(summary.skuCount());
+        response.setTotalQuantity(summary.totalQuantity());
+        if ("CONFIRMED".equals(status) && purchaseOrder != null) {
+            purchaseOrderService.completeFromReceipt(purchaseOrder.getId());
+            notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
         }
 
-        return response;
+        return enrichMarketplaceInfo(response);
     }
 
     @Override
@@ -293,18 +313,14 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     
                     // Fetch and map items for this receipt
                     List<InventoryReceiptItem> items = stockReceiveItemRepository.findByReceiptId(receipt.getId());
-                    List<StockReceiveItemResponse> itemResponses = items.stream()
-                            .map(receiptMapper::toItemResponse)
-                            .toList();
+                    List<StockReceiveItemResponse> itemResponses = toItemResponses(items);
                     response.setItems(itemResponses);
                     
-                    // Calculate totalSkuCount and totalQuantity
-                    response.setTotalSkuCount(items.size());
-                    response.setTotalQuantity(items.stream()
-                            .mapToInt(InventoryReceiptItem::getQuantity)
-                            .sum());
+                    ReceiptGroupSummary summary = summarizeReceiptItems(items);
+                    response.setTotalSkuCount(summary.skuCount());
+                    response.setTotalQuantity(summary.totalQuantity());
                     
-                    return response;
+                    return enrichMarketplaceInfo(response);
                 })
                 .toList();
 
@@ -328,18 +344,14 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         List<InventoryReceiptItem> items = stockReceiveItemRepository.findByReceiptId(id);
 
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
-        List<StockReceiveItemResponse> itemResponses = items.stream()
-                .map(receiptMapper::toItemResponse)
-                .toList();
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(items);
         response.setItems(itemResponses);
         
-        // Calculate totalSkuCount and totalQuantity
-        response.setTotalSkuCount(items.size());
-        response.setTotalQuantity(items.stream()
-                .mapToInt(InventoryReceiptItem::getQuantity)
-                .sum());
+        ReceiptGroupSummary summary = summarizeReceiptItems(items);
+        response.setTotalSkuCount(summary.skuCount());
+        response.setTotalQuantity(summary.totalQuantity());
 
-        return response;
+        return enrichMarketplaceInfo(response);
     }
 
     @Override
@@ -355,20 +367,26 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 "Chỉ có thể chỉnh sửa phiếu nhập ở trạng thái Lưu tạm");
         }
 
-        // 3. Always use the shared marketplace warehouse.
-        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
-
-        // 4. Validate supplier (optional)
-        Supplier supplier = null;
-        if (request.getSupplierId() != null) {
-            supplier = supplierRepository.findById(request.getSupplierId())
-                    .orElseThrow(() -> new AppException(ErrorCode.SUPPLIER_NOT_FOUND));
+        if (request.getPurchaseOrderId() == null) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Đơn mua hàng là bắt buộc.");
         }
-
-        // 5. Validate items not empty
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
+
+        PurchaseOrder purchaseOrder = purchaseOrderRepository.findByIdWithDetails(request.getPurchaseOrderId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn mua hàng."));
+        if (purchaseOrder.getStatus() != PurchaseOrderStatus.RECEIVING) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
+                    "Chỉ đơn ở trạng thái Đang giao hàng mới được dùng cho phiếu nhập kho.");
+        }
+        if (receipt.getPurchaseOrder() != null
+                && !receipt.getPurchaseOrder().getId().equals(purchaseOrder.getId())) {
+            throw new AppException(ErrorCode.CONFLICT, "Không thể đổi đơn mua hàng của phiếu nhập kho.");
+        }
+        validatePurchaseOrderItems(purchaseOrder, request.getItems());
+        Warehouse warehouse = purchaseOrder.getWarehouse();
+        Supplier supplier = purchaseOrder.getSupplier();
 
         // 7. For DRAFT: set default values for null quantity/unitCost
         for (StockReceiveItemRequest item : request.getItems()) {
@@ -380,31 +398,13 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             }
         }
 
-        // 8. Validate no duplicate variantId
-        Set<UUID> variantIdSet = new HashSet<>();
-        for (StockReceiveItemRequest item : request.getItems()) {
-            if (!variantIdSet.add(item.getVariantId())) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED, "Duplicate variant in receipt items");
-            }
-        }
-
-        // 9. Load and validate each ProductVariant
-        List<ProductVariant> variants = new ArrayList<>();
-        for (StockReceiveItemRequest item : request.getItems()) {
-            ProductVariant variant = variantRepository.findById(item.getVariantId())
-                    .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
-            if (Boolean.FALSE.equals(variant.getIsActive()) || variant.getDeletedAt() != null) {
-                throw new AppException(ErrorCode.VARIANT_NOT_FOUND);
-            }
-            variants.add(variant);
-        }
+        // 8-9. Keep one persisted receipt item per logical marketplace SKU.
+        ResolvedReceiptLines resolvedLines = resolveLogicalReceiptLines(request.getItems());
+        List<StockReceiveItemRequest> itemRequests = resolvedLines.requests();
+        List<ProductVariant> variants = resolvedLines.variants();
 
         // 10. Calculate totalCost
-        BigDecimal totalCost = BigDecimal.ZERO;
-        for (StockReceiveItemRequest itemReq : request.getItems()) {
-            BigDecimal itemTotal = BigDecimal.valueOf(itemReq.getQuantity()).multiply(itemReq.getUnitCost());
-            totalCost = totalCost.add(itemTotal);
-        }
+        BigDecimal totalCost = calculateGroupedReceiptTotal(itemRequests, variants);
 
         // 11. Load updatedBy user
         var updatedByUser = userRepository.findById(updatedByUserId).orElse(null);
@@ -414,6 +414,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         receipt.setWarehouse(warehouse);
         receipt.setSupplier(supplier);
+        receipt.setPurchaseOrder(purchaseOrder);
         receipt.setInvoiceNumber(receipt.getReceiptCode());
         receipt.setReceivedAt(receivedAt);
         receipt.setNotes(request.getNotes());
@@ -430,8 +431,8 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 15. Create new items
         List<InventoryReceiptItem> savedItems = new ArrayList<>();
-        for (int i = 0; i < request.getItems().size(); i++) {
-            StockReceiveItemRequest itemReq = request.getItems().get(i);
+        for (int i = 0; i < itemRequests.size(); i++) {
+            StockReceiveItemRequest itemReq = itemRequests.get(i);
             ProductVariant productVariant = variants.get(i);
 
             // Create InventoryReceiptItem
@@ -466,18 +467,14 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 16. Build and return response
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
-        List<StockReceiveItemResponse> itemResponses = savedItems.stream()
-                .map(receiptMapper::toItemResponse)
-                .toList();
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(savedItems);
         response.setItems(itemResponses);
         
-        // Calculate totalSkuCount and totalQuantity
-        response.setTotalSkuCount(savedItems.size());
-        response.setTotalQuantity(savedItems.stream()
-                .mapToInt(InventoryReceiptItem::getQuantity)
-                .sum());
+        ReceiptGroupSummary summary = summarizeReceiptItems(savedItems);
+        response.setTotalSkuCount(summary.skuCount());
+        response.setTotalQuantity(summary.totalQuantity());
 
-        return response;
+        return enrichMarketplaceInfo(response);
     }
 
     @Override
@@ -507,9 +504,9 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                     item.getVariant().getProduct().getName(),
                     item.getVariant().getSku()));
             }
-            if (item.getUnitCost() == null || item.getUnitCost().compareTo(BigDecimal.ZERO) <= 0) {
+            if (item.getUnitCost() == null || item.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
                 throw new AppException(ErrorCode.VALIDATION_FAILED, 
-                    String.format("Sản phẩm '%s' (SKU: %s) phải có đơn giá lớn hơn 0", 
+                    String.format("Sản phẩm '%s' (SKU: %s) phải có đơn giá lớn hơn hoặc bằng 0",
                     item.getVariant().getProduct().getName(),
                     item.getVariant().getSku()));
             }
@@ -522,17 +519,30 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
         receipt.setWarehouse(warehouse);
         Set<UUID> changedVariantIds = new HashSet<>();
+        Set<String> appliedStockGroups = new HashSet<>();
         for (InventoryReceiptItem receiptItem : receiptItems) {
             ProductVariant productVariant = receiptItem.getVariant();
             int quantity = receiptItem.getQuantity();
             BigDecimal unitCost = receiptItem.getUnitCost();
             List<ProductVariant> sharedVariants = resolveSharedStockVariants(productVariant);
+            if (!appliedStockGroups.add(sharedStockGroupKey(sharedVariants))) {
+                continue;
+            }
             int sharedQuantityBefore = sharedVariants.stream()
                     .map(variant -> ensureInventoryItemWithLock(warehouse, variant))
                     .mapToInt(this::quantityOnHand)
                     .max()
                     .orElse(0);
             int sharedQuantityAfter = sharedQuantityBefore + quantity;
+            BigDecimal avgCostBefore = resolveSharedCurrentCost(
+                    warehouse,
+                    sharedVariants,
+                    productVariant);
+            BigDecimal avgCostAfter = calculateWeightedAverageCost(
+                    sharedQuantityBefore,
+                    avgCostBefore,
+                    quantity,
+                    unitCost);
 
             for (ProductVariant sharedVariant : sharedVariants) {
                 InventoryItem inventoryItem = ensureInventoryItemWithLock(warehouse, sharedVariant);
@@ -541,6 +551,8 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                         inventoryItem,
                         sharedVariant,
                         sharedQuantityAfter,
+                        avgCostBefore,
+                        avgCostAfter,
                         unitCost,
                         approvedByUser);
 
@@ -578,19 +590,18 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 8. Build and return response
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
-        List<StockReceiveItemResponse> itemResponses = receiptItems.stream()
-                .map(receiptMapper::toItemResponse)
-                .toList();
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(receiptItems);
         response.setItems(itemResponses);
         
-        // Calculate totalSkuCount and totalQuantity
-        response.setTotalSkuCount(receiptItems.size());
-        response.setTotalQuantity(receiptItems.stream()
-                .mapToInt(InventoryReceiptItem::getQuantity)
-                .sum());
-        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        ReceiptGroupSummary summary = summarizeReceiptItems(receiptItems);
+        response.setTotalSkuCount(summary.skuCount());
+        response.setTotalQuantity(summary.totalQuantity());
+        if (receipt.getPurchaseOrder() != null) {
+            purchaseOrderService.completeFromReceipt(receipt.getPurchaseOrder().getId());
+            notifyMarketplaceSyncChoice(receipt, approvedByUser, changedVariantIds);
+        }
 
-        return response;
+        return enrichMarketplaceInfo(response);
     }
 
     @Override
@@ -634,81 +645,214 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         if (variantIds.isEmpty()) {
             return 0;
         }
-        marketplaceInventoryPropagationService.pushAvailableStock(variantIds);
-        return variantIds.size();
+        Set<UUID> expandedVariantIds = expandSharedVariantIds(variantIds);
+        marketplaceInventoryPropagationService.pushAvailableStock(expandedVariantIds);
+        return expandedVariantIds.size();
     }
 
-    private CostUpdateResult applyReceiptCostAndQuantity(
-            InventoryItem inventoryItem,
-            ProductVariant productVariant,
-            int quantity,
-            BigDecimal unitCost,
-            User updatedBy) {
-        int qtyBefore = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        BigDecimal avgCostBefore = inventoryItem.getAverageCost() != null
-                ? inventoryItem.getAverageCost()
-                : productVariant.getCostPrice();
-        avgCostBefore = normalizeMoney(avgCostBefore);
-        unitCost = normalizeMoney(unitCost);
+    @Override
+    @Transactional
+    public int syncReceiptMarketplaceInventory(UUID receiptId) {
+        InventoryReceipt receipt = stockReceiveRepository.findById(receiptId)
+                .orElseThrow(() -> new AppException(ErrorCode.RECEIPT_NOT_FOUND));
+        if (!"CONFIRMED".equals(receipt.getStatus())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Chỉ phiếu nhập đã hoàn thành mới được đồng bộ lên sàn.");
+        }
+        List<UUID> variantIds = stockReceiveRepository.findConfirmedVariantIdsByReceiptId(receiptId);
+        if (variantIds.isEmpty()) {
+            return 0;
+        }
+        Set<UUID> expandedVariantIds = expandSharedVariantIds(variantIds);
+        marketplaceInventoryPropagationService.pushAvailableStock(expandedVariantIds);
+        return expandedVariantIds.size();
+    }
 
-        int qtyAfter = qtyBefore + quantity;
-        BigDecimal existingStockValue = BigDecimal.valueOf(qtyBefore).multiply(avgCostBefore);
-        BigDecimal receivedStockValue = BigDecimal.valueOf(quantity).multiply(unitCost);
-        BigDecimal avgCostAfter = qtyAfter <= 0
-                ? unitCost
-                : existingStockValue
-                    .add(receivedStockValue)
-                    .divide(BigDecimal.valueOf(qtyAfter), 2, RoundingMode.HALF_UP);
+    private Set<UUID> expandSharedVariantIds(List<UUID> variantIds) {
+        Set<UUID> expanded = new HashSet<>();
+        for (ProductVariant variant : variantRepository.findAllById(variantIds)) {
+            resolveSharedStockVariants(variant).stream()
+                    .map(ProductVariant::getId)
+                    .forEach(expanded::add);
+        }
+        return expanded;
+    }
 
-        inventoryItem.setQuantityOnHand(qtyAfter);
-        inventoryItem.setAverageCost(avgCostAfter);
-        inventoryItem.setUpdatedBy(updatedBy);
-        inventoryItemRepository.save(inventoryItem);
+    private void validatePurchaseOrderItems(PurchaseOrder order, List<StockReceiveItemRequest> receiptItems) {
+        Map<String, Integer> ordered = new HashMap<>();
+        for (PurchaseOrderItem item : order.getItems()) {
+            String groupKey = sharedStockGroupKey(resolveSharedStockVariants(item.getVariant()));
+            Integer previous = ordered.putIfAbsent(groupKey, item.getQuantity());
+            if (previous != null && !Objects.equals(previous, item.getQuantity())) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "Các dòng cùng SKU trong đơn mua hàng có số lượng không nhất quán.");
+            }
+        }
+        Map<String, Integer> received = new HashMap<>();
+        if (receiptItems != null) {
+            for (StockReceiveItemRequest item : receiptItems) {
+                ProductVariant variant = variantRepository.findById(item.getVariantId())
+                        .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
+                String groupKey = sharedStockGroupKey(resolveSharedStockVariants(variant));
+                Integer previous = received.putIfAbsent(groupKey, item.getQuantity());
+                if (previous != null && !Objects.equals(previous, item.getQuantity())) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED,
+                            "Các dòng cùng SKU trong phiếu nhập có số lượng không nhất quán.");
+                }
+            }
+        }
+        for (Map.Entry<String, Integer> orderedItem : ordered.entrySet()) {
+            if (!Objects.equals(received.get(orderedItem.getKey()), orderedItem.getValue())) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "Phiếu nhập phải giữ đủ sản phẩm và số lượng của đơn mua hàng; có thể thêm sản phẩm khác.");
+            }
+        }
+    }
 
-        productVariant.setCostPrice(avgCostAfter);
-        productVariant.setPrice(avgCostAfter);
-        productVariant.setUpdatedBy(updatedBy);
-        variantRepository.save(productVariant);
+    private StockReceiveResponse enrichMarketplaceInfo(StockReceiveResponse response) {
+        if (response == null || response.getId() == null) {
+            return response;
+        }
+        List<UUID> receiptVariantIds = stockReceiveItemRepository.findByReceiptId(response.getId()).stream()
+                .map(item -> item.getVariant().getId()).distinct().toList();
+        if (receiptVariantIds.isEmpty()) {
+            response.setMarketplacePlatforms(List.of());
+            response.setMarketplaceSyncAvailable(false);
+            return response;
+        }
+        List<UUID> variantIds = new ArrayList<>(expandSharedVariantIds(receiptVariantIds));
+        List<String> platforms = channelProductVariantRepository
+                .findActiveByVariantIdInWithChannel(variantIds).stream()
+                .map(ChannelProductVariant::getChannelProduct)
+                .filter(java.util.Objects::nonNull)
+                .map(item -> item.getChannel())
+                .filter(java.util.Objects::nonNull)
+                .map(item -> item.getPlatform())
+                .filter(platform -> platform == PlatformType.SHOPIFY
+                        || platform == PlatformType.LAZADA || platform == PlatformType.TIKTOK)
+                .map(Enum::name).distinct().toList();
+        response.setMarketplacePlatforms(platforms);
+        response.setMarketplaceSyncAvailable(!platforms.isEmpty() && "CONFIRMED".equals(response.getStatus()));
+        return response;
+    }
 
-        return new CostUpdateResult(avgCostBefore, avgCostAfter, qtyBefore, qtyAfter);
+    private List<StockReceiveItemResponse> toItemResponses(List<InventoryReceiptItem> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, InventoryReceiptItem> logicalItems = new LinkedHashMap<>();
+        Map<String, List<ProductVariant>> sharedVariantsByGroup = new LinkedHashMap<>();
+        for (InventoryReceiptItem item : items) {
+            List<ProductVariant> sharedVariants = resolveSharedStockVariants(item.getVariant());
+            String groupKey = sharedStockGroupKey(sharedVariants);
+            logicalItems.putIfAbsent(groupKey, item);
+            sharedVariantsByGroup.putIfAbsent(groupKey, sharedVariants);
+        }
+
+        List<UUID> variantIds = sharedVariantsByGroup.values().stream()
+                .flatMap(List::stream)
+                .map(ProductVariant::getId)
+                .distinct()
+                .toList();
+        Map<UUID, List<ChannelProductVariant>> mappingsByVariant =
+                channelProductVariantRepository.findActiveByVariantIdInWithChannel(variantIds).stream()
+                        .filter(mapping -> mapping.getChannelProduct() != null
+                                && mapping.getChannelProduct().getChannel() != null)
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                mapping -> mapping.getVariant().getId(),
+                                LinkedHashMap::new,
+                                java.util.stream.Collectors.toList()));
+
+        return logicalItems.entrySet().stream().map(entry -> {
+            InventoryReceiptItem item = entry.getValue();
+            StockReceiveItemResponse response = receiptMapper.toItemResponse(item);
+            List<ChannelProductVariant> mappings = sharedVariantsByGroup
+                    .getOrDefault(entry.getKey(), List.of(item.getVariant())).stream()
+                    .flatMap(variant -> mappingsByVariant
+                            .getOrDefault(variant.getId(), List.of()).stream())
+                    .toList();
+            String marketplaceSku = mappings.stream()
+                    .map(ChannelProductVariant::getExternalSku)
+                    .filter(value -> value != null && !value.isBlank())
+                    .findFirst()
+                    .orElse(item.getVariant().getSku());
+            List<PlatformType> platforms = mappings.stream()
+                    .map(mapping -> mapping.getChannelProduct().getChannel().getPlatform())
+                    .filter(platform -> platform == PlatformType.SHOPIFY
+                            || platform == PlatformType.LAZADA
+                            || platform == PlatformType.TIKTOK)
+                    .distinct()
+                    .sorted(java.util.Comparator.comparing(Enum::name))
+                    .toList();
+            response.setSku(marketplaceSku);
+            response.setMarketplaceSku(marketplaceSku);
+            response.setPlatforms(platforms);
+            return response;
+        }).toList();
+    }
+
+    private void notifyMarketplaceSyncChoice(InventoryReceipt receipt, User user, Set<UUID> changedVariantIds) {
+        if (user == null || changedVariantIds == null || changedVariantIds.isEmpty()) {
+            return;
+        }
+        StockReceiveResponse response = enrichMarketplaceInfo(receiptMapper.toResponse(receipt));
+        if (!Boolean.TRUE.equals(response.getMarketplaceSyncAvailable())) {
+            return;
+        }
+        notificationService.createNotification(user.getId(), "SYNC", "Đồng bộ tồn kho lên sàn?",
+                receipt.getReceiptCode() + " đã hoàn thành. Sản phẩm đang bán trên "
+                        + String.join(", ", response.getMarketplacePlatforms())
+                        + ". Hãy xác nhận đồng bộ tồn kho.",
+                "RECEIPT", receipt.getId());
     }
 
     private CostUpdateResult applyReceiptCostAndQuantityTarget(
             InventoryItem inventoryItem,
             ProductVariant productVariant,
             int quantityAfter,
-            BigDecimal unitCost,
+            BigDecimal avgCostBefore,
+            BigDecimal avgCostAfter,
+            BigDecimal receivedUnitCost,
             User updatedBy) {
         int qtyBefore = quantityOnHand(inventoryItem);
-        int quantityDelta = quantityAfter - qtyBefore;
-        BigDecimal avgCostBefore = inventoryItem.getAverageCost() != null
-                ? inventoryItem.getAverageCost()
-                : productVariant.getCostPrice();
         avgCostBefore = normalizeMoney(avgCostBefore);
-        unitCost = normalizeMoney(unitCost);
-
-        BigDecimal avgCostAfter = avgCostBefore;
-        if (quantityDelta > 0) {
-            BigDecimal existingStockValue = BigDecimal.valueOf(qtyBefore).multiply(avgCostBefore);
-            BigDecimal receivedStockValue = BigDecimal.valueOf(quantityDelta).multiply(unitCost);
-            avgCostAfter = quantityAfter <= 0
-                    ? unitCost
-                    : existingStockValue
-                        .add(receivedStockValue)
-                        .divide(BigDecimal.valueOf(quantityAfter), 2, RoundingMode.HALF_UP);
-        }
+        avgCostAfter = normalizeMoney(avgCostAfter);
+        BigDecimal sellingPrice = normalizeMoney(receivedUnitCost);
 
         inventoryItem.setQuantityOnHand(quantityAfter);
         inventoryItem.setAverageCost(avgCostAfter);
         inventoryItem.setUpdatedBy(updatedBy);
         inventoryItemRepository.save(inventoryItem);
 
+        productVariant.setPrice(sellingPrice);
         productVariant.setCostPrice(avgCostAfter);
-        productVariant.setPrice(avgCostAfter);
         productVariant.setUpdatedBy(updatedBy);
         variantRepository.save(productVariant);
 
         return new CostUpdateResult(avgCostBefore, avgCostAfter, qtyBefore, quantityAfter);
+    }
+
+    private BigDecimal calculateWeightedAverageCost(
+            int currentQuantity,
+            BigDecimal currentCost,
+            int receivedQuantity,
+            BigDecimal receivedUnitCost) {
+        BigDecimal normalizedCurrentCost = normalizeMoney(currentCost);
+        BigDecimal normalizedReceivedCost = normalizeMoney(receivedUnitCost);
+        if (receivedQuantity <= 0) {
+            return normalizedCurrentCost;
+        }
+        int weightedQuantity = currentQuantity + receivedQuantity;
+        if (weightedQuantity <= 0) {
+            return normalizedReceivedCost;
+        }
+        BigDecimal existingStockValue = BigDecimal.valueOf(currentQuantity)
+                .multiply(normalizedCurrentCost);
+        BigDecimal receivedStockValue = BigDecimal.valueOf(receivedQuantity)
+                .multiply(normalizedReceivedCost);
+        return existingStockValue
+                .add(receivedStockValue)
+                .divide(BigDecimal.valueOf(weightedQuantity), 2, RoundingMode.HALF_UP);
     }
 
     private InventoryItem ensureInventoryItemWithLock(Warehouse warehouse, ProductVariant productVariant) {
@@ -718,29 +862,188 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                         .variant(productVariant)
                         .quantityOnHand(0)
                         .reservedQuantity(0)
-                        .averageCost(productVariant.getCostPrice() == null ? BigDecimal.ZERO : productVariant.getCostPrice())
+                        .averageCost(resolveCurrentCost(null, productVariant))
                         .build()));
         return inventoryItemRepository
                 .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), productVariant.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
     }
 
+    private BigDecimal resolveCurrentCost(InventoryItem inventoryItem, ProductVariant productVariant) {
+        BigDecimal inventoryAverageCost = inventoryItem == null ? null : inventoryItem.getAverageCost();
+        if (ProductCostPolicy.isPositive(inventoryAverageCost)) {
+            return normalizeMoney(inventoryAverageCost);
+        }
+        return normalizeMoney(ProductCostPolicy.initialCost(
+                productVariant.getCostPrice(),
+                productVariant.getPrice()));
+    }
+
+    private BigDecimal resolveSharedCurrentCost(
+            Warehouse warehouse,
+            List<ProductVariant> sharedVariants,
+            ProductVariant preferredVariant) {
+        List<ProductVariant> orderedVariants = new ArrayList<>();
+        orderedVariants.add(preferredVariant);
+        sharedVariants.stream()
+                .filter(variant -> !variant.getId().equals(preferredVariant.getId()))
+                .forEach(orderedVariants::add);
+
+        for (ProductVariant variant : orderedVariants) {
+            BigDecimal averageCost = ensureInventoryItemWithLock(warehouse, variant).getAverageCost();
+            if (ProductCostPolicy.isPositive(averageCost)) {
+                return normalizeMoney(averageCost);
+            }
+        }
+        for (ProductVariant variant : orderedVariants) {
+            if (ProductCostPolicy.isPositive(variant.getCostPrice())) {
+                return normalizeMoney(variant.getCostPrice());
+            }
+        }
+        for (ProductVariant variant : orderedVariants) {
+            if (ProductCostPolicy.isPositive(variant.getPrice())) {
+                return normalizeMoney(variant.getPrice());
+            }
+        }
+        return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    }
+
     private List<ProductVariant> resolveSharedStockVariants(ProductVariant productVariant) {
-        String normalizedSku = normalizeSku(productVariant.getSku());
-        if (normalizedSku.isBlank()) {
+        Set<String> externalSkuKeys = externalSkuKeys(
+                channelProductVariantRepository.findActiveByVariantIdWithChannel(productVariant.getId()));
+        if (externalSkuKeys.size() != 1) {
             return List.of(productVariant);
         }
+
         Map<UUID, ProductVariant> variantsById = new LinkedHashMap<>();
         variantsById.put(productVariant.getId(), productVariant);
-        variantRepository.findActiveMarketplaceMappedSharingSkuWithVariantId(productVariant.getId())
-                .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
-        variantRepository.findActiveMarketplaceMappedByNormalizedSku(normalizedSku)
+        channelProductVariantRepository.findActiveByNormalizedExternalSkuInWithVariant(
+                        new ArrayList<>(externalSkuKeys)).stream()
+                .map(ChannelProductVariant::getVariant)
                 .forEach(variant -> variantsById.putIfAbsent(variant.getId(), variant));
         return new ArrayList<>(variantsById.values());
     }
 
+    private ResolvedReceiptLines resolveLogicalReceiptLines(List<StockReceiveItemRequest> requests) {
+        Map<String, Integer> lineIndexByGroup = new LinkedHashMap<>();
+        List<StockReceiveItemRequest> logicalRequests = new ArrayList<>();
+        List<ProductVariant> logicalVariants = new ArrayList<>();
+        List<ReceiptLineTerms> logicalTerms = new ArrayList<>();
+
+        for (StockReceiveItemRequest request : requests) {
+            ProductVariant variant = variantRepository.findById(request.getVariantId())
+                    .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
+            if (Boolean.FALSE.equals(variant.getIsActive()) || variant.getDeletedAt() != null) {
+                throw new AppException(ErrorCode.VARIANT_NOT_FOUND);
+            }
+
+            List<ProductVariant> sharedVariants = resolveSharedStockVariants(variant);
+            String groupKey = sharedStockGroupKey(sharedVariants);
+            BigDecimal unitCost = normalizeMoney(request.getUnitCost());
+            Integer existingIndex = lineIndexByGroup.get(groupKey);
+            if (existingIndex != null) {
+                ReceiptLineTerms terms = logicalTerms.get(existingIndex);
+                if (!terms.matches(request.getQuantity(), unitCost)) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED,
+                            "Các sản phẩm con liên kết cùng SKU phải có cùng số lượng và đơn giá.");
+                }
+                continue;
+            }
+
+            String canonicalSku = canonicalMarketplaceSku(sharedVariants, variant);
+            ProductVariant representative = sharedVariants.stream()
+                    .filter(item -> canonicalSku.equalsIgnoreCase(item.getSku()))
+                    .findFirst()
+                    .orElse(variant);
+            lineIndexByGroup.put(groupKey, logicalRequests.size());
+            logicalRequests.add(request);
+            logicalVariants.add(representative);
+            logicalTerms.add(new ReceiptLineTerms(request.getQuantity(), unitCost));
+        }
+        return new ResolvedReceiptLines(logicalRequests, logicalVariants);
+    }
+
+    private String canonicalMarketplaceSku(List<ProductVariant> variants, ProductVariant fallback) {
+        List<UUID> variantIds = variants.stream().map(ProductVariant::getId).toList();
+        List<ChannelProductVariant> mappings =
+                channelProductVariantRepository.findActiveByVariantIdInWithChannel(variantIds);
+        Set<String> externalSkuKeys = externalSkuKeys(mappings);
+        if (externalSkuKeys.size() != 1) {
+            return fallback.getSku();
+        }
+        String canonicalKey = externalSkuKeys.iterator().next();
+        return mappings.stream()
+                .map(ChannelProductVariant::getExternalSku)
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .filter(value -> canonicalKey.equals(normalizeSku(value)))
+                .findFirst()
+                .orElse(fallback.getSku());
+    }
+
+    private BigDecimal calculateGroupedReceiptTotal(
+            List<StockReceiveItemRequest> itemRequests,
+            List<ProductVariant> variants) {
+        Map<String, ReceiptLineTerms> termsByGroup = new LinkedHashMap<>();
+        BigDecimal total = BigDecimal.ZERO;
+        for (int index = 0; index < itemRequests.size(); index++) {
+            StockReceiveItemRequest request = itemRequests.get(index);
+            String groupKey = sharedStockGroupKey(resolveSharedStockVariants(variants.get(index)));
+            BigDecimal unitCost = normalizeMoney(request.getUnitCost());
+            ReceiptLineTerms existing = termsByGroup.putIfAbsent(
+                    groupKey,
+                    new ReceiptLineTerms(request.getQuantity(), unitCost));
+            if (existing == null) {
+                total = total.add(BigDecimal.valueOf(request.getQuantity()).multiply(unitCost));
+            } else if (!existing.matches(request.getQuantity(), unitCost)) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "Các sản phẩm con liên kết cùng SKU phải có cùng số lượng và đơn giá.");
+            }
+        }
+        return total;
+    }
+
+    private ReceiptGroupSummary summarizeReceiptItems(List<InventoryReceiptItem> items) {
+        Set<String> groups = new HashSet<>();
+        int totalQuantity = 0;
+        for (InventoryReceiptItem item : items) {
+            String groupKey = sharedStockGroupKey(resolveSharedStockVariants(item.getVariant()));
+            if (groups.add(groupKey)) {
+                totalQuantity += item.getQuantity() == null ? 0 : item.getQuantity();
+            }
+        }
+        return new ReceiptGroupSummary(groups.size(), totalQuantity);
+    }
+
+    private String sharedStockGroupKey(List<ProductVariant> variants) {
+        Set<String> externalSkuKeys = externalSkuKeys(
+                channelProductVariantRepository.findActiveByVariantIdInWithChannel(
+                        variants.stream().map(ProductVariant::getId).toList()));
+        if (externalSkuKeys.size() == 1) {
+            return "external:" + externalSkuKeys.iterator().next();
+        }
+        return variants.stream()
+                .map(ProductVariant::getId)
+                .map(UUID::toString)
+                .sorted()
+                .map(id -> "variant:" + id)
+                .collect(Collectors.joining("|"));
+    }
+
     private String normalizeSku(String sku) {
-        return sku == null ? "" : sku.trim().toLowerCase();
+        return sku == null ? "" : sku.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Set<String> externalSkuKeys(List<ChannelProductVariant> mappings) {
+        if (mappings == null || mappings.isEmpty()) {
+            return Set.of();
+        }
+        return mappings.stream()
+                .map(ChannelProductVariant::getExternalSku)
+                .filter(value -> value != null && !value.isBlank())
+                .map(this::normalizeSku)
+                .filter(value -> !value.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private int quantityOnHand(InventoryItem inventoryItem) {
@@ -756,6 +1059,20 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             BigDecimal avgCostAfter,
             int qtyBefore,
             int qtyAfter) {
+    }
+
+    private record ReceiptLineTerms(Integer quantity, BigDecimal unitCost) {
+        private boolean matches(Integer otherQuantity, BigDecimal otherUnitCost) {
+            return Objects.equals(quantity, otherQuantity) && unitCost.compareTo(otherUnitCost) == 0;
+        }
+    }
+
+    private record ResolvedReceiptLines(
+            List<StockReceiveItemRequest> requests,
+            List<ProductVariant> variants) {
+    }
+
+    private record ReceiptGroupSummary(int skuCount, int totalQuantity) {
     }
 
     private OffsetDateTime resolveDocumentTime(LocalDate documentDate) {

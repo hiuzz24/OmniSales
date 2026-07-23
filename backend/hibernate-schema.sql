@@ -15,7 +15,7 @@ DO $$
             'users','channels','channel_credentials','products',
             'product_variants','channel_products','channel_product_variants',
             'warehouses','inventory_items','daily_sales_summary','report_configs',
-            'customers','suppliers','inventory_receipts',
+            'customers','suppliers','purchase_orders','inventory_receipts',
             'inventory_issues','stock_transfers','stocktake_sessions','orders'
             ]) LOOP
                 EXECUTE format('DROP TRIGGER IF EXISTS trg_%I_updated_at ON %I', tbl, tbl);
@@ -58,6 +58,8 @@ DROP TABLE IF EXISTS inventory_issue_items        CASCADE;
 DROP TABLE IF EXISTS inventory_issues             CASCADE;
 DROP TABLE IF EXISTS inventory_receipt_items      CASCADE;
 DROP TABLE IF EXISTS inventory_receipts           CASCADE;
+DROP TABLE IF EXISTS purchase_order_items         CASCADE;
+DROP TABLE IF EXISTS purchase_orders               CASCADE;
 DROP TABLE IF EXISTS inventory_transactions       CASCADE;
 DROP TABLE IF EXISTS inventory_items              CASCADE;
 DROP TABLE IF EXISTS order_items                  CASCADE;
@@ -463,6 +465,40 @@ CREATE TABLE warehouses (
                             deleted_at TIMESTAMPTZ
 );
 
+-- Purchase orders: Sales creates and sends; Operations receives through one inventory receipt.
+CREATE TABLE purchase_orders (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_code            VARCHAR(100) NOT NULL UNIQUE,
+    supplier_id           UUID NOT NULL REFERENCES suppliers(id),
+    warehouse_id          UUID NOT NULL REFERENCES warehouses(id),
+    status                VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
+        CHECK (status IN ('DRAFT','SENT_TO_SUPPLIER','RECEIVING','COMPLETED','CANCELLED')),
+    order_date            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expected_receipt_date DATE NOT NULL,
+    payment_method        VARCHAR(50),
+    total_amount          NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
+    notes                 TEXT,
+    created_by            UUID REFERENCES users(id) ON DELETE SET NULL,
+    sent_at               TIMESTAMPTZ,
+    receiving_at          TIMESTAMPTZ,
+    completed_at          TIMESTAMPTZ,
+    version               BIGINT NOT NULL DEFAULT 0,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_purchase_orders_status_sent ON purchase_orders(status, sent_at);
+
+CREATE TABLE purchase_order_items (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    purchase_order_id UUID NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    variant_id        UUID NOT NULL REFERENCES product_variants(id),
+    quantity          INT NOT NULL CHECK (quantity > 0),
+    unit_cost         NUMERIC(12,2) NOT NULL CHECK (unit_cost >= 0),
+    total_cost        NUMERIC(14,2) GENERATED ALWAYS AS (quantity * unit_cost) STORED,
+    CONSTRAINT uq_purchase_order_variant UNIQUE (purchase_order_id, variant_id)
+);
+CREATE INDEX idx_purchase_order_items_variant ON purchase_order_items(variant_id);
+
 -- ── Inventory ────────────────────────────────────────────────
 CREATE TABLE inventory_items (
                                  id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -502,6 +538,7 @@ CREATE TABLE inventory_receipts (
                                     id             UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
                                     warehouse_id   UUID          NOT NULL REFERENCES warehouses(id),
                                     supplier_id    UUID          REFERENCES suppliers(id) ON DELETE SET NULL,
+                                    purchase_order_id UUID       UNIQUE REFERENCES purchase_orders(id) ON DELETE RESTRICT,
                                     receipt_code   VARCHAR(100)  NOT NULL UNIQUE,
                                     invoice_number VARCHAR(100),
                                     status         VARCHAR(10)   NOT NULL DEFAULT 'DRAFT'
@@ -695,11 +732,11 @@ CREATE TABLE system_settings (
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
-                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','STOCK_TRANSFER')),
+                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
-                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY')),
+                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE')),
                                entity_id   UUID,
                                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -781,7 +818,7 @@ DO $$
             'users','channels','channel_credentials','products',
             'product_variants','channel_products','channel_product_variants',
             'warehouses','inventory_items','daily_sales_summary','report_configs',
-            'customers','suppliers','inventory_receipts',
+            'customers','suppliers','purchase_orders','inventory_receipts',
             'inventory_issues','stock_transfers','stocktake_sessions'
             ]) LOOP
                 EXECUTE format(
@@ -1102,11 +1139,17 @@ ON CONFLICT DO NOTHING;
 --  END OF SCRIPT
 -- ============================================================
 
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+
+ALTER TABLE notifications
+    ADD CONSTRAINT notifications_type_check
+        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
+
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_entity_type_check;
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_entity_type_check
-        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY', 'TRANSFER'));
+        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE'));
 
 ALTER TABLE stock_transfers ADD COLUMN note TEXT;
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
