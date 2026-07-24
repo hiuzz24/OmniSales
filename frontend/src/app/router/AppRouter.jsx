@@ -55,9 +55,13 @@ import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePag
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
 import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
+import WarehousePage from '../../features/inventory/pages/WarehousePage';
+import WarehouseDetailPage from '../../features/inventory/pages/WarehouseDetailPage';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 import NotificationListPage from '../../features/user/pages/NotificationListPage';
+import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
+import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
 
 const AppRouter = () => {
   return (
@@ -111,6 +115,19 @@ const AppRouter = () => {
               <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
               <Route path={ROUTES.STOCKTAKES} element={<StocktakePage />} />
               <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
+              <Route path={ROUTES.PURCHASE_ORDER_CREATE} element={<PurchaseOrderCreatePage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS]} />}>
+              <Route path={ROUTES.PURCHASE_ORDERS} element={<PurchaseOrderPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.WAREHOUSE} element={<WarehousePage />} />
+              <Route path={ROUTES.WAREHOUSE_DETAIL} element={<WarehouseDetailPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>

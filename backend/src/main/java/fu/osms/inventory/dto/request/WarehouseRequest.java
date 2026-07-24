@@ -14,8 +14,6 @@ import java.util.UUID;
 @Builder
 public class WarehouseRequest {
 
-    @NotNull(message = "Shop ID must not be null")
-
     @NotBlank(message = "Warehouse name must not be blank")
     @Size(max = 255)
     private String name;

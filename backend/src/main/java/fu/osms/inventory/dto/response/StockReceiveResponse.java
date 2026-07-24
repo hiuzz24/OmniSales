@@ -20,6 +20,8 @@ public class StockReceiveResponse {
     private String warehouseName;
     private UUID supplierId;
     private String supplierName;
+    private UUID purchaseOrderId;
+    private String purchaseOrderCode;
     private String receiptCode;
     private String invoiceNumber;
     private String status;
@@ -35,6 +37,8 @@ public class StockReceiveResponse {
     private OffsetDateTime updatedAt;
 
     private List<StockReceiveItemResponse> items;
+    private List<String> marketplacePlatforms;
+    private Boolean marketplaceSyncAvailable;
     
     // Computed fields
     private Integer totalSkuCount;  // Tổng số lượng SKU (số items)

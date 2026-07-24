@@ -29,6 +29,8 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
 
     boolean existsByInvoiceNumberAndIdNot(String invoiceNumber, UUID id);
 
+    boolean existsByPurchaseOrderId(UUID purchaseOrderId);
+
     @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
             "WHERE item.receipt.status = 'CONFIRMED' " +
             "AND item.receipt.updatedAt >= :changedSince " +
@@ -50,6 +52,10 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
             "WHERE item.receipt.status = 'CONFIRMED' " +
             "AND ch.deletedAt IS NULL " +
             "AND cp.mappingState = 'ACTIVE' " +
-            "AND (cpv.lastSyncedAt IS NULL OR cpv.lastSyncedAt < item.receipt.createdAt)")
+            "AND (cpv.lastSyncedAt IS NULL OR cpv.lastSyncedAt < COALESCE(item.receipt.confirmedAt, item.receipt.updatedAt))")
     List<UUID> findConfirmedVariantIdsPendingMarketplaceSync();
+
+    @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
+            "WHERE item.receipt.id = :receiptId AND item.receipt.status = 'CONFIRMED'")
+    List<UUID> findConfirmedVariantIdsByReceiptId(@Param("receiptId") UUID receiptId);
 }

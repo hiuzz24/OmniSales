@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Warehouse, ShoppingCart, Share2,
-  BarChart3, Settings, Menu, Bell, Users, ChevronDown,
+  Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User, Tag, Database,
+  ChevronRight, User, Tag, Database, ShoppingBag,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -37,15 +37,14 @@ const NAV_ITEMS = [
       { name: 'Phiếu chuyển kho', href: '/warehouse/transfers', icon: ArrowRightLeft, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
       { name: 'Phiếu kiểm kho', href: '/warehouse/stocktakes', icon: ClipboardList, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
       { name: 'Nhà cung cấp', href: ROUTES.SUPPLIERS, icon: Users, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
-      { name: 'Kho hàng', href: ROUTES.WAREHOUSE, icon: Store, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
+      { name: 'Kho hàng', href: ROUTES.WAREHOUSE, icon: Store, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN] },
       { name: 'Lịch sử thay đổi', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
     ],
   },
+  { name: 'Đơn mua hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
-  { name: 'Bán hàng (POS)', href: '/pos',      icon: Store,    roles: [] },
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
-  { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
   {
     name: 'Nhân sự',
     href: '/users',
@@ -60,14 +59,13 @@ const NAV_ITEMS = [
   { name: 'Sao lưu dữ liệu', href: ROUTES.BACKUP,      icon: Database,      roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Giám sát API',    href: ROUTES.API_MONITOR, icon: Shield,        roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Cấu hình hệ thống', href: ROUTES.SYSTEM_SETTINGS, icon: Settings,  roles: [ROLES.SYSTEM_ADMIN] },
-  { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
 ];
 
 const ROLE_HIDDEN = {
-  [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
-  [ROLES.OPERATIONS]: ['Phân tích', 'Nhân sự'],
+  [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Nhân sự'],
+  [ROLES.OPERATIONS]: ['Nhân sự'],
   [ROLES.OWNER]: [],
-  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Bán hàng (POS)', 'Đơn hàng', 'Kênh bán hàng', 'Phân tích', 'Cài đặt'],
+  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Đơn hàng', 'Kênh bán hàng'],
 };
 
 const isVisible = (item, role) => {
@@ -426,6 +424,14 @@ export default function MainLayout() {
                               } else {
                                 navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
                               }
+                              setNotifOpen(false);
+                            }
+                            if (n.entityType === 'PURCHASE') {
+                              navigate(ROUTES.PURCHASE_ORDERS);
+                              setNotifOpen(false);
+                            }
+                            if (n.entityType === 'RECEIPT' && n.entityId) {
+                              navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL.replace(':id', n.entityId));
                               setNotifOpen(false);
                             }
                             if (n.entityType === 'SYNC') {

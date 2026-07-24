@@ -3,6 +3,7 @@ package fu.osms.sync.shopify.impl;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProduct;
@@ -241,7 +242,7 @@ public class ShopifySyncServiceImpl implements PlatformSyncService {
             }
 
             BigDecimal price = localVariant.getPrice() != null ? localVariant.getPrice() : BigDecimal.ZERO;
-            BigDecimal cost = localVariant.getCostPrice() != null ? localVariant.getCostPrice() : price;
+            BigDecimal cost = ProductCostPolicy.initialCost(localVariant.getCostPrice(), price);
 
             Map<String, Object> inventoryItemInput = new HashMap<>();
             inventoryItemInput.put("cost", cost);
@@ -323,6 +324,10 @@ public class ShopifySyncServiceImpl implements PlatformSyncService {
             Map<String, Object> inventoryItem = (Map<String, Object>) updatedVariant.get("inventoryItem");
             if (inventoryItem != null && inventoryItem.get("id") != null) {
                 metadata.put("inventory_item_id", numericId(inventoryItem.get("id").toString()));
+            }
+            if (inventoryItem != null && inventoryItem.get("unitCost") instanceof Map<?, ?> unitCost
+                    && unitCost.get("amount") != null) {
+                metadata.put("shopifyUnitCost", unitCost.get("amount").toString());
             }
             mapping.setMetadata(metadata);
             mapping.setSyncStatus(SyncStatus.SYNCED);

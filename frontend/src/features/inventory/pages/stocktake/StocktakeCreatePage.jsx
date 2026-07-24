@@ -287,7 +287,7 @@ export default function StocktakeCreatePage() {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       <div className={styles.pageHeader}>
         <button type="button" className={styles.backBtn} onClick={() => navigate(ROUTES.STOCKTAKES)}>
           <ArrowLeft size={15} /> Quay lại

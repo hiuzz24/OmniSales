@@ -272,7 +272,7 @@ const OrderListPage = () => {
   );
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       <div className={styles.pageHeaderShell}>
         <PageHeader
           title="Đơn hàng"

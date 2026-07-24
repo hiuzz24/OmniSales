@@ -11,6 +11,7 @@ public interface InventoryTransactionMapper {
     @Mapping(target = "warehouseName", source = "warehouse.name")
     @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "variantSku", source = "variant.sku")
+    @Mapping(target = "productName", source = "variant.product.name")
     @Mapping(target = "variantName", source = "variant.name")
     @Mapping(target = "performedById", source = "performedBy.id")
     @Mapping(target = "performedByName", source = "performedBy.fullName")

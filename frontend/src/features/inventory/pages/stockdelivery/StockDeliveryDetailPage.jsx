@@ -30,7 +30,7 @@ const ISSUE_TYPES = {
 };
 
 const STATUS_CFG = {
-  DRAFT: { label: 'Lưu tạm', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  DRAFT: { label: 'Đang xử lý', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
   CONFIRMED: { label: 'Hoàn thành', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
   CANCELLED: { label: 'Đã hủy', color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
 };
@@ -172,7 +172,7 @@ export default function StockDeliveryDetailPage() {
     if (!delivery || delivery.status !== 'DRAFT' || !canComplete) return;
     const ok = await confirm({
       title: 'Hoàn thành phiếu xuất?',
-      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`,
+      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Đang xử lý.`,
       confirmText: 'Hoàn thành',
     });
     if (!ok) {
@@ -211,7 +211,7 @@ export default function StockDeliveryDetailPage() {
 
   return (
     <>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="product-workspace product-workspace--flow" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button type="button" onClick={() => navigate(ROUTES.STOCK_DELIVERIES)} style={secondaryButtonStyle}>

@@ -6,6 +6,7 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.dto.PageResponse;
@@ -28,10 +29,12 @@ import fu.osms.inventory.mapper.InventoryDetailMapper;
 import fu.osms.inventory.mapper.InventoryItemMapper;
 import fu.osms.inventory.mapper.InventoryTransactionMapper;
 import fu.osms.inventory.repository.InventoryItemRepository;
+import fu.osms.inventory.repository.InventoryIssueItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.inventory.dto.response.AvailableVariantDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -66,6 +69,8 @@ public class InventoryServiceImpl implements InventoryService {
     private final AvailableVariantDTOMapper availableVariantDTOMapper;
     private final InventoryAlertService inventoryAlertService;
     private final ChannelProductVariantRepository channelProductVariantRepository;
+    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
+    private final InventoryIssueItemRepository inventoryIssueItemRepository;
 
     @Override
     @Transactional
@@ -284,6 +289,7 @@ public class InventoryServiceImpl implements InventoryService {
 
     private List<InventoryItemResponse> aggregateInventoryItems(List<InventoryItem> inventoryItems, UUID preferredChannelId) {
         List<InventoryItemResponse> responses = inventoryItemMapper.toResponseList(inventoryItems);
+        enrichMovementQuantities(responses);
         enrichChannelInfo(responses, preferredChannelId);
         if (responses.isEmpty()) {
             return responses;
@@ -323,6 +329,8 @@ public class InventoryServiceImpl implements InventoryService {
         int quantityOnHand = safeInt(stockSource.getQuantityOnHand());
         int reservedQuantity = safeInt(stockSource.getReservedQuantity());
         int availableQuantity = safeInt(stockSource.getAvailableQuantity());
+        int incomingQuantity = group.stream().mapToInt(item -> safeInt(item.getIncomingQuantity())).max().orElse(0);
+        int outgoingQuantity = group.stream().mapToInt(item -> safeInt(item.getOutgoingQuantity())).max().orElse(0);
         int lowStockThreshold = group.stream().mapToInt(item -> safeInt(item.getLowStockThreshold())).max().orElse(0);
 
         List<UUID> variantIds = group.stream()
@@ -378,6 +386,22 @@ public class InventoryServiceImpl implements InventoryService {
                 .max(OffsetDateTime::compareTo)
                 .orElse(first.getUpdatedAt());
 
+        String categoryName = group.stream()
+                .map(InventoryItemResponse::getCategoryName)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(first.getCategoryName());
+        UUID categoryId = group.stream()
+                .map(InventoryItemResponse::getCategoryId)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(first.getCategoryId());
+        BigDecimal price = group.stream()
+                .map(InventoryItemResponse::getPrice)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(first.getPrice());
+
         return InventoryItemResponse.builder()
                 .id(first.getId())
                 .warehouseId(group.stream().map(InventoryItemResponse::getWarehouseId).distinct().count() == 1
@@ -393,22 +417,63 @@ public class InventoryServiceImpl implements InventoryService {
                 .marketplaceSku(marketplaceSku)
                 .productName(firstNonBlank(first.getProductName(), first.getVariantName()))
                 .variantName(first.getVariantName())
+                .categoryId(categoryId)
+                .categoryName(categoryName)
+                .price(price)
                 .channelId(channelIds.size() == 1 ? channelIds.get(0) : null)
                 .channelName(channelNames.size() == 1 ? channelNames.get(0) : String.join(", ", channelNames))
                 .platform(platforms.size() == 1 ? platforms.get(0) : null)
                 .channelIds(channelIds)
                 .channelNames(channelNames)
                 .platforms(platforms)
+                .unitPrice(firstNonNullPrice(group, InventoryItemResponse::getUnitPrice))
+                .salePrice(firstNonNullPrice(group, InventoryItemResponse::getSalePrice))
+                .currentSalePrice(firstNonNullPrice(group, InventoryItemResponse::getCurrentSalePrice))
                 .mergedInventoryItemCount(group.size())
                 .mergedVariantCount(variantIds.size())
                 .quantityOnHand(quantityOnHand)
                 .reservedQuantity(reservedQuantity)
                 .availableQuantity(availableQuantity)
+                .incomingQuantity(incomingQuantity)
+                .outgoingQuantity(outgoingQuantity)
                 .averageCost(first.getAverageCost())
                 .lowStockThreshold(lowStockThreshold)
                 .isLowStock(availableQuantity <= lowStockThreshold)
                 .updatedAt(updatedAt)
                 .build();
+    }
+
+    private BigDecimal firstNonNullPrice(List<InventoryItemResponse> group,
+                                         java.util.function.Function<InventoryItemResponse, BigDecimal> extractor) {
+        return group.stream()
+                .map(extractor)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(BigDecimal.ZERO);
+    }
+
+    private void enrichMovementQuantities(List<InventoryItemResponse> responses) {
+        List<UUID> variantIds = responses.stream().map(InventoryItemResponse::getVariantId)
+                .filter(Objects::nonNull).distinct().toList();
+        if (variantIds.isEmpty()) {
+            return;
+        }
+        Map<UUID, Integer> incoming = quantityMap(purchaseOrderItemRepository.sumIncomingByVariantIds(variantIds));
+        Map<UUID, Integer> outgoing = quantityMap(inventoryIssueItemRepository.sumOutgoingByVariantIds(variantIds));
+        for (InventoryItemResponse response : responses) {
+            response.setIncomingQuantity(incoming.getOrDefault(response.getVariantId(), 0));
+            response.setOutgoingQuantity(outgoing.getOrDefault(response.getVariantId(), 0));
+        }
+    }
+
+    private Map<UUID, Integer> quantityMap(List<Object[]> rows) {
+        Map<UUID, Integer> result = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row.length >= 2 && row[0] instanceof UUID id && row[1] instanceof Number quantity) {
+                result.put(id, quantity.intValue());
+            }
+        }
+        return result;
     }
 
     private Map<UUID, ChannelSummary> loadChannelSummaries(List<UUID> variantIds, UUID preferredChannelId) {
@@ -436,7 +501,8 @@ public class InventoryServiceImpl implements InventoryService {
 
         if (preferredChannelId == null && !variantIdsBySku.isEmpty()) {
             List<ChannelProductVariant> skuGroupMappings = channelProductVariantRepository
-                    .findActiveByNormalizedSkuInWithVariant(new ArrayList<>(variantIdsBySku.keySet()));
+                    .findActiveByNormalizedExternalSkuInWithVariant(
+                            new ArrayList<>(variantIdsBySku.keySet()));
             for (ChannelProductVariant mapping : skuGroupMappings) {
                 String skuKey = channelMappingSkuKey(mapping);
                 Set<UUID> targetVariantIds = variantIdsBySku.get(skuKey);
@@ -667,7 +733,9 @@ public class InventoryServiceImpl implements InventoryService {
                         .variant(variant)
                         .quantityOnHand(0)
                         .reservedQuantity(0)
-                        .averageCost(variant.getCostPrice() == null ? BigDecimal.ZERO : variant.getCostPrice())
+                        .averageCost(ProductCostPolicy.initialCost(
+                                variant.getCostPrice(),
+                                variant.getPrice()))
                         .lowStockThreshold(resolveLowStockThreshold(variant))
                         .build())
                 .toList();

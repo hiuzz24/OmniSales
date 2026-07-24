@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, UserCheck, UserX, Lock, Plus, X, Mail, AlertTriangle, 
+import {
+  Users, UserCheck, UserX, Lock, Plus, X, Mail, AlertTriangle,
   Search, Download, Eye, Pencil, Key, ShieldAlert, Check, Copy, CheckCircle2
 } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -15,7 +15,7 @@ const UserListPage = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -107,6 +107,12 @@ const UserListPage = () => {
 
   const getStatusBadge = (item) => {
     if (item.status === 'INACTIVE' && !item.deletedAt && item.fullName === 'Chờ kích hoạt') {
+      if (item.inviteStatus === 'EXPIRED') {
+        return <span className={`${styles.badge} ${styles.expired}`}>Hết hạn</span>;
+      }
+      if (item.inviteStatus === 'CANCELLED') {
+        return <span className={`${styles.badge} ${styles.cancelled}`}>Đã hủy</span>;
+      }
       return <span className={`${styles.badge} ${styles.invited}`}>Chờ đăng ký</span>;
     }
     const s = String(item.status).toUpperCase();
@@ -127,7 +133,7 @@ const UserListPage = () => {
 
   // Client-side filtering
   const filteredUsers = users.filter(user => {
-    const matchesSearch = 
+    const matchesSearch =
       (user.fullName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.email || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter ? user.role === roleFilter : true;
@@ -149,9 +155,9 @@ const UserListPage = () => {
       ]);
 
       // Prepend BOM to force UTF-8 in Excel
-      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
         + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n');
-      
+
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
@@ -182,8 +188,15 @@ const UserListPage = () => {
     e.preventDefault();
     setInviteError('');
 
-    if (!inviteEmail.trim()) {
+    const emailTrimmed = inviteEmail.trim();
+    if (!emailTrimmed) {
       setInviteError('Vui lòng nhập địa chỉ email');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailTrimmed)) {
+      setInviteError('Email không đúng định dạng (ví dụ: name@omnisales.vn)');
       return;
     }
 
@@ -238,14 +251,14 @@ const UserListPage = () => {
     const numbers = '0123456789';
     const specials = '!@#$%^&*()';
     const all = uppers + lowers + numbers + specials;
-    
+
     let pwd = '';
     // Ensure complexity requirements
     pwd += uppers[Math.floor(Math.random() * uppers.length)];
     pwd += lowers[Math.floor(Math.random() * lowers.length)];
     pwd += numbers[Math.floor(Math.random() * numbers.length)];
     pwd += specials[Math.floor(Math.random() * specials.length)];
-    
+
     for (let i = 0; i < 6; i++) {
       pwd += all[Math.floor(Math.random() * all.length)];
     }
@@ -255,19 +268,56 @@ const UserListPage = () => {
 
   const handleSaveUser = async (e) => {
     e.preventDefault();
+
+    // 1. Validate Họ và tên
     if (!formName.trim()) {
       toast.error('Họ và tên không được để trống');
       return;
+    }
+
+    // 2. Validate Email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailTrimmed = formEmail.trim();
+    if (!emailTrimmed) {
+      toast.error('Email không được để trống');
+      return;
+    }
+    if (!emailRegex.test(emailTrimmed)) {
+      toast.error('Email không đúng định dạng (ví dụ: name@omnisales.vn)');
+      return;
+    }
+
+    // 3. Validate Số điện thoại
+    const cleanPhone = formPhone.trim().replace(/[\s.-]/g, '');
+    if (cleanPhone) {
+      const phoneRegex = /^(0[35789]|02)\d{8}$/;
+      if (!phoneRegex.test(cleanPhone)) {
+        toast.error('Số điện thoại không đúng định dạng Việt Nam (ví dụ: 0901234567 hoặc 0243123456)');
+        return;
+      }
+    }
+
+    // 4. Validate Mật khẩu (Chỉ áp dụng khi tạo mới nhân viên)
+    if (drawerMode === 'create') {
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&+=!\-_]).{8,}$/;
+      if (!formPassword) {
+        toast.error('Mật khẩu không được để trống');
+        return;
+      }
+      if (!passwordRegex.test(formPassword)) {
+        toast.error('Mật khẩu phải chứa ít nhất 8 ký tự, bao gồm chữ thường, chữ hoa, số và ít nhất một ký tự đặc biệt (@#$%^&+=!-_)');
+        return;
+      }
     }
 
     setActionLoading(true);
     try {
       if (drawerMode === 'create') {
         const payload = {
-          email: formEmail.trim(),
+          email: emailTrimmed,
           password: formPassword,
           fullName: formName.trim(),
-          phone: formPhone.trim() || null,
+          phone: cleanPhone || null,
           role: formRole
         };
         await userApi.createUser(payload);
@@ -276,7 +326,7 @@ const UserListPage = () => {
         const payload = {
           email: selectedUser.email,
           fullName: formName.trim(),
-          phone: formPhone.trim() || null,
+          phone: cleanPhone || null,
           role: formRole,
           status: formStatus
         };
@@ -391,28 +441,30 @@ const UserListPage = () => {
   const currentPermissions = ROLE_PERMISSIONS[formRole] || [];
 
   return (
-    <div className={styles.container}>
-      <PageHeader 
-        title="Quản lý nhân sự"
-        subtitle="Quản lý tài khoản nội bộ, phân quyền và trạng thái trong tenant"
-        icon={() => <Users size={20} />}
-        actions={
-          <div className={styles.headerActions}>
-            <button className={styles.btnExport} onClick={handleExportUsers}>
-              <Download size={18} />
-              Xuất danh sách
-            </button>
-            <button className={styles.btnInvite} onClick={handleOpenInvite}>
-              <Mail size={18} />
-              Mời thành viên
-            </button>
-            <button className={styles.btnCreate} onClick={() => handleOpenDrawer('create')}>
-              <Plus size={18} />
-              Thêm User mới
-            </button>
-          </div>
-        }
-      />
+    <div className={styles.page}>
+      <div className={styles.pageHeader}>
+        <PageHeader
+          title="Quản lý nhân sự"
+          subtitle="Quản lý tài khoản nội bộ, phân quyền và trạng thái trong tenant"
+          icon={() => <Users size={20} />}
+          actions={
+            <div className={styles.headerActions}>
+              <button className={styles.btnExport} onClick={handleExportUsers}>
+                <Download size={18} />
+                Xuất danh sách
+              </button>
+              <button className={styles.btnInvite} onClick={handleOpenInvite}>
+                <Mail size={18} />
+                Mời thành viên
+              </button>
+              <button className={styles.btnCreate} onClick={() => handleOpenDrawer('create')}>
+                <Plus size={18} />
+                Thêm User mới
+              </button>
+            </div>
+          }
+        />
+      </div>
 
       {/* ── Stats Grid ── */}
       <div className={styles.statsGrid}>
@@ -461,7 +513,7 @@ const UserListPage = () => {
       <div className={styles.filterBar}>
         <div className={styles.searchWrapper}>
           <Search size={18} className={styles.searchIcon} />
-          <input 
+          <input
             type="text"
             placeholder="Tìm theo tên hoặc email..."
             value={searchTerm}
@@ -471,8 +523,8 @@ const UserListPage = () => {
         </div>
 
         <div className={styles.filtersWrapper}>
-          <select 
-            value={roleFilter} 
+          <select
+            value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
             className={styles.filterSelect}
           >
@@ -483,8 +535,8 @@ const UserListPage = () => {
             <option value="SALES">Sales Staff (Kinh doanh)</option>
           </select>
 
-          <select 
-            value={statusFilter} 
+          <select
+            value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className={styles.filterSelect}
           >
@@ -517,7 +569,7 @@ const UserListPage = () => {
                   <th>Vai trò</th>
                   <th>Trạng thái</th>
                   <th>Ngày tham gia</th>
-                  <th style={{ textAlign: 'right' }}>Thao tác</th>
+                  <th style={{ textAlign: 'center' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -537,17 +589,19 @@ const UserListPage = () => {
                     <td>{formatDate(item.createdAt)}</td>
                     <td className={styles.actionsCell}>
                       {item.status === 'INACTIVE' && !item.deletedAt && item.fullName === 'Chờ kích hoạt' ? (
-                        <button 
-                          className={styles.btnActionCancelInvite}
-                          onClick={() => handleCancelInvite(item)}
-                          title="Hủy lời mời"
-                        >
-                          <UserX size={16} />
-                          <span>Hủy lời mời</span>
-                        </button>
+                        item.inviteStatus !== 'EXPIRED' && item.inviteStatus !== 'CANCELLED' && (
+                          <button
+                            className={styles.btnActionCancelInvite}
+                            onClick={() => handleCancelInvite(item)}
+                            title="Hủy lời mời"
+                          >
+                            <UserX size={16} />
+                            <span>Hủy lời mời</span>
+                          </button>
+                        )
                       ) : (
                         <>
-                          <button 
+                          <button
                             className={styles.btnActionView}
                             onClick={() => navigate(ROUTES.USER_DETAIL.replace(':id', item.id))}
                             title="Xem chi tiết"
@@ -555,7 +609,7 @@ const UserListPage = () => {
                             <Eye size={16} />
                             <span>View</span>
                           </button>
-                          <button 
+                          <button
                             className={styles.btnActionEdit}
                             onClick={() => handleOpenDrawer('edit', item)}
                             title="Chỉnh sửa"
@@ -575,11 +629,11 @@ const UserListPage = () => {
       </div>
 
       {/* ── Slide-out Edit/View Drawer ── */}
-      <div 
-        className={`${styles.drawerBackdrop} ${drawerOpen ? styles.drawerBackdropOpen : ''}`} 
+      <div
+        className={`${styles.drawerBackdrop} ${drawerOpen ? styles.drawerBackdropOpen : ''}`}
         onClick={handleCloseDrawer}
       />
-      
+
       <div className={`${styles.drawer} ${drawerOpen ? styles.drawerOpen : ''}`}>
         <div className={styles.drawerHeader}>
           <h2>
@@ -645,8 +699,8 @@ const UserListPage = () => {
                       disabled={actionLoading}
                       required
                     />
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className={styles.btnGenPwd}
                       onClick={() => setFormPassword(generateRandomPassword())}
                       title="Tạo mật khẩu ngẫu nhiên"
@@ -655,7 +709,7 @@ const UserListPage = () => {
                     </button>
                   </div>
                   <span className={styles.fieldHelper}>
-                    Mật khẩu có độ dài tối thiểu 6 ký tự, khuyên dùng mật khẩu mạnh bao gồm chữ hoa, số và ký tự đặc biệt.
+                    Mật khẩu có độ dài tối thiểu 8 ký tự, yêu cầu dùng mật khẩu mạnh bao gồm chữ hoa, số và ký tự đặc biệt.
                   </span>
                 </div>
               )}
@@ -677,7 +731,7 @@ const UserListPage = () => {
 
             <div className={styles.formSection}>
               <h3 className={styles.sectionTitle}>VAI TRÒ & TRẠNG THÁI</h3>
-              
+
               <div className={styles.formRow}>
                 <div className={styles.formGroup} style={{ flex: 1 }}>
                   <label className={styles.label}>Vai trò</label>
@@ -689,7 +743,9 @@ const UserListPage = () => {
                   >
                     <option value="SALES">Kinh doanh (Sales)</option>
                     <option value="OPERATIONS">Vận hành (Operations)</option>
-                    <option value="OWNER">Shop Owner</option>
+                    {(selectedUser?.role === 'OWNER' || formRole === 'OWNER') && (
+                      <option value="OWNER">Shop Owner</option>
+                    )}
                     <option value="SYSTEM_ADMIN">System Admin</option>
                   </select>
                 </div>
@@ -771,18 +827,18 @@ const UserListPage = () => {
             )}
 
             <div className={styles.rightFooterBtns}>
-              <button 
-                type="button" 
-                className={styles.btnCancel} 
+              <button
+                type="button"
+                className={styles.btnCancel}
                 onClick={handleCloseDrawer}
                 disabled={actionLoading}
               >
                 {drawerMode === 'view' ? 'Đóng' : 'Hủy'}
               </button>
-              
+
               {drawerMode !== 'view' && (
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className={styles.btnSave}
                   disabled={actionLoading}
                 >
@@ -804,7 +860,7 @@ const UserListPage = () => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <form onSubmit={handleSendInvite} className={styles.modalForm}>
               <div className={styles.formGroup}>
                 <label htmlFor="invite-email" className={styles.label}>Email người được mời</label>
@@ -832,7 +888,6 @@ const UserListPage = () => {
                   <option value="SALES">Sales Staff (Nhân viên bán hàng)</option>
                   <option value="OPERATIONS">Operations Staff (Nhân viên vận hành)</option>
                   <option value="SYSTEM_ADMIN">System Admin (Quản trị hệ thống)</option>
-                  <option value="OWNER">Shop Owner (Chủ shop)</option>
                 </select>
               </div>
 
@@ -870,28 +925,28 @@ const UserListPage = () => {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div style={{ padding: '20px 24px' }}>
               <p style={{ margin: '0 0 16px', fontSize: '14px', color: '#475569', lineHeight: '1.5' }}>
-                Mật khẩu tạm thời cho tài khoản <strong>{tempPwdData.email}</strong> đã được đặt lại thành công. 
+                Mật khẩu tạm thời cho tài khoản <strong>{tempPwdData.email}</strong> đã được đặt lại thành công.
                 Vui lòng cung cấp mật khẩu này cho nhân sự để đăng nhập:
               </p>
-              
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                backgroundColor: '#f1f5f9', 
-                border: '1px solid #cbd5e1', 
-                borderRadius: '8px', 
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                backgroundColor: '#f1f5f9',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
                 padding: '12px 16px',
                 marginBottom: '20px'
               }}>
                 <code style={{ fontSize: '16px', fontWeight: '600', color: '#0f172a', fontFamily: 'monospace' }}>
                   {tempPwdData.password}
                 </code>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className={styles.btnCopy}
                   onClick={() => {
                     navigator.clipboard.writeText(tempPwdData.password);
@@ -916,8 +971,8 @@ const UserListPage = () => {
                 </button>
               </div>
 
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className={styles.btnSubmit}
                 onClick={() => setShowTempPwd(false)}
                 style={{ width: '100%', justifyContent: 'center' }}

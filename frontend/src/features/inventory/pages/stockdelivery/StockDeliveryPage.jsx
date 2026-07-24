@@ -73,7 +73,7 @@ const ISSUE_TYPES = {
 };
 
 const STATUS_CONFIG = {
-  DRAFT: { label: 'Lưu tạm', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  DRAFT: { label: 'Đang xử lý', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
   CONFIRMED: { label: 'Hoàn thành', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
   CANCELLED: { label: 'Đã hủy', color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
 };
@@ -98,7 +98,7 @@ const DELIVERY_EXPORT_COLUMNS = [
   { key: 'issueCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (delivery) => delivery.issueCode ?? '' },
   { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: true, getValue: (delivery) => delivery.warehouseName ?? '' },
   { key: 'issueType', label: 'Loại xuất', width: 18, defaultChecked: true, getValue: (delivery) => getStatusLabel(delivery.issueType ?? delivery.deliveryType) },
-  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (delivery) => getStatusLabel(delivery.status) },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (delivery) => delivery.status === 'DRAFT' ? 'Đang xử lý' : getStatusLabel(delivery.status) },
   { key: 'recipient', label: 'Người / Đơn nhận', width: 24, defaultChecked: true, getValue: (delivery) => delivery.recipient ?? '' },
   { key: 'totalSkuCount', label: 'SL SKU', width: 10, type: 'number', defaultChecked: true, getValue: (delivery) => delivery.totalSkuCount ?? delivery.items?.length ?? 0 },
   { key: 'totalQuantity', label: 'Tổng SL', width: 12, type: 'number', defaultChecked: true, getValue: (delivery) => delivery.totalQuantity ?? 0 },
@@ -123,7 +123,7 @@ const DELIVERY_DETAIL_EXPORT_COLUMNS = [
   { key: 'quantity', label: 'Số lượng', width: 12, type: 'number', defaultChecked: true, getValue: (row) => row.quantity },
   { key: 'unitCost', label: 'Đơn giá', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.unitCost },
   { key: 'lineTotal', label: 'Thành tiền', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.lineTotal },
-  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => getStatusLabel(row.status) },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => row.status === 'DRAFT' ? 'Đang xử lý' : getStatusLabel(row.status) },
   { key: 'note', label: 'Ghi chú', width: 30, defaultChecked: false, getValue: (row) => row.note },
 ];
 
@@ -375,7 +375,7 @@ export default function StockDeliveryPage() {
     if (!canComplete || !delivery?.id || delivery.status !== 'DRAFT') return;
     const ok = await confirm({
       title: 'Hoàn thành phiếu xuất?',
-      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`,
+      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Đang xử lý.`,
       confirmText: 'Hoàn thành',
     });
     if (!ok) {

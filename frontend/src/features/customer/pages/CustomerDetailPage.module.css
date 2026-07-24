@@ -5,6 +5,28 @@
   max-width: 960px;
 }
 
+/* Product workspace detail language */
+.page { gap: 16px; }
+.pageHeader { padding: 16px 20px; border: 1px solid #dbe5ec; border-radius: 14px; background: linear-gradient(135deg, rgba(239, 246, 255, 0.94), rgba(240, 253, 250, 0.88)); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+.pageTitle { color: #0f172a; font-size: 24px; letter-spacing: -0.02em; }
+.backBtn, .editBtn, .deleteBtn { min-height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.backBtn { border-color: #cbd8e2; background: #fff; }
+.editBtn { border-color: #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.editBtn:hover { border-color: #1d4ed8; background: #1d4ed8; }
+.heroCard, .card { border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.heroCard { background: linear-gradient(135deg, #ffffff, #f7fbff 62%, #f2fbf7); }
+.avatar { color: #2563eb; background: #eff6ff; }
+.customerName { color: #0f172a; }
+.heroStatValue { color: #1d4ed8; font-variant-numeric: tabular-nums; }
+.cardHeader { border-color: #e3eaf0; }
+.cardIcon { border: 1px solid #bfdbfe; border-radius: 9px; color: #2563eb; background: #eff6ff; }
+.cardTitle { color: #172033; font-size: 15px; }
+.infoRow { border-color: #e8eef3; }
+.modalOverlay { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
+.modal { border: 1px solid #dbe5ec; border-radius: 15px; box-shadow: 0 24px 64px rgba(15, 23, 42, 0.26); }
+
+@media (prefers-reduced-motion: reduce) { .backBtn, .editBtn, .deleteBtn { transition: none; } }
+
 /* ── Page Header ── */
 .pageHeader {
   display: flex;
@@ -444,3 +466,22 @@
     text-align: left;
   }
 }
+
+.page { gap: 16px; }
+.pageHeader { padding: 16px 20px; border: 1px solid #dbe5ec; border-radius: 14px; background: linear-gradient(135deg, rgba(239, 246, 255, 0.94), rgba(240, 253, 250, 0.88)); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+.pageTitle { color: #0f172a; font-size: 24px; letter-spacing: -0.02em; }
+.backBtn, .editBtn, .deleteBtn { min-height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.backBtn { border-color: #cbd8e2; background: #fff; }
+.editBtn { border-color: #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.editBtn:hover { border-color: #1d4ed8; background: #1d4ed8; }
+.heroCard, .card { border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.heroCard { background: linear-gradient(135deg, #ffffff, #f7fbff 62%, #f2fbf7); }
+.avatar { color: #2563eb; background: #eff6ff; }
+.customerName { color: #0f172a; }
+.heroStatValue { color: #1d4ed8; font-variant-numeric: tabular-nums; }
+.cardHeader { border-color: #e3eaf0; }
+.cardIcon { border: 1px solid #bfdbfe; border-radius: 9px; color: #2563eb; background: #eff6ff; }
+.cardTitle { color: #172033; font-size: 15px; }
+.infoRow { border-color: #e8eef3; }
+.modalOverlay { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
+.modal { border: 1px solid #dbe5ec; border-radius: 15px; box-shadow: 0 24px 64px rgba(15, 23, 42, 0.26); }

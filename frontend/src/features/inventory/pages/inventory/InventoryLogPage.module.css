@@ -368,3 +368,25 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Product workspace log language */
+.pageContainer { gap: 14px; animation-duration: 0.22s; }
+.filterCard, .logsCard { gap: 14px; padding: 16px; border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.logsCard { padding: 0; }
+.logsCard .cardHeader { padding: 14px 16px; border-color: #dbe5ec; background: linear-gradient(105deg, #f0f7fc, #fbfdfe 58%, #f2faf6); }
+.headerTitle { color: #172033; font-size: 15px; }
+.headerIcon { color: #2563eb; }
+.resetBtn, .pageBtn { min-height: 36px; border-color: #cbd8e2; border-radius: 8px; background: #fff; }
+.filtersGrid { gap: 12px; }
+.filterLabel { color: #52667c; font-size: 11px; font-weight: 750; letter-spacing: 0.035em; text-transform: uppercase; }
+.input, .select { min-height: 40px; border-color: #cbd8e2; border-radius: 8px; background-color: #fff; font-size: 13px; }
+.input:focus, .select:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+.table { min-width: 980px; border-collapse: separate; border-spacing: 0; }
+.table th { padding: 12px 14px; color: #42566d; background: #f3f7fa; font-size: 11px; font-weight: 750; letter-spacing: 0.025em; text-transform: uppercase; }
+.table td { padding: 12px 14px; border-color: #e8eef3; color: #334155; font-size: 13px; }
+.row { transition: background-color 150ms ease, box-shadow 150ms ease; }
+.row:hover { background: linear-gradient(90deg, rgba(239, 246, 255, 0.7), rgba(240, 253, 250, 0.42)); box-shadow: inset 3px 0 #60a5fa; }
+.pagination { border-color: #dbe5ec; background: #fbfdff; }
+.pageBtnActive { border-color: #2563eb; background: #2563eb; }
+
+@media (prefers-reduced-motion: reduce) { .pageContainer, .row { animation: none; transition: none; } }

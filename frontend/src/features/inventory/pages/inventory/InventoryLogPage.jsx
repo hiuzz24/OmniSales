@@ -252,7 +252,7 @@ export default function InventoryLogPage() {
   const endItem = Math.min((page + 1) * PAGE_SIZE, totalElements);
 
   return (
-    <div className={styles.pageContainer}>
+    <div className={`${styles.pageContainer} product-workspace`}>
       {/* Filters Card */}
       <div className={styles.filterCard}>
         <div className={styles.cardHeader}>

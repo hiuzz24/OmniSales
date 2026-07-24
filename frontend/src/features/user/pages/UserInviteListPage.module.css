@@ -1,17 +1,76 @@
-.container {
+.page {
+  --catalog-accent: #2563eb;
+  --catalog-accent-strong: #1d4ed8;
+  --catalog-accent-soft: #eff6ff;
+  --catalog-ink: #111827;
+  --catalog-muted: #64748b;
+  --catalog-line: #e0e7ef;
+  --catalog-line-soft: #edf1f5;
+  --catalog-card: #ffffff;
+  --catalog-surface: #f4f7fa;
+  --catalog-shadow: 0 10px 28px rgba(61, 91, 126, 0.065), 0 2px 5px rgba(15, 23, 42, 0.03);
+  width: calc(100% + 48px);
+  max-width: none;
+  height: calc(100dvh - 64px);
+  min-height: 0;
+  margin: -24px;
+  padding: 24px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 24px;
-  background-color: #f8fafc;
-  min-height: calc(100vh - 64px);
+  overflow: hidden;
+  color: var(--catalog-ink);
+  background:
+    radial-gradient(circle at 8% 2%, rgba(189, 219, 242, 0.28), transparent 27%),
+    radial-gradient(circle at 96% 8%, rgba(208, 224, 217, 0.22), transparent 24%),
+    linear-gradient(180deg, #f2f7fb 0%, #f7f8fa 360px);
+  font-family: inherit;
 }
 
-/* ── Page Header ── */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.pageHeader {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+  padding: 14px 18px;
+  border: 1px solid #d8e3ed;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(235, 245, 252, 0.96) 0%, rgba(247, 250, 252, 0.96) 58%, rgba(240, 248, 246, 0.94) 100%);
+  box-shadow: var(--catalog-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.pageHeader > div {
+  gap: 14px;
+  margin-bottom: 0;
+}
+
+.pageHeader > div > div:first-child > div:first-child {
+  border-color: #dce5ed;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 3px 10px rgba(51, 78, 111, 0.045);
+}
+
+.pageHeader:hover > div > div:first-child > div:first-child {
+  transform: none;
+  box-shadow: 0 3px 10px rgba(51, 78, 111, 0.045);
+}
+
+.pageHeader h1 {
+  font-size: clamp(23px, 2vw, 28px);
+  letter-spacing: 0;
+}
+
+.pageHeader p {
+  margin-bottom: 0;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.pageHeader > div > div:last-child {
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid rgba(211, 222, 233, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.52);
 }
 
 .titleSection h2 {
@@ -226,10 +285,8 @@
 
 /* ── Actions Cell ── */
 .actionsCell {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .btnActionCancelInvite {

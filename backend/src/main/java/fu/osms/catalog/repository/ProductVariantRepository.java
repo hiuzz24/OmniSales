@@ -60,37 +60,4 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             "ORDER BY v.createdAt DESC")
     Page<ProductVariant> findAllActive(Pageable pageable);
 
-    @Query("SELECT DISTINCT v FROM ProductVariant v " +
-            "WHERE LOWER(v.sku) = :normalizedSku " +
-            "AND v.isActive = true " +
-            "AND v.deletedAt IS NULL " +
-            "AND EXISTS (" +
-            "    SELECT 1 FROM ChannelProductVariant cpv " +
-            "    WHERE cpv.variant = v " +
-            "    AND cpv.channelProduct.channel.deletedAt IS NULL " +
-            "    AND cpv.channelProduct.mappingState = 'ACTIVE'" +
-            ") " +
-            "ORDER BY v.createdAt ASC")
-    List<ProductVariant> findActiveMarketplaceMappedByNormalizedSku(@Param("normalizedSku") String normalizedSku);
-
-    @Query("SELECT DISTINCT linkedVariant FROM ChannelProductVariant linked " +
-            "JOIN linked.variant linkedVariant " +
-            "JOIN linked.channelProduct linkedChannelProduct " +
-            "JOIN linkedChannelProduct.channel linkedChannel " +
-            "WHERE linkedChannel.deletedAt IS NULL " +
-            "AND linkedChannelProduct.mappingState = 'ACTIVE' " +
-            "AND linkedVariant.isActive = true " +
-            "AND linkedVariant.deletedAt IS NULL " +
-            "AND LOWER(COALESCE(linked.externalSku, linkedVariant.sku)) IN (" +
-            "    SELECT LOWER(COALESCE(source.externalSku, sourceVariant.sku)) " +
-            "    FROM ChannelProductVariant source " +
-            "    JOIN source.variant sourceVariant " +
-            "    JOIN source.channelProduct sourceChannelProduct " +
-            "    JOIN sourceChannelProduct.channel sourceChannel " +
-            "    WHERE sourceVariant.id = :variantId " +
-            "    AND sourceChannel.deletedAt IS NULL " +
-            "    AND sourceChannelProduct.mappingState = 'ACTIVE'" +
-            ") " +
-            "ORDER BY linkedVariant.createdAt ASC")
-    List<ProductVariant> findActiveMarketplaceMappedSharingSkuWithVariantId(@Param("variantId") UUID variantId);
 }

@@ -31,27 +31,24 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
             return Set.of();
         }
 
-        List<ChannelProductVariant> seedMappings = channelProductVariantRepository
-                .findActiveByVariantIdInWithChannel(new ArrayList<>(scopedVariantIds));
-        Set<String> skuKeys = new LinkedHashSet<>();
-        for (ChannelProductVariant mapping : seedMappings) {
-            String skuKey = skuKey(mapping);
-            if (skuKey != null) {
-                skuKeys.add(skuKey);
-            }
-        }
-        if (skuKeys.isEmpty()) {
-            return scopedVariantIds;
-        }
-
         Set<UUID> result = new LinkedHashSet<>(scopedVariantIds);
-        channelProductVariantRepository.findActiveByNormalizedSkuInWithVariant(new ArrayList<>(skuKeys))
-                .stream()
-                .map(ChannelProductVariant::getVariant)
-                .filter(Objects::nonNull)
-                .map(variant -> variant.getId())
-                .filter(Objects::nonNull)
-                .forEach(result::add);
+        for (UUID variantId : scopedVariantIds) {
+            Set<String> externalSkuKeys = channelProductVariantRepository
+                    .findActiveByVariantIdWithChannel(variantId).stream()
+                    .map(this::skuKey)
+                    .filter(Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            if (externalSkuKeys.size() != 1) {
+                continue;
+            }
+            channelProductVariantRepository.findActiveByNormalizedExternalSkuInWithVariant(
+                            new ArrayList<>(externalSkuKeys)).stream()
+                    .map(ChannelProductVariant::getVariant)
+                    .filter(Objects::nonNull)
+                    .map(variant -> variant.getId())
+                    .filter(Objects::nonNull)
+                    .forEach(result::add);
+        }
         return result;
     }
 
@@ -62,11 +59,13 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
             if (mapping == null || mapping.getVariant() == null || mapping.getVariant().getId() == null) {
                 return 0;
             }
-            return maxAvailableQuantity(List.of(mapping.getVariant().getId()));
+            return maxAvailableQuantity(
+                    List.of(mapping.getVariant().getId()),
+                    defaultWarehouseId(mapping));
         }
 
         List<UUID> variantIds = channelProductVariantRepository
-                .findActiveByNormalizedSkuInWithVariant(List.of(skuKey))
+                .findActiveByNormalizedExternalSkuInWithVariant(List.of(skuKey))
                 .stream()
                 .map(ChannelProductVariant::getVariant)
                 .filter(Objects::nonNull)
@@ -74,28 +73,50 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-        return maxAvailableQuantity(variantIds);
+        return maxAvailableQuantity(variantIds, defaultWarehouseId(mapping));
     }
 
-    private int maxAvailableQuantity(Collection<UUID> variantIds) {
+    private int maxAvailableQuantity(
+            Collection<UUID> variantIds,
+            UUID defaultWarehouseId) {
         Set<UUID> sanitized = sanitizeVariantIds(variantIds);
         if (sanitized.isEmpty()) {
             return 0;
         }
         return inventoryItemRepository.findByVariantIdIn(sanitized)
                 .stream()
+                .filter(item -> defaultWarehouseId == null
+                        || (item.getWarehouse() != null
+                        && defaultWarehouseId.equals(item.getWarehouse().getId())))
                 .mapToInt(this::availableQuantity)
                 .max()
                 .orElse(0);
+    }
+
+    private UUID defaultWarehouseId(ChannelProductVariant mapping) {
+        if (mapping == null
+                || mapping.getChannelProduct() == null
+                || mapping.getChannelProduct().getChannel() == null
+                || mapping.getChannelProduct().getChannel().getMetadata() == null) {
+            return null;
+        }
+        Object value = mapping.getChannelProduct().getChannel()
+                .getMetadata().get("defaultWarehouseId");
+        if (value == null || value.toString().isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value.toString().trim());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private int availableQuantity(InventoryItem item) {
         if (item.getAvailableQuantity() != null) {
             return Math.max(item.getAvailableQuantity(), 0);
         }
-        int quantityOnHand = item.getQuantityOnHand() == null ? 0 : item.getQuantityOnHand();
-        int reservedQuantity = item.getReservedQuantity() == null ? 0 : item.getReservedQuantity();
-        return Math.max(quantityOnHand - reservedQuantity, 0);
+        return 0;
     }
 
     private Set<UUID> sanitizeVariantIds(Collection<UUID> variantIds) {
@@ -112,22 +133,10 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
     }
 
     private String skuKey(ChannelProductVariant mapping) {
-        if (mapping == null) {
+        if (mapping == null || mapping.getExternalSku() == null
+                || mapping.getExternalSku().isBlank()) {
             return null;
         }
-        String value = firstNonBlank(
-                mapping.getExternalSku(),
-                mapping.getVariant() == null ? null : mapping.getVariant().getSku()
-        );
-        return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
-    }
-
-    private String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return null;
+        return mapping.getExternalSku().trim().toLowerCase(Locale.ROOT);
     }
 }

@@ -5,6 +5,7 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.common.enums.SyncStatus;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
@@ -88,6 +89,7 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
 
         marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
         OffsetDateTime syncStartedAt = OffsetDateTime.now();
+        List<String> failures = new ArrayList<>();
         for (Channel channel : connectedMarketplaceChannels()) {
             if (excludedChannelId != null && excludedChannelId.equals(channel.getId())) {
                 log.debug("[MarketplaceInventoryPropagation] Skip source channel channelId={}", excludedChannelId);
@@ -123,7 +125,12 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
             } catch (Exception e) {
                 log.error("[MarketplaceInventoryPropagation] Failed to push stock channelId={} platform={} variantIds={}",
                         channel.getId(), channel.getPlatform(), scopedVariantIds, e);
+                markMappingsFailed(channel.getId(), scopedVariantIds);
+                failures.add(channel.getDisplayName() + " (" + channel.getPlatform() + "): " + rootMessage(e));
             }
+        }
+        if (!failures.isEmpty()) {
+            throw new IllegalStateException("Đồng bộ tồn kho thất bại: " + String.join("; ", failures));
         }
     }
 
@@ -153,6 +160,21 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
 
     private boolean isSupported(PlatformType platform) {
         return platform == PlatformType.SHOPIFY || platform == PlatformType.LAZADA || platform == PlatformType.TIKTOK;
+    }
+
+    private void markMappingsFailed(UUID channelId, Collection<UUID> variantIds) {
+        List<fu.osms.channel.entity.ChannelProductVariant> mappings = channelProductVariantRepository
+                .findActiveByChannelIdAndVariantIdInWithVariant(channelId, new ArrayList<>(variantIds));
+        mappings.forEach(mapping -> mapping.setSyncStatus(SyncStatus.FAILED));
+        channelProductVariantRepository.saveAll(mappings);
+    }
+
+    private String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
 
     private Set<UUID> sanitizeVariantIds(Collection<UUID> variantIds) {

@@ -129,7 +129,7 @@ const InventoryDetailPage = () => {
 
   if (errorDetail) {
     return (
-      <div className={styles.page}>
+      <div className={`${styles.page} product-workspace`}>
         <div className={styles.errorWrapper}>
           <AlertCircle size={20} />
           <span>{errorDetail}</span>
@@ -191,7 +191,7 @@ const InventoryDetailPage = () => {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       {/* Header */}
       <div className={styles.pageHeader}>
         <div className={styles.headerLeft}>

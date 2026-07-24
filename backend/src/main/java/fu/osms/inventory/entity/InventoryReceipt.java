@@ -1,6 +1,7 @@
 package fu.osms.inventory.entity;
 
 import fu.osms.auth.entity.User;
+import fu.osms.purchase.entity.PurchaseOrder;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -31,6 +32,10 @@ public class InventoryReceipt {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id")
     private Supplier supplier;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "purchase_order_id", unique = true)
+    private PurchaseOrder purchaseOrder;
 
     @Column(name = "receipt_code", nullable = false, unique = true, length = 100)
     private String receiptCode;

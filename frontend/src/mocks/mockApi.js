@@ -125,7 +125,72 @@ mock.onGet(/\/products\/\d+/).reply((config) => {
 
 //  Warehouse Mock 
 
-mock.onGet('/warehouses').reply(200, { data: MOCK_WAREHOUSES });
+mock.onGet('/warehouses').reply((config) => {
+  const { keyword = '', status = 'ALL' } = config.params || {};
+  let filtered = [...MOCK_WAREHOUSES];
+
+  if (keyword) {
+    const kw = keyword.toLowerCase();
+    filtered = filtered.filter(
+      (w) =>
+        (w.name || '').toLowerCase().includes(kw) ||
+        (w.code || '').toLowerCase().includes(kw) ||
+        (w.address || '').toLowerCase().includes(kw)
+    );
+  }
+
+  if (status && status !== 'ALL') {
+    const isActive = status === 'ACTIVE';
+    filtered = filtered.filter((w) => w.isActive === isActive);
+  }
+
+  return [200, { data: filtered }];
+});
+
+mock.onGet(/\/warehouses\/\d+/).reply((config) => {
+  const id = parseInt(config.url.split('/').pop());
+  const warehouse = MOCK_WAREHOUSES.find((w) => w.id === id);
+  return warehouse ? [200, { data: warehouse }] : [404, { message: 'Warehouse not found' }];
+});
+
+mock.onPost('/warehouses').reply((config) => {
+  const data = JSON.parse(config.data);
+  const newId = MOCK_WAREHOUSES.length > 0 ? Math.max(...MOCK_WAREHOUSES.map((w) => w.id)) + 1 : 1;
+  const newWarehouse = {
+    id: newId,
+    code: data.code || `WH${newId}`,
+    name: data.name,
+    address: data.address,
+    stock: 0,
+    capacity: Number(data.capacity || 5000),
+    isActive: data.isActive !== undefined ? data.isActive : true,
+  };
+  MOCK_WAREHOUSES.push(newWarehouse);
+  return [200, { data: newWarehouse, success: true }];
+});
+
+mock.onPut(/\/warehouses\/\d+/).reply((config) => {
+  const id = parseInt(config.url.split('/').pop());
+  const data = JSON.parse(config.data);
+  const index = MOCK_WAREHOUSES.findIndex((w) => w.id === id);
+  if (index !== -1) {
+    MOCK_WAREHOUSES[index] = { ...MOCK_WAREHOUSES[index], ...data };
+    return [200, { data: MOCK_WAREHOUSES[index], success: true }];
+  }
+  return [404, { message: 'Warehouse not found' }];
+});
+
+mock.onPatch(/\/warehouses\/\d+\/status/).reply((config) => {
+  const urlParts = config.url.split('/');
+  const id = parseInt(urlParts[urlParts.length - 2]);
+  const data = JSON.parse(config.data);
+  const index = MOCK_WAREHOUSES.findIndex((w) => w.id === id);
+  if (index !== -1) {
+    MOCK_WAREHOUSES[index].isActive = data.isActive;
+    return [200, { data: MOCK_WAREHOUSES[index], success: true }];
+  }
+  return [404, { message: 'Warehouse not found' }];
+});
 
 //  Reports / Dashboard Mock 
 

@@ -27,9 +27,24 @@ public class SupplierServiceImpl implements SupplierService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<SupplierResponse> getAll(int page, int size) {
-
         Page<Supplier> suppliersPage = supplierRepository
                 .findByIsActiveTrueOrderByNameAsc(PageRequest.of(page, size));
+        return toPageResponse(suppliersPage);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<SupplierResponse> searchActive(String keyword, int page, int size) {
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        Page<Supplier> suppliersPage = supplierRepository.searchActive(
+                normalizedKeyword,
+                PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100))
+        );
+
+        return toPageResponse(suppliersPage);
+    }
+
+    private PageResponse<SupplierResponse> toPageResponse(Page<Supplier> suppliersPage) {
 
         List<SupplierResponse> content = suppliersPage.getContent().stream()
                 .map(supplierMapper::toResponse)
