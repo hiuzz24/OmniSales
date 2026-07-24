@@ -59,14 +59,13 @@ const NAV_ITEMS = [
   { name: 'Sao lưu dữ liệu', href: ROUTES.BACKUP,      icon: Database,      roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Giám sát API',    href: ROUTES.API_MONITOR, icon: Shield,        roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Cấu hình hệ thống', href: ROUTES.SYSTEM_SETTINGS, icon: Settings,  roles: [ROLES.SYSTEM_ADMIN] },
-  { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
 ];
 
 const ROLE_HIDDEN = {
-  [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Nhân sự', 'Cài đặt'],
+  [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Nhân sự'],
   [ROLES.OPERATIONS]: ['Nhân sự'],
   [ROLES.OWNER]: [],
-  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Đơn hàng', 'Kênh bán hàng', 'Cài đặt'],
+  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Đơn hàng', 'Kênh bán hàng'],
 };
 
 const isVisible = (item, role) => {
