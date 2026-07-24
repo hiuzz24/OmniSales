@@ -61,6 +61,7 @@ export default function InventoryDocumentListPage({
   footerLeft,
   footerRight,
   pagination,
+  children,
 }) {
   return (
     <main className={styles.page}>
@@ -113,53 +114,57 @@ export default function InventoryDocumentListPage({
 
       <section className={styles.filterBar} aria-label="Bộ lọc">{filters}</section>
 
-      <section className={styles.tableCard} aria-label={title}>
-        <div className={styles.tableScroll}>
-          <table className={styles.table} style={{ '--table-min-width': `${minTableWidth}px` }}>
-            <thead><tr>{columns.map((column) => (
-              <th key={column.key ?? column.label} style={{ textAlign: column.align ?? 'left' }}>{column.label}</th>
-            ))}</tr></thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 5 }, (_, index) => <tr key={index} className={styles.skeletonRow}><td colSpan={colSpan ?? columns.length}><span /></td></tr>)
-              ) : rows?.length ? rows : (
-                <tr><td colSpan={colSpan ?? columns.length} className={styles.emptyCell}>{emptyText}</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {(footerLeft || footerRight) && <div className={styles.tableFooter}><div>{footerLeft}</div><div>{footerRight}</div></div>}
-
-        {!loading && pagination && pagination.totalPages >= 0 && (
-          <div className={styles.paginationWrap}>
-            <Pagination
-              currentPage={pagination.page}
-              totalPages={pagination.totalPages}
-              totalElements={pagination.totalElements}
-              pageSize={pagination.pageSize ?? 10}
-              currentCount={rows?.length ?? 0}
-              itemLabel={pagination.itemLabel ?? 'phiếu'}
-              onPageChange={(nextPage) => {
-                if (pagination.onPageChange) return pagination.onPageChange(nextPage);
-                if (nextPage > pagination.page) pagination.onNext?.();
-                if (nextPage < pagination.page) pagination.onPrevious?.();
-                return undefined;
-              }}
-            />
+      {children ? (
+        children
+      ) : (
+        <section className={styles.tableCard} aria-label={title}>
+          <div className={styles.tableScroll}>
+            <table className={styles.table} style={{ '--table-min-width': `${minTableWidth}px` }}>
+              <thead><tr>{columns.map((column) => (
+                <th key={column.key ?? column.label} style={{ textAlign: column.align ?? 'left' }}>{column.label}</th>
+              ))}</tr></thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 5 }, (_, index) => <tr key={index} className={styles.skeletonRow}><td colSpan={colSpan ?? columns.length}><span /></td></tr>)
+                ) : rows?.length ? rows : (
+                  <tr><td colSpan={colSpan ?? columns.length} className={styles.emptyCell}>{emptyText}</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-        {pagination?.totalPages < 0 && (
-          <div className={styles.simplePagination}>
-            <span>{pagination.label}</span>
-            <div>
-              <button type="button" disabled={pagination.page <= 0} onClick={pagination.onPrevious}><ChevronLeft size={15} /> Trước</button>
-              <strong>Trang {pagination.page + 1} / {pagination.totalPages}</strong>
-              <button type="button" disabled={pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0} onClick={pagination.onNext}>Sau <ChevronRight size={15} /></button>
+
+          {(footerLeft || footerRight) && <div className={styles.tableFooter}><div>{footerLeft}</div><div>{footerRight}</div></div>}
+
+          {!loading && pagination && pagination.totalPages >= 0 && (
+            <div className={styles.paginationWrap}>
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                totalElements={pagination.totalElements}
+                pageSize={pagination.pageSize ?? 10}
+                currentCount={rows?.length ?? 0}
+                itemLabel={pagination.itemLabel ?? 'phiếu'}
+                onPageChange={(nextPage) => {
+                  if (pagination.onPageChange) return pagination.onPageChange(nextPage);
+                  if (nextPage > pagination.page) pagination.onNext?.();
+                  if (nextPage < pagination.page) pagination.onPrevious?.();
+                  return undefined;
+                }}
+              />
             </div>
-          </div>
-        )}
-      </section>
+          )}
+          {pagination?.totalPages < 0 && (
+            <div className={styles.simplePagination}>
+              <span>{pagination.label}</span>
+              <div>
+                <button type="button" disabled={pagination.page <= 0} onClick={pagination.onPrevious}><ChevronLeft size={15} /> Trước</button>
+                <strong>Trang {pagination.page + 1} / {pagination.totalPages}</strong>
+                <button type="button" disabled={pagination.page >= pagination.totalPages - 1 || pagination.totalElements === 0} onClick={pagination.onNext}>Sau <ChevronRight size={15} /></button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }

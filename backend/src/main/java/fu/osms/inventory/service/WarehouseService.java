@@ -17,7 +17,11 @@ public interface WarehouseService {
 
     List<WarehouseResponse> getAll();
 
+    List<WarehouseResponse> getAll(String keyword, String status);
+
     WarehouseResponse update(UUID id, WarehouseRequest request);
+
+    WarehouseResponse toggleStatus(UUID id, Boolean isActive);
 
     void delete(UUID id);
 

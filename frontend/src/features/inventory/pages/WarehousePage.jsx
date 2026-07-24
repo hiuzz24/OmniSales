@@ -158,7 +158,7 @@ export default function WarehousePage() {
     // Calculate warehouse stats
     const totalCount = warehouses.length;
     const activeCount = warehouses.filter(w => w.isActive).length;
-    const totalStock = warehouses.reduce((sum, w) => sum + (w.stock || 0), 0);
+    const totalStock = warehouses.reduce((sum, w) => sum + (w.totalStock ?? w.stock ?? 0), 0);
 
     const stats = [
         { label: 'Tổng số kho hàng', value: totalCount, icon: Warehouse, color: '#3b82f6', bg: '#eff6ff', active: true },
