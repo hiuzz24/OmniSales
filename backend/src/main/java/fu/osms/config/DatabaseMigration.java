@@ -129,5 +129,24 @@ public class DatabaseMigration {
             log.warn("Migration skipped or already applied for channel_credentials.refresh_token_expires_at: {}", e.getMessage());
         }
 
+        try {
+            jdbcTemplate.execute("""
+                        INSERT INTO system_settings (key, value, description, category, updated_at)
+                        VALUES 
+                        ('store.name', 'OmniSales Store', 'Tên thương hiệu / Cửa hàng', 'STORE', NOW()),
+                        ('store.phone', '0987654321', 'Hotline liên hệ', 'STORE', NOW()),
+                        ('store.email', 'contact@omnisales.vn', 'Email liên hệ', 'STORE', NOW()),
+                        ('store.tax_code', '0101234567', 'Mã số thuế doanh nghiệp', 'STORE', NOW()),
+                        ('store.address', '123 Nguyễn Trãi, Thanh Xuân, Hà Nội', 'Địa chỉ trụ sở chính', 'STORE', NOW()),
+                        ('inventory.low_stock_threshold', '10', 'Ngưỡng cảnh báo tồn kho tối thiểu', 'INVENTORY', NOW()),
+                        ('inventory.allow_negative_stock', 'false', 'Cho phép xuất kho khi tồn kho bằng 0', 'INVENTORY', NOW()),
+                        ('inventory.reserved_timeout_minutes', '30', 'Thời gian tự động giải phóng hàng giữ (phút)', 'INVENTORY', NOW())
+                        ON CONFLICT (key) DO NOTHING;
+                    """);
+            log.info("Migration: seeded default store and inventory system settings");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for system_settings seeding: {}", e.getMessage());
+        }
+
     }
 }

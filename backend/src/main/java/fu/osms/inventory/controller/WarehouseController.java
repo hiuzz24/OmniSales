@@ -22,8 +22,10 @@ public class WarehouseController {
     private final WarehouseService warehouseService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> create(@Valid @RequestBody WarehouseRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(warehouseService.create(request)));
     }
 
     @GetMapping("/{id}")
@@ -40,20 +42,33 @@ public class WarehouseController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
-    public ResponseEntity<ApiResponse<List<WarehouseResponse>>> getAll() {
-        List<WarehouseResponse> warehouses = warehouseService.getAll();
+    public ResponseEntity<ApiResponse<List<WarehouseResponse>>> getAll(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status) {
+        List<WarehouseResponse> warehouses = warehouseService.getAll(keyword, status);
         return ResponseEntity.ok(ApiResponse.success(warehouses));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> update(@PathVariable UUID id,
                                                                  @Valid @RequestBody WarehouseRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.update(id, request)));
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<WarehouseResponse>> toggleStatus(@PathVariable UUID id,
+                                                                       @RequestBody java.util.Map<String, Boolean> body) {
+        Boolean isActive = body.getOrDefault("isActive", true);
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.toggleStatus(id, isActive)));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        warehouseService.delete(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/userWarehouse/{id}")
