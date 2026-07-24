@@ -81,7 +81,7 @@ const CustomerCreatePage = () => {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       {/* Page Header */}
       <div className={styles.pageHeader}>
         <button className={styles.backBtn} onClick={() => navigate(ROUTES.CUSTOMER_LIST)}>

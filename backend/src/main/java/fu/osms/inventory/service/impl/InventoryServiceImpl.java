@@ -6,6 +6,7 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.dto.PageResponse;
@@ -28,10 +29,12 @@ import fu.osms.inventory.mapper.InventoryDetailMapper;
 import fu.osms.inventory.mapper.InventoryItemMapper;
 import fu.osms.inventory.mapper.InventoryTransactionMapper;
 import fu.osms.inventory.repository.InventoryItemRepository;
+import fu.osms.inventory.repository.InventoryIssueItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.inventory.dto.response.AvailableVariantDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,6 +55,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class InventoryServiceImpl implements InventoryService {
 
+    private static final String SHARED_WAREHOUSE_NAME = "Kho mặc định đa sàn";
+
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository transactionRepository;
     private final WarehouseRepository warehouseRepository;
@@ -64,10 +69,13 @@ public class InventoryServiceImpl implements InventoryService {
     private final AvailableVariantDTOMapper availableVariantDTOMapper;
     private final InventoryAlertService inventoryAlertService;
     private final ChannelProductVariantRepository channelProductVariantRepository;
+    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
+    private final InventoryIssueItemRepository inventoryIssueItemRepository;
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public PageResponse<InventoryItemResponse> getAllInventoryItems(PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly, String keyword, String status, UUID warehouseId, Collection<PlatformType> platforms) {
+        ensureInventoryItemsForExistingVariants();
         Page<InventoryItem> inventoryItemPage = inventoryItemRepository
                 .findAllWithVariantRelationshipsFiltered(
                         channelId,
@@ -79,6 +87,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         List<InventoryItemResponse> dtoList = aggregateInventoryItems(inventoryItemPage.getContent(), channelId);
         dtoList = filterByPlatforms(dtoList, platforms);
+        long totalProducts = countParentProducts(dtoList);
         dtoList = sortInventoryResponses(dtoList, pageRequest.getSort());
         List<InventoryItemResponse> pageContent = paginate(dtoList, page, size);
 
@@ -87,6 +96,8 @@ public class InventoryServiceImpl implements InventoryService {
                 .page(page)
                 .size(size)
                 .totalElements(dtoList.size())
+                .totalProducts(totalProducts)
+                .totalSkus((long) dtoList.size())
                 .totalPages(totalPages(dtoList.size(), size))
                 .first(page <= 0)
                 .last(page >= totalPages(dtoList.size(), size) - 1)
@@ -242,8 +253,9 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public PageResponse<InventoryItemResponse> getInventoryByCategoryId(UUID categoryId, PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly, String keyword, String status, UUID warehouseId, Collection<PlatformType> platforms) {
+        ensureInventoryItemsForExistingVariants();
         List<UUID> allCategoryIds = new ArrayList<>();
 
         findAllChildIds(categoryId, allCategoryIds);
@@ -258,6 +270,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         List<InventoryItemResponse> content = aggregateInventoryItems(inventoryPage.getContent(), channelId);
         content = filterByPlatforms(content, platforms);
+        long totalProducts = countParentProducts(content);
         content = sortInventoryResponses(content, pageRequest.getSort());
         List<InventoryItemResponse> pageContent = paginate(content, page, size);
 
@@ -266,6 +279,8 @@ public class InventoryServiceImpl implements InventoryService {
                 .page(page)
                 .size(size)
                 .totalElements(content.size())
+                .totalProducts(totalProducts)
+                .totalSkus((long) content.size())
                 .totalPages(totalPages(content.size(), size))
                 .first(page <= 0)
                 .last(page >= totalPages(content.size(), size) - 1)
@@ -274,6 +289,7 @@ public class InventoryServiceImpl implements InventoryService {
 
     private List<InventoryItemResponse> aggregateInventoryItems(List<InventoryItem> inventoryItems, UUID preferredChannelId) {
         List<InventoryItemResponse> responses = inventoryItemMapper.toResponseList(inventoryItems);
+        enrichMovementQuantities(responses);
         enrichChannelInfo(responses, preferredChannelId);
         if (responses.isEmpty()) {
             return responses;
@@ -290,7 +306,7 @@ public class InventoryServiceImpl implements InventoryService {
 
         Map<String, List<InventoryItemResponse>> bySku = responses.stream()
                 .collect(Collectors.groupingBy(
-                        this::inventoryAggregateKey,
+                        item -> inventoryAggregateKey(item, channelSummaryByVariantId),
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
@@ -305,9 +321,16 @@ public class InventoryServiceImpl implements InventoryService {
     private InventoryItemResponse aggregateSkuGroup(List<InventoryItemResponse> group,
                                                     Map<UUID, ChannelSummary> channelSummaryByVariantId) {
         InventoryItemResponse first = group.get(0);
-        int quantityOnHand = group.stream().mapToInt(item -> safeInt(item.getQuantityOnHand())).sum();
-        int reservedQuantity = group.stream().mapToInt(item -> safeInt(item.getReservedQuantity())).sum();
-        int availableQuantity = group.stream().mapToInt(item -> safeInt(item.getAvailableQuantity())).sum();
+        InventoryItemResponse stockSource = group.stream()
+                .max(Comparator
+                        .comparingInt((InventoryItemResponse item) -> safeInt(item.getQuantityOnHand()))
+                        .thenComparingInt(item -> safeInt(item.getAvailableQuantity())))
+                .orElse(first);
+        int quantityOnHand = safeInt(stockSource.getQuantityOnHand());
+        int reservedQuantity = safeInt(stockSource.getReservedQuantity());
+        int availableQuantity = safeInt(stockSource.getAvailableQuantity());
+        int incomingQuantity = group.stream().mapToInt(item -> safeInt(item.getIncomingQuantity())).max().orElse(0);
+        int outgoingQuantity = group.stream().mapToInt(item -> safeInt(item.getOutgoingQuantity())).max().orElse(0);
         int lowStockThreshold = group.stream().mapToInt(item -> safeInt(item.getLowStockThreshold())).max().orElse(0);
 
         List<UUID> variantIds = group.stream()
@@ -315,9 +338,15 @@ public class InventoryServiceImpl implements InventoryService {
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
+        List<UUID> productIds = group.stream()
+                .map(InventoryItemResponse::getProductId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
         List<UUID> channelIds = new ArrayList<>();
         List<String> channelNames = new ArrayList<>();
         List<PlatformType> platforms = new ArrayList<>();
+        List<String> marketplaceSkus = new ArrayList<>();
         for (UUID variantId : variantIds) {
             ChannelSummary summary = channelSummaryByVariantId.get(variantId);
             if (summary == null) {
@@ -338,7 +367,13 @@ public class InventoryServiceImpl implements InventoryService {
                     platforms.add(platform);
                 }
             });
+            summary.externalSkus().forEach(sku -> {
+                if (!marketplaceSkus.contains(sku)) {
+                    marketplaceSkus.add(sku);
+                }
+            });
         }
+        String marketplaceSku = marketplaceSkus.size() == 1 ? marketplaceSkus.get(0) : null;
 
         List<String> warehouseNames = group.stream()
                 .map(InventoryItemResponse::getWarehouseName)
@@ -351,6 +386,22 @@ public class InventoryServiceImpl implements InventoryService {
                 .max(OffsetDateTime::compareTo)
                 .orElse(first.getUpdatedAt());
 
+        String categoryName = group.stream()
+                .map(InventoryItemResponse::getCategoryName)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(first.getCategoryName());
+        UUID categoryId = group.stream()
+                .map(InventoryItemResponse::getCategoryId)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(first.getCategoryId());
+        BigDecimal price = group.stream()
+                .map(InventoryItemResponse::getPrice)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(first.getPrice());
+
         return InventoryItemResponse.builder()
                 .id(first.getId())
                 .warehouseId(group.stream().map(InventoryItemResponse::getWarehouseId).distinct().count() == 1
@@ -359,26 +410,70 @@ public class InventoryServiceImpl implements InventoryService {
                 .warehouseName(warehouseNames.size() <= 1
                         ? first.getWarehouseName()
                         : warehouseNames.size() + " kho")
+                .productId(productIds.size() == 1 ? productIds.get(0) : null)
+                .productIds(productIds)
                 .variantId(first.getVariantId())
-                .variantSku(first.getVariantSku())
+                .variantSku(firstNonBlank(marketplaceSku, first.getVariantSku()))
+                .marketplaceSku(marketplaceSku)
                 .productName(firstNonBlank(first.getProductName(), first.getVariantName()))
                 .variantName(first.getVariantName())
+                .categoryId(categoryId)
+                .categoryName(categoryName)
+                .price(price)
                 .channelId(channelIds.size() == 1 ? channelIds.get(0) : null)
                 .channelName(channelNames.size() == 1 ? channelNames.get(0) : String.join(", ", channelNames))
                 .platform(platforms.size() == 1 ? platforms.get(0) : null)
                 .channelIds(channelIds)
                 .channelNames(channelNames)
                 .platforms(platforms)
+                .unitPrice(firstNonNullPrice(group, InventoryItemResponse::getUnitPrice))
+                .salePrice(firstNonNullPrice(group, InventoryItemResponse::getSalePrice))
+                .currentSalePrice(firstNonNullPrice(group, InventoryItemResponse::getCurrentSalePrice))
                 .mergedInventoryItemCount(group.size())
                 .mergedVariantCount(variantIds.size())
                 .quantityOnHand(quantityOnHand)
                 .reservedQuantity(reservedQuantity)
                 .availableQuantity(availableQuantity)
+                .incomingQuantity(incomingQuantity)
+                .outgoingQuantity(outgoingQuantity)
                 .averageCost(first.getAverageCost())
                 .lowStockThreshold(lowStockThreshold)
                 .isLowStock(availableQuantity <= lowStockThreshold)
                 .updatedAt(updatedAt)
                 .build();
+    }
+
+    private BigDecimal firstNonNullPrice(List<InventoryItemResponse> group,
+                                         java.util.function.Function<InventoryItemResponse, BigDecimal> extractor) {
+        return group.stream()
+                .map(extractor)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(BigDecimal.ZERO);
+    }
+
+    private void enrichMovementQuantities(List<InventoryItemResponse> responses) {
+        List<UUID> variantIds = responses.stream().map(InventoryItemResponse::getVariantId)
+                .filter(Objects::nonNull).distinct().toList();
+        if (variantIds.isEmpty()) {
+            return;
+        }
+        Map<UUID, Integer> incoming = quantityMap(purchaseOrderItemRepository.sumIncomingByVariantIds(variantIds));
+        Map<UUID, Integer> outgoing = quantityMap(inventoryIssueItemRepository.sumOutgoingByVariantIds(variantIds));
+        for (InventoryItemResponse response : responses) {
+            response.setIncomingQuantity(incoming.getOrDefault(response.getVariantId(), 0));
+            response.setOutgoingQuantity(outgoing.getOrDefault(response.getVariantId(), 0));
+        }
+    }
+
+    private Map<UUID, Integer> quantityMap(List<Object[]> rows) {
+        Map<UUID, Integer> result = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row.length >= 2 && row[0] instanceof UUID id && row[1] instanceof Number quantity) {
+                result.put(id, quantity.intValue());
+            }
+        }
+        return result;
     }
 
     private Map<UUID, ChannelSummary> loadChannelSummaries(List<UUID> variantIds, UUID preferredChannelId) {
@@ -390,21 +485,36 @@ public class InventoryServiceImpl implements InventoryService {
                 : channelProductVariantRepository.findActiveByChannelIdAndVariantIdInWithVariant(preferredChannelId, variantIds);
 
         Map<UUID, MutableChannelSummary> mutable = new HashMap<>();
+        Map<String, Set<UUID>> variantIdsBySku = new LinkedHashMap<>();
         for (ChannelProductVariant mapping : mappings) {
             if (mapping.getVariant() == null || mapping.getVariant().getId() == null
                     || mapping.getChannelProduct() == null || mapping.getChannelProduct().getChannel() == null) {
                 continue;
             }
-            var channel = mapping.getChannelProduct().getChannel();
-            MutableChannelSummary summary = mutable.computeIfAbsent(mapping.getVariant().getId(), ignored -> new MutableChannelSummary());
-            if (channel.getId() != null) {
-                summary.channelIds.add(channel.getId());
+            UUID variantId = mapping.getVariant().getId();
+            addChannelMappingSummary(mutable.computeIfAbsent(variantId, ignored -> new MutableChannelSummary()), mapping);
+            String skuKey = channelMappingSkuKey(mapping);
+            if (!skuKey.isBlank()) {
+                variantIdsBySku.computeIfAbsent(skuKey, ignored -> new LinkedHashSet<>()).add(variantId);
             }
-            if (channel.getDisplayName() != null && !channel.getDisplayName().isBlank()) {
-                summary.channelNames.add(channel.getDisplayName());
-            }
-            if (channel.getPlatform() != null) {
-                summary.platforms.add(channel.getPlatform());
+        }
+
+        if (preferredChannelId == null && !variantIdsBySku.isEmpty()) {
+            List<ChannelProductVariant> skuGroupMappings = channelProductVariantRepository
+                    .findActiveByNormalizedExternalSkuInWithVariant(
+                            new ArrayList<>(variantIdsBySku.keySet()));
+            for (ChannelProductVariant mapping : skuGroupMappings) {
+                String skuKey = channelMappingSkuKey(mapping);
+                Set<UUID> targetVariantIds = variantIdsBySku.get(skuKey);
+                if (targetVariantIds == null || targetVariantIds.isEmpty()) {
+                    continue;
+                }
+                for (UUID targetVariantId : targetVariantIds) {
+                    addChannelMappingSummary(
+                            mutable.computeIfAbsent(targetVariantId, ignored -> new MutableChannelSummary()),
+                            mapping
+                    );
+                }
             }
         }
 
@@ -412,9 +522,41 @@ public class InventoryServiceImpl implements InventoryService {
         mutable.forEach((variantId, summary) -> result.put(variantId, new ChannelSummary(
                 new ArrayList<>(summary.channelIds),
                 new ArrayList<>(summary.channelNames),
-                new ArrayList<>(summary.platforms)
+                new ArrayList<>(summary.platforms),
+                new ArrayList<>(summary.externalSkus)
         )));
         return result;
+    }
+
+    private void addChannelMappingSummary(MutableChannelSummary summary, ChannelProductVariant mapping) {
+        if (summary == null || mapping == null || mapping.getChannelProduct() == null
+                || mapping.getChannelProduct().getChannel() == null) {
+            return;
+        }
+        var channel = mapping.getChannelProduct().getChannel();
+        if (channel.getId() != null) {
+            summary.channelIds.add(channel.getId());
+        }
+        if (channel.getDisplayName() != null && !channel.getDisplayName().isBlank()) {
+            summary.channelNames.add(channel.getDisplayName());
+        }
+        if (channel.getPlatform() != null) {
+            summary.platforms.add(channel.getPlatform());
+        }
+        String externalSku = normalizeSkuValue(mapping.getExternalSku());
+        if (externalSku != null) {
+            summary.externalSkus.add(externalSku);
+        }
+    }
+
+    private String channelMappingSkuKey(ChannelProductVariant mapping) {
+        if (mapping == null) {
+            return "";
+        }
+        return normalizeSkuKey(firstNonBlank(
+                mapping.getExternalSku(),
+                mapping.getVariant() == null ? null : mapping.getVariant().getSku()
+        ));
     }
 
     private List<InventoryItemResponse> sortInventoryResponses(List<InventoryItemResponse> source, Sort sort) {
@@ -482,16 +624,142 @@ public class InventoryServiceImpl implements InventoryService {
         return (int) Math.ceil((double) totalElements / safeSize);
     }
 
+    private long countParentProducts(List<InventoryItemResponse> items) {
+        if (items == null || items.isEmpty()) {
+            return 0;
+        }
+        Map<String, String> parent = new HashMap<>();
+        Set<String> fallbackKeys = new LinkedHashSet<>();
+        for (InventoryItemResponse item : items) {
+            if (item == null) {
+                continue;
+            }
+            List<String> keys = inventoryProductGroupKeys(item);
+            if (keys.isEmpty()) {
+                String fallbackKey = inventoryProductFallbackKey(item);
+                if (fallbackKey != null && !fallbackKey.isBlank()) {
+                    fallbackKeys.add(fallbackKey);
+                }
+                continue;
+            }
+            keys.forEach(key -> findProductGroupRoot(parent, key));
+            for (int index = 1; index < keys.size(); index++) {
+                unionProductGroupKeys(parent, keys.get(0), keys.get(index));
+            }
+        }
+        Set<String> roots = parent.keySet().stream()
+                .map(key -> findProductGroupRoot(parent, key))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        roots.addAll(fallbackKeys);
+        return roots.size();
+    }
+
+    private List<String> inventoryProductGroupKeys(InventoryItemResponse item) {
+        if (item == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> keys = new LinkedHashSet<>();
+        if (item.getProductIds() != null) {
+            item.getProductIds().stream()
+                    .filter(Objects::nonNull)
+                    .map(id -> "product:" + id)
+                    .forEach(keys::add);
+        }
+        if (item.getProductId() != null) {
+            keys.add("product:" + item.getProductId());
+        }
+        String sku = normalizeSkuKey(firstNonBlank(item.getMarketplaceSku(), item.getVariantSku()));
+        if (!sku.isBlank()) {
+            keys.add("sku:" + sku);
+        }
+        return new ArrayList<>(keys);
+    }
+
+    private String findProductGroupRoot(Map<String, String> parent, String key) {
+        parent.putIfAbsent(key, key);
+        String current = parent.get(key);
+        if (current.equals(key)) {
+            return key;
+        }
+        String root = findProductGroupRoot(parent, current);
+        parent.put(key, root);
+        return root;
+    }
+
+    private void unionProductGroupKeys(Map<String, String> parent, String first, String second) {
+        String firstRoot = findProductGroupRoot(parent, first);
+        String secondRoot = findProductGroupRoot(parent, second);
+        if (!firstRoot.equals(secondRoot)) {
+            parent.put(secondRoot, firstRoot);
+        }
+    }
+
+    private String inventoryProductFallbackKey(InventoryItemResponse item) {
+        if (item == null) {
+            return null;
+        }
+        if (item.getVariantId() != null) {
+            return "variant:" + item.getVariantId();
+        }
+        String sku = normalizeSkuKey(firstNonBlank(item.getMarketplaceSku(), item.getVariantSku()));
+        if (!sku.isBlank()) {
+            return "sku:" + sku;
+        }
+        return "inventory:" + item.getId();
+    }
+
     private boolean isLowStockResponse(InventoryItemResponse item) {
         return safeInt(item.getAvailableQuantity()) <= safeInt(item.getLowStockThreshold());
+    }
+
+    private void ensureInventoryItemsForExistingVariants() {
+        List<ProductVariant> variants = variantRepository.findVariantsWithoutInventoryItems();
+        if (variants.isEmpty()) {
+            return;
+        }
+
+        Optional<Warehouse> sharedWarehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(SHARED_WAREHOUSE_NAME)
+                .filter(warehouse -> Boolean.TRUE.equals(warehouse.getIsActive()));
+        Warehouse warehouse = sharedWarehouse
+                .or(() -> warehouseRepository.findFirstByDeletedAtIsNullAndIsActiveTrueOrderByCreatedAtAsc())
+                .orElse(null);
+        if (warehouse == null) {
+            return;
+        }
+
+        List<InventoryItem> items = variants.stream()
+                .map(variant -> InventoryItem.builder()
+                        .warehouse(warehouse)
+                        .variant(variant)
+                        .quantityOnHand(0)
+                        .reservedQuantity(0)
+                        .averageCost(ProductCostPolicy.initialCost(
+                                variant.getCostPrice(),
+                                variant.getPrice()))
+                        .lowStockThreshold(resolveLowStockThreshold(variant))
+                        .build())
+                .toList();
+        inventoryItemRepository.saveAll(items);
+    }
+
+    private int resolveLowStockThreshold(ProductVariant variant) {
+        if (variant == null || variant.getProduct() == null || variant.getProduct().getLowStockThreshold() == null) {
+            return 5;
+        }
+        return variant.getProduct().getLowStockThreshold();
     }
 
     private String normalizeSkuKey(String sku) {
         return sku == null ? "" : sku.trim().toLowerCase(Locale.ROOT);
     }
 
-    private String inventoryAggregateKey(InventoryItemResponse item) {
-        String sku = normalizeSkuKey(item.getVariantSku());
+    private String inventoryAggregateKey(InventoryItemResponse item, Map<UUID, ChannelSummary> channelSummaryByVariantId) {
+        String sku = Optional.ofNullable(channelSummaryByVariantId.get(item.getVariantId()))
+                .flatMap(summary -> summary.externalSkus().stream()
+                        .map(this::normalizeSkuKey)
+                        .filter(value -> !value.isBlank())
+                        .findFirst())
+                .orElseGet(() -> normalizeSkuKey(item.getVariantSku()));
         if (!sku.isBlank()) {
             return "sku:" + sku;
         }
@@ -499,6 +767,13 @@ public class InventoryServiceImpl implements InventoryService {
             return "variant:" + item.getVariantId();
         }
         return "inventory:" + item.getId();
+    }
+
+    private String normalizeSkuValue(String sku) {
+        if (sku == null || sku.isBlank()) {
+            return null;
+        }
+        return sku.trim();
     }
 
     private int safeInt(Integer value) {
@@ -518,13 +793,17 @@ public class InventoryServiceImpl implements InventoryService {
         return null;
     }
 
-    private record ChannelSummary(List<UUID> channelIds, List<String> channelNames, List<PlatformType> platforms) {
+    private record ChannelSummary(List<UUID> channelIds,
+                                  List<String> channelNames,
+                                  List<PlatformType> platforms,
+                                  List<String> externalSkus) {
     }
 
     private static class MutableChannelSummary {
         private final LinkedHashSet<UUID> channelIds = new LinkedHashSet<>();
         private final LinkedHashSet<String> channelNames = new LinkedHashSet<>();
         private final LinkedHashSet<PlatformType> platforms = new LinkedHashSet<>();
+        private final LinkedHashSet<String> externalSkus = new LinkedHashSet<>();
     }
 
     private void enrichChannelInfo(List<InventoryItemResponse> responses, UUID preferredChannelId) {
@@ -577,6 +856,7 @@ public class InventoryServiceImpl implements InventoryService {
             response.setChannelId(mapping.getChannelProduct().getChannel().getId());
             response.setChannelName(mapping.getChannelProduct().getChannel().getDisplayName());
             response.setPlatform(mapping.getChannelProduct().getChannel().getPlatform());
+            response.setMarketplaceSku(normalizeSkuValue(mapping.getExternalSku()));
         }
     }
 
@@ -726,7 +1006,7 @@ public class InventoryServiceImpl implements InventoryService {
                 .map(item -> availableVariantDTOMapper.toAvailableDto(item.getVariant(), item))
                 .collect(Collectors.toList());
         enrichAvailableVariantChannelInfo(variants, warehousePlatform);
-        return variants;
+        return aggregateAvailableVariantsBySku(variants);
     }
 
     private List<AvailableVariantDTO> getMarketplaceVariantsForWarehouse(Warehouse warehouse, PlatformType platform) {
@@ -762,7 +1042,7 @@ public class InventoryServiceImpl implements InventoryService {
                 .map(mapping -> toMarketplaceAvailableVariant(mapping, itemByVariantId.get(mapping.getVariant().getId())))
                 .toList();
         enrichAvailableVariantChannelInfo(variants, platform);
-        return variants;
+        return aggregateAvailableVariantsBySku(variants);
     }
 
     private AvailableVariantDTO toMarketplaceAvailableVariant(ChannelProductVariant mapping, InventoryItem item) {
@@ -777,10 +1057,14 @@ public class InventoryServiceImpl implements InventoryService {
 
         return AvailableVariantDTO.builder()
                 .variantId(variant.getId())
-                .sku(variant.getSku())
+                .variantIds(List.of(variant.getId()))
+                .sku(firstNonBlank(normalizeSkuValue(mapping.getExternalSku()), variant.getSku()))
+                .marketplaceSku(normalizeSkuValue(mapping.getExternalSku()))
                 .productName(variant.getProduct() == null ? variant.getName() : variant.getProduct().getName())
                 .variantName(variant.getName())
                 .unitPrice(variant.getPrice())
+                .salePrice(variant.getPrice())
+                .currentSalePrice(variant.getPrice())
                 .averageCost(averageCost == null ? BigDecimal.ZERO : averageCost)
                 .availableQuantity(availableQuantity)
                 .channelId(channel.getId())
@@ -842,6 +1126,10 @@ public class InventoryServiceImpl implements InventoryService {
             if (channel.getPlatform() != null && !summary.platforms.contains(channel.getPlatform())) {
                 summary.platforms.add(channel.getPlatform());
             }
+            String externalSku = normalizeSkuValue(mapping.getExternalSku());
+            if (externalSku != null) {
+                summary.externalSkus.add(externalSku);
+            }
         }
 
         for (AvailableVariantDTO variant : variants) {
@@ -849,6 +1137,12 @@ public class InventoryServiceImpl implements InventoryService {
             if (summary == null) {
                 continue;
             }
+            String marketplaceSku = firstOrNull(summary.externalSkus);
+            if (marketplaceSku != null) {
+                variant.setMarketplaceSku(marketplaceSku);
+                variant.setSku(marketplaceSku);
+            }
+            variant.setVariantIds(variant.getVariantId() == null ? List.of() : List.of(variant.getVariantId()));
             variant.setChannelIds(new ArrayList<>(summary.channelIds));
             variant.setChannelNames(new ArrayList<>(summary.channelNames));
             variant.setPlatforms(new ArrayList<>(summary.platforms));
@@ -862,6 +1156,119 @@ public class InventoryServiceImpl implements InventoryService {
             variant.setChannelId(summary.channelIds.size() == 1 ? firstOrNull(summary.channelIds) : null);
             variant.setChannelName(summary.channelNames.size() == 1 ? firstOrNull(summary.channelNames) : String.join(", ", summary.channelNames));
         }
+    }
+
+    private List<AvailableVariantDTO> aggregateAvailableVariantsBySku(List<AvailableVariantDTO> variants) {
+        if (variants == null || variants.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, List<AvailableVariantDTO>> bySku = variants.stream()
+                .collect(Collectors.groupingBy(
+                        this::availableVariantAggregateKey,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        List<AvailableVariantDTO> result = new ArrayList<>();
+        for (List<AvailableVariantDTO> group : bySku.values()) {
+            AvailableVariantDTO first = group.get(0);
+            LinkedHashSet<UUID> variantIds = new LinkedHashSet<>();
+            LinkedHashSet<UUID> channelIds = new LinkedHashSet<>();
+            LinkedHashSet<String> channelNames = new LinkedHashSet<>();
+            LinkedHashSet<PlatformType> platforms = new LinkedHashSet<>();
+
+            int availableQuantity = 0;
+            BigDecimal unitPrice = null;
+            BigDecimal salePrice = null;
+            BigDecimal averageCost = null;
+            for (AvailableVariantDTO item : group) {
+                if (item.getVariantId() != null) {
+                    variantIds.add(item.getVariantId());
+                }
+                if (item.getVariantIds() != null) {
+                    variantIds.addAll(item.getVariantIds());
+                }
+                if (item.getChannelId() != null) {
+                    channelIds.add(item.getChannelId());
+                }
+                if (item.getChannelIds() != null) {
+                    channelIds.addAll(item.getChannelIds());
+                }
+                if (item.getChannelName() != null && !item.getChannelName().isBlank()) {
+                    channelNames.add(item.getChannelName());
+                }
+                if (item.getChannelNames() != null) {
+                    channelNames.addAll(item.getChannelNames().stream()
+                            .filter(name -> name != null && !name.isBlank())
+                            .toList());
+                }
+                if (item.getPlatform() != null) {
+                    platforms.add(item.getPlatform());
+                }
+                if (item.getPlatforms() != null) {
+                    platforms.addAll(item.getPlatforms());
+                }
+                availableQuantity = Math.max(availableQuantity, safeInt(item.getAvailableQuantity()));
+                unitPrice = firstPositive(unitPrice, item.getUnitPrice());
+                salePrice = firstPositive(salePrice, firstNonNull(item.getSalePrice(), item.getCurrentSalePrice(), item.getUnitPrice()));
+                averageCost = firstPositive(averageCost, item.getAverageCost());
+            }
+
+            String displaySku = firstNonBlank(first.getMarketplaceSku(), first.getSku());
+            result.add(AvailableVariantDTO.builder()
+                    .variantId(first.getVariantId())
+                    .variantIds(new ArrayList<>(variantIds))
+                    .sku(displaySku)
+                    .marketplaceSku(first.getMarketplaceSku())
+                    .productName(first.getProductName())
+                    .variantName(first.getVariantName())
+                    .unitPrice(firstNonNull(unitPrice, first.getUnitPrice(), BigDecimal.ZERO))
+                    .salePrice(firstNonNull(salePrice, first.getSalePrice(), first.getCurrentSalePrice(), BigDecimal.ZERO))
+                    .currentSalePrice(firstNonNull(salePrice, first.getCurrentSalePrice(), first.getSalePrice(), BigDecimal.ZERO))
+                    .averageCost(firstNonNull(averageCost, first.getAverageCost(), BigDecimal.ZERO))
+                    .availableQuantity(availableQuantity)
+                    .channelId(channelIds.size() == 1 ? firstOrNull(channelIds) : null)
+                    .channelName(channelNames.size() == 1 ? firstOrNull(channelNames) : String.join(", ", channelNames))
+                    .platform(platforms.size() == 1 ? firstOrNull(platforms) : null)
+                    .channelIds(new ArrayList<>(channelIds))
+                    .channelNames(new ArrayList<>(channelNames))
+                    .platforms(new ArrayList<>(platforms))
+                    .mergedVariantCount(Math.max(variantIds.size(), 1))
+                    .build());
+        }
+        return result;
+    }
+
+    private String availableVariantAggregateKey(AvailableVariantDTO variant) {
+        String sku = normalizeSkuKey(firstNonBlank(variant.getMarketplaceSku(), variant.getSku()));
+        if (!sku.isBlank()) {
+            return "sku:" + sku;
+        }
+        if (variant.getVariantId() != null) {
+            return "variant:" + variant.getVariantId();
+        }
+        return UUID.randomUUID().toString();
+    }
+
+    @SafeVarargs
+    private final <T> T firstNonNull(T... values) {
+        for (T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private BigDecimal firstPositive(BigDecimal current, BigDecimal candidate) {
+        if (current != null && current.compareTo(BigDecimal.ZERO) > 0) {
+            return current;
+        }
+        if (candidate != null && candidate.compareTo(BigDecimal.ZERO) > 0) {
+            return candidate;
+        }
+        return current == null ? candidate : current;
     }
 
     private <T> T firstOrNull(Collection<T> values) {

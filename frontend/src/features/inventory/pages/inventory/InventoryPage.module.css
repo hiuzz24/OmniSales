@@ -1,6 +1,75 @@
 /* ─── Page Shell ─────────────────────────────────────────────────────────── */
 .page {
-  animation: fadeIn 0.4s ease-out;
+  --catalog-accent: #2563eb;
+  --catalog-accent-strong: #1d4ed8;
+  --catalog-accent-soft: #eff6ff;
+  --catalog-ink: #111827;
+  --catalog-muted: #64748b;
+  --catalog-line: #e0e7ef;
+  --catalog-line-soft: #edf1f5;
+  --catalog-card: #ffffff;
+  --catalog-surface: #f4f7fa;
+  --catalog-shadow: 0 10px 28px rgba(61, 91, 126, 0.065), 0 2px 5px rgba(15, 23, 42, 0.03);
+  width: calc(100% + 48px);
+  max-width: none;
+  min-height: calc(100dvh - 64px);
+  margin: -24px;
+  padding: 24px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: inherit;
+  color: var(--catalog-ink);
+  background:
+    radial-gradient(circle at 8% 2%, rgba(189, 219, 242, 0.28), transparent 27%),
+    radial-gradient(circle at 96% 8%, rgba(208, 224, 217, 0.22), transparent 24%),
+    linear-gradient(180deg, #f2f7fb 0%, #f7f8fa 360px);
+}
+
+.pageHeader {
+  flex: 0 0 auto;
+  margin-bottom: 12px;
+  padding: 14px 18px;
+  border: 1px solid #d8e3ed;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(235, 245, 252, 0.96) 0%, rgba(247, 250, 252, 0.96) 58%, rgba(240, 248, 246, 0.94) 100%);
+  box-shadow: var(--catalog-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.pageHeader > div {
+  gap: 14px;
+  margin-bottom: 0;
+}
+
+.pageHeader > div > div:first-child > div:first-child {
+  border-color: #dce5ed;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 3px 10px rgba(51, 78, 111, 0.045);
+}
+
+.pageHeader:hover > div > div:first-child > div:first-child {
+  transform: none;
+  box-shadow: 0 3px 10px rgba(51, 78, 111, 0.045);
+}
+
+.pageHeader h1 {
+  font-size: clamp(23px, 2vw, 28px);
+  letter-spacing: 0;
+}
+
+.pageHeader p {
+  margin-bottom: 0;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.pageHeader > div > div:last-child {
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid rgba(211, 222, 233, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.52);
 }
 
 @keyframes fadeIn {
@@ -770,6 +839,16 @@
   color: #94a3b8;
 }
 
+.qtyPositive {
+  color: #047857;
+  font-weight: 700;
+}
+
+.qtyWarning {
+  color: #c2410c;
+  font-weight: 700;
+}
+
 .negativeCell {
   color: #dc2626;
   font-weight: 700;
@@ -1289,7 +1368,7 @@
 
 .summaryLabel {
   display: block;
-  margin-bottom: 18px;
+  margin-bottom: 8px;
   color: #475569;
   font-size: 14px;
 }
@@ -1298,6 +1377,19 @@
   color: #020617;
   font-size: 24px;
   line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryInfo {
+  min-width: 0;
+}
+
+.summaryMeta {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .stockNoticePanel {
@@ -1474,6 +1566,23 @@
   flex-wrap: wrap;
 }
 
+.footerMetric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.footerMetricLabel {
+  color: #64748b;
+}
+
+.footerMetric strong {
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
 .pagination {
   padding: 14px 16px;
   border-top-color: #eef2f7;
@@ -1585,10 +1694,10 @@
   max-width: 100%;
   min-width: 0;
   display: flex;
-  flex-flow: row nowrap;
+  flex-flow: row wrap;
   align-items: center;
   gap: 5px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .channelBadge {
@@ -1843,3 +1952,34 @@
     justify-content: space-between;
   }
 }
+
+/* Product workspace inventory overview language */
+.page { gap: 14px; }
+.pageHeader { padding: 14px 18px; border: 1px solid #d8e3ed; border-radius: 14px; background: linear-gradient(135deg, rgba(235, 245, 252, 0.96), rgba(247, 250, 252, 0.96) 58%, rgba(240, 248, 246, 0.94)); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+.headerIconWrap { border: 1px solid #bfdbfe; border-radius: 11px; color: #2563eb; background: #eff6ff; }
+.pageTitle { color: #0f172a; font-size: 24px; letter-spacing: -0.02em; }
+.btnOutline, .btnPrimary { min-height: 38px; height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.btnOutline { border-color: #cbd8e2; color: #334155; background: #fff; }
+.btnPrimary { border: 1px solid #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.btnPrimary:hover { border-color: #1d4ed8; background: #1d4ed8; }
+.summaryGrid { gap: 12px; }
+.summaryCard { position: relative; min-height: 104px; padding: 16px 18px; overflow: hidden; border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 5px 16px rgba(15, 23, 42, 0.035); }
+.summaryCard::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: #3b82f6; content: ''; }
+.summaryCard:nth-child(2)::before { background: #0ea5e9; }
+.summaryCard:nth-child(3)::before { background: #f59e0b; }
+.summaryCard:nth-child(4)::before { background: #10b981; }
+.summaryValue { font-size: 23px; }
+.filtersPanel { padding: 12px; gap: 10px; border-color: #dbe5ec; border-radius: 13px; background: rgba(255, 255, 255, 0.94); box-shadow: 0 5px 16px rgba(15, 23, 42, 0.035); }
+.searchInput, .select { min-height: 40px; height: 40px; border-color: #cbd8e2; border-radius: 8px; background: #fff; font-size: 13px; }
+.searchInput:focus, .select:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+.tableCard { border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.tableCardHeader { padding: 13px 16px; border-color: #dbe5ec; background: linear-gradient(105deg, #f0f7fc, #fbfdfe 58%, #f2faf6); }
+.table { min-width: 1120px; border-collapse: separate; border-spacing: 0; }
+.th { padding: 12px 14px; color: #42566d; background: #f3f7fa; font-size: 11px; font-weight: 750; letter-spacing: 0.025em; text-transform: uppercase; }
+.td { padding: 12px 14px; border-color: #e8eef3; color: #334155; font-size: 13px; }
+.tr, .trAlt { transition: background-color 150ms ease, box-shadow 150ms ease; }
+.tr:hover, .trAlt:hover { background: linear-gradient(90deg, rgba(239, 246, 255, 0.7), rgba(240, 253, 250, 0.42)); box-shadow: inset 3px 0 #60a5fa; }
+.tableFooter { border-color: #dbe5ec; background: #fbfdff; }
+.pageBtnActive { border-color: #2563eb; background: #2563eb; }
+
+@media (prefers-reduced-motion: reduce) { .summaryCard, .tr, .trAlt { transition: none; } }

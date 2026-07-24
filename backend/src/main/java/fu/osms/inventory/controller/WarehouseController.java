@@ -27,8 +27,9 @@ public class WarehouseController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> getById(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.getById(id)));
     }
 
     @GetMapping("/master")

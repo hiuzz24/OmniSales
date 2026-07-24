@@ -697,3 +697,40 @@
   .statsGrid { grid-template-columns: 1fr 1fr; }
   .pageHeader { flex-direction: column; align-items: flex-start; }
 }
+
+/* Product workspace visual language */
+.page { gap: 14px; }
+.pageHeader { padding: 18px 20px; border: 1px solid #dbe5ec; border-radius: 14px; background: linear-gradient(135deg, rgba(239, 246, 255, 0.94), rgba(240, 253, 250, 0.88)); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+.headerIcon { border: 1px solid #bfdbfe; border-radius: 11px; color: #2563eb; background: #eff6ff; }
+.pageTitle { color: #0f172a; font-size: 24px; letter-spacing: -0.02em; }
+.btnPrimary, .btnOutline { min-height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.btnPrimary { border-color: #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.btnPrimary:hover { border-color: #1d4ed8; background: #1d4ed8; }
+.btnOutline { border-color: #cbd8e2; color: #334155; background: #fff; }
+.statsGrid { gap: 12px; }
+.statCard { position: relative; min-height: 102px; padding: 16px 18px; overflow: hidden; border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 5px 16px rgba(15, 23, 42, 0.035); }
+.statCard::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: #3b82f6; content: ''; }
+.statCard:nth-child(2)::before { background: #10b981; }
+.statCard:nth-child(3)::before { background: #0ea5e9; }
+.statCard:nth-child(4)::before { background: #6366f1; }
+.statCard:hover { transform: none; border-color: #bfd0df; box-shadow: 0 8px 22px rgba(51, 78, 111, 0.07); }
+.statLabel { font-size: 12px; font-weight: 650; }
+.statValue { font-size: 24px; }
+.statIconWrap { width: 36px; height: 36px; border-radius: 10px; }
+.filterCard { padding: 12px; border-color: #dbe5ec; border-radius: 13px; background: rgba(255, 255, 255, 0.94); box-shadow: 0 5px 16px rgba(15, 23, 42, 0.035); }
+.filterRow { gap: 10px; }
+.searchInput, .select { min-height: 40px; border-color: #cbd8e2; border-radius: 8px; background: #fff; font-size: 13px; }
+.searchInput:focus, .select:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+.tableCard { border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.table { min-width: 1020px; border-collapse: separate; border-spacing: 0; }
+.table th { padding-block: 12px; color: #42566d; background: #f3f7fa; font-size: 11px; font-weight: 750; letter-spacing: 0.025em; text-transform: uppercase; }
+.table td { border-color: #e8eef3; color: #334155; font-size: 13px; }
+.tableRow { transition: background-color 150ms ease, box-shadow 150ms ease; }
+.tableRow:hover { background: linear-gradient(90deg, rgba(239, 246, 255, 0.7), rgba(240, 253, 250, 0.42)); box-shadow: inset 3px 0 #60a5fa; }
+.customerCode { color: #2563eb; background: #eff6ff; }
+.tableFooter { border-color: #dbe5ec; background: #fbfdff; }
+.menuDropdown { border-color: #dbe5ec; border-radius: 10px; box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16); }
+.modalOverlay { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
+.modal { border: 1px solid #dbe5ec; border-radius: 15px; box-shadow: 0 24px 64px rgba(15, 23, 42, 0.26); }
+
+@media (prefers-reduced-motion: reduce) { .statCard, .tableRow, .btnPrimary { transition: none; } }

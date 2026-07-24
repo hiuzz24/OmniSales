@@ -16,6 +16,8 @@ public class PageResponse<T> {
     private int page;
     private int size;
     private long totalElements;
+    private Long totalProducts;
+    private Long totalSkus;
     private int totalPages;
     private boolean first;
     private boolean last;

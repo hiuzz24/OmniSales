@@ -6,6 +6,7 @@ import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
+import fu.osms.common.enums.SyncStatus;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.repository.InventoryIssueRepository;
@@ -15,6 +16,7 @@ import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.channel.token.service.ChannelTokenService;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
+import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -49,6 +51,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
     private final InventoryItemRepository inventoryItemRepository;
     private final StockReceiveRepository stockReceiveRepository;
     private final InventoryIssueRepository inventoryIssueRepository;
+    private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
@@ -259,6 +262,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
 
         OffsetDateTime syncedAt = OffsetDateTime.now();
         for (ChannelProductVariant mapping : batchMappings) {
+            mapping.setSyncStatus(SyncStatus.SYNCED);
             mapping.setLastSyncedAt(syncedAt);
             channelProductVariantRepository.save(mapping);
         }
@@ -286,9 +290,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                                 "warehouseId", String.valueOf(item.getWarehouse().getId()),
                                 "warehouseName", item.getWarehouse().getName(),
                                 "warehouseCode", String.valueOf(resolveWarehouseCode(item.getWarehouse(), defaultWarehouseId, defaultWarehouseCode)),
-                                "quantityOnHand", item.getQuantityOnHand() == null ? 0 : item.getQuantityOnHand(),
-                                "reservedQuantity", item.getReservedQuantity() == null ? 0 : item.getReservedQuantity(),
-                                "sellableQuantity", availableQuantity(item)
+                                "availableQuantity", availableQuantity(item)
                         ))
                         .toList()
         );
@@ -308,28 +310,41 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
             payload.append("<SellerSku>").append(escapeXml(sellerSku)).append("</SellerSku>");
         }
 
+        int targetSellableQuantity = marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping);
         List<WarehouseQuantity> warehouseQuantities = inventoryItems.stream()
                 .map(item -> new WarehouseQuantity(resolveWarehouseCode(item.getWarehouse(), defaultWarehouseId, defaultWarehouseCode), availableQuantity(item)))
                 .filter(item -> item.warehouseCode() != null && !item.warehouseCode().isBlank())
                 .toList();
 
         if (warehouseQuantities.isEmpty()) {
-            int totalSellableQuantity = inventoryItems.stream()
-                    .mapToInt(this::availableQuantity)
-                    .sum();
-            payload.append("<SellableQuantity>").append(Math.max(totalSellableQuantity, 0)).append("</SellableQuantity>");
+            payload.append("<SellableQuantity>").append(Math.max(targetSellableQuantity, 0)).append("</SellableQuantity>");
         } else {
             payload.append("<MultiWarehouseInventories>");
+            String primaryWarehouseCode = firstWarehouseCode(warehouseQuantities, defaultWarehouseCode);
             for (WarehouseQuantity warehouseQuantity : warehouseQuantities) {
+                int sellableQuantity = warehouseQuantity.warehouseCode().equals(primaryWarehouseCode)
+                        ? targetSellableQuantity
+                        : 0;
                 payload.append("<MultiWarehouseInventory>")
                         .append("<WarehouseCode>").append(escapeXml(warehouseQuantity.warehouseCode())).append("</WarehouseCode>")
-                        .append("<SellableQuantity>").append(Math.max(warehouseQuantity.sellableQuantity(), 0)).append("</SellableQuantity>")
+                        .append("<SellableQuantity>").append(Math.max(sellableQuantity, 0)).append("</SellableQuantity>")
                         .append("</MultiWarehouseInventory>");
             }
             payload.append("</MultiWarehouseInventories>");
         }
 
         return payload.append("</Sku>").toString();
+    }
+
+    private String firstWarehouseCode(List<WarehouseQuantity> warehouseQuantities, String defaultWarehouseCode) {
+        if (defaultWarehouseCode != null && !defaultWarehouseCode.isBlank()) {
+            for (WarehouseQuantity warehouseQuantity : warehouseQuantities) {
+                if (defaultWarehouseCode.equals(warehouseQuantity.warehouseCode())) {
+                    return defaultWarehouseCode;
+                }
+            }
+        }
+        return warehouseQuantities.get(0).warehouseCode();
     }
 
     private void ensureSuccess(String response) {
@@ -420,9 +435,10 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
     }
 
     private int availableQuantity(InventoryItem inventoryItem) {
-        int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        int reservedQuantity = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-        return Math.max(quantityOnHand - reservedQuantity, 0);
+        if (inventoryItem.getAvailableQuantity() != null) {
+            return Math.max(inventoryItem.getAvailableQuantity(), 0);
+        }
+        return 0;
     }
 
     private Long tokenExpiresAt(ChannelCredential credential) {

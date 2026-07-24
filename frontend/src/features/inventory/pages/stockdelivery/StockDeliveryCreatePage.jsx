@@ -31,6 +31,24 @@ const PLATFORM_LABELS = {
   TIKTOK: 'TikTok Shop',
 };
 const PLATFORM_KEYS = Object.keys(PLATFORM_LABELS);
+const PLATFORM_BADGE_STYLES = {
+  LAZADA: { backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe' },
+  SHOPIFY: { backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' },
+  TIKTOK: { backgroundColor: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1' },
+  LOCAL: { backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
+};
+const platformBadgeBaseStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 20,
+  padding: '2px 7px',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  fontSize: 11,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  whiteSpace: 'nowrap',
+};
 
 const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
 
@@ -43,16 +61,28 @@ const normalizePlatform = (value) => {
   return PLATFORM_KEYS.includes(text) ? text : null;
 };
 
+const extractPlatforms = (value) => {
+  if (Array.isArray(value)) return value.flatMap(extractPlatforms);
+  const text = String(value ?? '').trim().toUpperCase();
+  if (!text) return [];
+  const matches = [];
+  if (text.includes('LAZADA')) matches.push('LAZADA');
+  if (text.includes('SHOPIFY')) matches.push('SHOPIFY');
+  if (text.includes('TIKTOK')) matches.push('TIKTOK');
+  const normalized = normalizePlatform(text);
+  return matches.length > 0 ? matches : (normalized ? [normalized] : []);
+};
+
 const itemPlatforms = (item) => {
-  const platforms = Array.isArray(item?.platforms) ? item.platforms : [];
   return uniqueValues([
-    ...platforms,
-    item?.platform,
-    item?.channelPlatform,
-    item?.salesChannelPlatform,
-    item?.channel?.platform,
-    item?.channelName,
-  ].map(normalizePlatform));
+    ...extractPlatforms(item?.platforms),
+    ...extractPlatforms(item?.platform),
+    ...extractPlatforms(item?.channelPlatform),
+    ...extractPlatforms(item?.salesChannelPlatform),
+    ...extractPlatforms(item?.channel?.platform),
+    ...extractPlatforms(item?.channelName),
+    ...extractPlatforms(item?.channelNames),
+  ]);
 };
 
 const formatPlatforms = (item) => {
@@ -60,12 +90,28 @@ const formatPlatforms = (item) => {
   return platforms.length === 0 ? 'Ứng dụng' : platforms.map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
 };
 
+const renderPlatformBadges = (item) => {
+  const platforms = itemPlatforms(item);
+  const displayPlatforms = platforms.length > 0 ? platforms : ['LOCAL'];
+  return displayPlatforms.map((platform) => (
+    <span
+      key={platform}
+      style={{
+        ...platformBadgeBaseStyle,
+        ...(PLATFORM_BADGE_STYLES[platform] ?? PLATFORM_BADGE_STYLES.LOCAL),
+      }}
+    >
+      {platform === 'LOCAL' ? 'Ứng dụng' : PLATFORM_LABELS[platform] ?? platform}
+    </span>
+  ));
+};
+
 const normalizeWarehouseVariant = (item) => {
   const variantId = item.variantId ?? item.id;
   return {
     id: variantId,
     variantId,
-    sku: item.sku ?? item.variantSku ?? '',
+    sku: item.marketplaceSku ?? item.sku ?? item.variantSku ?? '',
     productName: item.productName ?? item.product?.name ?? item.variantName ?? item.sku ?? item.variantSku ?? '',
     name: item.variantName ?? item.name ?? '',
     availableQuantity: item.availableQuantity ?? item.quantityOnHand ?? 0,
@@ -105,9 +151,9 @@ const aggregateWarehouseVariantsBySku = (variants) => {
     const existing = groups.get(key);
     existing.productName = existing.productName || item.productName;
     existing.name = existing.name || item.name;
-    existing.availableQuantity = Number(existing.availableQuantity ?? 0) + Number(item.availableQuantity ?? 0);
-    existing.quantityOnHand = Number(existing.quantityOnHand ?? 0) + Number(item.quantityOnHand ?? 0);
-    existing.reservedQuantity = Number(existing.reservedQuantity ?? 0) + Number(item.reservedQuantity ?? 0);
+    existing.availableQuantity = Math.max(Number(existing.availableQuantity ?? 0), Number(item.availableQuantity ?? 0));
+    existing.quantityOnHand = Math.max(Number(existing.quantityOnHand ?? 0), Number(item.quantityOnHand ?? 0));
+    existing.reservedQuantity = Math.max(Number(existing.reservedQuantity ?? 0), Number(item.reservedQuantity ?? 0));
     existing.platforms = uniqueValues([...itemPlatforms(existing), ...itemPlatforms(item)]);
     existing.channelNames = uniqueValues([...(existing.channelNames ?? []), ...(item.channelNames ?? []), item.channelName]);
     existing.channelIds = uniqueValues([...(existing.channelIds ?? []), ...(item.channelIds ?? []), item.channelId]);
@@ -186,7 +232,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontFamily: 'monospace', backgroundColor: '#fee2e2', color: '#991b1b', padding: '1px 6px', borderRadius: 4 }}>{item.sku}</span>
-                    <span style={{ fontSize: 11, backgroundColor: '#f1f5f9', color: '#475569', padding: '1px 6px', borderRadius: 4 }}>{formatPlatforms(item)}</span>
+                    {renderPlatformBadges(item)}
                     {(item.mergedVariantCount ?? 1) > 1 && <span style={{ fontSize: 11, backgroundColor: '#ecfdf5', color: '#047857', padding: '1px 6px', borderRadius: 4 }}>Gộp {item.mergedVariantCount} biến thể</span>}
                     <span style={{ fontSize: 11, backgroundColor: '#fef2f2', color: '#991b1b', padding: '1px 6px', borderRadius: 4 }}>Có thể xuất: {formatNumber(item.availableQuantity)}</span>
                     {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
@@ -290,7 +336,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
 
     let ignore = false;
     setLoadingWarehouseVariants(true);
-    inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false, { warehouseId })
+    inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false)
       .then((response) => {
         if (ignore) return;
         const data = getResponseData(response);
@@ -317,11 +363,12 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
     let ignore = false;
     Promise.all(items.map(async (item) => {
       if (!item.variantId || String(item.variantId).startsWith('excel-')) return item;
+      if ((item.mergedVariantCount ?? 1) > 1 || itemPlatforms(item).length > 1) return item;
       try {
         const response = await inventoryApi.getByVariant(selectedWarehouseId, item.variantId);
         const inventoryItem = getResponseData(response);
         return { ...item, quantityOnHand: inventoryItem.quantityOnHand ?? 0, reservedQuantity: inventoryItem.reservedQuantity ?? 0, availableQuantity: inventoryItem.availableQuantity ?? 0 };
-      } catch { return { ...item, quantityOnHand: 0, reservedQuantity: 0, availableQuantity: 0 }; }
+      } catch { return item; }
     })).then((nextItems) => { if (!ignore) setItems(nextItems); });
     return () => { ignore = true; };
   }, [selectedWarehouseId, itemVariantKey]);
@@ -459,7 +506,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
       const savedResponse = isEdit ? await stockDeliveryService.updateStockDelivery(id, payload) : await stockDeliveryService.createStockDelivery(payload);
       const savedDelivery = getResponseData(savedResponse);
       if (submitAction === 'complete') { await stockDeliveryService.confirmStockDelivery(savedDelivery.id); toast.success('Hoàn thành phiếu xuất kho thành công.'); }
-      else { toast.success(isEdit ? 'Cập nhật phiếu xuất kho thành công.' : 'Lưu tạm phiếu xuất kho thành công.'); }
+      else { toast.success(isEdit ? 'Cập nhật phiếu xuất kho thành công.' : 'Đã tạo phiếu xuất kho ở trạng thái Đang xử lý.'); }
       runWithoutGuard(() => navigate(ROUTES.STOCK_DELIVERIES));
     } catch (error) {
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') { toast.error(Object.values(error.response.data.data)[0] || 'Có lỗi xảy ra.'); }
@@ -472,7 +519,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
 
       {/* Page Header */}
       <div className={styles.pageHeader}>
@@ -642,7 +689,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
           <div className={`${styles.card} ${styles.sidebarCard}`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button className={`${styles.actionBtn} ${styles.backBtn}`} onClick={() => navigate(ROUTES.STOCK_DELIVERIES)}><ArrowLeft size={14} /> Hủy</button>
-              <button className={`${styles.actionBtn} ${styles.tealBtn}`} onClick={submitDelivery('draft')} disabled={isSubmitting}><PackageMinus className={styles.tealIcon} />{isSubmitting ? 'Đang xử lý...' : 'Lưu tạm'}</button>
+              <button className={`${styles.actionBtn} ${styles.tealBtn}`} onClick={submitDelivery('draft')} disabled={isSubmitting}><PackageMinus className={styles.tealIcon} />{isSubmitting ? 'Đang xử lý...' : 'Lưu & xử lý'}</button>
               <button className={`${styles.actionBtn} ${styles.dangerBtn}`} onClick={submitDelivery('complete')} disabled={isSubmitting}><PackageMinus className={styles.dangerIcon} />{isSubmitting ? 'Đang xử lý...' : 'Hoàn thành xuất kho'}</button>
             </div>
           </div>
@@ -661,7 +708,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
               <span className={styles.noteTitle} style={{ color: '#92400e' }}>Lưu ý quan trọng</span>
             </div>
             <ul className={styles.noteList}>
-              {['Số lượng xuất phải nhỏ hơn hoặc bằng tồn kho khả dụng.', 'Kho xuất phải ở trạng thái hoạt động.', 'Sau khi xuất kho, số lượng tồn sẽ tự động giảm.', 'Lưu tạm để tiếp tục chỉnh sửa sau.'].map((note) => (
+              {['Số lượng xuất phải nhỏ hơn hoặc bằng tồn kho khả dụng.', 'Kho xuất phải ở trạng thái hoạt động.', 'Sau khi xuất kho, số lượng tồn sẽ tự động giảm.', 'Phiếu đang xử lý vẫn có thể tiếp tục chỉnh sửa.'].map((note) => (
                 <li key={note} className={styles.noteItem} style={{ color: '#78350f' }}>{note}</li>
               ))}
             </ul>

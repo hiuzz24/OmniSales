@@ -10,27 +10,10 @@ import ExportProductsModal from '../components/ExportProductsModal';
 import ImportProductsModal from '../components/ImportProductsModal';
 import styles from './ProductManagementPage.module.css';
 
-const PLATFORM_LABELS = {
-  LAZADA: 'Lazada',
-  SHOPIFY: 'Shopify',
-  TIKTOK: 'TikTok Shop',
-};
-
-const formatCount = (value) => Number(value ?? 0).toLocaleString('vi-VN');
-
-const buildProductSyncMessage = ({ channel, direction, result }) => {
-  const channelLabel = `${PLATFORM_LABELS[channel.platform] ?? channel.platform} - ${channel.displayName ?? 'Chưa đặt tên'}`;
-  if (direction === 'from-marketplace') {
-    return `Đã đồng bộ ${channelLabel}: lấy được ${formatCount(result?.productCount)} sản phẩm và ${formatCount(result?.variantCount)} sản phẩm con từ sàn.`;
-  }
-
-  return `Đã đồng bộ ${channelLabel}: đẩy ${formatCount(result?.productCount)} sản phẩm và ${formatCount(result?.pushedVariantCount)} SKU tồn kho lên sàn.`;
-};
-
 const ProductManagementPage = () => {
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [platformFilter, setPlatformFilter] = useState('');
+  const [platformFilters, setPlatformFilters] = useState([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [tableRefreshKey, setTableRefreshKey] = useState(0);
@@ -108,14 +91,14 @@ const ProductManagementPage = () => {
         onSearchChange={setSearchInput}
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}
-        platformFilter={platformFilter}
-        onPlatformChange={setPlatformFilter}
+        platformFilters={platformFilters}
+        onPlatformChange={setPlatformFilters}
       />
       <ProductTable
-        key={`${tableRefreshKey}-${debouncedKeyword}-${statusFilter}-${platformFilter}`}
+        key={`${tableRefreshKey}-${debouncedKeyword}-${statusFilter}-${platformFilters.join(',')}`}
         keyword={debouncedKeyword}
         statusFilter={statusFilter}
-        platformFilter={platformFilter}
+        platformFilters={platformFilters}
       />
       <ExportProductsModal
         isOpen={isExportModalOpen}

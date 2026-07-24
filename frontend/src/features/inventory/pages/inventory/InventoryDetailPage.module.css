@@ -809,3 +809,32 @@
 .primaryBtn:active {
   transform: translateY(0);
 }
+
+/* Product workspace detail language */
+.page { gap: 14px; }
+.pageHeader { padding: 14px 18px; border: 1px solid #d8e3ed; border-radius: 14px; background: linear-gradient(135deg, rgba(235, 245, 252, 0.96), rgba(247, 250, 252, 0.96) 58%, rgba(240, 248, 246, 0.94)); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+.productIconWrap { border: 1px solid #bfdbfe; border-radius: 11px; color: #2563eb; background: #eff6ff; }
+.pageTitle { color: #0f172a; font-size: 22px; letter-spacing: -0.015em; }
+.backBtn, .btnOutline, .primaryBtn, .cancelBtn { min-height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.backBtn, .btnOutline, .cancelBtn { border: 1px solid #cbd8e2; color: #334155; background: #fff; }
+.primaryBtn { border: 1px solid #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.primaryBtn:hover { border-color: #1d4ed8; background: #1d4ed8; box-shadow: 0 5px 12px rgba(37, 99, 235, 0.2); }
+.summaryGrid, .mainGrid, .leftCol, .rightCol { gap: 14px; }
+.summaryCard { position: relative; min-height: 102px; padding: 16px 18px; overflow: hidden; border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 5px 16px rgba(15, 23, 42, 0.035); }
+.summaryCard::before { position: absolute; inset: 0 auto 0 0; width: 3px; background: #3b82f6; content: ''; }
+.summaryCard:nth-child(2)::before { background: #0ea5e9; }
+.summaryCard:nth-child(3)::before { background: #f59e0b; }
+.summaryCard:nth-child(4)::before { background: #10b981; }
+.summaryValue { font-size: 23px; font-variant-numeric: tabular-nums; }
+.card { padding: 20px; border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.cardHeader { padding-bottom: 12px; border-bottom: 1px solid #e8eef3; }
+.cardIcon { color: #2563eb; }
+.cardTitle { color: #172033; font-size: 15px; }
+.table { min-width: 860px; border-collapse: separate; border-spacing: 0; }
+.th { padding: 12px 14px; color: #42566d; background: #f3f7fa; font-size: 11px; font-weight: 750; letter-spacing: 0.025em; text-transform: uppercase; }
+.td { padding: 12px 14px; border-color: #e8eef3; color: #334155; font-size: 13px; }
+.modalOverlay { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
+.modalContent { border: 1px solid #dbe5ec; border-radius: 15px; box-shadow: 0 24px 64px rgba(15, 23, 42, 0.26); }
+.modalHeader { border-color: #dbe5ec; background: #f8fbfd; }
+.formInput, .formSelect { min-height: 40px; border-color: #cbd8e2; border-radius: 8px; font-size: 13px; }
+.formInput:focus, .formSelect:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }

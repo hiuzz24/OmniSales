@@ -19,8 +19,20 @@ const channelSyncService = {
     const response = await channelApi.syncFromApp(channelId);
     return unwrap(response);
   },
+  syncAllFromApp: async () => {
+    const response = await channelApi.syncAllFromApp();
+    return unwrap(response);
+  },
   syncChannelFromMarketplace: async (channelId) => {
     const response = await channelApi.syncFromMarketplace(channelId);
+    return unwrap(response);
+  },
+  enqueueSyncFromMarketplace: async (channelId) => {
+    const response = await channelApi.enqueueSyncFromMarketplace(channelId);
+    return unwrap(response);
+  },
+  getSyncJob: async (jobId) => {
+    const response = await channelApi.getSyncJob(jobId);
     return unwrap(response);
   },
 };

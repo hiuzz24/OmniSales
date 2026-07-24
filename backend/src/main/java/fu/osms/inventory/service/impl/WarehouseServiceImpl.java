@@ -1,8 +1,11 @@
 package fu.osms.inventory.service.impl;
 
+import fu.osms.auth.repository.UserRepository;
+import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.dto.request.WarehouseRequest;
 import fu.osms.inventory.dto.response.WarehouseResponse;
 import fu.osms.inventory.mapper.WarehouseMapper;
+import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.WarehouseService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
@@ -18,6 +21,8 @@ import java.util.UUID;
 public class WarehouseServiceImpl implements WarehouseService {
 
     private final WarehouseRepository warehouseRepository;
+    private final UserRepository userRepository;
+    private final InventoryItemRepository inventoryItemRepository;
     private final WarehouseMapper warehouseMapper;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
@@ -30,13 +35,15 @@ public class WarehouseServiceImpl implements WarehouseService {
     @Override
     @Transactional(readOnly = true)
     public WarehouseResponse getById(UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        Warehouse warehouse = warehouseRepository.findById(id)
+                .orElseThrow(() -> new fu.osms.common.exception.AppException(fu.osms.common.exception.ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho hàng"));
+        return mapToResponseWithStats(warehouse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public WarehouseResponse getMaster() {
-        return warehouseMapper.toResponse(marketplaceWarehouseConsistencyService.resolveMasterWarehouse());
+        return mapToResponseWithStats(marketplaceWarehouseConsistencyService.resolveMasterWarehouse());
     }
 
     @Override
@@ -44,7 +51,7 @@ public class WarehouseServiceImpl implements WarehouseService {
     public List<WarehouseResponse> getAll() {
         return warehouseRepository.findByIsActiveTrueOrderByNameAsc()
                 .stream()
-                .map(warehouseMapper::toResponse)
+                .map(this::mapToResponseWithStats)
                 .toList();
     }
 
@@ -62,6 +69,17 @@ public class WarehouseServiceImpl implements WarehouseService {
 
     @Override
     public WarehouseResponse getWarehouseByUserId(UUID userId) {
-        return warehouseMapper.toResponse(warehouseRepository.findWarehouseByUserId(userId));
+        return mapToResponseWithStats(warehouseRepository.findWarehouseByUserId(userId));
+    }
+
+    private WarehouseResponse mapToResponseWithStats(Warehouse warehouse) {
+        if (warehouse == null) return null;
+        WarehouseResponse response = warehouseMapper.toResponse(warehouse);
+        if (response != null && warehouse.getId() != null) {
+            response.setStaffCount(userRepository.countByWarehouseId(warehouse.getId()));
+            response.setProductCount(inventoryItemRepository.countProductTypesByWarehouseId(warehouse.getId()));
+            response.setTotalStock(inventoryItemRepository.sumTotalStockByWarehouseId(warehouse.getId()));
+        }
+        return response;
     }
 }

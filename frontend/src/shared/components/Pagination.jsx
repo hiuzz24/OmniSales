@@ -1,4 +1,5 @@
-﻿import { ChevronLeft, ChevronRight } from 'lucide-react';
+﻿import { useId } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import styles from './Pagination.module.css';
 
 const ELLIPSIS = 'ellipsis';
@@ -49,8 +50,24 @@ const Pagination = ({
   itemLabel = 'mục',
   className = '',
   siblingCount = 1,
+  showPageSizeSelector = false,
+  pageSizeOptions = [10, 20, 50],
+  onPageSizeChange,
+  pageSizeSelectorDisabled = false,
+  pageSizeLabel = 'Số mục mỗi trang',
 }) => {
+  const generatedPageSizeId = useId();
+  const pageSizeSelectId = `pagination-page-size-${generatedPageSizeId.replace(/:/g, '')}`;
   const safePageSize = Math.max(Number(pageSize) || 1, 1);
+  const normalizedPageSizeOptions = [...new Set(
+    (Array.isArray(pageSizeOptions) ? pageSizeOptions : [])
+      .map(Number)
+      .filter((option) => Number.isFinite(option) && option > 0)
+  )];
+  if (!normalizedPageSizeOptions.includes(safePageSize)) {
+    normalizedPageSizeOptions.push(safePageSize);
+    normalizedPageSizeOptions.sort((a, b) => a - b);
+  }
   const safeTotalElements = Math.max(Number(totalElements) || Number(currentCount) || 0, 0);
   const inferredTotalPages = Math.ceil(safeTotalElements / safePageSize);
   const safeTotalPages = Math.max(Number(totalPages) || inferredTotalPages || 0, 0);
@@ -75,11 +92,44 @@ const Pagination = ({
     }
   };
 
+  const handlePageSizeChange = (event) => {
+    if (!onPageSizeChange) return;
+    const nextPageSize = Number(event.target.value);
+    if (Number.isFinite(nextPageSize) && nextPageSize > 0 && nextPageSize !== safePageSize) {
+      onPageSizeChange(nextPageSize);
+    }
+  };
+
   return (
     <nav className={`${styles.pagination} ${className}`} aria-label="Phân trang">
-      <p className={styles.info} aria-live="polite">
-        Hiển thị <strong>{firstItem}-{lastItem}</strong> / {safeTotalElements} {itemLabel}
-      </p>
+      <div className={styles.summary}>
+        <p className={styles.info} aria-live="polite">
+          Hiển thị <strong>{firstItem}-{lastItem}</strong> / {safeTotalElements} {itemLabel}
+        </p>
+
+        {showPageSizeSelector && (
+          <div className={styles.pageSizeControl}>
+            <label className={styles.pageSizeLabel} htmlFor={pageSizeSelectId}>
+              {pageSizeLabel}
+            </label>
+            <div className={styles.selectWrapper}>
+              <select
+                id={pageSizeSelectId}
+                className={styles.pageSizeSelect}
+                value={safePageSize}
+                onChange={handlePageSizeChange}
+                disabled={pageSizeSelectorDisabled || !onPageSizeChange}
+                aria-label={pageSizeLabel}
+              >
+                {normalizedPageSizeOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+              <ChevronDown className={styles.selectIcon} size={14} aria-hidden="true" />
+            </div>
+          </div>
+        )}
+      </div>
 
       {safeTotalPages >= 1 && (
         <div className={styles.controls}>

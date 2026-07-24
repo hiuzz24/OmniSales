@@ -104,16 +104,16 @@ class WarehouseServiceImplTest {
     @DisplayName("create - throws UnsupportedOperationException (not implemented)")
     void create_notImplemented() {
         assertThatThrownBy(() -> warehouseService.create(
-                fu.osms.inventory.dto.request.WarehouseRequest.builder().name("x").build()
-        )).isInstanceOf(UnsupportedOperationException.class);
+                fu.osms.inventory.dto.request.WarehouseRequest.builder().name("x").build()))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
     @DisplayName("update - throws UnsupportedOperationException (not implemented)")
     void update_notImplemented() {
         assertThatThrownBy(() -> warehouseService.update(sample.getId(),
-                fu.osms.inventory.dto.request.WarehouseRequest.builder().name("x").build()
-        )).isInstanceOf(UnsupportedOperationException.class);
+                fu.osms.inventory.dto.request.WarehouseRequest.builder().name("x").build()))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

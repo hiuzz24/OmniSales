@@ -5,6 +5,26 @@
   max-width: 860px;
 }
 
+/* Product workspace form language */
+.page { gap: 16px; }
+.pageHeader { padding: 16px 20px; border: 1px solid #dbe5ec; border-radius: 14px; background: linear-gradient(135deg, rgba(239, 246, 255, 0.94), rgba(240, 253, 250, 0.88)); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+.pageTitle { color: #0f172a; font-size: 24px; letter-spacing: -0.02em; }
+.backBtn, .cancelBtn, .submitBtn { min-height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.backBtn, .cancelBtn { border-color: #cbd8e2; color: #334155; background: #fff; }
+.submitBtn { border-color: #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.submitBtn:hover:not(:disabled) { border-color: #1d4ed8; background: #1d4ed8; }
+.form { gap: 16px; }
+.section { padding: 20px; border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.sectionHeader { padding-bottom: 13px; border-color: #e3eaf0; }
+.sectionIcon { border: 1px solid #bfdbfe; border-radius: 9px; color: #2563eb; background: #eff6ff; }
+.sectionTitle { color: #172033; font-size: 15px; }
+.label { color: #52667c; font-size: 11px; font-weight: 750; letter-spacing: 0.035em; text-transform: uppercase; }
+.input, .textarea { min-height: 40px; border-color: #cbd8e2; border-radius: 8px; font-size: 13px; }
+.input:focus, .textarea:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+.formActions { padding-top: 2px; border: 0; }
+
+@media (prefers-reduced-motion: reduce) { .backBtn, .cancelBtn, .submitBtn { transition: none; } }
+
 /* ── Page Header ── */
 .pageHeader {
   display: flex;
@@ -344,3 +364,20 @@
     text-align: left;
   }
 }
+
+.page { gap: 16px; }
+.pageHeader { padding: 16px 20px; border: 1px solid #dbe5ec; border-radius: 14px; background: linear-gradient(135deg, rgba(239, 246, 255, 0.94), rgba(240, 253, 250, 0.88)); box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05); }
+.pageTitle { color: #0f172a; font-size: 24px; letter-spacing: -0.02em; }
+.backBtn, .cancelBtn, .submitBtn { min-height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.backBtn, .cancelBtn { border-color: #cbd8e2; color: #334155; background: #fff; }
+.submitBtn { border-color: #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.submitBtn:hover:not(:disabled) { border-color: #1d4ed8; background: #1d4ed8; }
+.form { gap: 16px; }
+.section { padding: 20px; border-color: #dbe5ec; border-radius: 13px; box-shadow: 0 7px 20px rgba(15, 23, 42, 0.04); }
+.sectionHeader { padding-bottom: 13px; border-color: #e3eaf0; }
+.sectionIcon { border: 1px solid #bfdbfe; border-radius: 9px; color: #2563eb; background: #eff6ff; }
+.sectionTitle { color: #172033; font-size: 15px; }
+.label { color: #52667c; font-size: 11px; font-weight: 750; letter-spacing: 0.035em; text-transform: uppercase; }
+.input, .textarea { min-height: 40px; border-color: #cbd8e2; border-radius: 8px; font-size: 13px; }
+.input:focus, .textarea:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+.formActions { padding-top: 2px; border: 0; }

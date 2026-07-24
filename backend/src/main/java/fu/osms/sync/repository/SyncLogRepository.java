@@ -5,15 +5,15 @@ import fu.osms.sync.entity.SyncLog;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
 import java.time.OffsetDateTime;
-
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
@@ -38,5 +38,18 @@ public interface SyncLogRepository extends JpaRepository<SyncLog, UUID>, JpaSpec
 
     @Query("select s from SyncLog s join fetch s.channel where s.id = :id")
     Optional<SyncLog> findWithChannelById(@Param("id") UUID id);
+
+    @EntityGraph(attributePaths = "channel")
+    Optional<SyncLog> findFirstByChannelIdAndStatusAndCompletedAtIsNullOrderByStartedAtDesc(
+            UUID channelId,
+            SyncStatus status
+    );
+
+    @EntityGraph(attributePaths = "channel")
+    Optional<SyncLog> findFirstByChannelIdAndStatusAndCompletedAtIsNullAndJobTypeEndingWithOrderByStartedAtDesc(
+            UUID channelId,
+            SyncStatus status,
+            String jobTypeSuffix
+    );
 
 }

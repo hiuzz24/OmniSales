@@ -5,6 +5,7 @@ import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
@@ -25,6 +26,7 @@ import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.impl.ChannelProductAggregationService;
+import fu.osms.sync.service.impl.SyncJobProgressTracker;
 import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import fu.osms.sync.tiktok.TikTokImportSyncService;
 import fu.osms.sync.tiktok.util.TikTokWarehouseAddressFormatter;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +54,7 @@ import java.util.UUID;
 public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
 
     private static final int INVENTORY_BATCH_SIZE = 100;
+    private static final int MAX_VARIANT_SKU_LENGTH = 100;
     private static final String WAREHOUSE_MARKER = "TIKTOK_WAREHOUSE_ID:";
 
     private final ChannelRepository channelRepository;
@@ -65,13 +69,14 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
     private final ChannelProductAggregationService channelProductAggregationService;
+    private final SyncJobProgressTracker syncJobProgressTracker;
 
     @Override
     @Transactional
     public ChannelImportSyncResponse syncProductsAndInventory(UUID channelId) {
         Channel channel = requireTikTokChannel(channelId);
         String shopCipher = requireShopCipher(channel);
-        marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(channel);
+        Warehouse masterWarehouse = marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(channel);
 
         SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
                 .channel(channel)
@@ -82,45 +87,56 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
 
         int productCount = 0;
         int variantCount = 0;
-        Set<String> externalWarehouseIds = new LinkedHashSet<>();
 
         try {
-            List<Map<String, Object>> productSummaries = loadAllProductSummaries(channelId, shopCipher);
-            Map<String, Map<String, Object>> inventoryByProductId = loadInventoryByProductId(
-                    channelId,
-                    shopCipher,
-                    productSummaries.stream().map(this::productId).filter(this::hasText).toList()
-            );
             Map<String, Map<String, Object>> warehousesById = loadWarehousesById(channelId, shopCipher);
             Map<String, Warehouse> localWarehousesByExternalId = syncTikTokWarehouses(warehousesById);
-            externalWarehouseIds.addAll(localWarehousesByExternalId.keySet());
+            Set<String> externalWarehouseIds = new LinkedHashSet<>(localWarehousesByExternalId.keySet());
 
             UUID defaultWarehouseId = resolveDefaultWarehouseId(channel);
             boolean loadFullProductDetail = shouldLoadFullProductDetail(channel);
             Set<UUID> changedVariantIds = new LinkedHashSet<>();
-            for (Map<String, Object> summary : productSummaries) {
-                String externalProductId = productId(summary);
-                if (!hasText(externalProductId)) {
-                    continue;
-                }
-
-                Map<String, Object> detail = loadFullProductDetail || !hasText(productTitle(summary))
-                        ? loadProductDetail(channelId, shopCipher, externalProductId, summary)
-                        : summary;
-                Map<String, Object> inventory = inventoryByProductId.getOrDefault(externalProductId, Map.of());
-                ImportedProduct imported = upsertProduct(
-                        channel,
-                        detail,
-                        inventory,
-                        defaultWarehouseId,
-                        externalWarehouseIds,
-                        warehousesById,
-                        localWarehousesByExternalId
+            int[] importedCounts = {0, 0};
+            OffsetDateTime changedSince = channel.getLastSyncedAt();
+            forEachProductSummaryPage(channelId, shopCipher, changedSince, productSummaries -> {
+                Map<String, Map<String, Object>> inventoryByProductId = loadInventoryByProductId(
+                        channelId,
+                        shopCipher,
+                        productSummaries.stream().map(this::productId).filter(this::hasText).toList()
                 );
-                productCount++;
-                variantCount += imported.variantCount();
-                changedVariantIds.addAll(imported.variantIds());
-            }
+                int pageVariantCount = 0;
+                for (Map<String, Object> summary : productSummaries) {
+                    String externalProductId = productId(summary);
+                    if (!hasText(externalProductId)) {
+                        continue;
+                    }
+
+                    Map<String, Object> detail = loadFullProductDetail || !hasText(productTitle(summary))
+                            ? loadProductDetail(channelId, shopCipher, externalProductId, summary)
+                            : summary;
+                    Map<String, Object> inventory = inventoryByProductId.getOrDefault(externalProductId, Map.of());
+                    if (listOfMaps(inventory.get("skus")).isEmpty() && listOfMaps(detail.get("skus")).isEmpty()) {
+                        detail = loadProductDetail(channelId, shopCipher, externalProductId, summary);
+                    }
+                    ImportedProduct imported = upsertProduct(
+                            channel,
+                            detail,
+                            inventory,
+                            masterWarehouse,
+                            defaultWarehouseId,
+                            externalWarehouseIds,
+                            warehousesById,
+                            localWarehousesByExternalId
+                    );
+                    importedCounts[0]++;
+                    importedCounts[1] += imported.variantCount();
+                    pageVariantCount += imported.variantCount();
+                    changedVariantIds.addAll(imported.variantIds());
+                }
+                syncJobProgressTracker.recordVariantBatch(pageVariantCount);
+            });
+            productCount = importedCounts[0];
+            variantCount = importedCounts[1];
 
             Map<String, Object> metadata = mutableMap(channel.getMetadata());
             metadata.put("productCount", channelProductRepository.countByChannelIdAndMappingState(channelId, "ACTIVE"));
@@ -131,7 +147,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             channelRepository.save(channel);
 
             completeLog(syncLog, SyncStatus.SYNCED, productCount + variantCount, productCount + variantCount, 0, null);
-            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds, channelId);
             return ChannelImportSyncResponse.builder()
                     .channelId(channelId)
                     .syncLogId(syncLog.getId())
@@ -148,18 +164,28 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         }
     }
 
-    private List<Map<String, Object>> loadAllProductSummaries(UUID channelId, String shopCipher) {
-        List<Map<String, Object>> products = new ArrayList<>();
+    private void forEachProductSummaryPage(UUID channelId,
+                                           String shopCipher,
+                                           OffsetDateTime changedSince,
+                                           Consumer<List<Map<String, Object>>> pageConsumer) {
         String pageToken = null;
         do {
-            Map<String, Object> response = tikTokApiClient.searchProducts(channelId, shopCipher, pageToken);
-            log.info("[TikTokImportSync] Product search response pageToken={}, payload={}",
-                    pageToken, response);
+            log.info("[TikTokImportSync] Calling product search channelId={}, pageToken={}, update_time_ge={}",
+                    channelId,
+                    hasText(pageToken) ? "<present>" : "<none>",
+                    changedSince == null ? null : changedSince.toEpochSecond());
+            Map<String, Object> response = tikTokApiClient.searchProducts(channelId, shopCipher, pageToken, changedSince);
             Map<String, Object> data = map(response.get("data"));
-            products.addAll(listOfMaps(data.get("products")));
+            List<Map<String, Object>> products = listOfMaps(data.get("products"));
+            log.info("[TikTokImportSync] Product search page channelId={}, received={}, nextPageToken={}",
+                    channelId,
+                    products.size(),
+                    hasText(stringValue(data.get("next_page_token"))) ? "<present>" : "<none>");
+            if (!products.isEmpty()) {
+                pageConsumer.accept(products);
+            }
             pageToken = stringValue(data.get("next_page_token"));
         } while (hasText(pageToken));
-        return products;
     }
 
     private Map<String, Map<String, Object>> loadInventoryByProductId(UUID channelId,
@@ -224,6 +250,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private ImportedProduct upsertProduct(Channel channel,
                                           Map<String, Object> productNode,
                                           Map<String, Object> inventoryNode,
+                                          Warehouse masterWarehouse,
                                           UUID defaultWarehouseId,
                                           Set<String> externalWarehouseIds,
                                           Map<String, Map<String, Object>> warehousesById,
@@ -234,18 +261,16 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 .orElseGet(ChannelProduct::new);
 
         List<Map<String, Object>> inventorySkus = listOfMaps(inventoryNode.get("skus"));
-        Product product = findProductBySharedSku(inventorySkus)
-                .orElse(channelProduct.getProduct());
+        List<Map<String, Object>> detailSkus = listOfMaps(productNode.get("skus"));
+        Product product = channelProduct.getProduct();
         if (product == null) {
-            String productName = firstNonBlank(productTitle(productNode), "TikTok Product " + externalProductId);
-            product = java.util.Optional.<Product>empty()
-                    .or(() -> productRepository.findFirstByNameIgnoreCaseAndDeletedAtIsNullOrderByCreatedAtAsc(productName))
-                    .orElseGet(() -> productRepository.findFirstBySkuAndDeletedAtIsNull(fallbackSku(externalProductId))
-                            .orElseGet(Product::new));
+            product = Product.builder()
+                    .sku(fallbackSku(externalProductId))
+                    .build();
         }
         boolean tikTokOwnedProduct = product.getId() == null || isGeneratedPlatformSku(stringValue(product.getSku()));
         if (product.getId() == null) {
-            product.setSku(firstSellerSku(inventorySkus, fallbackSku(externalProductId)));
+            product.setSku(fallbackSku(externalProductId));
         }
         if (tikTokOwnedProduct) {
             product.setName(firstNonBlank(productTitle(productNode), "TikTok Product " + externalProductId));
@@ -274,21 +299,24 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         channelProduct = channelProductRepository.save(channelProduct);
         channelProduct = channelProductAggregationService.normalizeImportedMapping(channelProduct);
 
-        Map<String, Map<String, Object>> detailsBySkuId = indexById(listOfMaps(productNode.get("skus")));
+        Map<String, Map<String, Object>> detailsBySkuId = indexById(detailSkus);
+        List<Map<String, Object>> skuSources = inventorySkus.isEmpty() ? detailSkus : inventorySkus;
         int variantCount = 0;
         Set<UUID> variantIds = new LinkedHashSet<>();
-        for (Map<String, Object> skuInventory : inventorySkus) {
-            String externalSkuId = stringValue(skuInventory.get("id"));
+        for (Map<String, Object> skuSource : skuSources) {
+            String externalSkuId = stringValue(skuSource.get("id"));
             if (!hasText(externalSkuId)) {
                 continue;
             }
-            Map<String, Object> skuDetail = detailsBySkuId.getOrDefault(externalSkuId, Map.of());
+            Map<String, Object> skuDetail = detailsBySkuId.getOrDefault(externalSkuId, skuSource);
+            Map<String, Object> skuInventory = inventorySkus.isEmpty() ? skuSource : skuSource;
             ProductVariant variant = upsertVariant(channelProduct, product, skuInventory, skuDetail);
             upsertChannelVariant(channelProduct, variant, skuInventory, skuDetail);
             upsertInventory(
                     variant,
                     skuInventory,
                     defaultWarehouseId,
+                    masterWarehouse,
                     externalWarehouseIds,
                     warehousesById,
                     localWarehousesByExternalId
@@ -297,17 +325,6 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             variantCount++;
         }
         return new ImportedProduct(variantCount, variantIds);
-    }
-
-    private java.util.Optional<Product> findProductBySharedSku(List<Map<String, Object>> skuNodes) {
-        return skuNodes.stream()
-                .map(node -> stringValue(node.get("seller_sku")))
-                .filter(this::hasText)
-                .map(productVariantRepository::findBySkuAndDeletedAtIsNull)
-                .flatMap(java.util.Optional::stream)
-                .map(ProductVariant::getProduct)
-                .filter(java.util.Objects::nonNull)
-                .findFirst();
     }
 
     private ProductVariant upsertVariant(ChannelProduct channelProduct,
@@ -320,11 +337,9 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 stringValue(detailSku.get("seller_sku")),
                 fallbackSku(externalSkuId)
         );
-        ProductVariant variant = productVariantRepository.findBySkuAndDeletedAtIsNull(sellerSku)
-                .filter(existing -> sameProduct(existing, product))
-                .or(() -> channelProductVariantRepository
-                        .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalSkuId)
-                        .map(ChannelProductVariant::getVariant))
+        ProductVariant variant = channelProductVariantRepository
+                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalSkuId)
+                .map(ChannelProductVariant::getVariant)
                 .orElseGet(ProductVariant::new);
         if (variant.getId() == null) {
             variant.setProduct(product);
@@ -336,10 +351,14 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             ));
             variant.setOptionValues(Map.of("source", "TikTok Shop"));
         }
-        BigDecimal externalPrice = moneyAmount(detailSku.get("price"));
-        if (variant.getPrice() == null && externalPrice != null) {
-            variant.setPrice(externalPrice);
+
+        Object priceObject = detailSku.get("price");
+        if ((!shouldPreserveLocalPrice(channelProduct, externalSkuId) || variant.getPrice() == null)
+                && priceObject instanceof Map<?, ?> price) {
+            variant.setPrice(moneyAmount(price.get("tax_exclusive_price")));
         }
+
+        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
         variant.setIsActive(true);
         return productVariantRepository.save(variant);
     }
@@ -354,9 +373,17 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         mapping.setVariant(variant);
         applyExternalVariantId(channelProduct, mapping, externalSkuId);
         mapping.setExternalSku(firstNonBlank(stringValue(inventorySku.get("seller_sku")), variant.getSku()));
-        mapping.setExternalPrice(moneyAmount(detailSku.get("price")));
-        mapping.setSyncStatus(SyncStatus.SYNCED);
-        mapping.setLastSyncedAt(OffsetDateTime.now());
+        Object priceObject = detailSku.get("price");
+
+        if (priceObject instanceof Map<?, ?> price) {
+            mapping.setExternalPrice(
+                    moneyAmount(price.get("tax_exclusive_price"))
+            );
+        }
+        if (mapping.getSyncStatus() != SyncStatus.OUT_OF_SYNC) {
+            mapping.setSyncStatus(SyncStatus.SYNCED);
+            mapping.setLastSyncedAt(OffsetDateTime.now());
+        }
         Map<String, Object> metadata = mutableMap(mapping.getMetadata());
         List<String> warehouseIds = listOfMaps(inventorySku.get("warehouse_inventory")).stream()
                 .map(node -> stringValue(node.get("warehouse_id")))
@@ -367,6 +394,14 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         metadata.put("tiktokAvailableQuantity", intValue(inventorySku.get("total_available_quantity")));
         mapping.setMetadata(metadata);
         channelProductVariantRepository.save(mapping);
+    }
+
+    private boolean shouldPreserveLocalPrice(ChannelProduct channelProduct, String externalVariantId) {
+        return channelProductVariantRepository
+                .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
+                .map(ChannelProductVariant::getSyncStatus)
+                .filter(SyncStatus.OUT_OF_SYNC::equals)
+                .isPresent();
     }
 
     private ChannelProductVariant resolveChannelVariantMapping(ChannelProduct channelProduct,
@@ -399,6 +434,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private void upsertInventory(ProductVariant variant,
                                  Map<String, Object> inventorySku,
                                  UUID defaultWarehouseId,
+                                 Warehouse masterWarehouse,
                                  Set<String> externalWarehouseIds,
                                  Map<String, Map<String, Object>> warehousesById,
                                  Map<String, Warehouse> localWarehousesByExternalId) {
@@ -432,6 +468,11 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             return;
         }
 
+        if (warehouseInventory.isEmpty() && masterWarehouse != null) {
+            saveInventoryItem(masterWarehouse, variant, 0, 0);
+            return;
+        }
+
         for (Map<String, Object> warehouseNode : warehouseInventory) {
             String externalWarehouseId = stringValue(warehouseNode.get("warehouse_id"));
             if (!hasText(externalWarehouseId)) {
@@ -461,12 +502,29 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         InventoryItem item = inventoryItemRepository
                 .findByWarehouseIdAndVariantId(warehouse.getId(), variant.getId())
                 .orElseGet(InventoryItem::new);
+
+        int newTotalQuantity = Math.max(0, availableQuantity) + Math.max(0, committedQuantity);
+        int previousQuantity = item.getQuantityOnHand() == null ? 0 : item.getQuantityOnHand();
+        int incomingQuantity = Math.max(0, newTotalQuantity - previousQuantity);
+
         item.setWarehouse(warehouse);
         item.setVariant(variant);
-        item.setQuantityOnHand(Math.max(0, availableQuantity) + Math.max(0, committedQuantity));
+        item.setQuantityOnHand(newTotalQuantity);
         item.setReservedQuantity(Math.max(0, committedQuantity));
         item.setLowStockThreshold(item.getLowStockThreshold() == null ? 5 : item.getLowStockThreshold());
-        item.setAverageCost(item.getAverageCost() == null ? BigDecimal.ZERO : item.getAverageCost());
+
+        if (incomingQuantity > 0) {
+            BigDecimal newAvgCost = ProductCostPolicy.weightedAverageCost(
+                    BigDecimal.valueOf(previousQuantity),
+                    item.getAverageCost(),
+                    BigDecimal.valueOf(incomingQuantity),
+                    variant.getCostPrice()
+            );
+            item.setAverageCost(newAvgCost);
+        } else if (item.getAverageCost() == null) {
+            item.setAverageCost(ProductCostPolicy.initialCost(null, variant.getPrice()));
+        }
+
         inventoryItemRepository.save(item);
     }
 
@@ -476,10 +534,13 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         warehouse.setName("TikTok Shop - "
                 + firstNonBlank(stringValue(warehouseNode.get("name")), "Warehouse")
                 + " " + marker);
-        warehouse.setAddress(TikTokWarehouseAddressFormatter.format(
+        String importedAddress = TikTokWarehouseAddressFormatter.format(
                 map(warehouseNode.get("address")),
                 externalWarehouseId
-        ));
+        );
+        if (importedAddress != null && !importedAddress.isBlank()) {
+            warehouse.setAddress(importedAddress);
+        }
         warehouse.setIsActive(!"DISABLED".equalsIgnoreCase(stringValue(warehouseNode.get("effect_status"))));
         warehouse.setDeletedAt(null);
         return warehouseRepository.save(warehouse);
@@ -561,17 +622,43 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     }
 
     private String uniqueSku(String baseSku, String externalSkuId) {
-        return productVariantRepository.findBySkuAndDeletedAtIsNull(baseSku)
-                .map(existing -> baseSku + "-" + externalSkuId)
-                .orElse(baseSku);
+        String normalizedBase = truncateSku(firstNonBlank(baseSku, fallbackSku(externalSkuId)));
+        if (productVariantRepository.findBySkuAndDeletedAtIsNull(normalizedBase).isEmpty()) {
+            return normalizedBase;
+        }
+
+        String suffixToken = skuSuffixToken(externalSkuId);
+        String candidate = appendSkuSuffix(normalizedBase, suffixToken, 1);
+        int suffix = 2;
+        while (productVariantRepository.findBySkuAndDeletedAtIsNull(candidate).isPresent()) {
+            candidate = appendSkuSuffix(normalizedBase, suffixToken, suffix++);
+        }
+        return candidate;
     }
 
-    private String firstSellerSku(List<Map<String, Object>> skuNodes, String fallback) {
-        return skuNodes.stream()
-                .map(node -> stringValue(node.get("seller_sku")))
-                .filter(this::hasText)
-                .findFirst()
-                .orElse(fallback);
+    private String appendSkuSuffix(String baseSku, String suffixToken, int suffix) {
+        String suffixValue = "-" + suffixToken + (suffix > 1 ? "-" + suffix : "");
+        int baseLength = Math.max(1, MAX_VARIANT_SKU_LENGTH - suffixValue.length());
+        return truncateSku(baseSku, baseLength) + suffixValue;
+    }
+
+    private String skuSuffixToken(String value) {
+        String token = firstNonBlank(value, UUID.randomUUID().toString()).trim().replaceAll("[^A-Za-z0-9_-]+", "-");
+        if (token.length() > 40) {
+            token = token.substring(token.length() - 40);
+        }
+        return token.isBlank() ? UUID.randomUUID().toString() : token;
+    }
+
+    private String truncateSku(String sku) {
+        return truncateSku(sku, MAX_VARIANT_SKU_LENGTH);
+    }
+
+    private String truncateSku(String sku, int maxLength) {
+        if (sku == null || sku.length() <= maxLength) {
+            return sku;
+        }
+        return sku.substring(0, maxLength);
     }
 
     private String fallbackSku(String externalId) {
@@ -580,13 +667,6 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
 
     private boolean isGeneratedPlatformSku(String sku) {
         return sku != null && (sku.startsWith("SHOPIFY-") || sku.startsWith("LAZADA-") || sku.startsWith("TIKTOK-"));
-    }
-
-    private boolean sameProduct(ProductVariant variant, Product product) {
-        return variant.getProduct() != null
-                && variant.getProduct().getId() != null
-                && product.getId() != null
-                && variant.getProduct().getId().equals(product.getId());
     }
 
     private Map<String, Map<String, Object>> indexById(List<Map<String, Object>> nodes) {

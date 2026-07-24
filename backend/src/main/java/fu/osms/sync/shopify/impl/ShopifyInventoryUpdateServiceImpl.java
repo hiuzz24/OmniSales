@@ -6,8 +6,10 @@ import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
+import fu.osms.common.enums.SyncStatus;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.repository.InventoryIssueRepository;
@@ -15,12 +17,14 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.shopify.ShopifyApiClient;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
+import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -47,6 +51,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
     private final InventoryItemRepository inventoryItemRepository;
     private final StockReceiveRepository stockReceiveRepository;
     private final InventoryIssueRepository inventoryIssueRepository;
+    private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
@@ -109,7 +114,8 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
                 continue;
             }
 
-            Map<String, Integer> availableByLocationId = totalAvailableByShopifyLocationId(
+            Map<String, Integer> availableByLocationId = targetAvailableByShopifyLocationId(
+                    mapping,
                     inventoryByVariantId.getOrDefault(mapping.getVariant().getId(), List.of()),
                     defaultLocationId
             );
@@ -133,8 +139,96 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         if (!quantities.isEmpty()) {
             pushedCount += sendBatch(shopDomain, credential.getAccessToken(), channelId, quantities, batchMappings);
         }
+        syncInventoryItemCosts(shopDomain, credential.getAccessToken(), mappings);
 
         return pushedCount;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void syncInventoryItemCosts(String shopDomain,
+                                        String accessToken,
+                                        List<ChannelProductVariant> mappings) {
+        Map<String, ChannelProductVariant> mappingByInventoryItemId = new HashMap<>();
+        for (ChannelProductVariant mapping : mappings) {
+            String inventoryItemId = extractInventoryItemId(mapping);
+            if (inventoryItemId != null) {
+                mappingByInventoryItemId.putIfAbsent(inventoryItemId, mapping);
+            }
+        }
+
+        String mutation = """
+                mutation inventoryItemUpdate($id: ID!, $input: InventoryItemInput!) {
+                  inventoryItemUpdate(id: $id, input: $input) {
+                    inventoryItem {
+                      id
+                      unitCost {
+                        amount
+                      }
+                    }
+                    userErrors {
+                      field
+                      message
+                    }
+                  }
+                }
+                """;
+
+        for (Map.Entry<String, ChannelProductVariant> entry : mappingByInventoryItemId.entrySet()) {
+            ChannelProductVariant mapping = entry.getValue();
+            BigDecimal targetCost = ProductCostPolicy.initialCost(
+                    mapping.getVariant().getCostPrice(),
+                    mapping.getVariant().getPrice());
+            if (matchesLastSyncedCost(mapping, targetCost)) {
+                continue;
+            }
+
+            Map<String, Object> response = shopifyApiClient.executeGraphQl(
+                    shopDomain,
+                    accessToken,
+                    mutation,
+                    Map.of(
+                            "id", toInventoryItemGid(entry.getKey()),
+                            "input", Map.of("cost", targetCost)
+                    )
+            );
+            ensureNoGraphQlErrors(response);
+
+            Map<String, Object> data = (Map<String, Object>) response.get("data");
+            Map<String, Object> payload = data == null
+                    ? null
+                    : (Map<String, Object>) data.get("inventoryItemUpdate");
+            List<Map<String, Object>> userErrors = payload == null
+                    ? List.of()
+                    : (List<Map<String, Object>>) payload.get("userErrors");
+            if (userErrors != null && !userErrors.isEmpty()) {
+                throw new IllegalStateException("Shopify inventoryItemUpdate lỗi: " + userErrors);
+            }
+
+            Map<String, Object> metadata = mapping.getMetadata() == null
+                    ? new HashMap<>()
+                    : new HashMap<>(mapping.getMetadata());
+            metadata.put("shopifyUnitCost", targetCost.toPlainString());
+            mapping.setMetadata(metadata);
+            mapping.setSyncStatus(SyncStatus.SYNCED);
+            mapping.setLastSyncedAt(OffsetDateTime.now());
+            channelProductVariantRepository.save(mapping);
+            log.info("[ShopifyStockSync] Updated unit cost channelId={} variantId={} cost={}",
+                    mapping.getChannelProduct().getChannel().getId(),
+                    mapping.getVariant().getId(),
+                    targetCost);
+        }
+    }
+
+    private boolean matchesLastSyncedCost(ChannelProductVariant mapping, BigDecimal targetCost) {
+        if (mapping.getMetadata() == null || mapping.getMetadata().get("shopifyUnitCost") == null) {
+            return false;
+        }
+        try {
+            return new BigDecimal(mapping.getMetadata().get("shopifyUnitCost").toString())
+                    .compareTo(targetCost) == 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
     }
 
     private ChangedScope resolveChangedScope(OffsetDateTime changedSince,
@@ -223,6 +317,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
 
         OffsetDateTime syncedAt = OffsetDateTime.now();
         for (ChannelProductVariant mapping : mappings) {
+            mapping.setSyncStatus(SyncStatus.SYNCED);
             mapping.setLastSyncedAt(syncedAt);
             channelProductVariantRepository.save(mapping);
         }
@@ -499,39 +594,34 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         return "gid://shopify/Location/" + value;
     }
 
-    private Map<String, Integer> totalAvailableByShopifyLocationId(List<InventoryItem> inventoryItems, String defaultLocationId) {
+    private Map<String, Integer> targetAvailableByShopifyLocationId(ChannelProductVariant mapping,
+                                                                    List<InventoryItem> inventoryItems,
+                                                                    String defaultLocationId) {
         Map<String, Integer> availableByLocationId = new HashMap<>();
+        int targetQuantity = marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping);
         if (inventoryItems == null || inventoryItems.isEmpty()) {
-            availableByLocationId.put(defaultLocationId, 0);
+            availableByLocationId.put(defaultLocationId, targetQuantity);
             return availableByLocationId;
         }
 
         for (InventoryItem inventoryItem : inventoryItems) {
             String locationId = extractShopifyLocationId(inventoryItem.getWarehouse());
             if (locationId != null) {
-                availableByLocationId.merge(locationId, availableQuantity(inventoryItem), Integer::sum);
+                availableByLocationId.putIfAbsent(locationId, 0);
             }
         }
 
         if (!availableByLocationId.isEmpty()) {
+            String primaryLocationId = availableByLocationId.containsKey(defaultLocationId)
+                    ? defaultLocationId
+                    : availableByLocationId.keySet().iterator().next();
+            availableByLocationId.replaceAll((locationId, ignored) ->
+                    locationId.equals(primaryLocationId) ? targetQuantity : 0);
             return availableByLocationId;
         }
 
-        int totalAvailableQuantity = 0;
-        for (InventoryItem inventoryItem : inventoryItems) {
-            totalAvailableQuantity += availableQuantity(inventoryItem);
-        }
-        availableByLocationId.put(defaultLocationId, totalAvailableQuantity);
+        availableByLocationId.put(defaultLocationId, targetQuantity);
         return availableByLocationId;
-    }
-
-    private int availableQuantity(InventoryItem inventoryItem) {
-        if (inventoryItem.getAvailableQuantity() != null) {
-            return inventoryItem.getAvailableQuantity();
-        }
-        int quantityOnHand = inventoryItem.getQuantityOnHand() != null ? inventoryItem.getQuantityOnHand() : 0;
-        int reservedQuantity = inventoryItem.getReservedQuantity() != null ? inventoryItem.getReservedQuantity() : 0;
-        return quantityOnHand - reservedQuantity;
     }
 
     private String extractShopifyLocationId(Warehouse warehouse) {

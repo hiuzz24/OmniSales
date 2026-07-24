@@ -13,10 +13,14 @@ import lombok.*;
 @Builder
 public class AvailableVariantDTO {
     private UUID variantId;
+    private List<UUID> variantIds;
     private String sku;
+    private String marketplaceSku;
     private String productName;
     private String variantName;
     private BigDecimal unitPrice;
+    private BigDecimal salePrice;
+    private BigDecimal currentSalePrice;
     private BigDecimal averageCost;
     private Integer availableQuantity;
     private UUID channelId;

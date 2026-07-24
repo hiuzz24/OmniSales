@@ -20,6 +20,7 @@ public class ProductVariantResponse {
     private String productName;
 
     private String sku;
+    private String marketplaceSku;
     private String name;
     private String barcode;
     private java.math.BigDecimal price;

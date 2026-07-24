@@ -110,11 +110,40 @@ public interface ChannelProductVariantRepository extends JpaRepository<ChannelPr
             "JOIN FETCH cp.channel ch " +
             "JOIN FETCH cpv.variant v " +
             "LEFT JOIN FETCH v.product " +
+            "WHERE cpv.externalSku IS NOT NULL " +
+            "AND TRIM(cpv.externalSku) <> '' " +
+            "AND LOWER(TRIM(cpv.externalSku)) IN :skus " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND v.isActive = true " +
+            "AND v.deletedAt IS NULL " +
+            "ORDER BY cpv.updatedAt DESC")
+    List<ChannelProductVariant> findActiveByNormalizedExternalSkuInWithVariant(
+            @Param("skus") List<String> skus);
+
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "LEFT JOIN FETCH v.product " +
             "WHERE ch.platform = :platform " +
             "AND ch.deletedAt IS NULL " +
             "AND cp.mappingState = 'ACTIVE' " +
             "ORDER BY v.sku ASC")
     List<ChannelProductVariant> findActiveByPlatformWithVariant(@Param("platform") PlatformType platform);
+
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "JOIN FETCH v.product p " +
+            "WHERE ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND v.isActive = true " +
+            "AND v.deletedAt IS NULL " +
+            "AND p.deletedAt IS NULL " +
+            "ORDER BY LOWER(COALESCE(cpv.externalSku, v.sku)), ch.platform, ch.displayName")
+    List<ChannelProductVariant> findAllActiveWithVariantAndChannel();
 
     @Query(value = "SELECT cpv.* FROM channel_product_variants cpv " +
             "JOIN channel_products cp ON cp.id = cpv.channel_product_id " +

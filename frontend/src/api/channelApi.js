@@ -36,8 +36,20 @@ const channelApi = {
         const data = await axiosClient.post(`/channels/${id}/sync/from-app`, null, syncRequestConfig);
         return data;
     },
+    syncAllFromApp: async () => {
+        const data = await axiosClient.post('/channels/sync/from-app', null, syncRequestConfig);
+        return data;
+    },
     syncFromMarketplace: async (id) => {
         const data = await axiosClient.post(`/channels/${id}/sync/from-marketplace`, null, syncRequestConfig);
+        return data;
+    },
+    enqueueSyncFromMarketplace: async (id) => {
+        const data = await axiosClient.post(`/channels/${id}/sync/from-marketplace/jobs`);
+        return data;
+    },
+    getSyncJob: async (jobId) => {
+        const data = await axiosClient.get(`/channels/sync-jobs/${jobId}`);
         return data;
     },
 }
