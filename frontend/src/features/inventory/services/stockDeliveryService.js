@@ -79,6 +79,24 @@ const stockDeliveryService = {
       throw error.response?.data || error.message;
     }
   },
+
+  getOrderCandidates: async (params = {}) => {
+    try {
+      const response = await stockDeliveryApi.getOrderCandidates(params);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createFromOrders: async (orderIds) => {
+    try {
+      const response = await stockDeliveryApi.createFromOrders(orderIds);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
 };
 
 export default stockDeliveryService;

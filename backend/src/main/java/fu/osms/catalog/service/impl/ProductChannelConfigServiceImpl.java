@@ -5,11 +5,14 @@ import fu.osms.catalog.dto.request.ChannelConfigRequest;
 import fu.osms.catalog.dto.response.ChannelProductConfigResponse;
 import fu.osms.catalog.dto.response.PlatformAttributeOptionResponse;
 import fu.osms.catalog.dto.response.PlatformAttributeResponse;
+import fu.osms.catalog.dto.TikTokProductTitleInput;
+import fu.osms.catalog.dto.TikTokProductTitleResult;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.catalog.service.PlatformLookupService;
 import fu.osms.catalog.service.ProductChannelConfigService;
+import fu.osms.catalog.service.TikTokProductTitleResolver;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.common.enums.PlatformType;
@@ -52,6 +55,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
     private final ProductVariantRepository productVariantRepository;
     private final PlatformLookupServiceFactory lookupServiceFactory;
     private final ObjectMapper objectMapper;
+    private final TikTokProductTitleResolver tikTokProductTitleResolver;
 
     @Override
     @Transactional(readOnly = true)
@@ -140,6 +144,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         if (platform == PlatformType.TIKTOK) {
             nextConfig.put("categoryVersion", textOrDefault(request.getCategoryVersion(), "v2"));
             putIfText(nextConfig, "sizeChartImageUrl", request.getSizeChartImageUrl());
+            putIfText(nextConfig, "listingTitle", request.getListingTitle());
         }
 
         PlatformLookupService lookup = lookupServiceFactory.get(platform);
@@ -183,6 +188,10 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
             } else if (!isHttpUrl(sizeChartImageUrl)) {
                 validationError = "TikTok size chart image URL must start with http:// or https://";
             }
+        }
+        if (validationError == null && platform == PlatformType.TIKTOK) {
+            TikTokProductTitleResult titleResult = resolveTikTokTitle(channelProduct.getProduct(), nextConfig);
+            if (!titleResult.valid()) validationError = titleResult.validationError();
         }
         if (validationError != null) {
             markNotReady(nextConfig, validationError);
@@ -364,6 +373,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
                 .categoryVersion(stringValue(config.get("categoryVersion")))
                 .brandId(stringValue(config.get("brandId")))
                 .brandName(stringValue(config.get("brandName")))
+                .listingTitle(stringValue(config.get("listingTitle")))
                 .attributes(mapValue(config.get("attributes")))
                 .variantAttributeValueMappings(nestedStringMapValue(config.get("variantAttributeValueMappings")))
                 .readyToSync(isReady(channelProduct))
@@ -466,12 +476,19 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
                 || channelProduct.getChannel().getPlatform() != PlatformType.TIKTOK) {
             return null;
         }
-        String name = channelProduct.getProduct().getName();
-        int length = name == null ? 0 : name.trim().length();
-        if (length < 25 || length > 255) {
-            return "TikTok product name must be between 25 and 255 characters";
-        }
-        return null;
+        TikTokProductTitleResult result = resolveTikTokTitle(
+                channelProduct.getProduct(), config(channelProduct));
+        return result.valid() ? null : result.validationError();
+    }
+
+    private TikTokProductTitleResult resolveTikTokTitle(Product product, Map<String, Object> config) {
+        return tikTokProductTitleResolver.resolve(new TikTokProductTitleInput(
+                stringValue(config.get("listingTitle")),
+                product == null ? null : product.getName(),
+                stringValue(config.get("categoryName")),
+                stringValue(config.get("brandName")),
+                product == null ? null : product.getDescription()
+        ));
     }
 
     private boolean isPositiveNumber(Object value) {

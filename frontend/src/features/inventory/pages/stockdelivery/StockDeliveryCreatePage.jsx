@@ -12,6 +12,7 @@ import inventoryApi from '../../../../api/inventoryApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
+import OrderStockDeliverySelector from './OrderStockDeliverySelector';
 import styles from '../CreatePage.module.css';
 
 const formatNumber = (v) => new Intl.NumberFormat('vi-VN').format(v ?? 0);
@@ -536,12 +537,11 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6 }}>
         <button
-          disabled
-          style={{
-            padding: '7px 16px', borderRadius: 8, border: '1px solid #e2e8f0',
-            backgroundColor: '#f8fafc', color: '#94a3b8', fontSize: 13, fontWeight: 500,
-            cursor: 'not-allowed', opacity: 0.7,
-          }}
+          type="button"
+          disabled={isEdit}
+          onClick={() => setActiveTab('BY_ORDER')}
+          className={`${styles.actionBtn} ${activeTab === 'BY_ORDER' ? styles.primaryBtn : styles.secondaryBtn}`}
+          style={{ padding: '7px 16px' }}
         >
           Xuất theo đơn hàng
         </button>
@@ -554,17 +554,10 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
         </button>
       </div>
 
-      {/* Info for BY_ORDER */}
-      {activeTab === 'BY_ORDER' && (
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'start', gap: 10 }}>
-          <AlertCircle size={16} color="#2563eb" style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#1e40af', marginBottom: 2 }}>Tính năng đang phát triển</div>
-            <div style={{ fontSize: 12, color: '#3b82f6' }}>Xuất kho theo đơn hàng sẽ được cập nhật trong phiên bản tiếp theo. Vui lòng sử dụng tab "Xuất thủ công".</div>
-          </div>
-        </div>
-      )}
+      {activeTab === 'BY_ORDER' && <OrderStockDeliverySelector />}
 
+      {activeTab === 'MANUAL' && (
+        <>
       {/* Warning */}
       {overAvailableItem && (
         <div className={styles.warningBanner}>
@@ -734,6 +727,8 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
         products={warehouseVariants}
         loading={loadingWarehouseVariants}
       />
+        </>
+      )}
       {ConfirmDialog}
     </div>
   );

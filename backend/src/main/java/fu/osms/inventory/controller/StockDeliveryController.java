@@ -2,7 +2,11 @@ package fu.osms.inventory.controller;
 
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.inventory.dto.request.StockDeliveryRequest;
+import fu.osms.inventory.dto.request.OrderStockDeliveryBatchRequest;
+import fu.osms.inventory.dto.response.OrderStockDeliveryBatchResponse;
+import fu.osms.inventory.dto.response.OrderStockDeliveryCandidateResponse;
 import fu.osms.inventory.dto.response.StockDeliveryResponse;
+import fu.osms.inventory.service.OrderStockDeliveryService;
 import fu.osms.inventory.service.StockDeliveryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +30,28 @@ import java.util.UUID;
 public class StockDeliveryController {
 
     private final StockDeliveryService stockDeliveryService;
+    private final OrderStockDeliveryService orderStockDeliveryService;
+
+    @GetMapping("/order-candidates")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<Page<OrderStockDeliveryCandidateResponse>>> getOrderCandidates(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        return ResponseEntity.ok(ApiResponse.success(
+                "Order candidates retrieved successfully",
+                orderStockDeliveryService.getCandidates(keyword, pageable)));
+    }
+
+    @PostMapping("/from-orders")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<OrderStockDeliveryBatchResponse>> createFromOrders(
+            @Valid @RequestBody OrderStockDeliveryBatchRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                "Order stock deliveries processed",
+                orderStockDeliveryService.createFromOrders(request)));
+    }
 
     /**
      * Create a new stock delivery document

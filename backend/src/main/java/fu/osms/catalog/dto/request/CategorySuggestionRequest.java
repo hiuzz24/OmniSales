@@ -11,6 +11,9 @@ public class CategorySuggestionRequest {
     private UUID channelId;
     private UUID productId;
     private String title;
+    private String listingTitle;
+    private String categoryName;
+    private String brandName;
     private String description;
     private String primaryImageUrl;
     private String categoryVersion;

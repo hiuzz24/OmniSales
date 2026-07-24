@@ -4,11 +4,14 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.catalog.dto.response.PlatformAttributeResponse;
+import fu.osms.catalog.dto.TikTokProductTitleInput;
+import fu.osms.catalog.dto.TikTokProductTitleResult;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.service.PlatformLookupService;
 import fu.osms.catalog.service.ProductChannelConfigService;
+import fu.osms.catalog.service.TikTokProductTitleResolver;
 import fu.osms.catalog.service.impl.PlatformLookupServiceFactory;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
@@ -53,6 +56,7 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
     private final ProductChannelConfigService productChannelConfigService;
     private final PlatformLookupServiceFactory lookupServiceFactory;
     private final TikTokProductPayloadBuilder payloadBuilder;
+    private final TikTokProductTitleResolver titleResolver;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -131,10 +135,14 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
         if (product.getDescription() == null || product.getDescription().isBlank()) {
             throw new IllegalStateException("TikTok product description is required");
         }
-        int titleLength = product.getName() == null ? 0 : product.getName().trim().length();
-        if (titleLength < 25 || titleLength > 255) {
-            throw new IllegalStateException("TikTok product name must be between 25 and 255 characters");
-        }
+        TikTokProductTitleResult titleResult = titleResolver.resolve(new TikTokProductTitleInput(
+                text(config.get("listingTitle")),
+                product.getName(),
+                text(config.get("categoryName")),
+                text(config.get("brandName")),
+                product.getDescription()
+        ));
+        if (!titleResult.valid()) throw new IllegalStateException(titleResult.validationError());
         if (product.getWeightGrams() == null || product.getWeightGrams() <= 0) {
             throw new IllegalStateException("TikTok package weight is required");
         }

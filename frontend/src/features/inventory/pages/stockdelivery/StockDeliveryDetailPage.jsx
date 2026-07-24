@@ -62,8 +62,11 @@ const formatDateOnly = (value) => {
 
 const getResponseData = (response) => response?.data?.data ?? response?.data ?? response ?? {};
 
-const StatusBadge = ({ status }) => {
-  const config = STATUS_CFG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
+const StatusBadge = ({ status, issueType }) => {
+  const base = STATUS_CFG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
+  const config = issueType === 'ORDER' && status === 'DRAFT'
+    ? { ...base, label: 'Chờ xuất kho' }
+    : base;
   return (
     <span style={{
       display: 'inline-flex',
@@ -138,9 +141,12 @@ export default function StockDeliveryDetailPage() {
 
   const handleCancel = async () => {
     if (!delivery || delivery.status === 'CANCELLED' || !isOwner) return;
+    const isOrderDraft = delivery.issueType === 'ORDER' && delivery.status === 'DRAFT';
     const ok = await confirm({
       title: 'Hủy phiếu xuất?',
-      message: `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
+      message: isOrderDraft
+        ? `Phiếu "${delivery.issueCode}" sẽ bị hủy. Hàng đã giữ của đơn không được giải phóng và bạn có thể tạo lại phiếu khi đơn vẫn đang xử lý.`
+        : `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
       confirmText: 'Hủy phiếu',
       tone: 'danger',
     });
@@ -152,7 +158,9 @@ export default function StockDeliveryDetailPage() {
     try {
       const response = await stockDeliveryService.cancelStockDelivery(delivery.id);
       setDelivery(getResponseData(response));
-      toast.success('Hủy phiếu xuất thành công. Tồn kho đã được khôi phục.');
+      toast.success(isOrderDraft
+        ? 'Đã hủy phiếu xuất. Reservation của đơn hàng vẫn được giữ.'
+        : 'Hủy phiếu xuất thành công. Tồn kho đã được khôi phục.');
     } catch (error) {
       toast.error(error?.message || 'Không thể hủy phiếu xuất. Vui lòng thử lại.');
     } finally {
@@ -225,13 +233,14 @@ export default function StockDeliveryDetailPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          {canComplete && delivery.status === 'DRAFT' && (
+          {canComplete && delivery.status === 'DRAFT' && delivery.issueType !== 'ORDER' && (
             <button type="button" onClick={handleComplete} disabled={completing} style={{ ...successButtonStyle, opacity: completing ? 0.7 : 1 }}>
               {completing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={14} />}
               {completing ? 'Đang hoàn thành...' : 'Hoàn thành xuất kho'}
             </button>
           )}
-          {isOwner && delivery.status !== 'CANCELLED' && (
+          {isOwner && delivery.status !== 'CANCELLED'
+            && !(delivery.issueType === 'ORDER' && delivery.status === 'CONFIRMED') && (
             <button type="button" onClick={handleCancel} disabled={cancelling} style={{ ...dangerButtonStyle, opacity: cancelling ? 0.7 : 1 }}>
               {cancelling ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Ban size={14} />}
               {cancelling ? 'Đang hủy...' : 'Hủy phiếu xuất'}
@@ -297,7 +306,7 @@ export default function StockDeliveryDetailPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
             <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>Trạng thái</div>
-            <StatusBadge status={delivery.status} />
+            <StatusBadge status={delivery.status} issueType={delivery.issueType} />
           </div>
 
           <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>

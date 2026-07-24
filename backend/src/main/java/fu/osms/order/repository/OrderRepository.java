@@ -30,6 +30,10 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     Optional<Order> findByChannel_IdAndExternalOrderId(UUID channelId, String externalOrderId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findForUpdateById(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT o FROM Order o WHERE o.channel.id = :channelId AND o.externalOrderId = :externalOrderId")
     Optional<Order> findForUpdateByChannelIdAndExternalOrderId(@Param("channelId") UUID channelId,
                                                                @Param("externalOrderId") String externalOrderId);
@@ -100,4 +104,56 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
 
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.status = 'DELIVERED'")
     BigDecimal sumRevenueDelivered();
+
+    @Query(value = """
+            SELECT o FROM Order o
+            WHERE o.status = :status
+              AND (
+                    :keyword IS NULL
+                    OR :keyword = ''
+                    OR LOWER(o.externalOrderId) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR LOWER(COALESCE(o.buyerName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR EXISTS (
+                        SELECT oi.id FROM OrderItem oi
+                        WHERE oi.order = o
+                          AND (
+                            LOWER(COALESCE(oi.sku, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                            OR LOWER(COALESCE(oi.name, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                          )
+                    )
+              )
+              AND NOT EXISTS (
+                    SELECT issue.id FROM InventoryIssue issue
+                    WHERE issue.referenceId = o.id
+                      AND issue.issueType = 'ORDER'
+                      AND issue.status IN ('DRAFT', 'CONFIRMED')
+              )
+            """,
+            countQuery = """
+            SELECT COUNT(o) FROM Order o
+            WHERE o.status = :status
+              AND (
+                    :keyword IS NULL
+                    OR :keyword = ''
+                    OR LOWER(o.externalOrderId) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR LOWER(COALESCE(o.buyerName, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    OR EXISTS (
+                        SELECT oi.id FROM OrderItem oi
+                        WHERE oi.order = o
+                          AND (
+                            LOWER(COALESCE(oi.sku, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                            OR LOWER(COALESCE(oi.name, '')) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                          )
+                    )
+              )
+              AND NOT EXISTS (
+                    SELECT issue.id FROM InventoryIssue issue
+                    WHERE issue.referenceId = o.id
+                      AND issue.issueType = 'ORDER'
+                      AND issue.status IN ('DRAFT', 'CONFIRMED')
+              )
+            """)
+    Page<Order> findStockDeliveryCandidates(@Param("status") OrderStatus status,
+                                            @Param("keyword") String keyword,
+                                            Pageable pageable);
 }

@@ -53,6 +53,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import fu.osms.order.event.OrderCreatedEvent;
 import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderPaidEvent;
+import fu.osms.order.event.OrderStatusChangedEvent;
 
 import fu.osms.common.utils.SecurityUtils;
 import java.math.BigDecimal;
@@ -219,6 +220,10 @@ public class OrderServiceImpl implements OrderService {
         if ("PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus)) {
             eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
         }
+        if (oldStatus != savedOrder.getStatus()) {
+            eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                    savedOrder.getId(), oldStatus, savedOrder.getStatus()));
+        }
 
         return toResponseWithItems(savedOrder);
     }
@@ -376,6 +381,8 @@ public class OrderServiceImpl implements OrderService {
 
         marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
         eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                savedOrder.getId(), oldStatus, savedOrder.getStatus()));
     }
 
     @Override
