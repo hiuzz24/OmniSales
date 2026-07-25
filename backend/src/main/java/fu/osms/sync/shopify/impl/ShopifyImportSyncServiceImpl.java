@@ -1,11 +1,13 @@
 package fu.osms.sync.shopify.impl;
 
 import fu.osms.catalog.entity.Product;
+import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.entity.Category;
 import fu.osms.catalog.enums.CategoryStatus;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.CategoryRepository;
+import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.catalog.util.ProductCostPolicy;
@@ -73,6 +75,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
+    private final ProductImageRepository productImageRepository;
     private final ProductVariantRepository productVariantRepository;
     private final WarehouseRepository warehouseRepository;
     private final InventoryItemRepository inventoryItemRepository;
@@ -155,6 +158,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
 
                     if (!processedProductIds.containsKey(externalProductId)) {
                         processedProductIds.put(externalProductId, true);
+                        upsertProductImages(product, productNode);
                         productCount++;
                     }
 
@@ -705,6 +709,17 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                         vendor
                         status
                         updatedAt
+                        images(first: $first) {
+                          edges {
+                            node {
+                              id
+                              url
+                              altText
+                              width
+                              height
+                            }
+                          }
+                        }
                         variants(first: 1) {
                           nodes {
                             id
@@ -733,6 +748,42 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         );
         ensureNoGraphQlErrors(response);
         return response;
+    }
+
+    private void upsertProductImages(Product product, Map<String, Object> productNode) {
+        List<String> imageUrls = extractProductImageUrls(productNode);
+        if (imageUrls.isEmpty()) {
+            return;
+        }
+        productImageRepository.deleteProductLevelImages(product.getId());
+        List<ProductImage> images = new java.util.ArrayList<>();
+        for (int index = 0; index < imageUrls.size(); index++) {
+            images.add(ProductImage.builder()
+                    .product(product)
+                    .variant(null)
+                    .url(imageUrls.get(index))
+                    .sortOrder((short) index)
+                    .isPrimary(index == 0)
+                    .build());
+        }
+        productImageRepository.saveAll(images);
+    }
+
+    private List<String> extractProductImageUrls(Map<String, Object> productNode) {
+        Map<String, Object> images = map(productNode.get("images"));
+        List<String> urls = new java.util.ArrayList<>();
+        for (Map<String, Object> edge : list(images, "edges")) {
+            Map<String, Object> node = map(edge.get("node"));
+            String url = firstNonBlank(
+                    stringValue(node.get("url")),
+                    stringValue(node.get("src")),
+                    stringValue(node.get("originalSrc"))
+            );
+            if (url != null && !url.isBlank() && !urls.contains(url)) {
+                urls.add(url);
+            }
+        }
+        return urls;
     }
 
     private boolean hasLocationAddressScope(String shopDomain, String accessToken) {

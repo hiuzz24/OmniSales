@@ -590,15 +590,15 @@ export default function StockReceiveCreatePage() {
       if (receipt.marketplaceSyncAvailable) {
         const platforms = (receipt.marketplacePlatforms ?? []).map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
         const shouldSync = await confirm({
-          title: 'Đồng bộ tồn kho lên sàn?',
-          message: `Tồn kho đã được cập nhật. Đồng bộ số lượng mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
+          title: 'Đồng bộ tồn có thể bán và giá lên sàn?',
+          message: `Tồn kho và giá bán đã được cập nhật. Đồng bộ số lượng có thể bán và giá mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
           confirmLabel: 'Đồng bộ ngay',
           cancelLabel: 'Để sau',
         });
         if (shouldSync) {
           try {
             await stockReceiveService.syncReceiptMarketplaceInventory(receipt.id);
-            toast.success('Đã đồng bộ tồn kho lên các sàn liên quan.');
+            toast.success('Đã đồng bộ tồn có thể bán và giá lên các sàn liên quan.');
           } catch (syncError) {
             toast.error(syncError?.response?.data?.message || 'Nhập kho thành công nhưng đồng bộ sàn thất bại.');
           }

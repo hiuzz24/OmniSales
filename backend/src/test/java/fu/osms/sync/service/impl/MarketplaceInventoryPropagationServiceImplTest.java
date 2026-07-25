@@ -2,7 +2,9 @@ package fu.osms.sync.service.impl;
 
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
+import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
@@ -33,6 +35,7 @@ class MarketplaceInventoryPropagationServiceImplTest {
 
     @Mock private ChannelRepository channelRepository;
     @Mock private ChannelCredentialRepository credentialRepository;
+    @Mock private ChannelProductVariantRepository channelProductVariantRepository;
     @Mock private MarketplaceWarehouseConsistencyService warehouseConsistencyService;
     @Mock private ShopifyInventoryUpdateService shopifyInventoryUpdateService;
     @Mock private LazadaInventoryUpdateService lazadaInventoryUpdateService;
@@ -47,6 +50,7 @@ class MarketplaceInventoryPropagationServiceImplTest {
         service = new MarketplaceInventoryPropagationServiceImpl(
                 channelRepository,
                 credentialRepository,
+                channelProductVariantRepository,
                 warehouseConsistencyService,
                 shopifyInventoryUpdateService,
                 lazadaInventoryUpdateService,
@@ -64,7 +68,6 @@ class MarketplaceInventoryPropagationServiceImplTest {
         Channel lazada = connectedChannel(sourceChannelId, PlatformType.LAZADA);
         Channel shopify = connectedChannel(shopifyChannelId, PlatformType.SHOPIFY);
 
-        when(marketplaceStockQuantityResolver.expandVariantIdsBySkuGroup(Set.of(variantId))).thenReturn(Set.of(variantId));
         when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(lazada, shopify));
         when(credentialRepository.findByChannelIdAndConnectionState(any(UUID.class), eq("CONNECTED")))
                 .thenAnswer(invocation -> Optional.of(ChannelCredential.builder()
@@ -72,6 +75,9 @@ class MarketplaceInventoryPropagationServiceImplTest {
                         .accessToken("token")
                         .connectionState("CONNECTED")
                         .build()));
+        when(channelProductVariantRepository.findActiveByChannelIdAndVariantIdInWithVariant(
+                eq(shopifyChannelId), any()))
+                .thenReturn(List.of(ChannelProductVariant.builder().build()));
 
         service.pushAvailableStock(Set.of(variantId), sourceChannelId);
 

@@ -562,7 +562,7 @@ class ProductServiceImplTest {
             when(productMapper.toResponse(product)).thenReturn(response);
             setupCommonSearchMocks();
 
-            PageResponse<ProductResponse> result = productService.search(null, null, fu.osms.common.enums.PlatformType.SHOPIFY, 0, 6);
+            PageResponse<ProductResponse> result = productService.search(null, null, Set.of(fu.osms.common.enums.PlatformType.SHOPIFY), 0, 6);
 
             assertThat(result.getContent()).hasSize(1);
             verify(productRepository).findAll(any(Specification.class), any(PageRequest.class));
