@@ -50,11 +50,10 @@ class ChannelServiceImplTest {
     @Mock private ChannelCredentialRepository credentialRepository;
     @Mock private ChannelMapper channelMapper;
     @Mock private ChannelConnectionService connectionService;
-    @Mock private ChannelMappingLifecycleService mappingLifecycleService;
     @Mock private ChannelProductQueryService productQueryService;
     @Mock private ChannelResponseService responseService;
 
-    private ChannelServiceImpl service;
+        private ChannelServiceImpl service;
 
     @BeforeEach
     void setUp() {
@@ -63,258 +62,258 @@ class ChannelServiceImplTest {
                 credentialRepository,
                 channelMapper,
                 connectionService,
-                mappingLifecycleService,
                 productQueryService,
                 responseService
         );
     }
 
-    @Test
-    @DisplayName("connectLazada delegates verbatim to ChannelConnectionService with all 6 args")
-    void connectLazada_delegates() {
-        ChannelResponse expected = ChannelResponse.builder()
-                .id(UUID.randomUUID())
-                .platform(PlatformType.LAZADA)
-                .displayName("Lazada-Demo")
-                .build();
-        when(connectionService.connectLazada("access", "refresh", 3600, 7_200_000, "acc-001", "Demo"))
-                .thenReturn(expected);
+        @Test
+        @DisplayName("connectLazada delegates verbatim to ChannelConnectionService with all 6 args")
+        void connectLazada_delegates() {
+                ChannelResponse expected = ChannelResponse.builder()
+                                .id(UUID.randomUUID())
+                                .platform(PlatformType.LAZADA)
+                                .displayName("Lazada-Demo")
+                                .build();
+                when(connectionService.connectLazada("access", "refresh", 3600, 7_200_000, "acc-001", "Demo"))
+                                .thenReturn(expected);
 
-        ChannelResponse actual = service.connectLazada("access", "refresh", 3600, 7_200_000, "acc-001", "Demo");
+                ChannelResponse actual = service.connectLazada("access", "refresh", 3600, 7_200_000, "acc-001", "Demo");
 
-        assertThat(actual).isSameAs(expected);
-        verify(connectionService).connectLazada("access", "refresh", 3600, 7_200_000, "acc-001", "Demo");
-    }
+                assertThat(actual).isSameAs(expected);
+                verify(connectionService).connectLazada("access", "refresh", 3600, 7_200_000, "acc-001", "Demo");
+        }
 
-    @Test
-    @DisplayName("connectTikTok forwards the metadata map to ChannelConnectionService")
-    void connectTikTok_delegates() {
-        Map<String, Object> metadata = Map.of("region", "VN", "shopId", "S1");
-        ChannelResponse expected = ChannelResponse.builder()
-                .id(UUID.randomUUID())
-                .platform(PlatformType.TIKTOK)
-                .build();
-        when(connectionService.connectTikTok("access", "refresh", 3600, 7_200_000, "acc-1", "Demo", metadata))
-                .thenReturn(expected);
+        @Test
+        @DisplayName("connectTikTok forwards the metadata map to ChannelConnectionService")
+        void connectTikTok_delegates() {
+                Map<String, Object> metadata = Map.of("region", "VN", "shopId", "S1");
+                ChannelResponse expected = ChannelResponse.builder()
+                                .id(UUID.randomUUID())
+                                .platform(PlatformType.TIKTOK)
+                                .build();
+                when(connectionService.connectTikTok("access", "refresh", 3600, 7_200_000, "acc-1", "Demo", metadata))
+                                .thenReturn(expected);
 
-        ChannelResponse actual = service.connectTikTok("access", "refresh", 3600, 7_200_000, "acc-1", "Demo", metadata);
+                ChannelResponse actual = service.connectTikTok("access", "refresh", 3600, 7_200_000, "acc-1", "Demo",
+                                metadata);
 
-        assertThat(actual).isSameAs(expected);
-        verify(connectionService).connectTikTok("access", "refresh", 3600, 7_200_000, "acc-1", "Demo", metadata);
-    }
+                assertThat(actual).isSameAs(expected);
+                verify(connectionService).connectTikTok("access", "refresh", 3600, 7_200_000, "acc-1", "Demo",
+                                metadata);
+        }
 
-    @Test
-    @DisplayName("connectShopify delegates")
-    void connectShopify_delegates() {
-        ChannelResponse expected = ChannelResponse.builder()
-                .id(UUID.randomUUID())
-                .platform(PlatformType.SHOPIFY)
-                .displayName("demo.myshopify.com")
-                .build();
-        when(connectionService.connectShopify("demo.myshopify.com", "shpat-token"))
-                .thenReturn(expected);
+        @Test
+        @DisplayName("connectShopify delegates")
+        void connectShopify_delegates() {
+                ChannelResponse expected = ChannelResponse.builder()
+                                .id(UUID.randomUUID())
+                                .platform(PlatformType.SHOPIFY)
+                                .displayName("demo.myshopify.com")
+                                .build();
+                when(connectionService.connectShopify("demo.myshopify.com", "shpat-token"))
+                                .thenReturn(expected);
 
-        ChannelResponse actual = service.connectShopify("demo.myshopify.com", "shpat-token");
+                ChannelResponse actual = service.connectShopify("demo.myshopify.com", "shpat-token");
 
-        assertThat(actual).isSameAs(expected);
-        verify(connectionService).connectShopify("demo.myshopify.com", "shpat-token");
-    }
+                assertThat(actual).isSameAs(expected);
+                verify(connectionService).connectShopify("demo.myshopify.com", "shpat-token");
+        }
 
-    @Test
-    @DisplayName("getById returns mapped response and enriches stats before responding")
-    void getById_enrichesAndMaps() {
-        UUID id = UUID.randomUUID();
-        Channel channel = Channel.builder().id(id).platform(PlatformType.LAZADA).build();
-        ChannelResponse mapped = ChannelResponse.builder().id(id).platform(PlatformType.LAZADA).build();
-        when(channelRepository.findById(id)).thenReturn(Optional.of(channel));
-        when(responseService.toResponse(channel)).thenReturn(mapped);
+        @Test
+        @DisplayName("getById returns mapped response and enriches stats before responding")
+        void getById_enrichesAndMaps() {
+                UUID id = UUID.randomUUID();
+                Channel channel = Channel.builder().id(id).platform(PlatformType.LAZADA).build();
+                ChannelResponse mapped = ChannelResponse.builder().id(id).platform(PlatformType.LAZADA).build();
+                when(channelRepository.findById(id)).thenReturn(Optional.of(channel));
+                when(responseService.toResponse(channel)).thenReturn(mapped);
 
-        ChannelResponse actual = service.getById(id);
+                ChannelResponse actual = service.getById(id);
 
-        assertThat(actual).isSameAs(mapped);
-        verify(responseService).enrichStats(channel);
-        verify(responseService).toResponse(channel);
-    }
+                assertThat(actual).isSameAs(mapped);
+                verify(responseService).enrichStats(channel);
+                verify(responseService).toResponse(channel);
+        }
 
-    @Test
-    @DisplayName("getById throws AppException(CHANNEL_NOT_FOUND) when missing or deleted")
-    void getById_missing() {
-        UUID id = UUID.randomUUID();
-        when(channelRepository.findById(id)).thenReturn(Optional.empty());
+        @Test
+        @DisplayName("getById throws AppException(CHANNEL_NOT_FOUND) when missing or deleted")
+        void getById_missing() {
+                UUID id = UUID.randomUUID();
+                when(channelRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getById(id))
-                .isInstanceOf(AppException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_NOT_FOUND);
+                assertThatThrownBy(() -> service.getById(id))
+                                .isInstanceOf(AppException.class)
+                                .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_NOT_FOUND);
 
-        verify(responseService, never()).toResponse(any(Channel.class));
-    }
+                verify(responseService, never()).toResponse(any(Channel.class));
+        }
 
-    @Test
-    @DisplayName("getById throws when the channel is soft-deleted")
-    void getById_deleted() {
-        UUID id = UUID.randomUUID();
-        Channel deleted = Channel.builder()
-                .id(id)
-                .platform(PlatformType.LAZADA)
-                .deletedAt(OffsetDateTime.now())
-                .build();
-        when(channelRepository.findById(id)).thenReturn(Optional.of(deleted));
+        @Test
+        @DisplayName("getById throws when the channel is soft-deleted")
+        void getById_deleted() {
+                UUID id = UUID.randomUUID();
+                Channel deleted = Channel.builder()
+                                .id(id)
+                                .platform(PlatformType.LAZADA)
+                                .deletedAt(OffsetDateTime.now())
+                                .build();
+                when(channelRepository.findById(id)).thenReturn(Optional.of(deleted));
 
-        assertThatThrownBy(() -> service.getById(id))
-                .isInstanceOf(AppException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_NOT_FOUND);
-    }
+                assertThatThrownBy(() -> service.getById(id))
+                                .isInstanceOf(AppException.class)
+                                .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_NOT_FOUND);
+        }
 
-    @Test
-    @DisplayName("getAll enriches then maps every active channel")
-    void getAll_enrichesAndMaps() {
-        Channel a = Channel.builder().id(UUID.randomUUID()).platform(PlatformType.LAZADA).build();
-        Channel b = Channel.builder().id(UUID.randomUUID()).platform(PlatformType.SHOPIFY).build();
-        when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(a, b));
-        when(responseService.toResponse(a)).thenReturn(ChannelResponse.builder().id(a.getId()).platform(PlatformType.LAZADA).build());
-        when(responseService.toResponse(b)).thenReturn(ChannelResponse.builder().id(b.getId()).platform(PlatformType.SHOPIFY).build());
+        @Test
+        @DisplayName("getAll enriches then maps every active channel")
+        void getAll_enrichesAndMaps() {
+                Channel a = Channel.builder().id(UUID.randomUUID()).platform(PlatformType.LAZADA).build();
+                Channel b = Channel.builder().id(UUID.randomUUID()).platform(PlatformType.SHOPIFY).build();
+                when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(a, b));
+                when(responseService.toResponse(a)).thenReturn(
+                                ChannelResponse.builder().id(a.getId()).platform(PlatformType.LAZADA).build());
+                when(responseService.toResponse(b)).thenReturn(
+                                ChannelResponse.builder().id(b.getId()).platform(PlatformType.SHOPIFY).build());
 
-        List<ChannelResponse> result = service.getAll();
+                List<ChannelResponse> result = service.getAll();
 
-        assertThat(result).hasSize(2);
-        verify(responseService, times(2)).enrichStats(any(Channel.class));
-    }
+                assertThat(result).hasSize(2);
+                verify(responseService, times(2)).enrichStats(any(Channel.class));
+        }
 
     @Test
     @DisplayName("create throws AppException(CHANNEL_ALREADY_EXISTS) when platform + displayName already exists")
     void create_alreadyExists() {
         ChannelRequest req = ChannelRequest.builder()
-                .platform(PlatformType.SHOPEE)
-                .displayName("Shopee-Existing")
+                .platform(PlatformType.LAZADA)
+                .displayName("Lazada-Existing")
                 .build();
-        Channel existingActive = Channel.builder()
-                .id(UUID.randomUUID())
-                .platform(PlatformType.SHOPEE)
-                .displayName("Shopee-Existing")
-                .build();
-        when(channelRepository.findByPlatformAndDisplayName(PlatformType.SHOPEE, "Shopee-Existing"))
-                .thenReturn(Optional.of(existingActive));
+        when(channelRepository.existsByPlatformAndDisplayName(PlatformType.LAZADA, "Lazada-Existing"))
+                .thenReturn(true);
 
-        assertThatThrownBy(() -> service.create(req))
-                .isInstanceOf(AppException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_ALREADY_EXISTS);
+                assertThatThrownBy(() -> service.create(req))
+                                .isInstanceOf(AppException.class)
+                                .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_ALREADY_EXISTS);
 
-        verify(channelMapper, never()).toEntity(any());
-        verify(channelRepository, never()).save(any(Channel.class));
-    }
+                verify(channelMapper, never()).toEntity(any());
+                verify(channelRepository, never()).save(any(Channel.class));
+        }
 
     @Test
     @DisplayName("create persists channel + initial CONNECTED credential and returns response")
     void create_persists() {
         ChannelRequest req = ChannelRequest.builder()
-                .platform(PlatformType.SHOPEE)
-                .displayName("Shopee-New")
+                .platform(PlatformType.LAZADA)
+                .displayName("Lazada-New")
                 .metadata(Map.of("accountId", "acc-99"))
                 .commissionRate(new BigDecimal("3.50"))
                 .build();
         Channel savedChannel = Channel.builder()
                 .id(UUID.randomUUID())
-                .platform(PlatformType.SHOPEE)
-                .displayName("Shopee-New")
+                .platform(PlatformType.LAZADA)
+                .displayName("Lazada-New")
                 .metadata(Map.of("accountId", "acc-99"))
                 .build();
-        ChannelResponse mappedResponse = ChannelResponse.builder().id(savedChannel.getId()).platform(PlatformType.SHOPEE).build();
+        ChannelResponse mappedResponse = ChannelResponse.builder().id(savedChannel.getId()).platform(PlatformType.LAZADA).build();
 
-        when(channelRepository.findByPlatformAndDisplayName(PlatformType.SHOPEE, "Shopee-New")).thenReturn(Optional.empty());
-        when(channelMapper.toEntity(req)).thenReturn(Channel.builder().platform(PlatformType.SHOPEE).displayName("Shopee-New").metadata(new java.util.HashMap<>()).build());
+        when(channelRepository.existsByPlatformAndDisplayName(PlatformType.LAZADA, "Lazada-New")).thenReturn(false);
+        when(channelMapper.toEntity(req)).thenReturn(Channel.builder().platform(PlatformType.LAZADA).displayName("Lazada-New").metadata(new java.util.HashMap<>()).build());
         when(channelRepository.save(any(Channel.class))).thenReturn(savedChannel);
         when(responseService.toResponse(any(Channel.class))).thenReturn(mappedResponse);
 
-        ChannelResponse actual = service.create(req);
+                ChannelResponse actual = service.create(req);
 
-        assertThat(actual).isSameAs(mappedResponse);
-        ArgumentCaptor<ChannelCredential> credCap = ArgumentCaptor.forClass(ChannelCredential.class);
-        verify(credentialRepository).save(credCap.capture());
-        assertThat(credCap.getValue().getConnectionState()).isEqualTo("CONNECTED");
-        verify(responseService).toResponse(any(Channel.class));
-    }
+                assertThat(actual).isSameAs(mappedResponse);
+                ArgumentCaptor<ChannelCredential> credCap = ArgumentCaptor.forClass(ChannelCredential.class);
+                verify(credentialRepository).save(credCap.capture());
+                assertThat(credCap.getValue().getConnectionState()).isEqualTo("CONNECTED");
+                verify(responseService).toResponse(any(Channel.class));
+        }
 
-    @Test
-    @DisplayName("update merges metadata, applies displayName + syncEnabled, persists")
-    void update_mergesAndSaves() {
-        UUID id = UUID.randomUUID();
-        Channel existing = Channel.builder()
-                .id(id)
-                .platform(PlatformType.LAZADA)
-                .displayName("Old")
-                .metadata(new java.util.HashMap<>(Map.of("accountId", "acc-1", "shopDomain", "old")))
-                .syncEnabled(false)
-                .build();
-        ChannelRequest req = ChannelRequest.builder()
-                .platform(PlatformType.LAZADA)
-                .displayName("New")
-                .metadata(Map.of("accountId", "acc-2", "shopDomain", ""))
-                .commissionRate(new BigDecimal("1.25"))
-                .syncEnabled(true)
-                .build();
-        when(channelRepository.findById(id)).thenReturn(Optional.of(existing));
+        @Test
+        @DisplayName("update merges metadata, applies displayName + syncEnabled, persists")
+        void update_mergesAndSaves() {
+                UUID id = UUID.randomUUID();
+                Channel existing = Channel.builder()
+                                .id(id)
+                                .platform(PlatformType.LAZADA)
+                                .displayName("Old")
+                                .metadata(new java.util.HashMap<>(Map.of("accountId", "acc-1", "shopDomain", "old")))
+                                .syncEnabled(false)
+                                .build();
+                ChannelRequest req = ChannelRequest.builder()
+                                .platform(PlatformType.LAZADA)
+                                .displayName("New")
+                                .metadata(Map.of("accountId", "acc-2", "shopDomain", ""))
+                                .commissionRate(new BigDecimal("1.25"))
+                                .syncEnabled(true)
+                                .build();
+                when(channelRepository.findById(id)).thenReturn(Optional.of(existing));
 
-        service.update(id, req);
+                service.update(id, req);
 
-        assertThat(existing.getDisplayName()).isEqualTo("New");
-        assertThat(existing.getSyncEnabled()).isTrue();
-        assertThat(existing.getCommissionRate()).isEqualByComparingTo(new BigDecimal("1.25"));
-        assertThat(existing.getMetadata()).containsEntry("accountId", "acc-2");
-        assertThat(existing.getMetadata()).doesNotContainKey("shopDomain");
-        verify(channelRepository).save(existing);
-    }
+                assertThat(existing.getDisplayName()).isEqualTo("New");
+                assertThat(existing.getSyncEnabled()).isTrue();
+                assertThat(existing.getCommissionRate()).isEqualByComparingTo(new BigDecimal("1.25"));
+                assertThat(existing.getMetadata()).containsEntry("accountId", "acc-2");
+                assertThat(existing.getMetadata()).doesNotContainKey("shopDomain");
+                verify(channelRepository).save(existing);
+        }
 
-    @Test
-    @DisplayName("delete delegates to ChannelConnectionService.disconnect")
-    void delete_delegates() {
-        UUID id = UUID.randomUUID();
-        service.delete(id);
+        @Test
+        @DisplayName("delete delegates to ChannelConnectionService.disconnect")
+        void delete_delegates() {
+                UUID id = UUID.randomUUID();
+                service.delete(id);
 
-        verify(connectionService).disconnect(id);
-        verify(channelRepository, never()).save(any(Channel.class));
-    }
+                verify(connectionService).disconnect(id);
+                verify(channelRepository, never()).save(any(Channel.class));
+        }
 
-    @Test
-    @DisplayName("connectLazada delegates to connectionService")
-    void connectLazada_delegatesToConnectionService() {
-        ChannelResponse expected = ChannelResponse.builder()
-                .id(UUID.randomUUID())
-                .platform(PlatformType.LAZADA)
-                .displayName("Lazada-Demo Lazada")
-                .build();
-        when(connectionService.connectLazada("access-tok", "refresh-tok", 3600, 7200000, "acc-001", "Demo Lazada"))
-                .thenReturn(expected);
+        @Test
+        @DisplayName("connectLazada delegates to connectionService")
+        void connectLazada_delegatesToConnectionService() {
+                ChannelResponse expected = ChannelResponse.builder()
+                                .id(UUID.randomUUID())
+                                .platform(PlatformType.LAZADA)
+                                .displayName("Lazada-Demo Lazada")
+                                .build();
+                when(connectionService.connectLazada("access-tok", "refresh-tok", 3600, 7200000, "acc-001",
+                                "Demo Lazada"))
+                                .thenReturn(expected);
 
-        ChannelResponse res = service.connectLazada("access-tok", "refresh-tok",
-                3600, 7200000, "acc-001", "Demo Lazada");
+                ChannelResponse res = service.connectLazada("access-tok", "refresh-tok",
+                                3600, 7200000, "acc-001", "Demo Lazada");
 
-        assertThat(res).isSameAs(expected);
-        verify(connectionService).connectLazada("access-tok", "refresh-tok", 3600, 7200000, "acc-001", "Demo Lazada");
-    }
+                assertThat(res).isSameAs(expected);
+                verify(connectionService).connectLazada("access-tok", "refresh-tok", 3600, 7200000, "acc-001",
+                                "Demo Lazada");
+        }
 
-    @Test
-    @DisplayName("getProductChannelSyncs delegates to the query service")
-    void getProductChannelSyncs_delegates() {
-        Set<UUID> ids = Set.of(UUID.randomUUID());
-        Map<UUID, List<ChannelSyncResponse>> expected = Map.of();
-        when(productQueryService.getProductChannelSyncs(ids)).thenReturn(expected);
+        @Test
+        @DisplayName("getProductChannelSyncs delegates to the query service")
+        void getProductChannelSyncs_delegates() {
+                Set<UUID> ids = Set.of(UUID.randomUUID());
+                Map<UUID, List<ChannelSyncResponse>> expected = Map.of();
+                when(productQueryService.getProductChannelSyncs(ids)).thenReturn(expected);
 
-        Map<UUID, List<ChannelSyncResponse>> actual = service.getProductChannelSyncs(ids);
+                Map<UUID, List<ChannelSyncResponse>> actual = service.getProductChannelSyncs(ids);
 
-        assertThat(actual).isSameAs(expected);
-        verify(productQueryService).getProductChannelSyncs(ids);
-    }
+                assertThat(actual).isSameAs(expected);
+                verify(productQueryService).getProductChannelSyncs(ids);
+        }
 
-    @Test
-    @DisplayName("getProductChannels passes ids through to the query service")
-    void getProductChannels_delegates() {
-        java.util.Collection<UUID> ids = List.of(UUID.randomUUID(), UUID.randomUUID());
-        Map<UUID, List<String>> expected = Map.of();
-        when(productQueryService.getProductChannels(ids)).thenReturn(expected);
+        @Test
+        @DisplayName("getProductChannels passes ids through to the query service")
+        void getProductChannels_delegates() {
+                java.util.Collection<UUID> ids = List.of(UUID.randomUUID(), UUID.randomUUID());
+                Map<UUID, List<String>> expected = Map.of();
+                when(productQueryService.getProductChannels(ids)).thenReturn(expected);
 
-        Map<UUID, List<String>> actual = service.getProductChannels(ids);
+                Map<UUID, List<String>> actual = service.getProductChannels(ids);
 
-        assertThat(actual).isSameAs(expected);
-        verify(productQueryService).getProductChannels(ids);
-    }
+                assertThat(actual).isSameAs(expected);
+                verify(productQueryService).getProductChannels(ids);
+        }
 }

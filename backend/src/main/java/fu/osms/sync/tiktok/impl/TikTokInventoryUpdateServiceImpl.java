@@ -1,5 +1,6 @@
 package fu.osms.sync.tiktok.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
@@ -33,6 +34,7 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
     private final TikTokAuthorizedApiClient tikTokApiClient;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
@@ -98,8 +100,14 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
             }
 
             tikTokApiClient.updateInventory(channelId, shopCipher, entry.getKey(), skuPayloads);
+            updatePrices(channelId, shopCipher, channel, entry.getKey(), entry.getValue());
             OffsetDateTime syncedAt = OffsetDateTime.now();
             for (ChannelProductVariant mapping : entry.getValue()) {
+                if (mapping.getVariant() != null
+                        && mapping.getVariant().getPrice() != null
+                        && mapping.getVariant().getPrice().signum() > 0) {
+                    mapping.setExternalPrice(mapping.getVariant().getPrice());
+                }
                 mapping.setSyncStatus(SyncStatus.SYNCED);
                 mapping.setLastSyncedAt(syncedAt);
             }
@@ -107,6 +115,41 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
             pushedVariantCount += entry.getValue().size();
         }
         return pushedVariantCount;
+    }
+
+    private void updatePrices(UUID channelId,
+                              String shopCipher,
+                              Channel channel,
+                              String productId,
+                              List<ChannelProductVariant> mappings) {
+        List<Map<String, Object>> skus = mappings.stream()
+                .filter(mapping -> mapping.getVariant() != null
+                        && mapping.getVariant().getPrice() != null
+                        && mapping.getVariant().getPrice().signum() > 0
+                        && hasText(mapping.getExternalVariantId()))
+                .map(mapping -> {
+                    String amount = mapping.getVariant().getPrice().toPlainString();
+                    return Map.<String, Object>of(
+                            "id", mapping.getExternalVariantId(),
+                            "price", Map.of(
+                                    "amount", amount,
+                                    "currency", currency(channel),
+                                    "sale_price", amount
+                            )
+                    );
+                })
+                .toList();
+        if (skus.isEmpty()) {
+            return;
+        }
+
+        String response = tikTokApiClient.executePost(
+                channelId,
+                "/product/202309/products/" + productId + "/prices/update",
+                Map.of("shop_cipher", shopCipher),
+                serialize(Map.of("skus", skus))
+        );
+        ensureSuccess(response);
     }
 
     private Set<UUID> sanitizeVariantIds(Collection<UUID> variantIds) {
@@ -152,6 +195,42 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
             }
         }
         return null;
+    }
+
+    private String currency(Channel channel) {
+        String region = optionalText(channel.getMetadata(), "region", "sellerBaseRegion");
+        return switch (region == null ? "VN" : region.toUpperCase()) {
+            case "ID" -> "IDR";
+            case "MY" -> "MYR";
+            case "PH" -> "PHP";
+            case "SG" -> "SGD";
+            case "TH" -> "THB";
+            default -> "VND";
+        };
+    }
+
+    private String serialize(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("Khong the tao payload cap nhat gia TikTok.", e);
+        }
+    }
+
+    private void ensureSuccess(String response) {
+        try {
+            Map<?, ?> payload = objectMapper.readValue(response, Map.class);
+            Object code = payload.get("code");
+            if (code != null && !"0".equals(String.valueOf(code))) {
+                throw new IllegalStateException(
+                        "TikTok Shop price update failed: code=" + code + ", message=" + payload.get("message")
+                );
+            }
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Khong doc duoc response cap nhat gia TikTok.", e);
+        }
     }
 
     private UUID optionalUuid(Map<String, Object> metadata, String key) {

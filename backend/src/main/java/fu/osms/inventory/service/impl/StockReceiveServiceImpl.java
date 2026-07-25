@@ -799,10 +799,10 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         if (!Boolean.TRUE.equals(response.getMarketplaceSyncAvailable())) {
             return;
         }
-        notificationService.createNotification(user.getId(), "SYNC", "Đồng bộ tồn kho lên sàn?",
+        notificationService.createNotification(user.getId(), "SYNC", "Đồng bộ tồn có thể bán và giá lên sàn?",
                 receipt.getReceiptCode() + " đã hoàn thành. Sản phẩm đang bán trên "
                         + String.join(", ", response.getMarketplacePlatforms())
-                        + ". Hãy xác nhận đồng bộ tồn kho.",
+                        + ". Hãy xác nhận đồng bộ tồn có thể bán và giá bán.",
                 "RECEIPT", receipt.getId());
     }
 
