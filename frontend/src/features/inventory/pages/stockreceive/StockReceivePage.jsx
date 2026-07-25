@@ -28,6 +28,7 @@ import {
   formatDate,
   formatNumber,
   formatVND,
+  formatDateTime,
   getResponseData,
   tableCellStyle,
 } from '../components/inventoryDocumentListUtils';
@@ -50,7 +51,7 @@ const columns = [
   { label: 'Giá trị', align: 'right' },
   { label: 'Trạng thái' },
   { label: 'Người tạo' },
-  { label: 'Ngày tạo' },
+  { label: 'Thời gian tạo' },
   { label: '', align: 'right' },
 ];
 
@@ -58,7 +59,7 @@ const RECEIPT_EXPORT_COLUMNS = [
   { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
   { key: 'receiptCode', label: 'Mã', width: 16, defaultChecked: true, getValue: (receipt) => receipt.receiptCode ?? '' },
   { key: 'receiptDate', label: 'Ngày nhập', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.receiptDate ?? receipt.confirmedAt ?? receipt.createdAt) },
-  { key: 'createdAt', label: 'Ngày tạo', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.createdAt) },
+  { key: 'createdAt', label: 'Thời gian tạo', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.createdAt) },
   { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (receipt) => getStatusLabel(receipt.status) },
   { key: 'totalCost', label: 'Tổng giá trị', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.totalCost ?? 0 },
   { key: 'paidAmount', label: 'Đã trả', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.paidAmount ?? receipt.totalCost ?? 0 },
@@ -75,7 +76,7 @@ const getReceiptExportDate = (receipt) => receipt.receiptDate ?? receipt.confirm
 const RECEIPT_DETAIL_EXPORT_COLUMNS = [
   { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
   { key: 'receiptCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (row) => row.receiptCode },
-  { key: 'receiptDate', label: 'Ngày nhập', width: 20, defaultChecked: true, getValue: (row) => formatExportDateTime(row.receiptDate) },
+  { key: 'receiptDate', label: 'Thời gian nhập', width: 20, defaultChecked: true, getValue: (row) => formatExportDateTime(row.receiptDate) },
   { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: true, getValue: (row) => row.warehouseName },
   { key: 'supplierName', label: 'Nhà cung cấp', width: 28, defaultChecked: true, getValue: (row) => row.supplierName },
   { key: 'sku', label: 'SKU', width: 18, defaultChecked: true, getValue: (row) => row.sku },
@@ -152,15 +153,15 @@ const ActionMenu = ({ receipt, onComplete, onRefresh, confirm, onPrint }) => {
       if (completedReceipt.marketplaceSyncAvailable) {
         const platforms = (completedReceipt.marketplacePlatforms ?? []).join(', ');
         const shouldSync = await confirm({
-          title: 'Đồng bộ tồn kho lên sàn?',
-          message: `Tồn kho đã được cập nhật. Đồng bộ số lượng mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
+          title: 'Đồng bộ tồn có thể bán và giá lên sàn?',
+          message: `Tồn kho và giá bán đã được cập nhật. Đồng bộ số lượng có thể bán và giá mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
           confirmLabel: 'Đồng bộ ngay',
           cancelLabel: 'Để sau',
         });
         if (shouldSync) {
           try {
             await stockReceiveService.syncReceiptMarketplaceInventory(receipt.id);
-            toast.success('Đã đồng bộ tồn kho lên các sàn liên quan.');
+            toast.success('Đã đồng bộ tồn có thể bán và giá lên các sàn liên quan.');
           } catch (syncError) {
             toast.error(syncError?.response?.data?.message || 'Nhập kho thành công nhưng đồng bộ sàn thất bại.');
           }
@@ -294,7 +295,7 @@ export default function StockReceivePage() {
       const data = getResponseData(response);
       const count = Number(data.syncedVariantCount ?? 0);
       toast.success(count > 0
-        ? `Đã đồng bộ tồn kho ${formatNumber(count)} SKU từ phiếu nhập lên các sàn liên kết.`
+        ? `Đã đồng bộ tồn có thể bán và giá ${formatNumber(count)} SKU từ phiếu nhập lên các sàn liên kết.`
         : 'Không có SKU phiếu nhập nào cần đồng bộ.');
       await refreshData();
     } catch (error) {
@@ -321,7 +322,7 @@ export default function StockReceivePage() {
       <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatVND(receipt.totalCost)}</td>
       <td style={tableCellStyle}><StatusBadge status={receipt.status} /></td>
       <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
-      <td style={tableCellStyle}>{formatDate(receipt.createdAt)}</td>
+      <td style={tableCellStyle}>{formatDateTime(receipt.createdAt)}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right' }}>
         <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} onPrint={handlePrintReceipt} />
       </td>
@@ -365,7 +366,7 @@ export default function StockReceivePage() {
             }}
           >
             <RefreshCw size={15} style={{ animation: syncingMarketplace ? 'spin 1s linear infinite' : undefined }} />
-            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn kho'}
+            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn và giá'}
           </button>
         )}
         stats={stats}

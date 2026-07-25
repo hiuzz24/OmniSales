@@ -29,11 +29,14 @@ import fu.osms.sync.service.impl.ChannelProductAggregationService;
 import fu.osms.sync.service.impl.SyncJobProgressTracker;
 import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import fu.osms.sync.tiktok.TikTokImportSyncService;
+import fu.osms.sync.tiktok.TikTokProductDetailEnrichmentService;
 import fu.osms.sync.tiktok.util.TikTokWarehouseAddressFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -70,6 +73,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
     private final ChannelProductAggregationService channelProductAggregationService;
     private final SyncJobProgressTracker syncJobProgressTracker;
+    private final TikTokProductDetailEnrichmentService tikTokProductDetailEnrichmentService;
 
     @Override
     @Transactional
@@ -148,6 +152,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
 
             completeLog(syncLog, SyncStatus.SYNCED, productCount + variantCount, productCount + variantCount, 0, null);
             marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds, channelId);
+            scheduleDetailEnrichmentAfterCommit(channelId);
             return ChannelImportSyncResponse.builder()
                     .channelId(channelId)
                     .syncLogId(syncLog.getId())
@@ -162,6 +167,19 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             completeLog(syncLog, SyncStatus.FAILED, productCount + variantCount, productCount + variantCount, 1, e.getMessage());
             throw e;
         }
+    }
+
+    private void scheduleDetailEnrichmentAfterCommit(UUID channelId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            tikTokProductDetailEnrichmentService.enrichChannelProducts(channelId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                tikTokProductDetailEnrichmentService.enrichChannelProducts(channelId);
+            }
+        });
     }
 
     private void forEachProductSummaryPage(UUID channelId,

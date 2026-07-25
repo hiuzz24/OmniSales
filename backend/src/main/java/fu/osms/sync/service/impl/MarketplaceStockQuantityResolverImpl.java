@@ -10,12 +10,15 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -83,14 +86,19 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
         if (sanitized.isEmpty()) {
             return 0;
         }
-        return inventoryItemRepository.findByVariantIdIn(sanitized)
+        Map<String, List<InventoryItem>> itemsByWarehouse = inventoryItemRepository.findByVariantIdIn(sanitized)
                 .stream()
                 .filter(item -> defaultWarehouseId == null
                         || (item.getWarehouse() != null
                         && defaultWarehouseId.equals(item.getWarehouse().getId())))
-                .mapToInt(this::availableQuantity)
-                .max()
-                .orElse(0);
+                .collect(Collectors.groupingBy(
+                        this::warehouseKey,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        return itemsByWarehouse.values().stream()
+                .mapToInt(this::sellableQuantityForSharedWarehouseStock)
+                .sum();
     }
 
     private UUID defaultWarehouseId(ChannelProductVariant mapping) {
@@ -116,7 +124,33 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
         if (item.getAvailableQuantity() != null) {
             return Math.max(item.getAvailableQuantity(), 0);
         }
-        return 0;
+        return Math.max(safeInt(item.getQuantityOnHand()) - safeInt(item.getReservedQuantity()), 0);
+    }
+
+    private int sellableQuantityForSharedWarehouseStock(List<InventoryItem> items) {
+        int quantityOnHand = items.stream()
+                .mapToInt(item -> safeInt(item.getQuantityOnHand()))
+                .max()
+                .orElse(0);
+        int reservedQuantity = items.stream()
+                .mapToInt(item -> safeInt(item.getReservedQuantity()))
+                .sum();
+        int computedAvailable = quantityOnHand - reservedQuantity;
+        if (items.size() <= 1) {
+            return Math.max(availableQuantity(items.get(0)), 0);
+        }
+        return Math.max(computedAvailable, 0);
+    }
+
+    private String warehouseKey(InventoryItem item) {
+        if (item.getWarehouse() != null && item.getWarehouse().getId() != null) {
+            return "warehouse:" + item.getWarehouse().getId();
+        }
+        return "item:" + item.getId();
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private Set<UUID> sanitizeVariantIds(Collection<UUID> variantIds) {

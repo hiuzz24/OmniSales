@@ -41,6 +41,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
 
     private static final int SKU_BATCH_SIZE = 50;
     private static final String API_PATH = "/product/stock/sellable/update";
+    private static final String PRICE_API_PATH = "/product/price_quantity/update";
     private static final String WAREHOUSE_CODE_MARKER = "LAZADA_WAREHOUSE_CODE=";
 
     private final LazadaAuthorizedApiClient lazadaApiClient;
@@ -161,6 +162,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         if (!skuPayloads.isEmpty()) {
             syncedSkuCount += sendBatch(credential, skuPayloads, batchMappings);
         }
+        syncSkuPrices(credential, mappings, inventoryByVariantId, changedScope, changedSince, defaultWarehouseId, defaultWarehouseCode);
 
         return new LazadaInventorySyncResult(
                 affectedProductIds.size(),
@@ -252,7 +254,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
 
         String response = lazadaApiClient.executePost(
                 credential.getChannel().getId(), API_PATH, params);
-        ensureSuccess(response);
+        ensureSuccess(response, API_PATH);
         log.info(
                 "[LazadaStockSync] Lazada API success api={} batchSkuCount={} responseLength={}",
                 API_PATH,
@@ -268,6 +270,127 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         }
 
         return batchMappings.size();
+    }
+
+    private void syncSkuPrices(ChannelCredential credential,
+                               List<ChannelProductVariant> mappings,
+                               Map<UUID, List<InventoryItem>> inventoryByVariantId,
+                               ChangedScope changedScope,
+                               OffsetDateTime changedSince,
+                               UUID defaultWarehouseId,
+                               String defaultWarehouseCode) {
+        List<String> skuPayloads = new ArrayList<>();
+        List<ChannelProductVariant> batchMappings = new ArrayList<>();
+        for (ChannelProductVariant mapping : mappings) {
+            if (mapping.getVariant() == null
+                    || mapping.getVariant().getPrice() == null
+                    || mapping.getVariant().getPrice().signum() <= 0
+                    || mapping.getChannelProduct() == null
+                    || !hasText(mapping.getChannelProduct().getExternalProductId())
+                    || !hasText(mapping.getExternalVariantId())) {
+                continue;
+            }
+            List<InventoryItem> scopedItems = scopeInventoryItems(
+                    inventoryByVariantId.getOrDefault(mapping.getVariant().getId(), List.of()),
+                    changedScope,
+                    changedSince,
+                    defaultWarehouseId,
+                    defaultWarehouseCode
+            );
+            skuPayloads.add(buildSkuPricePayload(mapping, scopedItems, defaultWarehouseId, defaultWarehouseCode));
+            batchMappings.add(mapping);
+            if (skuPayloads.size() == SKU_BATCH_SIZE) {
+                sendPriceBatch(credential, skuPayloads, batchMappings);
+                skuPayloads.clear();
+                batchMappings.clear();
+            }
+        }
+        if (!skuPayloads.isEmpty()) {
+            sendPriceBatch(credential, skuPayloads, batchMappings);
+        }
+    }
+
+    private String buildSkuPricePayload(ChannelProductVariant mapping,
+                                        List<InventoryItem> inventoryItems,
+                                        UUID defaultWarehouseId,
+                                        String defaultWarehouseCode) {
+        StringBuilder payload = new StringBuilder()
+                .append("<Sku>")
+                .append("<ItemId>").append(escapeXml(mapping.getChannelProduct().getExternalProductId())).append("</ItemId>")
+                .append("<SkuId>").append(escapeXml(mapping.getExternalVariantId())).append("</SkuId>");
+        String sellerSku = firstNonBlank(mapping.getExternalSku(), mapping.getVariant().getSku());
+        if (sellerSku != null) {
+            payload.append("<SellerSku>").append(escapeXml(sellerSku)).append("</SellerSku>");
+        }
+        String price = mapping.getVariant().getPrice().toPlainString();
+        payload.append("<Price>").append(price).append("</Price>");
+        payload.append("<SalePrice>").append(price).append("</SalePrice>");
+        appendPriceQuantityPayload(payload, mapping, inventoryItems, defaultWarehouseId, defaultWarehouseCode);
+        return payload.append("</Sku>").toString();
+    }
+
+    private void appendPriceQuantityPayload(StringBuilder payload,
+                                            ChannelProductVariant mapping,
+                                            List<InventoryItem> inventoryItems,
+                                            UUID defaultWarehouseId,
+                                            String defaultWarehouseCode) {
+        int targetAvailableQuantity = Math.max(
+                marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping),
+                0
+        );
+        List<WarehouseQuantity> warehouseQuantities = inventoryItems.stream()
+                .map(item -> new WarehouseQuantity(
+                        resolveWarehouseCode(item.getWarehouse(), defaultWarehouseId, defaultWarehouseCode),
+                        availableQuantity(item)))
+                .filter(item -> item.warehouseCode() != null && !item.warehouseCode().isBlank())
+                .toList();
+
+        if (warehouseQuantities.isEmpty()) {
+            payload.append("<Quantity>").append(targetAvailableQuantity).append("</Quantity>");
+            return;
+        }
+
+        payload.append("<MultiWarehouseInventories>");
+        String primaryWarehouseCode = firstWarehouseCode(warehouseQuantities, defaultWarehouseCode);
+        for (WarehouseQuantity warehouseQuantity : warehouseQuantities) {
+            int quantity = warehouseQuantity.warehouseCode().equals(primaryWarehouseCode)
+                    ? targetAvailableQuantity
+                    : 0;
+            payload.append("<MultiWarehouseInventory>")
+                    .append("<WarehouseCode>").append(escapeXml(warehouseQuantity.warehouseCode())).append("</WarehouseCode>")
+                    .append("<Quantity>").append(Math.max(quantity, 0)).append("</Quantity>")
+                    .append("</MultiWarehouseInventory>");
+        }
+        payload.append("</MultiWarehouseInventories>");
+    }
+
+    private void sendPriceBatch(ChannelCredential credential,
+                                List<String> skuPayloads,
+                                List<ChannelProductVariant> batchMappings) {
+        String payload = "<Request><Product><Skus>"
+                + String.join("", skuPayloads)
+                + "</Skus></Product></Request>";
+
+        Map<String, String> params = new HashMap<>();
+        params.put("payload", payload);
+        log.info(
+                "[LazadaStockSync] Calling Lazada price API api={} batchSkuCount={} payloadLength={}",
+                PRICE_API_PATH,
+                batchMappings.size(),
+                payload.length()
+        );
+
+        String response = lazadaApiClient.executePost(
+                credential.getChannel().getId(), PRICE_API_PATH, params);
+        ensureSuccess(response, PRICE_API_PATH);
+
+        OffsetDateTime syncedAt = OffsetDateTime.now();
+        for (ChannelProductVariant mapping : batchMappings) {
+            mapping.setExternalPrice(mapping.getVariant().getPrice());
+            mapping.setSyncStatus(SyncStatus.SYNCED);
+            mapping.setLastSyncedAt(syncedAt);
+            channelProductVariantRepository.save(mapping);
+        }
     }
 
     private void logSkuChange(ChannelProductVariant mapping,
@@ -347,7 +470,7 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
         return warehouseQuantities.get(0).warehouseCode();
     }
 
-    private void ensureSuccess(String response) {
+    private void ensureSuccess(String response, String apiPath) {
         try {
             JsonNode root = objectMapper.readTree(response);
             String code = root.path("code").asText("");
@@ -358,12 +481,12 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
                         root.path("error_msg").asText(null),
                         response
                 );
-                throw new IllegalStateException("Lazada API " + API_PATH + " loi: " + message);
+                throw new IllegalStateException("Lazada API " + apiPath + " loi: " + message);
             }
         } catch (IllegalStateException e) {
             throw e;
         } catch (Exception e) {
-            throw new IllegalStateException("Khong doc duoc response cap nhat ton Lazada.", e);
+            throw new IllegalStateException("Khong doc duoc response cap nhat Lazada.", e);
         }
     }
 
@@ -464,6 +587,10 @@ public class LazadaInventoryUpdateServiceImpl implements LazadaInventoryUpdateSe
             }
         }
         return null;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private record WarehouseQuantity(String warehouseCode, int sellableQuantity) {

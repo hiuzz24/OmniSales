@@ -10,6 +10,7 @@ import fu.osms.channel.mapper.ChannelMapper;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.service.ChannelConnectionService;
+import fu.osms.channel.service.ChannelMappingLifecycleService;
 import fu.osms.channel.service.ChannelProductQueryService;
 import fu.osms.channel.service.ChannelResponseService;
 import fu.osms.common.dto.PageResponse;
@@ -49,6 +50,7 @@ class ChannelServiceImplTest {
     @Mock private ChannelCredentialRepository credentialRepository;
     @Mock private ChannelMapper channelMapper;
     @Mock private ChannelConnectionService connectionService;
+    @Mock private ChannelMappingLifecycleService mappingLifecycleService;
     @Mock private ChannelProductQueryService productQueryService;
     @Mock private ChannelResponseService responseService;
 
@@ -61,6 +63,7 @@ class ChannelServiceImplTest {
                 credentialRepository,
                 channelMapper,
                 connectionService,
+                mappingLifecycleService,
                 productQueryService,
                 responseService
         );

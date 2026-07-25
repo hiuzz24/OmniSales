@@ -321,14 +321,10 @@ public class InventoryServiceImpl implements InventoryService {
     private InventoryItemResponse aggregateSkuGroup(List<InventoryItemResponse> group,
                                                     Map<UUID, ChannelSummary> channelSummaryByVariantId) {
         InventoryItemResponse first = group.get(0);
-        InventoryItemResponse stockSource = group.stream()
-                .max(Comparator
-                        .comparingInt((InventoryItemResponse item) -> safeInt(item.getQuantityOnHand()))
-                        .thenComparingInt(item -> safeInt(item.getAvailableQuantity())))
-                .orElse(first);
-        int quantityOnHand = safeInt(stockSource.getQuantityOnHand());
-        int reservedQuantity = safeInt(stockSource.getReservedQuantity());
-        int availableQuantity = safeInt(stockSource.getAvailableQuantity());
+        StockTotals stockTotals = aggregateSharedSkuStock(group);
+        int quantityOnHand = stockTotals.quantityOnHand();
+        int reservedQuantity = stockTotals.reservedQuantity();
+        int availableQuantity = stockTotals.availableQuantity();
         int incomingQuantity = group.stream().mapToInt(item -> safeInt(item.getIncomingQuantity())).max().orElse(0);
         int outgoingQuantity = group.stream().mapToInt(item -> safeInt(item.getOutgoingQuantity())).max().orElse(0);
         int lowStockThreshold = group.stream().mapToInt(item -> safeInt(item.getLowStockThreshold())).max().orElse(0);
@@ -450,6 +446,45 @@ public class InventoryServiceImpl implements InventoryService {
                 .filter(Objects::nonNull)
                 .findFirst()
                 .orElse(BigDecimal.ZERO);
+    }
+
+    private StockTotals aggregateSharedSkuStock(List<InventoryItemResponse> group) {
+        Map<String, List<InventoryItemResponse>> byWarehouse = group.stream()
+                .collect(Collectors.groupingBy(
+                        this::stockWarehouseKey,
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        int quantityOnHand = 0;
+        int reservedQuantity = 0;
+        int availableQuantity = 0;
+        for (List<InventoryItemResponse> warehouseItems : byWarehouse.values()) {
+            int warehouseOnHand = warehouseItems.stream()
+                    .mapToInt(item -> safeInt(item.getQuantityOnHand()))
+                    .max()
+                    .orElse(0);
+            int warehouseReserved = warehouseItems.stream()
+                    .mapToInt(item -> safeInt(item.getReservedQuantity()))
+                    .sum();
+            int warehouseAvailable = Math.max(warehouseOnHand - warehouseReserved, 0);
+
+            if (warehouseItems.size() == 1 && warehouseItems.get(0).getAvailableQuantity() != null) {
+                warehouseAvailable = Math.max(safeInt(warehouseItems.get(0).getAvailableQuantity()), 0);
+            }
+
+            quantityOnHand += warehouseOnHand;
+            reservedQuantity += warehouseReserved;
+            availableQuantity += warehouseAvailable;
+        }
+        return new StockTotals(quantityOnHand, reservedQuantity, availableQuantity);
+    }
+
+    private String stockWarehouseKey(InventoryItemResponse item) {
+        if (item.getWarehouseId() != null) {
+            return "warehouse:" + item.getWarehouseId();
+        }
+        return "item:" + item.getId();
     }
 
     private void enrichMovementQuantities(List<InventoryItemResponse> responses) {
@@ -1276,6 +1311,9 @@ public class InventoryServiceImpl implements InventoryService {
             return null;
         }
         return values.iterator().next();
+    }
+
+    private record StockTotals(int quantityOnHand, int reservedQuantity, int availableQuantity) {
     }
 
     private User getCurrentUser() {
