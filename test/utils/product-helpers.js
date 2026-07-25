@@ -56,44 +56,106 @@ async function getAuthHeaders(request) {
  * Create a test product via API
  * Returns the created product object with id and sku
  * Requires valid auth token
+ *
+ * NOTE: `ProductRequest` requires several non-null fields and a structured
+ * `images` array (each item is a `{ url, isPrimary, sortOrder }` object).
+ * The previous helper sent raw strings + omitted required fields, which made
+ * every create call fail with HTTP 500. The defaults below cover the BE
+ * validation requirements enforced by ProductRequestValidator.
  */
 async function createTestProduct(request, token, overrides = {}) {
   const timestamp = Date.now();
 
-  // If categoryId not provided, fetch it automatically
+  // If categoryId not provided, fetch it automatically. If no categories
+  // exist (e.g. the afterEach hook just deleted the last test category in
+  // a fast-running suite), create one on the fly so this test doesn't
+  // fail with a misleading 400 "Product category must not be null".
   let categoryId = overrides.categoryId;
   if (!categoryId) {
     categoryId = await getFirstCategoryId(request, token);
+    if (!categoryId) {
+      categoryId = await ensureCategory(request, token, `Test Cat ${timestamp}`);
+    }
   }
+
+  const defaultVariant = {
+    sku: `TEST-V-${timestamp}`,
+    barcode: `BC-${timestamp}`,
+    price: 150000,
+    costPrice: 80000,
+    isActive: true,
+    optionValues: { Size: 'M', 'Màu': 'Đen' },
+    images: [
+      // Each variant image MUST NOT be primary because there is a UNIQUE
+      // constraint on (product_id) WHERE is_primary=true in product_images.
+      // A primary image for a variant also occupies the product's primary
+      // slot (variant_id is set but product_id is still the parent product).
+      { url: 'https://via.placeholder.com/300', isPrimary: false, sortOrder: 1 },
+    ],
+  };
 
   const defaultProduct = {
     name: `Test Product ${timestamp}`,
     sku: `TEST-${timestamp}`,
+    description: 'Test product description for Playwright E2E tests',
+    brand: 'TestBrand',
+    unit: 'pcs',
+    hasVariants: true,
     status: 'ACTIVE',
     lowStockThreshold: 5,
-    images: ['https://via.placeholder.com/300'],
-    variants: [
-      {
-        sku: `TEST-V-${timestamp}`,
-        price: 150000,
-        costPrice: 80000,
-        isActive: true,
-        optionValues: { Size: 'M', 'Màu': 'Đen' },
-      },
+    weightGrams: 500,
+    attributes: {
+      packageLengthCm: 20,
+      packageWidthCm: 15,
+      packageHeightCm: 10,
+    },
+    images: [
+      { url: 'https://via.placeholder.com/300', isPrimary: true, sortOrder: 0 },
     ],
+    variants: [defaultVariant],
   };
 
   const productData = { ...defaultProduct, ...overrides };
+
+  // Normalize variants: ensure each variant is shaped as a ProductVariantRequest
+  // (the previous helper accepted `{ sku, price, isActive, optionValues }` but
+  // did not normalize; if a test passed custom variants they need barcode + images).
+  if (Array.isArray(productData.variants)) {
+    productData.variants = productData.variants.map((v, i) => ({
+      ...v,
+      barcode: v.barcode || `BC-${timestamp}-${i}`,
+      name: v.name || `Variant ${v.sku}`,
+      weightGrams: v.weightGrams || 500,
+      images: v.images || [
+        // See defaultVariant above: variant images must NOT be primary because
+        // only one primary image is allowed per product_id.
+        { url: 'https://via.placeholder.com/300', isPrimary: false, sortOrder: 1 },
+      ],
+    }));
+  }
+
+  // Ensure attributes carry the dimension fields the validator requires.
+  productData.attributes = {
+    packageLengthCm: 20,
+    packageWidthCm: 15,
+    packageHeightCm: 10,
+    ...(productData.attributes || {}),
+  };
 
   // Only set categoryId if we have one (backend requires valid categoryId)
   if (categoryId) {
     productData.categoryId = categoryId;
   }
 
-  const response = await request.post(`${API_BASE}/products`, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    data: productData,
-  });
+  let response;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    response = await request.post(`${API_BASE}/products`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: productData,
+    });
+    if (response.status() !== 429) break;
+    await new Promise(r => setTimeout(r, 1500 * (attempt + 1) + Math.floor(Math.random() * 500)));
+  }
 
   if (response.status() !== 200) {
     const errorBody = await response.text();
@@ -139,6 +201,33 @@ async function getFirstCategoryId(request, token) {
 }
 
 /**
+ * Create a category on demand and return its id. Used as a fallback when
+ * the suite has wiped the catalog (e.g. after a fast afterEach cleanup)
+ * but a test still needs to attach a categoryId to its product.
+ */
+async function ensureCategory(request, token, name) {
+  try {
+    const response = await request.post(`${API_BASE}/categories`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: {
+        name,
+        slug: `test-cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        parentId: null,
+        description: 'Auto-created for Playwright test product',
+        sortOrder: 0,
+      },
+    });
+    if (response.status() === 200 || response.status() === 201) {
+      const body = await response.json();
+      if (body.data && body.data.id) return body.data.id;
+    }
+  } catch (_) {
+    // Fall through
+  }
+  return null;
+}
+
+/**
  * Return the first available category name (so tests can fill it into
  * the import template's "Danh mục" column).
  */
@@ -176,6 +265,7 @@ module.exports = {
   createTestProduct,
   deleteTestProduct,
   getFirstCategoryId,
+  ensureCategory,
   getFirstCategoryName,
   uniqueSku,
   TEST_EMAIL,

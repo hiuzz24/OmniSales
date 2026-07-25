@@ -75,6 +75,10 @@ async function getAuthTokenCached(request) {
  * Fetch all pages of a list endpoint, returning all items whose field
  * matches the keyword (case-insensitive).
  *
+ * Retries with exponential backoff on HTTP 429 (rate-limit) because the
+ * backend's ApiUsageFilter caps per-user requests at 100/minute per
+ * endpoint and our cleanup runs 12 keyword searches after each test.
+ *
  * @param {object} request  Playwright request context
  * @param {string} token
  * @param {object} opts
@@ -89,15 +93,29 @@ async function fetchAllPages(request, token, { listPath, queryName, keyword, mat
   let page = 0;
   const PAGE_SIZE = 100;
 
+  // Normalize listPath: append '?' if there is no query string yet so we
+  // can safely add '&foo=...' parameters afterwards. Without this, the
+  // cleanup produced URLs like `/api/products&search=TEST-` which Spring
+  // treated as an unknown static resource and surfaced as HTTP 500.
+  const separator = listPath.includes('?') ? '&' : '?';
+
   while (true) {
     const url = queryName
-      ? `${API_BASE}${listPath}&${queryName}=${encodeURIComponent(keyword)}&page=${page}&size=${PAGE_SIZE}`
-      : `${API_BASE}${listPath}?page=${page}&size=${PAGE_SIZE}`;
+      ? `${API_BASE}${listPath}${separator}${queryName}=${encodeURIComponent(keyword)}&page=${page}&size=${PAGE_SIZE}`
+      : `${API_BASE}${listPath}${separator}page=${page}&size=${PAGE_SIZE}`;
 
-    const resp = await request.get(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
+    let resp;
+    let attempt = 0;
+    while (true) {
+      resp = await request.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (resp.status() !== 429) break;
+      attempt += 1;
+      if (attempt >= 5) break;
+      const wait = 1500 * attempt + Math.floor(Math.random() * 500);
+      await new Promise(r => setTimeout(r, wait));
+    }
     if (resp.status() !== 200) break;
 
     const body = await resp.json();
@@ -145,19 +163,28 @@ async function deleteByKeyword(request, token, opts) {
   const items = await fetchAllPages(request, token, { listPath, queryName, keyword, matchField });
 
   for (const item of items) {
-    try {
-      const id = item[itemIdField] || item.channelId || item;
-      const deletePath = deletePathFn(id);
-      const resp = await request[method.toLowerCase() === 'patch' ? 'patch' : method.toLowerCase() === 'put' ? 'put' : 'delete'](
-        `${API_BASE}${deletePath}`,
-        {
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          data: patchData,
-        },
-      );
-      if (resp.status() === 404 || resp.status() === 405) continue;
-    } catch (e) {
-      // best-effort
+    let deleted = false;
+    for (let attempt = 0; attempt < 5 && !deleted; attempt++) {
+      try {
+        const id = item[itemIdField] || item.channelId || item;
+        const deletePath = deletePathFn(id);
+        const resp = await request[method.toLowerCase() === 'patch' ? 'patch' : method.toLowerCase() === 'put' ? 'put' : 'delete'](
+          `${API_BASE}${deletePath}`,
+          {
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            data: patchData,
+          },
+        );
+        if (resp.status() === 404 || resp.status() === 405) { deleted = true; break; }
+        if (resp.status() === 429) {
+          await new Promise(r => setTimeout(r, 1500 * (attempt + 1) + Math.floor(Math.random() * 500)));
+          continue;
+        }
+        deleted = true;
+      } catch (e) {
+        // best-effort
+        deleted = true;
+      }
     }
   }
 
@@ -200,6 +227,53 @@ async function cancelEntity(request, token, listPath, id, cancelPathFn) {
 // ─── High-level cleanup ─────────────────────────────────────────────────────
 
 /**
+ * Delete every test product in the catalog using the API. Used by the
+ * product spec afterEach hook (where calling the full
+ * `cleanupAllTestData()` would otherwise time out) and by the global
+ * teardown. Returns the number of products successfully deleted.
+ */
+async function cleanupTestProducts(request, token) {
+  const productSkuPrefixes = [
+    'TEST-', 'API-', 'VAR-', 'V1-', 'V2-', 'DUP-', 'DUPV-',
+    'E2E-', 'SV-', 'VR-', 'DV-', 'NOPRICE-', 'NONAME', 'NONAMEV-',
+    'NOVAR-', 'UNAUTH', 'UA-', 'DRAFT-', 'SEARCH-', 'SKU-TEST-',
+    'SMOKE', 'NEWBE-', 'RETEST', 'RET-', 'SIMPLE-', 'ASCII-',
+    'WITHMAU-', 'NOVARW-', 'EMPTYVIMG-', 'NOVARIMG-', 'VARIMG-',
+    'ONLYVIMG-', 'APIV-', 'TEST-V-', 'TEST-ORD-',
+  ];
+  let deleted = 0;
+  try {
+    const allProducts = await fetchAllPages(request, token, {
+      listPath: '/products',
+      queryName: undefined,
+      keyword: undefined,
+      pageSize: 100,
+    });
+    const testProducts = allProducts.filter(p => {
+      const sku = (p.sku || '').toUpperCase();
+      return productSkuPrefixes.some(prefix => sku.startsWith(prefix.toUpperCase()));
+    });
+    for (const p of testProducts) {
+      let ok = false;
+      for (let attempt = 0; attempt < 5 && !ok; attempt++) {
+        const r = await request.delete(`${API_BASE}/products/${p.id}/delete`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (r.status() === 429) {
+          await new Promise(res => setTimeout(res, 1500 * (attempt + 1)));
+          continue;
+        }
+        ok = true;
+        if (r.status() < 400) deleted++;
+      }
+    }
+  } catch (_) {
+    // best-effort
+  }
+  return deleted;
+}
+
+/**
  * Delete all test data by keyword using the API.
  * Called at end of each test suite (afterEach) or in globalTeardown.
  *
@@ -208,13 +282,24 @@ async function cancelEntity(request, token, listPath, id, cancelPathFn) {
 async function cleanupAllTestData(request, token) {
   const counts = {};
 
-  // Products — DELETE /api/products/{id}/delete (soft delete)
-  try {
-    counts.products = await deleteByKeyword(request, token, {
-      listPath: '/products', queryName: 'search', keyword: 'TEST-',
-      deletePathFn: id => `/products/${id}/delete`,
-    });
-  } catch (_) {}
+  // Products — DELETE /api/products/{id}/delete (soft delete).
+  //
+  // Tests create products with many different name/SKU prefixes:
+  //   * helper default  : "Test Product …" + sku "TEST-…"
+  //   * API spec        : "API Test Product …", "API Variant Product …"
+  //   * duplicate spec  : sku "DUP-…"
+  //   * variant spec    : sku "VAR-…", variant "V1-…", "V2-…"
+  //   * e2e spec        : sku "E2E-…", "DRAFT-…", "SV-…", "VR-…", "DV-…"
+  //   * validation spec : "NONAME…", "NOVAR…", "UNAUTH…", "NOPRICE-…"
+  //   * product-variant : sku "SEARCH-…"
+  //
+  // Strategy: a SINGLE GET to /api/products (no keyword) returns every
+  // non-deleted product. We then keep only products whose SKU starts with
+  // any known test marker, and DELETE them. This used to be 12 keyword
+  // searches (one per prefix), which together tripped the backend's
+  // 100-req/minute ApiUsageFilter on /api/products and produced 429
+  // failures during cleanup itself.
+  counts.products = await cleanupTestProducts(request, token);
 
   // Customers — DELETE /api/customers/{id}
   try {
@@ -383,10 +468,86 @@ async function cleanupAllTestDataSQL(pg) {
     `DELETE FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR slug LIKE 'test-category-%'`,
 
     // ── Products (deep clean) ───────────────────────────────────────────
-    `DELETE FROM product_variants WHERE sku LIKE 'TEST-%' OR sku LIKE 'SKU-TEST-%' OR sku LIKE 'API-%' OR sku LIKE 'VAR-%' OR sku LIKE 'DUP-%' OR sku LIKE 'TEST-ORD-%' OR sku LIKE 'TEST-V-%' OR sku LIKE 'APIV-%'`,
-    `DELETE FROM product_images WHERE product_id IN (SELECT id FROM products WHERE sku LIKE 'TEST-%' OR name LIKE 'Test Product %')`,
-    `DELETE FROM product_logs WHERE product_id IN (SELECT id FROM products WHERE sku LIKE 'TEST-%' OR name LIKE 'Test Product %')`,
-    `DELETE FROM products WHERE sku LIKE 'TEST-%' OR sku LIKE 'SKU-TEST-%' OR sku LIKE 'API-%' OR sku LIKE 'VAR-%' OR sku LIKE 'DUP-%' OR name LIKE 'Test Product %'`,
+    // SKU prefixes used across catalog specs — see comment in
+    // cleanupAllTestData() above. Be aggressive here because the BE API
+    // soft-deletes rows, and tests depend on /api/products returning only
+    // fresh data after cleanup.
+    `DELETE FROM product_images WHERE product_id IN (SELECT id FROM products
+       WHERE sku LIKE 'TEST-%' OR sku LIKE 'SKU-TEST-%' OR sku LIKE 'API-%'
+          OR sku LIKE 'VAR-%' OR sku LIKE 'V1-%' OR sku LIKE 'V2-%'
+          OR sku LIKE 'DUP-%' OR sku LIKE 'DUPV-%' OR sku LIKE 'E2E-%'
+          OR sku LIKE 'SV-%' OR sku LIKE 'VR-%' OR sku LIKE 'DV-%'
+          OR sku LIKE 'NOPRICE-%' OR sku LIKE 'NONAME%' OR sku LIKE 'NONAMEV-%'
+          OR sku LIKE 'NOVAR-%' OR sku LIKE 'UNAUTH%' OR sku LIKE 'UA-%'
+          OR sku LIKE 'DRAFT-%' OR sku LIKE 'SEARCH-%' OR sku LIKE 'SMOKE%'
+          OR sku LIKE 'NEWBE-%' OR sku LIKE 'RETEST%' OR sku LIKE 'RET%'
+          OR sku LIKE 'SIMPLE-%' OR sku LIKE 'ASCII-%' OR sku LIKE 'WITHMAU-%'
+          OR sku LIKE 'NOVARW-%' OR sku LIKE 'EMPTYVIMG-%' OR sku LIKE 'NOVARIMG-%'
+          OR sku LIKE 'VARIMG-%' OR sku LIKE 'ONLYVIMG-%' OR name LIKE 'Test Product %'
+          OR name LIKE 'API Test %' OR name LIKE 'API Variant %'
+          OR name LIKE 'First Product %' OR name LIKE 'E2E Test Product %'
+          OR name LIKE 'E2E Variant Product %' OR name LIKE 'E2E Draft Product %'
+          OR name LIKE 'Search Test Product %' OR name LIKE 'NewBE %'
+          OR name LIKE 'ReTest %' OR name LIKE 'ReTest2 %'
+          OR name LIKE 'AsciiTest %' OR name LIKE 'NoImgVariant %'
+          OR name LIKE 'Smoke %' OR name LIKE 'Smoke2 %'
+          OR name LIKE 'Smoke Test %' OR name LIKE 'Smoke Final %'
+          OR name LIKE 'Smoke Variants %' OR name LIKE 'WithMau %'
+          OR name LIKE 'NoVarImg %' OR name LIKE 'Simpler %' OR name LIKE 'NoVarW %')`,
+    `DELETE FROM product_logs WHERE product_id IN (SELECT id FROM products
+       WHERE sku LIKE 'TEST-%' OR sku LIKE 'SKU-TEST-%' OR sku LIKE 'API-%'
+          OR sku LIKE 'VAR-%' OR sku LIKE 'V1-%' OR sku LIKE 'V2-%'
+          OR sku LIKE 'DUP-%' OR sku LIKE 'DUPV-%' OR sku LIKE 'E2E-%'
+          OR sku LIKE 'SV-%' OR sku LIKE 'VR-%' OR sku LIKE 'DV-%'
+          OR sku LIKE 'NOPRICE-%' OR sku LIKE 'NONAME%' OR sku LIKE 'NONAMEV-%'
+          OR sku LIKE 'NOVAR-%' OR sku LIKE 'UNAUTH%' OR sku LIKE 'UA-%'
+          OR sku LIKE 'DRAFT-%' OR sku LIKE 'SEARCH-%' OR sku LIKE 'SMOKE%'
+          OR sku LIKE 'NEWBE-%' OR sku LIKE 'RETEST%' OR sku LIKE 'RET%'
+          OR sku LIKE 'SIMPLE-%' OR sku LIKE 'ASCII-%' OR sku LIKE 'WITHMAU-%'
+          OR sku LIKE 'NOVARW-%' OR sku LIKE 'EMPTYVIMG-%' OR sku LIKE 'NOVARIMG-%'
+          OR sku LIKE 'VARIMG-%' OR sku LIKE 'ONLYVIMG-%' OR name LIKE 'Test Product %'
+          OR name LIKE 'API Test %' OR name LIKE 'API Variant %'
+          OR name LIKE 'First Product %' OR name LIKE 'E2E Test Product %'
+          OR name LIKE 'E2E Variant Product %' OR name LIKE 'E2E Draft Product %'
+          OR name LIKE 'Search Test Product %' OR name LIKE 'NewBE %'
+          OR name LIKE 'ReTest %' OR name LIKE 'ReTest2 %'
+          OR name LIKE 'AsciiTest %' OR name LIKE 'NoImgVariant %'
+          OR name LIKE 'Smoke %' OR name LIKE 'Smoke2 %'
+          OR name LIKE 'Smoke Test %' OR name LIKE 'Smoke Final %'
+          OR name LIKE 'Smoke Variants %' OR name LIKE 'WithMau %'
+          OR name LIKE 'NoVarImg %' OR name LIKE 'Simpler %' OR name LIKE 'NoVarW %')`,
+    `DELETE FROM product_variants WHERE sku LIKE 'TEST-%' OR sku LIKE 'SKU-TEST-%' OR sku LIKE 'API-%'
+       OR sku LIKE 'VAR-%' OR sku LIKE 'V1-%' OR sku LIKE 'V2-%'
+       OR sku LIKE 'DUP-%' OR sku LIKE 'DUPV-%' OR sku LIKE 'E2E-%'
+       OR sku LIKE 'SV-%' OR sku LIKE 'VR-%' OR sku LIKE 'DV-%'
+       OR sku LIKE 'NOPRICE-%' OR sku LIKE 'NONAME%' OR sku LIKE 'NONAMEV-%'
+       OR sku LIKE 'NOVAR-%' OR sku LIKE 'UNAUTH%' OR sku LIKE 'UA-%'
+       OR sku LIKE 'DRAFT-%' OR sku LIKE 'SEARCH-%' OR sku LIKE 'SMOKE%'
+       OR sku LIKE 'NEWBE-%' OR sku LIKE 'RETEST%' OR sku LIKE 'RET%'
+       OR sku LIKE 'SIMPLE-%' OR sku LIKE 'ASCII-%' OR sku LIKE 'WITHMAU-%'
+       OR sku LIKE 'NOVARW-%' OR sku LIKE 'EMPTYVIMG-%' OR sku LIKE 'NOVARIMG-%'
+       OR sku LIKE 'VARIMG-%' OR sku LIKE 'ONLYVIMG-%' OR sku LIKE 'APIV-%' OR sku LIKE 'TEST-V-%' OR sku LIKE 'TEST-ORD-%'`,
+    `DELETE FROM products WHERE sku LIKE 'TEST-%' OR sku LIKE 'SKU-TEST-%' OR sku LIKE 'API-%'
+       OR sku LIKE 'VAR-%' OR sku LIKE 'V1-%' OR sku LIKE 'V2-%'
+       OR sku LIKE 'DUP-%' OR sku LIKE 'DUPV-%' OR sku LIKE 'E2E-%'
+       OR sku LIKE 'SV-%' OR sku LIKE 'VR-%' OR sku LIKE 'DV-%'
+       OR sku LIKE 'NOPRICE-%' OR sku LIKE 'NONAME%' OR sku LIKE 'NONAMEV-%'
+       OR sku LIKE 'NOVAR-%' OR sku LIKE 'UNAUTH%' OR sku LIKE 'UA-%'
+       OR sku LIKE 'DRAFT-%' OR sku LIKE 'SEARCH-%' OR sku LIKE 'SMOKE%'
+       OR sku LIKE 'NEWBE-%' OR sku LIKE 'RETEST%' OR sku LIKE 'RET%'
+       OR sku LIKE 'SIMPLE-%' OR sku LIKE 'ASCII-%' OR sku LIKE 'WITHMAU-%'
+       OR sku LIKE 'NOVARW-%' OR sku LIKE 'EMPTYVIMG-%' OR sku LIKE 'NOVARIMG-%'
+       OR sku LIKE 'VARIMG-%' OR sku LIKE 'ONLYVIMG-%' OR name LIKE 'Test Product %'
+       OR name LIKE 'API Test %' OR name LIKE 'API Variant %'
+       OR name LIKE 'First Product %' OR name LIKE 'E2E Test Product %'
+       OR name LIKE 'E2E Variant Product %' OR name LIKE 'E2E Draft Product %'
+       OR name LIKE 'Search Test Product %' OR name LIKE 'NewBE %'
+       OR name LIKE 'ReTest %' OR name LIKE 'ReTest2 %'
+       OR name LIKE 'AsciiTest %' OR name LIKE 'NoImgVariant %'
+       OR name LIKE 'Smoke %' OR name LIKE 'Smoke2 %'
+       OR name LIKE 'Smoke Test %' OR name LIKE 'Smoke Final %'
+       OR name LIKE 'Smoke Variants %' OR name LIKE 'WithMau %'
+       OR name LIKE 'NoVarImg %' OR name LIKE 'Simpler %' OR name LIKE 'NoVarW %'`,
 
     // ── Customers ──────────────────────────────────────────────────────
     `DELETE FROM customers WHERE full_name LIKE 'Test Customer %'
@@ -448,6 +609,7 @@ module.exports = {
   cancelOrder,
   cleanupAllTestData,
   cleanupAllTestDataSQL,
+  cleanupTestProducts,
   API_BASE,
   TEST_EMAIL,
   TEST_PASSWORD,

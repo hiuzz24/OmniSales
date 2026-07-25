@@ -218,12 +218,14 @@ class LazadaImportSyncServiceImplTest {
         assertThat(response.getStatus()).isEqualTo("SYNCED");
         ArgumentCaptor<Map<String, String>> productParams = ArgumentCaptor.forClass(Map.class);
         verify(lazadaApiClient, times(2)).executeGet(eq(channelId), eq("/products/get"), productParams.capture());
+        // First call: no "filter" - asks Lazada for normal/active products
         assertThat(productParams.getAllValues().get(0))
                 .doesNotContainKey("filter")
-                .containsKeys("created_time", "updated_time");
+                .containsKeys("create_after", "update_after");
+        // Second call: filter=inactive to fetch Lazada-inactive products
         assertThat(productParams.getAllValues().get(1))
                 .containsEntry("filter", "inactive")
-                .containsKeys("created_time", "updated_time");
+                .containsKeys("create_after", "update_after");
         verify(marketplaceInventoryPropagationService).schedulePushAvailableStock(any(), eq(channelId));
         verify(syncAlertService, never()).notifySyncFailure(any(SyncLog.class));
     }

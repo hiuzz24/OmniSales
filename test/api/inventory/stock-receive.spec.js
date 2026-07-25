@@ -3,6 +3,9 @@ const {
   getWarehouseId,
   getVariantIdFromCatalog,
   getVariantsFromCatalog,
+  getSupplierId,
+  createReceivingPurchaseOrder,
+  cancelPurchaseOrder,
   cleanupTestData,
   API_BASE,
 } = require('../../utils/inventory-helpers');
@@ -15,13 +18,16 @@ function todayIso() {
 test.describe('Stock Receive API Tests', () => {
 
   let warehouseId;
-  let supplierId = 'b0b1c2d3-0001-0000-0000-000000000002';
+  let supplierId;
   let variantId;
   let createdReceipts = [];
+  let createdPurchaseOrders = [];
+  let cachedReceivingPo = null;
 
   test.beforeAll(async ({ request, managerHeaders }) => {
     const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     warehouseId = await getWarehouseId(request, authToken);
+    supplierId = await getSupplierId(request, authToken);
     const variants = await getVariantsFromCatalog(request, authToken);
     if (variants.length > 0) {
       variantId = variants[0].id || variants[0].variantId;
@@ -35,9 +41,43 @@ test.describe('Stock Receive API Tests', () => {
         await cleanupTestData(request, authToken, 'receipt', id);
       }
     }
+    if (createdPurchaseOrders.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdPurchaseOrders.splice(0)) {
+        await cancelPurchaseOrder(request, authToken, id);
+      }
+    }
+    // Cancelled POs cannot be reused as RECEIVING — reset the cache so the
+    // next test makes a fresh PO.
+    cachedReceivingPo = null;
     const token = await getAuthTokenCached(request);
     await cleanupAllTestData(request, token);
   });
+
+  /**
+   * Get a purchase order that is in the RECEIVING state. Once a PO is fetched
+   * or created the first time, the same PO is reused for the rest of the
+   * spec to (a) keep tests deterministic and (b) avoid waiting the
+   * SENT_TO_SUPPLIER → RECEIVING delay multiple times.
+   */
+  async function getOrCreateReceivingPo(request, authToken, overrides = {}) {
+    if (cachedReceivingPo) return cachedReceivingPo;
+    const po = await createReceivingPurchaseOrder(request, authToken, {
+      supplierId,
+      variantId,
+      quantity: 1,
+      unitCost: 50000,
+      maxWaitMs: 20000,
+      ...overrides,
+    });
+    if (!po || !po.id) {
+      cachedReceivingPo = null;
+      return null;
+    }
+    createdPurchaseOrders.push(po.id);
+    cachedReceivingPo = po;
+    return po;
+  }
 
   // GET /api/receipts
   test('R-1 - GET /api/receipts - List with pagination returns 200', async ({ request, managerHeaders }) => {
@@ -99,16 +139,20 @@ test.describe('Stock Receive API Tests', () => {
   // POST /api/receipts
   test('R-7 - POST /api/receipts - Create DRAFT receipt', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const po = await getOrCreateReceivingPo(request, authToken);
+    test.skip(!po, 'No RECEIVING purchase order available');
     const response = await request.post(`${API_BASE}/receipts`, {
       headers: {
         ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
+        purchaseOrderId: po.id,
         warehouseId,
-        supplierId,
+        supplierId: po.supplierId,
         receivedAt: todayIso(),
-        items: [{ variantId, quantity: 2, unitCost: 50000 }],
+        items: [{ variantId, quantity: po.quantity, unitCost: 50000 }],
         isDraft: true,
       },
     });
@@ -123,16 +167,29 @@ test.describe('Stock Receive API Tests', () => {
 
   test('R-8 - POST /api/receipts - Create CONFIRMED receipt (isDraft=false)', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    // Create a fresh PO so the quantity check passes on first run
+    const po = await createReceivingPurchaseOrder(request, authToken, {
+      supplierId,
+      variantId,
+      quantity: 1,
+      unitCost: 50000,
+      maxWaitMs: 20000,
+    });
+    test.skip(!po || !po.id, 'No RECEIVING purchase order available');
+    createdPurchaseOrders.push(po.id);
+
     const response = await request.post(`${API_BASE}/receipts`, {
       headers: {
         ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
+        purchaseOrderId: po.id,
         warehouseId,
-        supplierId,
+        supplierId: po.supplierId,
         receivedAt: todayIso(),
-        items: [{ variantId, quantity: 1, unitCost: 50000 }],
+        items: [{ variantId, quantity: po.quantity, unitCost: 50000 }],
         isDraft: false,
       },
     });
@@ -218,16 +275,28 @@ test.describe('Stock Receive API Tests', () => {
   // PUT /api/receipts/{id}
   test('R-14 - PUT /api/receipts/{id} - Update DRAFT receipt', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const po = await createReceivingPurchaseOrder(request, authToken, {
+      supplierId,
+      variantId,
+      quantity: 1,
+      unitCost: 50000,
+      maxWaitMs: 20000,
+    });
+    test.skip(!po || !po.id, 'No RECEIVING purchase order available');
+    createdPurchaseOrders.push(po.id);
+
     const create = await request.post(`${API_BASE}/receipts`, {
       headers: {
         ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
+        purchaseOrderId: po.id,
         warehouseId,
-        supplierId,
+        supplierId: po.supplierId,
         receivedAt: todayIso(),
-        items: [{ variantId, quantity: 1, unitCost: 50000 }],
+        items: [{ variantId, quantity: po.quantity, unitCost: 50000 }],
         isDraft: true,
       },
     });
@@ -241,11 +310,12 @@ test.describe('Stock Receive API Tests', () => {
         'Content-Type': 'application/json',
       },
       data: {
+        purchaseOrderId: po.id,
         warehouseId,
-        supplierId,
+        supplierId: po.supplierId,
         receivedAt: todayIso(),
         notes: 'Updated by test',
-        items: [{ variantId, quantity: 4, unitCost: 60000 }],
+        items: [{ variantId, quantity: po.quantity, unitCost: 60000 }],
         isDraft: true,
       },
     });
@@ -257,6 +327,8 @@ test.describe('Stock Receive API Tests', () => {
 
   test('R-15 - PUT /api/receipts/{id} - Not found returns 404/500', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
+    // Body must satisfy request validation (purchaseOrderId is mandatory) so the
+    // server reaches the receipt-id lookup and returns RECEIPT_NOT_FOUND → 404.
     const response = await request.put(
       `${API_BASE}/receipts/00000000-0000-0000-0000-000000000000`,
       {
@@ -265,6 +337,7 @@ test.describe('Stock Receive API Tests', () => {
           'Content-Type': 'application/json',
         },
         data: {
+          purchaseOrderId: '00000000-0000-0000-0000-000000000000',
           warehouseId,
           supplierId,
           receivedAt: todayIso(),
@@ -279,16 +352,28 @@ test.describe('Stock Receive API Tests', () => {
   // PATCH /api/receipts/{id}/complete
   test('R-16 - PATCH /api/receipts/{id}/complete - Complete DRAFT receipt', async ({ request, managerHeaders }) => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const po = await createReceivingPurchaseOrder(request, authToken, {
+      supplierId,
+      variantId,
+      quantity: 1,
+      unitCost: 50000,
+      maxWaitMs: 20000,
+    });
+    test.skip(!po || !po.id, 'No RECEIVING purchase order available');
+    createdPurchaseOrders.push(po.id);
+
     const create = await request.post(`${API_BASE}/receipts`, {
       headers: {
         ...managerHeaders,
         'Content-Type': 'application/json',
       },
       data: {
+        purchaseOrderId: po.id,
         warehouseId,
-        supplierId,
+        supplierId: po.supplierId,
         receivedAt: todayIso(),
-        items: [{ variantId, quantity: 1, unitCost: 50000 }],
+        items: [{ variantId, quantity: po.quantity, unitCost: 50000 }],
         isDraft: true,
       },
     });

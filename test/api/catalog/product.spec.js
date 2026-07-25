@@ -6,7 +6,7 @@ const {
   createTestProduct,
   API_BASE,
 } = require('../../utils/product-helpers');
-const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
+const { getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Product API Tests', () => {
 
@@ -16,9 +16,16 @@ test.describe('Product API Tests', () => {
     categoryId = await getFirstCategoryId(request, managerHeaders.Authorization.replace('Bearer ', ''));
   });
 
+  // Use the lightweight, product-only cleanup here. The full
+  // `cleanupAllTestData()` makes ~13 API calls (one per entity type) and
+  // can blow past the 30s afterEach timeout once the backend's per-route
+  // rate limiter kicks in. `cleanupTestProducts()` only hits
+  // /api/products + /api/products/{id}/delete, which is enough to keep
+  // the catalog clean between product tests.
   test.afterEach(async ({ request }) => {
     const token = await getAuthTokenCached(request);
-    await cleanupAllTestData(request, token);
+    const { cleanupTestProducts } = require('../../utils/cleanup-helpers');
+    await cleanupTestProducts(request, token);
   });
 
   // P1: Auth - Login
@@ -268,6 +275,9 @@ test.describe('Product API Tests', () => {
     const created = await createTestProduct(request, authToken);
     const updatedName = `Updated Product ${Date.now()}`;
 
+    // Re-send the full product body so we don't trip the create-time
+    // @ValidProductRequest validator (description/brand/unit/hasVariants/
+    // weightGrams/attributes/images/barcode are all @NotBlank/@NotNull).
     const updateResponse = await request.put(`${API_BASE}/products/${created.id}`, {
       headers: {
         ...managerHeaders,
@@ -277,15 +287,34 @@ test.describe('Product API Tests', () => {
         name: updatedName,
         sku: created.sku,
         categoryId: created.categoryId,
+        description: created.description || 'Updated description',
+        brand: created.brand || 'TestBrand',
+        unit: created.unit || 'pcs',
+        hasVariants: created.hasVariants ?? true,
         status: created.status,
-        lowStockThreshold: 5,
-        variants: created.variants.map((v) => ({
+        lowStockThreshold: created.lowStockThreshold ?? 5,
+        weightGrams: created.weightGrams ?? 500,
+        attributes: created.attributes || {
+          packageLengthCm: 20,
+          packageWidthCm: 15,
+          packageHeightCm: 10,
+        },
+        images: created.images || [
+          { url: 'https://via.placeholder.com/300', isPrimary: true, sortOrder: 0 },
+        ],
+        variants: (created.variants || []).map((v) => ({
           id: v.id,
           sku: v.sku,
+          name: v.name || `Variant ${v.sku}`,
+          barcode: v.barcode || `BC-${v.sku}`,
           price: v.price,
           costPrice: v.costPrice,
           isActive: v.isActive,
           optionValues: v.optionValues,
+          weightGrams: v.weightGrams || 500,
+          images: v.images || [
+            { url: 'https://via.placeholder.com/300', isPrimary: false, sortOrder: 1 },
+          ],
         })),
       },
     });
@@ -310,15 +339,34 @@ test.describe('Product API Tests', () => {
         name: created.name,
         sku: created.sku,
         categoryId: created.categoryId,
+        description: created.description || 'Updated description',
+        brand: created.brand || 'TestBrand',
+        unit: created.unit || 'pcs',
+        hasVariants: created.hasVariants ?? true,
         status: 'DRAFT',
-        lowStockThreshold: 5,
-        variants: created.variants.map((v) => ({
+        lowStockThreshold: created.lowStockThreshold ?? 5,
+        weightGrams: created.weightGrams ?? 500,
+        attributes: created.attributes || {
+          packageLengthCm: 20,
+          packageWidthCm: 15,
+          packageHeightCm: 10,
+        },
+        images: created.images || [
+          { url: 'https://via.placeholder.com/300', isPrimary: true, sortOrder: 0 },
+        ],
+        variants: (created.variants || []).map((v) => ({
           id: v.id,
           sku: v.sku,
+          name: v.name || `Variant ${v.sku}`,
+          barcode: v.barcode || `BC-${v.sku}`,
           price: v.price,
           costPrice: v.costPrice,
           isActive: v.isActive,
           optionValues: v.optionValues,
+          weightGrams: v.weightGrams || 500,
+          images: v.images || [
+            { url: 'https://via.placeholder.com/300', isPrimary: false, sortOrder: 1 },
+          ],
         })),
       },
     });

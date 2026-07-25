@@ -162,7 +162,10 @@ test.describe('Invite Staff E2E Tests', () => {
     }
 
     await page.goto(`${FRONTEND_URL}/inviteUser?token=${token}`);
-    await page.waitForLoadState('networkidle');
+    // The page may keep network sockets open (e.g. an HTTP polling endpoint
+    // for form state) so `networkidle` can hang until the test timeout.
+    // Switch to a DOM-based wait instead.
+    await page.waitForSelector('#fullName', { timeout: 15000 });
 
     await page.locator('#fullName').fill('Test Staff');
     await page.locator('#password').fill('weak');

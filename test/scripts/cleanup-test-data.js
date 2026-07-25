@@ -13,7 +13,7 @@ const { cleanupAllTestData, getAuthToken } = require('../utils/cleanup-helpers')
 const { API_BASE, TEST_EMAIL, TEST_PASSWORD } = require('../utils/env-config');
 
 async function apiMode() {
-  const request = (require('@playwright/test').request).newContext();
+  const request = await (require('@playwright/test').request).newContext();
   try {
     console.log('[cleanup] login as', TEST_EMAIL);
     const token = await getAuthToken(request);

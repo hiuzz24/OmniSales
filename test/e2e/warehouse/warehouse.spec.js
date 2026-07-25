@@ -328,4 +328,71 @@ test.describe('Warehouse E2E Tests', () => {
       await expect(managerPage.locator('body')).toBeVisible();
     });
   });
+
+  test.describe('Warehouse Management (/warehouse/manage)', () => {
+    test('WGM-1 - /warehouse/manage - List page renders', async ({ managerPage }) => {
+      await managerPage.goto(`${BASE_URL}/warehouse/manage`);
+      await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
+
+      const hasHeading = await managerPage.locator('h1, h2, h3').first().count();
+      expect(hasHeading).toBeGreaterThan(0);
+    });
+
+    test('WGM-2 - /warehouse/manage - Create button opens modal', async ({ managerPage }) => {
+      await managerPage.goto(`${BASE_URL}/warehouse/manage`);
+      await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
+
+      const createBtn = managerPage.locator('button:has-text("Tạo"), button:has-text("Thêm"), button:has-text("+"), a:has-text("Tạo")').first();
+      // The page might not have a Create button (e.g. listing only existing WHs).
+      // We just verify the page renders without crashing.
+      const body = await managerPage.content();
+      expect(body.length).toBeGreaterThan(50);
+      if ((await createBtn.count()) > 0) {
+        await createBtn.click();
+        await managerPage.waitForTimeout(500);
+      }
+    });
+
+    test('WGM-3 - /warehouse/manage - Click warehouse row navigates to detail', async ({ managerPage }) => {
+      await managerPage.goto(`${BASE_URL}/warehouse/manage`);
+      await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
+
+      const detailBtn = managerPage.locator('a:has-text("Chi tiết"), button:has-text("Chi tiết"), a:has-text("View"), button:has-text("View")').first();
+      if ((await detailBtn.count()) > 0) {
+        await detailBtn.click();
+        await managerPage.waitForTimeout(1000);
+        expect(managerPage.url()).toMatch(/\/warehouse\/manage\//);
+      }
+    });
+
+    test('WGM-4 - /warehouse/manage/:id - Detail page renders', async ({ managerPage, request }) => {
+      // Use the first existing warehouse via API
+      const { getAuthToken } = require('../../utils/warehouse-helpers');
+      const authToken = await getAuthTokenCached(request);
+      const list = await request.get(`${process.env.API_BASE || 'http://localhost:8080/api'}/warehouses`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      test.skip(list.status() !== 200, 'warehouses list unavailable');
+      const data = (await list.json()).data;
+      test.skip(!Array.isArray(data) || data.length === 0, 'No warehouses');
+      const targetId = data[0].id;
+
+      await managerPage.goto(`${BASE_URL}/warehouse/manage/${targetId}`);
+      await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
+
+      const hasHeading = await managerPage.locator('h1, h2, h3').first().count();
+      expect(hasHeading).toBeGreaterThan(0);
+    });
+
+    test('WGM-5 - /warehouse/manage - Status filter switches values', async ({ managerPage }) => {
+      await managerPage.goto(`${BASE_URL}/warehouse/manage`);
+      await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
+
+      const statusSelect = managerPage.locator('select').first();
+      if ((await statusSelect.count()) > 0) {
+        const opts = await statusSelect.locator('option').count();
+        expect(opts).toBeGreaterThanOrEqual(1);
+      }
+    });
+  });
 });

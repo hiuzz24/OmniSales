@@ -19,6 +19,7 @@ import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductLogRepository;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.service.ChannelService;
@@ -87,6 +88,8 @@ class ProductServiceImplTest {
     private ChannelRepository channelRepository;
     @Mock
     private ChannelProductRepository channelProductRepository;
+    @Mock
+    private ChannelProductVariantRepository channelProductVariantRepository;
     @Mock
     private OrderItemRepository orderItemRepository;
     @Mock
@@ -220,6 +223,10 @@ class ProductServiceImplTest {
                 .product(product)
                 .mappingState("ACTIVE")
                 .build();
+
+        // Default stub for marketplace SKU lookup used by getById/buildProductResponses
+        lenient().when(channelProductVariantRepository.findActiveByVariantIdInWithChannel(anyList()))
+                .thenReturn(Collections.emptyList());
     }
 
     private MockedStatic<SecurityUtils> mockSecurityUtils() {
@@ -365,7 +372,7 @@ class ProductServiceImplTest {
         void shouldThrowWhenDuplicateVariantSkusInRequest() {
             try (MockedStatic<SecurityUtils> mocked = mockSecurityUtils()) {
                 ProductVariantRequest dupVariant = ProductVariantRequest.builder()
-                        .sku("TEST-001")
+                        .sku("TEST-001-V1")
                         .price(new BigDecimal("150000"))
                         .build();
                 request.setVariants(List.of(variantRequest, dupVariant));
@@ -373,13 +380,13 @@ class ProductServiceImplTest {
                 when(productRepository.existsBySkuAndDeletedAtIsNull("TEST-001")).thenReturn(false);
                 when(productMapper.toEntity(request)).thenReturn(product);
                 when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
-                when(productVariantRepository.existsBySkuInAndDeletedAtIsNull(anyCollection())).thenReturn(false);
-                when(productRepository.existsBySkuInAndDeletedAtIsNull(anyCollection())).thenReturn(true);
 
                 assertThatThrownBy(() -> productService.create(request))
                         .isInstanceOf(AppException.class)
                         .satisfies(e -> assertThat(((AppException) e).getErrorCode())
-                                .isEqualTo(ErrorCode.PRODUCT_SKU_CONFLICT));
+                                .isEqualTo(ErrorCode.VARIANT_SKU_CONFLICT));
+
+                verify(productRepository, never()).save(any());
             }
         }
 
@@ -509,9 +516,7 @@ class ProductServiceImplTest {
         @Test
         @DisplayName("Should return paginated results successfully")
         void shouldReturnPaginatedResults() {
-            Page<Product> page = new PageImpl<>(List.of(product), PageRequest.of(0, 6), 1);
-
-            when(productRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+            when(productRepository.findAll(any(Specification.class))).thenReturn(List.of(product));
             when(productMapper.toResponse(product)).thenReturn(response);
             setupCommonSearchMocks();
 
@@ -527,9 +532,7 @@ class ProductServiceImplTest {
         @Test
         @DisplayName("Should return empty page when no products match")
         void shouldReturnEmptyPageWhenNoMatch() {
-            Page<Product> emptyPage = new PageImpl<>(Collections.emptyList(), PageRequest.of(0, 6), 0);
-
-            when(productRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(emptyPage);
+            when(productRepository.findAll(any(Specification.class))).thenReturn(Collections.emptyList());
 
             PageResponse<ProductResponse> result = productService.search("nonexistent", null, null, 0, 6);
 
@@ -541,24 +544,20 @@ class ProductServiceImplTest {
         @Test
         @DisplayName("Should filter by keyword correctly")
         void shouldFilterByKeyword() {
-            Page<Product> page = new PageImpl<>(List.of(product), PageRequest.of(0, 6), 1);
-
-            when(productRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+            when(productRepository.findAll(any(Specification.class))).thenReturn(List.of(product));
             when(productMapper.toResponse(product)).thenReturn(response);
             setupCommonSearchMocks();
 
             PageResponse<ProductResponse> result = productService.search("Test", null, null, 0, 6);
 
             assertThat(result.getContent()).hasSize(1);
-            verify(productRepository).findAll(any(Specification.class), any(PageRequest.class));
+            verify(productRepository).findAll(any(Specification.class));
         }
 
         @Test
         @DisplayName("Should filter by status correctly")
         void shouldFilterByStatus() {
-            Page<Product> page = new PageImpl<>(List.of(product), PageRequest.of(0, 6), 1);
-
-            when(productRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+            when(productRepository.findAll(any(Specification.class))).thenReturn(List.of(product));
             when(productMapper.toResponse(product)).thenReturn(response);
             setupCommonSearchMocks();
 
@@ -571,17 +570,18 @@ class ProductServiceImplTest {
         @Test
         @DisplayName("Should filter by platform correctly")
         void shouldFilterByPlatform() {
-            Page<Product> page = new PageImpl<>(List.of(product), PageRequest.of(0, 6), 1);
-
-            when(productRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+            when(productRepository.findAll(any(Specification.class))).thenReturn(List.of(product));
             when(productMapper.toResponse(product)).thenReturn(response);
             setupCommonSearchMocks();
+            // The service rewrites channels from channelService response — make it return SHOPIFY
+            when(channelService.getProductChannels(anyList()))
+                    .thenReturn(Map.of(productId, List.of("Shopify")));
 
             PageResponse<ProductResponse> result = productService.search(null, null,
-                    fu.osms.common.enums.PlatformType.SHOPIFY, 0, 6);
+                    java.util.List.of(fu.osms.common.enums.PlatformType.SHOPIFY), 0, 6);
 
             assertThat(result.getContent()).hasSize(1);
-            verify(productRepository).findAll(any(Specification.class), any(PageRequest.class));
+            verify(productRepository).findAll(any(Specification.class));
         }
 
         @Test
@@ -597,9 +597,7 @@ class ProductServiceImplTest {
                     .attributes(new HashMap<>())
                     .createdBy(user)
                     .build();
-            Page<Product> page = new PageImpl<>(List.of(product, product2), PageRequest.of(0, 2), 2);
-
-            when(productRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+            when(productRepository.findAll(any(Specification.class))).thenReturn(List.of(product, product2));
             when(productMapper.toResponse(product)).thenReturn(response);
             when(productMapper.toResponse(product2)).thenReturn(ProductResponse.builder()
                     .id(product2.getId())
