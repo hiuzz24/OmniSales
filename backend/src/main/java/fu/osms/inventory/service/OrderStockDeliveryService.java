@@ -11,7 +11,7 @@ import java.util.UUID;
 
 public interface OrderStockDeliveryService {
 
-    Page<OrderStockDeliveryCandidateResponse> getCandidates(String keyword, Pageable pageable);
+    Page<OrderStockDeliveryCandidateResponse> getCandidates(UUID orderId, String keyword, Pageable pageable);
 
     OrderStockDeliveryBatchResponse createFromOrders(OrderStockDeliveryBatchRequest request);
 

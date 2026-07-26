@@ -128,6 +128,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
                       AND issue.issueType = 'ORDER'
                       AND issue.status IN ('DRAFT', 'CONFIRMED')
               )
+            ORDER BY
+              CASE WHEN :orderId IS NOT NULL AND o.id = :orderId THEN 0 ELSE 1 END,
+              o.createdAt DESC
             """,
             countQuery = """
             SELECT COUNT(o) FROM Order o
@@ -154,6 +157,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
               )
             """)
     Page<Order> findStockDeliveryCandidates(@Param("status") OrderStatus status,
+                                            @Param("orderId") UUID orderId,
                                             @Param("keyword") String keyword,
                                             Pageable pageable);
 }

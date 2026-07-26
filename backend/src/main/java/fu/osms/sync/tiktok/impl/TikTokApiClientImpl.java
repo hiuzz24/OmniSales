@@ -122,6 +122,20 @@ public class TikTokApiClientImpl implements TikTokApiClient {
     }
 
     @Override
+    public Map<String, Object> searchInventoryBySkuIds(String accessToken,
+                                                       String shopCipher,
+                                                       List<String> skuIds) {
+        validateShopCipher(shopCipher);
+        return executeForMap(
+                "/product/202309/inventory/search",
+                HttpMethod.POST,
+                commonQuery(shopCipher),
+                Map.of("sku_ids", skuIds),
+                accessToken
+        );
+    }
+
+    @Override
     public Map<String, Object> getWarehouses(String accessToken, String shopCipher) {
         validateShopCipher(shopCipher);
         return executeForMap(

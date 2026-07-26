@@ -89,6 +89,15 @@ const stockDeliveryService = {
     }
   },
 
+  getOrderReadiness: async (orderId) => {
+    try {
+      const response = await stockDeliveryApi.getOrderReadiness(orderId);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   createFromOrders: async (orderIds) => {
     try {
       const response = await stockDeliveryApi.createFromOrders(orderIds);

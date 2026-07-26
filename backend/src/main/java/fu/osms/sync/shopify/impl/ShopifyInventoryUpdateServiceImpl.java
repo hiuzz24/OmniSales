@@ -17,6 +17,9 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.shopify.ShopifyApiClient;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
+import fu.osms.sync.shopify.inventory.InventoryLocationKey;
+import fu.osms.sync.shopify.inventory.ShopifyInventoryGateway;
+import fu.osms.sync.shopify.inventory.ShopifyInventorySetCommand;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,9 +55,10 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
     private final StockReceiveRepository stockReceiveRepository;
     private final InventoryIssueRepository inventoryIssueRepository;
     private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
+    private final ShopifyInventoryGateway inventoryGateway;
 
     @Override
-    @Transactional(propagation = Propagation.MANDATORY)
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public int syncChangedAvailableStock(UUID channelId,
                                          OffsetDateTime changedSince,
                                          OffsetDateTime changedUntil,
@@ -87,7 +91,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         }
 
         String shopDomain = extractShopDomain(channel);
-        String defaultLocationId = resolveLocationId(channel, shopDomain, credential.getAccessToken());
+        String defaultLocationId = inventoryGateway.resolveManagedLocationId(channelId);
         UUID defaultWarehouseId = resolveDefaultWarehouseId(channel);
 
         List<UUID> variantIds = mappings.stream()
@@ -129,7 +133,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
                 batchMappings.add(mapping);
 
                 if (quantities.size() == BATCH_SIZE) {
-                    pushedCount += sendBatch(shopDomain, credential.getAccessToken(), channelId, quantities, batchMappings);
+                    pushedCount += sendBatch(channelId, quantities, batchMappings);
                     quantities.clear();
                     batchMappings.clear();
                 }
@@ -137,7 +141,7 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         }
 
         if (!quantities.isEmpty()) {
-            pushedCount += sendBatch(shopDomain, credential.getAccessToken(), channelId, quantities, batchMappings);
+            pushedCount += sendBatch(channelId, quantities, batchMappings);
         }
         syncInventoryItemCosts(shopDomain, credential.getAccessToken(), mappings);
 
@@ -260,65 +264,27 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
     }
 
     @SuppressWarnings("unchecked")
-    private int sendBatch(String shopDomain,
-                          String accessToken,
-                          UUID channelId,
+    private int sendBatch(UUID channelId,
                           List<Map<String, Object>> quantities,
                           List<ChannelProductVariant> mappings) {
-        ensureInventoryItemsStockedAtLocations(shopDomain, accessToken, quantities);
-
-        String query = """
-                mutation inventorySetQuantities($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
-                  inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
-                    inventoryAdjustmentGroup {
-                      reason
-                      referenceDocumentUri
-                      changes {
-                        name
-                        delta
-                        quantityAfterChange
-                      }
-                    }
-                    userErrors {
-                      code
-                      field
-                      message
-                    }
-                  }
-                }
-                """;
-
-        Map<String, Object> input = new HashMap<>();
-        input.put("name", "available");
-        input.put("reason", "correction");
-        input.put("referenceDocumentUri", "omnisales://channels/" + channelId + "/inventory-sync/" + UUID.randomUUID());
-        input.put("quantities", List.copyOf(quantities));
-
-        log.info("[ShopifyStockSync] Set Shopify inventory channelId={} quantityCount={} quantities={}",
-                channelId, quantities.size(), quantities);
-
-        Map<String, Object> response = shopifyApiClient.executeGraphQl(
-                shopDomain,
-                accessToken,
-                query,
-                Map.of(
-                        "input", input,
-                        "idempotencyKey", UUID.randomUUID().toString()
-                )
-        );
-        ensureNoGraphQlErrors(response);
-
-        Map<String, Object> data = (Map<String, Object>) response.get("data");
-        Map<String, Object> payload = data == null ? null : (Map<String, Object>) data.get("inventorySetQuantities");
-        List<Map<String, Object>> userErrors = payload == null ? List.of() : (List<Map<String, Object>>) payload.get("userErrors");
-        if (userErrors != null && !userErrors.isEmpty()) {
-            throw new IllegalStateException("Shopify inventorySetQuantities lỗi: " + userErrors);
-        }
-
+        List<ShopifyInventorySetCommand> commands = quantities.stream()
+                .map(quantity -> new ShopifyInventorySetCommand(
+                        new InventoryLocationKey(
+                                stringValue(quantity.get("inventoryItemId")),
+                                stringValue(quantity.get("locationId"))
+                        ),
+                        intValue(quantity.get("quantity")),
+                        quantity.get("changeFromQuantity") == null
+                                ? null
+                                : intValue(quantity.get("changeFromQuantity"))
+                ))
+                .toList();
+        inventoryGateway.setAvailable(channelId, commands, UUID.randomUUID().toString());
         OffsetDateTime syncedAt = OffsetDateTime.now();
         for (ChannelProductVariant mapping : mappings) {
             mapping.setSyncStatus(SyncStatus.SYNCED);
             mapping.setLastSyncedAt(syncedAt);
+            clearInventoryReconciliation(mapping);
             channelProductVariantRepository.save(mapping);
         }
 
@@ -656,6 +622,16 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
             }
         }
         return null;
+    }
+
+    private void clearInventoryReconciliation(ChannelProductVariant mapping) {
+        if (mapping.getMetadata() == null
+                || !mapping.getMetadata().containsKey("inventoryReconciliation")) {
+            return;
+        }
+        Map<String, Object> metadata = new HashMap<>(mapping.getMetadata());
+        metadata.remove("inventoryReconciliation");
+        mapping.setMetadata(metadata);
     }
 
     private String stringValue(Object value) {

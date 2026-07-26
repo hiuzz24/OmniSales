@@ -732,7 +732,7 @@ CREATE TABLE system_settings (
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
-                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
+                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
@@ -1143,7 +1143,7 @@ ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_type_check
-        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
+        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
 
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_entity_type_check;
 

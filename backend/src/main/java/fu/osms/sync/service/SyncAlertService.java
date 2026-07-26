@@ -64,6 +64,10 @@ public class SyncAlertService {
                 return "Đồng bộ tải dữ liệu từ Lazada";
             case "LAZADA_LOCAL_CHANGES_SYNC":
                 return "Đồng bộ thay đổi lên Lazada";
+            case "MARKETPLACE_INVENTORY_AUTO_PUSH":
+                return "Tự động đồng bộ tồn kho lên sàn";
+            case "MARKETPLACE_INVENTORY_RECONCILE":
+                return "Đối soát tồn kho với sàn";
             default:
                 return "Đồng bộ dữ liệu";
         }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -262,6 +262,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
 export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const fileRef = useRef(null);
   const [items, setItems] = useState([]);
@@ -270,9 +271,19 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const [warehouseVariants, setWarehouseVariants] = useState([]);
   const [loadingWarehouseVariants, setLoadingWarehouseVariants] = useState(false);
   const previousWarehouseIdRef = useRef('');
-  const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL or BY_ORDER
+  const requestedTab = searchParams.get('tab');
+  const linkedOrderId = searchParams.get('orderId');
+  const [activeTab, setActiveTab] = useState(
+    mode !== 'edit' && requestedTab === 'BY_ORDER' ? 'BY_ORDER' : 'MANUAL',
+  ); // MANUAL or BY_ORDER
   const [loadingDelivery, setLoadingDelivery] = useState(mode === 'edit');
   const isEdit = mode === 'edit';
+
+  useEffect(() => {
+    if (!isEdit && requestedTab === 'BY_ORDER') {
+      setActiveTab('BY_ORDER');
+    }
+  }, [isEdit, requestedTab]);
 
   const today = new Date().toISOString().split('T')[0];
   const { register, handleSubmit, watch, reset, setValue, formState: { errors, isSubmitting, isDirty } } = useForm({
@@ -554,7 +565,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
         </button>
       </div>
 
-      {activeTab === 'BY_ORDER' && <OrderStockDeliverySelector />}
+      {activeTab === 'BY_ORDER' && <OrderStockDeliverySelector orderId={linkedOrderId} />}
 
       {activeTab === 'MANUAL' && (
         <>

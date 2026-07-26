@@ -10,6 +10,7 @@ import fu.osms.inventory.dto.request.OrderStockDeliveryBatchRequest;
 import fu.osms.inventory.dto.response.*;
 import fu.osms.inventory.entity.*;
 import fu.osms.inventory.enums.InvTxnType;
+import fu.osms.inventory.event.OrderStockDeliveryCreatedEvent;
 import fu.osms.inventory.mapper.StockDeliveryMapper;
 import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.InventoryItemRepository;
@@ -23,6 +24,7 @@ import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -56,13 +58,15 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
     private final InventoryAlertService inventoryAlertService;
     private final StockDeliveryMapper stockDeliveryMapper;
     private final OrderStockDeliveryBatchService batchService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
-    public Page<OrderStockDeliveryCandidateResponse> getCandidates(String keyword, Pageable pageable) {
+    public Page<OrderStockDeliveryCandidateResponse> getCandidates(
+            UUID orderId, String keyword, Pageable pageable) {
         String normalizedKeyword = keyword == null ? null : keyword.trim();
         return orderRepository.findStockDeliveryCandidates(
-                OrderStatus.PROCESSING, normalizedKeyword, pageable).map(this::toCandidate);
+                OrderStatus.PROCESSING, orderId, normalizedKeyword, pageable).map(this::toCandidate);
     }
 
     @Override
@@ -106,7 +110,10 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
                 .notes(resolved.item().getName())
                 .build()));
         issue.calculateTotals();
-        return stockDeliveryMapper.toResponse(issueRepository.save(issue));
+        InventoryIssue savedIssue = issueRepository.save(issue);
+        eventPublisher.publishEvent(new OrderStockDeliveryCreatedEvent(
+                order.getId(), savedIssue.getId(), savedIssue.getIssueCode()));
+        return stockDeliveryMapper.toResponse(savedIssue);
     }
 
     @Override

@@ -45,6 +45,10 @@ const stockDeliveryApi = {
     return axiosClient.get('/stock-deliveries/order-candidates', { params });
   },
 
+  getOrderReadiness: (orderId) => {
+    return axiosClient.get(`/stock-deliveries/orders/${orderId}/readiness`);
+  },
+
   createFromOrders: (orderIds) => {
     return axiosClient.post('/stock-deliveries/from-orders', { orderIds });
   },

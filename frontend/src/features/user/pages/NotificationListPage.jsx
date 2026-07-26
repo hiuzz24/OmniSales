@@ -24,6 +24,8 @@ const NOTIF_META = {
   ORDER: { icon: ShoppingCart, color: '#2563eb', bg: '#eff6ff' },
   ORDER_NEW: { icon: ShoppingCart, color: '#2563eb', bg: '#eff6ff' },
   ORDER_CANCELLED: { icon: ShoppingCart, color: '#dc2626', bg: '#fef2f2' },
+  ORDER_PICK_REQUIRED: { icon: Package, color: '#d97706', bg: '#fffbeb' },
+  ORDER_READY_SHIP: { icon: ShoppingCart, color: '#0f766e', bg: '#f0fdfa' },
   SYNC: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
   SYNC_FAILED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
   INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
@@ -143,7 +145,9 @@ const NotificationListPage = () => {
     }
 
     // Navigation logic based on notification parameters
-    if (notif.entityType === 'ORDER' && notif.entityId) {
+    if (notif.type === 'ORDER_PICK_REQUIRED' && notif.entityId) {
+      navigate(`${ROUTES.STOCK_DELIVERY_CREATE}?tab=BY_ORDER&orderId=${notif.entityId}`);
+    } else if (notif.entityType === 'ORDER' && notif.entityId) {
       navigate(ROUTES.ORDER_DETAIL.replace(':id', notif.entityId));
     } else if (notif.entityType === 'INVENTORY' && notif.entityId) {
       if (notif.type === 'STOCK_TRANSFER') {

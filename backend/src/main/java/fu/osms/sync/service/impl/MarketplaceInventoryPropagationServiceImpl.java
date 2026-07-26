@@ -7,6 +7,8 @@ import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
+import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
+import fu.osms.sync.service.InventoryAutoPushSyncLogService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
@@ -17,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -40,7 +41,7 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
     private final LazadaInventoryUpdateService lazadaInventoryUpdateService;
     private final TikTokInventoryUpdateService tikTokInventoryUpdateService;
     private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
-    private final TransactionTemplate transactionTemplate;
+    private final InventoryAutoPushSyncLogService inventoryAutoPushSyncLogService;
 
     @Override
     public void schedulePushAvailableStock(Collection<UUID> variantIds) {
@@ -65,8 +66,7 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
             @Override
             public void afterCommit() {
                 try {
-                    transactionTemplate.executeWithoutResult(
-                            status -> pushAvailableStock(scopedVariantIds, excludedChannelId));
+                    pushAvailableStock(scopedVariantIds, excludedChannelId);
                 } catch (Exception e) {
                     log.error("[MarketplaceInventoryPropagation] Failed to push stock after commit variantIds={}",
                             scopedVariantIds, e);
@@ -95,7 +95,8 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
                 log.debug("[MarketplaceInventoryPropagation] Skip source channel channelId={}", excludedChannelId);
                 continue;
             }
-            if (!hasActiveMappings(channel.getId(), scopedVariantIds)) {
+            int mappedVariantCount = activeMappingCount(channel.getId(), scopedVariantIds);
+            if (mappedVariantCount == 0) {
                 log.debug(
                         "[MarketplaceInventoryPropagation] Skip unrelated channel channelId={} platform={} variantIds={}",
                         channel.getId(),
@@ -104,29 +105,38 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
                 );
                 continue;
             }
+            UUID syncLogId = inventoryAutoPushSyncLogService.start(channel.getId(), mappedVariantCount);
             try {
+                int pushedVariantCount = 0;
                 if (channel.getPlatform() == PlatformType.SHOPIFY) {
-                    shopifyInventoryUpdateService.syncChangedAvailableStock(
+                    pushedVariantCount = shopifyInventoryUpdateService.syncChangedAvailableStock(
                             channel.getId(),
                             null,
                             syncStartedAt,
                             scopedVariantIds
                     );
                 } else if (channel.getPlatform() == PlatformType.LAZADA) {
-                    lazadaInventoryUpdateService.syncChangedSellableStock(
+                    LazadaInventorySyncResult result = lazadaInventoryUpdateService.syncChangedSellableStock(
                             channel.getId(),
                             null,
                             syncStartedAt,
                             scopedVariantIds
                     );
+                    pushedVariantCount = result.pushedVariantCount();
                 } else if (channel.getPlatform() == PlatformType.TIKTOK) {
-                    tikTokInventoryUpdateService.pushAvailableStock(channel.getId(), scopedVariantIds);
+                    pushedVariantCount = tikTokInventoryUpdateService.pushAvailableStock(
+                            channel.getId(),
+                            scopedVariantIds
+                    );
                 }
+                inventoryAutoPushSyncLogService.markSynced(syncLogId, pushedVariantCount);
             } catch (Exception e) {
+                String errorMessage = rootMessage(e);
                 log.error("[MarketplaceInventoryPropagation] Failed to push stock channelId={} platform={} variantIds={}",
                         channel.getId(), channel.getPlatform(), scopedVariantIds, e);
+                inventoryAutoPushSyncLogService.markFailed(syncLogId, mappedVariantCount, errorMessage);
                 markMappingsFailed(channel.getId(), scopedVariantIds);
-                failures.add(channel.getDisplayName() + " (" + channel.getPlatform() + "): " + rootMessage(e));
+                failures.add(channel.getDisplayName() + " (" + channel.getPlatform() + "): " + errorMessage);
             }
         }
         if (!failures.isEmpty()) {
@@ -149,13 +159,16 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
         return result;
     }
 
-    private boolean hasActiveMappings(UUID channelId, Collection<UUID> variantIds) {
+    private int activeMappingCount(UUID channelId, Collection<UUID> variantIds) {
         if (channelId == null || variantIds == null || variantIds.isEmpty()) {
-            return false;
+            return 0;
         }
-        return !channelProductVariantRepository
+        return (int) channelProductVariantRepository
                 .findActiveByChannelIdAndVariantIdInWithVariant(channelId, new ArrayList<>(variantIds))
-                .isEmpty();
+                .stream()
+                .map(mapping -> mapping.getVariant().getId())
+                .distinct()
+                .count();
     }
 
     private boolean isSupported(PlatformType platform) {

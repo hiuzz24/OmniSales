@@ -13,20 +13,25 @@ const errorText = (error) => {
   return error?.message || error?.error || 'Không thể xử lý yêu cầu';
 };
 
-export default function OrderStockDeliverySelector() {
+export default function OrderStockDeliverySelector({ orderId }) {
   const [keyword, setKeyword] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const [pageData, setPageData] = useState({ content: [], totalPages: 0, totalElements: 0 });
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(() => orderId ? [orderId] : []);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    setSelectedIds(orderId ? [orderId] : []);
+    setPage(0);
+  }, [orderId]);
 
   const loadCandidates = useCallback(async () => {
     setLoading(true);
     try {
       const response = await stockDeliveryService.getOrderCandidates({
+        orderId: orderId || undefined,
         keyword: query || undefined,
         page,
         size: PAGE_SIZE,
@@ -40,13 +45,14 @@ export default function OrderStockDeliverySelector() {
     } finally {
       setLoading(false);
     }
-  }, [page, query]);
+  }, [orderId, page, query]);
 
   useEffect(() => {
     loadCandidates();
   }, [loadCandidates]);
 
   const orders = pageData.content || [];
+
   const allSelected = orders.length > 0 && orders.every((order) => selectedIds.includes(order.orderId));
   const selectedCount = selectedIds.length;
   const totalPages = Math.max(1, pageData.totalPages || 1);

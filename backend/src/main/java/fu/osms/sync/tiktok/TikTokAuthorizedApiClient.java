@@ -50,6 +50,11 @@ public class TikTokAuthorizedApiClient {
                 token -> apiClient.searchInventory(token.accessToken(), shopCipher, productIds));
     }
 
+    public Map<String, Object> searchInventoryBySkuIds(UUID channelId, String shopCipher, List<String> skuIds) {
+        return tokenService.execute(channelId,
+                token -> apiClient.searchInventoryBySkuIds(token.accessToken(), shopCipher, skuIds));
+    }
+
     public Map<String, Object> getWarehouses(UUID channelId, String shopCipher) {
         return tokenService.execute(channelId,
                 token -> apiClient.getWarehouses(token.accessToken(), shopCipher));
