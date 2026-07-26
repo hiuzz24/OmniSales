@@ -99,7 +99,7 @@ export default function PurchaseOrderPage() {
                 const config = STATUS[order.status] ?? STATUS.DRAFT;
                 return <tr key={order.id}>
                   <td><span className={styles.code}>{order.orderCode}</span></td>
-                  <td>{order.supplierName}</td><td>{order.warehouseName}</td><td>{dateTime(order.orderDate)}</td><td>{dateTime(order.receivingAt)}</td>
+                  <td>{order.supplierName}</td><td>{order.warehouseName}</td><td>{dateTime(order.orderDate)}</td><td>{dateTime(order.completedAt)}</td>
                   <td className={styles.money}><strong>{money(order.totalAmount)}</strong></td>
                   <td>{order.receiptCode ? <span className={styles.code}>{order.receiptCode}</span> : '—'}</td>
                   <td><span className={`${styles.badge} ${config.className}`}>{config.label}</span></td>

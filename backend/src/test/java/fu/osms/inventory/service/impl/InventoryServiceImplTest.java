@@ -3,6 +3,7 @@ package fu.osms.inventory.service.impl;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
+import fu.osms.inventory.dto.response.InventoryItemResponse;
 import fu.osms.inventory.dto.response.StockSummaryDTO;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.Warehouse;
@@ -18,7 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -112,6 +115,38 @@ class InventoryServiceImplTest {
     }
 
     @Test
+    @DisplayName("aggregateSharedSkuStock - keeps reserved when mirrored marketplace variants share stock")
+    void aggregateSharedSkuStock_keepsReservedForMirroredVariants() throws Exception {
+        UUID warehouseId = UUID.randomUUID();
+        InventoryItemResponse shopifyRow = InventoryItemResponse.builder()
+                .id(UUID.randomUUID())
+                .warehouseId(warehouseId)
+                .variantId(UUID.randomUUID())
+                .quantityOnHand(4)
+                .reservedQuantity(3)
+                .availableQuantity(1)
+                .build();
+        InventoryItemResponse tiktokRow = InventoryItemResponse.builder()
+                .id(UUID.randomUUID())
+                .warehouseId(warehouseId)
+                .variantId(UUID.randomUUID())
+                .quantityOnHand(4)
+                .reservedQuantity(0)
+                .availableQuantity(4)
+                .build();
+
+        Object totals = ReflectionTestUtils.invokeMethod(
+                inventoryService,
+                "aggregateSharedSkuStock",
+                List.of(shopifyRow, tiktokRow)
+        );
+
+        assertThat(recordInt(totals, "quantityOnHand")).isEqualTo(4);
+        assertThat(recordInt(totals, "reservedQuantity")).isEqualTo(3);
+        assertThat(recordInt(totals, "availableQuantity")).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("getItems - throws WAREHOUSE_NOT_FOUND when warehouse missing")
     void getItems_missingWarehouseThrows() {
         UUID warehouseId = UUID.randomUUID();
@@ -133,5 +168,11 @@ class InventoryServiceImplTest {
         assertThatThrownBy(() -> inventoryService.getItemByWarehouseAndVariant(warehouseId, variantId))
                 .isInstanceOf(AppException.class)
                 .hasMessageContaining(ErrorCode.INVENTORY_ITEM_NOT_FOUND.getMessage());
+    }
+
+    private int recordInt(Object record, String methodName) throws Exception {
+        Method method = record.getClass().getDeclaredMethod(methodName);
+        method.setAccessible(true);
+        return (int) method.invoke(record);
     }
 }

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import {
   Tag, Plus, Search, ChevronDown, CheckCircle, XCircle,
-  Folder, Package, MoreHorizontal, ChevronLeft, ChevronRight,
-  AlertTriangle, X, Check, Edit2, Trash2
+  Folder, FolderOpen, Package, MoreHorizontal, ChevronLeft, ChevronRight,
+  AlertTriangle, X, Check, Edit2, Trash2, Power, CornerDownRight,
+  Maximize2, Minimize2
 } from 'lucide-react';
 import categoryApi from '../../../api/categoryApi';
 import PageHeader from '../../../shared/components/PageHeader';
@@ -23,7 +24,7 @@ const CategoryPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
-  const [size] = useState(10);
+  const [size] = useState(50);
 
   // Filters
   const [searchInput, setSearchInput] = useState('');
@@ -97,8 +98,8 @@ const CategoryPage = () => {
   const loadParentCategories = async () => {
     try {
       const list = await categoryApi.getAll();
-      // Filter root categories (which don't have parentId)
-      const roots = list.filter(cat => cat.parentId === null);
+      // Filter active root categories (which don't have parentId)
+      const roots = list.filter(cat => cat.parentId === null && (!cat.status || cat.status === 'ACTIVE'));
       setParentCategories(roots);
     } catch (err) {
       console.error('Error loading parent categories:', err);
@@ -116,7 +117,10 @@ const CategoryPage = () => {
   };
 
   const getDescription = (category) => {
-    return `Phân loại cho ${category.name.toLowerCase()}`;
+    if (!category) return 'Phân loại danh mục';
+    if (category.description) return category.description;
+    if (category.name) return `Phân loại cho ${category.name.toLowerCase()}`;
+    return 'Phân loại danh mục';
   };
 
   const slugify = (text) => {
@@ -230,12 +234,49 @@ const CategoryPage = () => {
     }
   };
 
+  const handleToggleStatus = async (category) => {
+    const isCurrentlyActive = category.status === 'ACTIVE';
+    const newStatus = isCurrentlyActive ? 'INACTIVE' : 'ACTIVE';
+    const actionLabel = isCurrentlyActive ? 'ngưng hoạt động' : 'kích hoạt';
+
+    if (window.confirm(`Bạn có chắc chắn muốn ${actionLabel} danh mục "${category.name}"?`)) {
+      try {
+        setLoading(true);
+        const parentList = await categoryApi.getAll();
+        const parent = parentList.find(cat => cat.name === category.parentCategoryName);
+        const payload = {
+          name: category.name,
+          slug: category.slug || slugify(category.name),
+          parentId: parent ? parent.id : null,
+          status: newStatus,
+          sortOrder: 0
+        };
+        await categoryApi.update(category.id, payload);
+        toast.success(`Đã ${actionLabel} danh mục thành công`);
+        setActiveMenuId(null);
+        fetchDashboardData();
+      } catch (err) {
+        console.error('Error toggling category status:', err);
+        toast.error(err?.response?.data?.message || 'Có lỗi xảy ra khi đổi trạng thái danh mục');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const handleDelete = async (category) => {
-    if (window.confirm(`Bạn có chắc chắn muốn xóa danh mục "${category.name}"? Trạng thái sẽ được đổi thành Ngưng hoạt động.`)) {
+    if (category.productCount > 0) {
+      toast.error(`Không thể xóa danh mục "${category.name}" vì đang chứa ${category.productCount} sản phẩm.`);
+      setActiveMenuId(null);
+      return;
+    }
+
+    if (window.confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN danh mục "${category.name}" khỏi cơ sở dữ liệu?`)) {
       try {
         setLoading(true);
         await categoryApi.delete(category.id);
-        toast.success('Xóa danh mục thành công');
+        toast.success('Đã xóa vĩnh viễn danh mục thành công');
+        setActiveMenuId(null);
         fetchDashboardData();
       } catch (err) {
         console.error('Error deleting category:', err);
@@ -246,19 +287,178 @@ const CategoryPage = () => {
     }
   };
 
-  // Client-side filtering
-  const filteredCategories = data.categories.filter((c) => {
-    const matchesSearch =
-      !searchInput ||
-      c.name.toLowerCase().includes(searchInput.toLowerCase()) ||
-      c.slug.toLowerCase().includes(searchInput.toLowerCase()) ||
-      (c.parentCategoryName &&
-        c.parentCategoryName.toLowerCase().includes(searchInput.toLowerCase()));
+  // Expanded Nodes State
+  const [expandedIds, setExpandedIds] = useState(new Set());
 
-    const matchesStatus = !statusFilter || c.status === statusFilter;
+  // Build tree hierarchy from data.categories with cycle protection & cumulative product counting
+  const categoryTree = useMemo(() => {
+    const categoriesList = data.categories || [];
+    if (!Array.isArray(categoriesList) || categoriesList.length === 0) return [];
 
-    return matchesSearch && matchesStatus;
-  });
+    const categoryByName = {};
+    categoriesList.forEach((cat) => {
+      if (cat && cat.name) {
+        categoryByName[cat.name] = {
+          ...cat,
+          directProductCount: Number(cat.productCount || 0),
+          children: []
+        };
+      }
+    });
+
+    const roots = [];
+    categoriesList.forEach((cat) => {
+      if (!cat || !cat.name) return;
+      const node = categoryByName[cat.name];
+      if (!node) return;
+
+      const isRoot = !cat.parentCategoryName || cat.parentCategoryName === 'Danh mục gốc';
+      if (isRoot) {
+        roots.push(node);
+      } else {
+        const parent = categoryByName[cat.parentCategoryName];
+        if (parent && Array.isArray(parent.children) && parent !== node) {
+          if (!parent.children.some((c) => c.id === node.id)) {
+            parent.children.push(node);
+          }
+        } else {
+          roots.push(node);
+        }
+      }
+    });
+
+    // Compute cumulative total product count (direct products + all subcategories' products)
+    const computeCumulativeProducts = (node, visited = new Set()) => {
+      if (!node || !node.id || visited.has(node.id)) return 0;
+      visited.add(node.id);
+
+      let sum = Number(node.directProductCount || 0);
+      if (Array.isArray(node.children)) {
+        node.children.forEach((child) => {
+          sum += computeCumulativeProducts(child, visited);
+        });
+      }
+      node.productCount = sum;
+      return sum;
+    };
+
+    roots.forEach((root) => computeCumulativeProducts(root));
+
+    return roots;
+  }, [data.categories]);
+
+  // Check if filtering/search is active
+  const isFiltering = Boolean(searchInput.trim() || statusFilter);
+
+  // Filter tree nodes if search or status filter is active with cycle protection
+  const filteredTree = useMemo(() => {
+    if (!isFiltering) return categoryTree;
+
+    const query = searchInput.toLowerCase().trim();
+
+    const filterNodes = (nodes, visited = new Set()) => {
+      if (!Array.isArray(nodes)) return [];
+      return nodes
+        .map((node) => {
+          if (!node || !node.id || visited.has(node.id)) return null;
+
+          const currentVisited = new Set(visited);
+          currentVisited.add(node.id);
+
+          const nodeName = node.name ? node.name.toLowerCase() : '';
+          const nodeSlug = node.slug ? node.slug.toLowerCase() : '';
+          const nodeDesc = getDescription(node).toLowerCase();
+
+          const matchesSearch =
+            !query ||
+            nodeName.includes(query) ||
+            nodeSlug.includes(query) ||
+            nodeDesc.includes(query);
+          const matchesStatus = !statusFilter || node.status === statusFilter;
+
+          const matchingChildren = filterNodes(node.children || [], currentVisited);
+
+          if ((matchesSearch && matchesStatus) || matchingChildren.length > 0) {
+            return {
+              ...node,
+              children: matchingChildren
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+    };
+
+    return filterNodes(categoryTree);
+  }, [categoryTree, searchInput, statusFilter, isFiltering]);
+
+  // Flatten visible tree rows based on expandedIds with cycle protection
+  const visibleRows = useMemo(() => {
+    const flatten = (nodes, level = 0, visited = new Set()) => {
+      if (!Array.isArray(nodes)) return [];
+      let result = [];
+      nodes.forEach((node) => {
+        if (!node || !node.id || visited.has(node.id)) return;
+
+        const currentVisited = new Set(visited);
+        currentVisited.add(node.id);
+
+        const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+        const isExpanded = isFiltering || expandedIds.has(node.id);
+
+        result.push({
+          ...node,
+          level,
+          hasChildren,
+          isExpanded
+        });
+
+        if (hasChildren && isExpanded) {
+          result = result.concat(flatten(node.children, level + 1, currentVisited));
+        }
+      });
+      return result;
+    };
+
+    try {
+      return flatten(filteredTree);
+    } catch (e) {
+      console.error('Error flattening category tree:', e);
+      return data.categories || [];
+    }
+  }, [filteredTree, expandedIds, isFiltering, data.categories]);
+
+  // Expand / Collapse Handlers
+  const toggleExpand = (id, e) => {
+    if (e) e.stopPropagation();
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleExpandAll = () => {
+    const allParentIds = new Set();
+    const collectParentIds = (nodes) => {
+      nodes.forEach((n) => {
+        if (n.children && n.children.length > 0) {
+          allParentIds.add(n.id);
+          collectParentIds(n.children);
+        }
+      });
+    };
+    collectParentIds(categoryTree);
+    setExpandedIds(allParentIds);
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedIds(new Set());
+  };
 
   const actions = (
     <button className={styles.primaryBtn} onClick={openModal}>
@@ -346,6 +546,28 @@ const CategoryPage = () => {
           </select>
           <ChevronDown size={16} className={styles.selectChevron} />
         </div>
+
+        {/* Tree Control Buttons */}
+        <div className={styles.treeControlButtons}>
+          <button
+            type="button"
+            className={styles.treeActionBtn}
+            onClick={handleExpandAll}
+            title="Mở tất cả danh mục"
+          >
+            <Maximize2 size={14} />
+            Mở tất cả
+          </button>
+          <button
+            type="button"
+            className={styles.treeActionBtn}
+            onClick={handleCollapseAll}
+            title="Thu gọn tất cả danh mục"
+          >
+            <Minimize2 size={14} />
+            Thu gọn
+          </button>
+        </div>
       </div>
 
       {/* Categories Table Card */}
@@ -361,7 +583,7 @@ const CategoryPage = () => {
             <h3 className={styles.emptyTitle}>Đã xảy ra lỗi</h3>
             <p className={styles.emptyText}>{error}</p>
           </div>
-        ) : filteredCategories.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <div className={styles.emptyState}>
             <Tag size={40} className={styles.emptyIcon} />
             <h3 className={styles.emptyTitle}>Không tìm thấy danh mục</h3>
@@ -378,28 +600,72 @@ const CategoryPage = () => {
                   <th className={styles.th} style={{ textAlign: 'right' }}>Sản phẩm</th>
                   <th className={styles.th}>Trạng thái</th>
                   <th className={styles.th}>Ngày tạo</th>
-                  <th className={styles.th} style={{ width: '80px' }}></th>
+                  <th className={styles.th} style={{ width: '130px', textAlign: 'center' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredCategories.map((category) => {
+                {visibleRows.map((category) => {
                   const isParentRoot = category.parentCategoryName === 'Danh mục gốc';
                   const isEditing = category.id === editingId;
 
                   return (
                     <tr key={category.id} className={styles.tr}>
-                      {/* Name Column */}
+                      {/* Name Column with Tree Indent */}
                       <td className={styles.td}>
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className={styles.inlineEditInput}
-                          />
-                        ) : (
-                          <span className={styles.categoryName} title={category.name}>{category.name}</span>
-                        )}
+                        <div
+                          className={styles.treeNameCell}
+                          style={{ paddingLeft: `${category.level * 24}px` }}
+                        >
+                          {/* Expand/Collapse Toggle or Branch Guide */}
+                          {category.hasChildren ? (
+                            <button
+                              type="button"
+                              className={styles.expandToggleBtn}
+                              onClick={(e) => toggleExpand(category.id, e)}
+                              title={category.isExpanded ? 'Thu gọn' : 'Mở rộng'}
+                            >
+                              {category.isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                            </button>
+                          ) : category.level > 0 ? (
+                            <span className={styles.treeBranchGuide}>
+                              <CornerDownRight size={14} />
+                            </span>
+                          ) : (
+                            <span className={styles.expandTogglePlaceholder} />
+                          )}
+
+                          {/* Category Folder / Tag Icon */}
+                          {category.hasChildren ? (
+                            category.isExpanded ? (
+                              <FolderOpen size={17} className={styles.folderIconActive} />
+                            ) : (
+                              <Folder size={17} className={styles.folderIcon} />
+                            )
+                          ) : (
+                            <Tag size={15} className={styles.itemTagIcon} />
+                          )}
+
+                          {/* Category Name or Inline Edit Input */}
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              className={styles.inlineEditInput}
+                            />
+                          ) : (
+                            <span className={styles.categoryNameText} title={category.name}>
+                              {category.name}
+                            </span>
+                          )}
+
+                          {/* Subcategory Count Badge */}
+                          {category.hasChildren && !isEditing && (
+                            <span className={styles.subCountBadge}>
+                              {Array.isArray(category.children) ? category.children.length : 0} danh mục con
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Parent Category Column */}
@@ -509,33 +775,38 @@ const CategoryPage = () => {
                             </button>
                           </div>
                         ) : (
-                          <div className={styles.actionMenuWrapper}>
+                          <div className={styles.directActionButtons}>
                             <button
-                              className={styles.actionMenuBtn}
-                              onClick={(e) => handleToggleMenu(e, category.id)}
-                              title="Hành động"
+                              className={styles.iconActionBtn}
+                              onClick={() => startInlineEdit(category)}
+                              title="Sửa danh mục"
                             >
-                              <MoreHorizontal size={16} />
+                              <Edit2 size={15} />
                             </button>
-
-                            {activeMenuId === category.id && (
-                              <div className={styles.actionDropdown}>
-                                <button
-                                  className={styles.actionItem}
-                                  onClick={() => startInlineEdit(category)}
-                                >
-                                  <Edit2 size={14} />
-                                  Sửa
-                                </button>
-                                <button
-                                  className={`${styles.actionItem} ${styles.actionItemDelete}`}
-                                  onClick={() => handleDelete(category)}
-                                >
-                                  <Trash2 size={14} />
-                                  Xóa
-                                </button>
-                              </div>
-                            )}
+                            <button
+                              className={`${styles.iconActionBtn} ${
+                                category.status === 'ACTIVE'
+                                  ? styles.statusDeactivateBtn
+                                  : styles.statusActivateBtn
+                              }`}
+                              onClick={() => handleToggleStatus(category)}
+                              title={category.status === 'ACTIVE' ? 'Ngưng hoạt động' : 'Kích hoạt'}
+                            >
+                              <Power size={15} />
+                            </button>
+                            <button
+                              className={`${styles.iconActionBtn} ${styles.deleteActionBtn} ${
+                                category.productCount > 0 ? styles.iconActionDisabled : ''
+                              }`}
+                              onClick={() => handleDelete(category)}
+                              title={
+                                category.productCount > 0
+                                  ? `Không thể xóa vì đang chứa ${category.productCount} sản phẩm`
+                                  : 'Xóa vĩnh viễn danh mục'
+                              }
+                            >
+                              <Trash2 size={15} />
+                            </button>
                           </div>
                         )}
                       </td>
@@ -554,7 +825,7 @@ const CategoryPage = () => {
             totalPages={data.totalPages}
             totalElements={data.totalElements}
             pageSize={size}
-            currentCount={filteredCategories.length}
+            currentCount={visibleRows.length}
             itemLabel="danh mục"
             onPageChange={setPage}
           />

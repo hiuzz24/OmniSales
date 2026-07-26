@@ -143,9 +143,101 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         if (!quantities.isEmpty()) {
             pushedCount += sendBatch(channelId, quantities, batchMappings);
         }
+        syncVariantPrices(shopDomain, credential.getAccessToken(), mappings);
         syncInventoryItemCosts(shopDomain, credential.getAccessToken(), mappings);
 
         return pushedCount;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void syncVariantPrices(String shopDomain,
+                                   String accessToken,
+                                   List<ChannelProductVariant> mappings) {
+        Map<String, List<ChannelProductVariant>> mappingsByProductId = mappings.stream()
+                .filter(mapping -> mapping.getChannelProduct() != null)
+                .filter(mapping -> hasText(mapping.getChannelProduct().getExternalProductId()))
+                .filter(mapping -> hasText(mapping.getExternalVariantId()))
+                .filter(mapping -> mapping.getVariant() != null
+                        && mapping.getVariant().getPrice() != null
+                        && mapping.getVariant().getPrice().signum() > 0)
+                .collect(Collectors.groupingBy(
+                        mapping -> mapping.getChannelProduct().getExternalProductId(),
+                        HashMap::new,
+                        Collectors.toList()
+                ));
+        if (mappingsByProductId.isEmpty()) {
+            return;
+        }
+
+        String mutation = """
+                mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                  productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+                    productVariants {
+                      id
+                      price
+                    }
+                    userErrors {
+                      field
+                      message
+                    }
+                  }
+                }
+                """;
+
+        OffsetDateTime syncedAt = OffsetDateTime.now();
+        for (Map.Entry<String, List<ChannelProductVariant>> entry : mappingsByProductId.entrySet()) {
+            List<Map<String, Object>> variantInputs = entry.getValue().stream()
+                    .map(mapping -> Map.<String, Object>of(
+                            "id", toProductVariantGid(mapping.getExternalVariantId()),
+                            "price", mapping.getVariant().getPrice().toPlainString()
+                    ))
+                    .toList();
+            Map<String, Object> response = shopifyApiClient.executeGraphQl(
+                    shopDomain,
+                    accessToken,
+                    mutation,
+                    Map.of(
+                            "productId", toProductGid(entry.getKey()),
+                            "variants", variantInputs
+                    )
+            );
+            ensureNoGraphQlErrors(response);
+
+            Map<String, Object> data = (Map<String, Object>) response.get("data");
+            Map<String, Object> payload = data == null
+                    ? null
+                    : (Map<String, Object>) data.get("productVariantsBulkUpdate");
+            List<Map<String, Object>> userErrors = payload == null
+                    ? List.of()
+                    : (List<Map<String, Object>>) payload.get("userErrors");
+            if (userErrors != null && !userErrors.isEmpty()) {
+                throw new IllegalStateException("Shopify productVariantsBulkUpdate loi: " + userErrors);
+            }
+
+            Map<String, ChannelProductVariant> mappingByExternalVariantId = entry.getValue().stream()
+                    .collect(Collectors.toMap(
+                            mapping -> numericId(mapping.getExternalVariantId()),
+                            mapping -> mapping,
+                            (first, ignored) -> first
+                    ));
+            List<Map<String, Object>> updatedVariants = payload == null
+                    ? List.of()
+                    : (List<Map<String, Object>>) payload.get("productVariants");
+            for (Map<String, Object> updatedVariant : updatedVariants) {
+                ChannelProductVariant mapping = mappingByExternalVariantId.get(
+                        numericId(String.valueOf(updatedVariant.get("id"))));
+                if (mapping == null) {
+                    continue;
+                }
+                Object price = updatedVariant.get("price");
+                mapping.setExternalPrice(price == null
+                        ? mapping.getVariant().getPrice()
+                        : new BigDecimal(price.toString()));
+                mapping.setSyncStatus(SyncStatus.SYNCED);
+                mapping.setLastSyncedAt(syncedAt);
+                channelProductVariantRepository.save(mapping);
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -560,6 +652,28 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
         return "gid://shopify/Location/" + value;
     }
 
+    private String toProductGid(String value) {
+        if (value.startsWith("gid://shopify/Product/")) {
+            return value;
+        }
+        return "gid://shopify/Product/" + value;
+    }
+
+    private String toProductVariantGid(String value) {
+        if (value.startsWith("gid://shopify/ProductVariant/")) {
+            return value;
+        }
+        return "gid://shopify/ProductVariant/" + value;
+    }
+
+    private String numericId(String value) {
+        if (value == null) {
+            return null;
+        }
+        int slashIndex = value.lastIndexOf('/');
+        return slashIndex >= 0 ? value.substring(slashIndex + 1) : value;
+    }
+
     private Map<String, Integer> targetAvailableByShopifyLocationId(ChannelProductVariant mapping,
                                                                     List<InventoryItem> inventoryItems,
                                                                     String defaultLocationId) {
@@ -636,6 +750,10 @@ public class ShopifyInventoryUpdateServiceImpl implements ShopifyInventoryUpdate
 
     private String stringValue(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private int intValue(Object value) {

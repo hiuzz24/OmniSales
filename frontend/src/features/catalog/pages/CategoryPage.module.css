@@ -767,6 +767,180 @@
   color: #dc2626;
 }
 
+.actionItemDisabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionItemDisabled:hover {
+  background-color: transparent !important;
+  color: #94a3b8 !important;
+}
+
+/* Direct Action Buttons Row */
+.directActionButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.iconActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.iconActionBtn:hover {
+  background-color: #f1f5f9;
+  color: #2563eb;
+  border-color: #cbd5e1;
+}
+
+.statusDeactivateBtn:hover {
+  background-color: #fff7ed;
+  color: #ea580c;
+  border-color: #ffedd5;
+}
+
+.statusActivateBtn:hover {
+  background-color: #f0fdf4;
+  color: #16a34a;
+  border-color: #dcfce7;
+}
+
+.deleteActionBtn:hover {
+  background-color: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.iconActionDisabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.iconActionDisabled:hover {
+  background-color: #ffffff !important;
+  color: #94a3b8 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Tree Table Styles */
+.treeControlButtons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.treeActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.treeActionBtn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.treeNameCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.expandToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background-color: #f1f5f9;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.expandToggleBtn:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.expandTogglePlaceholder {
+  width: 24px;
+  height: 24px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.treeBranchGuide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.folderIcon {
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.folderIconActive {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.itemTagIcon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.categoryNameText {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.subCountBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
 /* Inline Edit Controls */
 .inlineEditInput {
   width: 100%;

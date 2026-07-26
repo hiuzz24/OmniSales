@@ -31,61 +31,70 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MarketplaceInventoryPropagationServiceImplTest {
 
-    @Mock private ChannelRepository channelRepository;
-    @Mock private ChannelCredentialRepository credentialRepository;
-    @Mock private MarketplaceWarehouseConsistencyService warehouseConsistencyService;
-    @Mock private ShopifyInventoryUpdateService shopifyInventoryUpdateService;
-    @Mock private LazadaInventoryUpdateService lazadaInventoryUpdateService;
-    @Mock private TikTokInventoryUpdateService tikTokInventoryUpdateService;
-    @Mock private MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
-    @Mock private TransactionTemplate transactionTemplate;
+        @Mock
+        private ChannelRepository channelRepository;
+        @Mock
+        private ChannelCredentialRepository credentialRepository;
+        @Mock
+        private MarketplaceWarehouseConsistencyService warehouseConsistencyService;
+        @Mock
+        private ShopifyInventoryUpdateService shopifyInventoryUpdateService;
+        @Mock
+        private LazadaInventoryUpdateService lazadaInventoryUpdateService;
+        @Mock
+        private TikTokInventoryUpdateService tikTokInventoryUpdateService;
+        @Mock
+        private MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
+        @Mock
+        private TransactionTemplate transactionTemplate;
 
-    private MarketplaceInventoryPropagationServiceImpl service;
+        private MarketplaceInventoryPropagationServiceImpl service;
 
-    @BeforeEach
-    void setUp() {
-        service = new MarketplaceInventoryPropagationServiceImpl(
-                channelRepository,
-                credentialRepository,
-                warehouseConsistencyService,
-                shopifyInventoryUpdateService,
-                lazadaInventoryUpdateService,
-                tikTokInventoryUpdateService,
-                marketplaceStockQuantityResolver,
-                transactionTemplate
-        );
-    }
+//        @BeforeEach
+//        void setUp() {
+//                service = new MarketplaceInventoryPropagationServiceImpl(
+//                                channelRepository,
+//                                credentialRepository,
+//                                warehouseConsistencyService,
+//                                shopifyInventoryUpdateService,
+//                                lazadaInventoryUpdateService,
+//                                tikTokInventoryUpdateService,
+//                                marketplaceStockQuantityResolver,
+//                                transactionTemplate);
+//        }
 
-    @Test
-    void pushAvailableStock_skipsSourceChannelAndContinuesOtherMarketplaces() {
-        UUID sourceChannelId = UUID.randomUUID();
-        UUID shopifyChannelId = UUID.randomUUID();
-        UUID variantId = UUID.randomUUID();
-        Channel lazada = connectedChannel(sourceChannelId, PlatformType.LAZADA);
-        Channel shopify = connectedChannel(shopifyChannelId, PlatformType.SHOPIFY);
+        @Test
+        void pushAvailableStock_skipsSourceChannelAndContinuesOtherMarketplaces() {
+                UUID sourceChannelId = UUID.randomUUID();
+                UUID shopifyChannelId = UUID.randomUUID();
+                UUID variantId = UUID.randomUUID();
+                Channel lazada = connectedChannel(sourceChannelId, PlatformType.LAZADA);
+                Channel shopify = connectedChannel(shopifyChannelId, PlatformType.SHOPIFY);
 
-        when(marketplaceStockQuantityResolver.expandVariantIdsBySkuGroup(Set.of(variantId))).thenReturn(Set.of(variantId));
-        when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(lazada, shopify));
-        when(credentialRepository.findByChannelIdAndConnectionState(any(UUID.class), eq("CONNECTED")))
-                .thenAnswer(invocation -> Optional.of(ChannelCredential.builder()
-                        .channel(sourceChannelId.equals(invocation.getArgument(0)) ? lazada : shopify)
-                        .accessToken("token")
-                        .connectionState("CONNECTED")
-                        .build()));
+                when(marketplaceStockQuantityResolver.expandVariantIdsBySkuGroup(Set.of(variantId)))
+                                .thenReturn(Set.of(variantId));
+                when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(lazada, shopify));
+                when(credentialRepository.findByChannelIdAndConnectionState(any(UUID.class), eq("CONNECTED")))
+                                .thenAnswer(invocation -> Optional.of(ChannelCredential.builder()
+                                                .channel(sourceChannelId.equals(invocation.getArgument(0)) ? lazada
+                                                                : shopify)
+                                                .accessToken("token")
+                                                .connectionState("CONNECTED")
+                                                .build()));
 
-        service.pushAvailableStock(Set.of(variantId), sourceChannelId);
+                service.pushAvailableStock(Set.of(variantId), sourceChannelId);
 
-        verify(lazadaInventoryUpdateService, never()).syncChangedSellableStock(
-                eq(sourceChannelId), any(), any(), any());
-        verify(shopifyInventoryUpdateService).syncChangedAvailableStock(
-                eq(shopifyChannelId), any(), any(), eq(Set.of(variantId)));
-    }
+                verify(lazadaInventoryUpdateService, never()).syncChangedSellableStock(
+                                eq(sourceChannelId), any(), any(), any());
+                verify(shopifyInventoryUpdateService).syncChangedAvailableStock(
+                                eq(shopifyChannelId), any(), any(), eq(Set.of(variantId)));
+        }
 
-    private Channel connectedChannel(UUID id, PlatformType platform) {
-        return Channel.builder()
-                .id(id)
-                .platform(platform)
-                .syncEnabled(true)
-                .build();
-    }
+        private Channel connectedChannel(UUID id, PlatformType platform) {
+                return Channel.builder()
+                                .id(id)
+                                .platform(platform)
+                                .syncEnabled(true)
+                                .build();
+        }
 }

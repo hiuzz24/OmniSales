@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -122,6 +123,7 @@ class LazadaInventoryUpdateServiceImplTest {
         ChannelProduct channelProduct = ChannelProduct.builder()
                 .id(UUID.randomUUID())
                 .channel(channel)
+                .externalProductId("234234234")
                 .build();
 
         mapping = ChannelProductVariant.builder()
@@ -159,6 +161,8 @@ class LazadaInventoryUpdateServiceImplTest {
                 .thenReturn(8);
         when(lazadaApiClient.executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap()))
                 .thenReturn("{\"code\":\"0\"}");
+        when(lazadaApiClient.executePost(eq(channelId), eq("/product/price_quantity/update"), anyMap()))
+                .thenReturn("{\"code\":\"0\"}");
 
         LazadaInventorySyncResult result = service.syncChangedSellableStock(
                 channelId, null, null, null);
@@ -167,6 +171,43 @@ class LazadaInventoryUpdateServiceImplTest {
         assertThat(result.pushedVariantCount()).isEqualTo(1);
         assertThat(result.changedWarehouseCount()).isEqualTo(0);
         verify(lazadaApiClient).executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap());
+    }
+
+    @Test
+    @DisplayName("syncChangedSellableStock - price payload sends available quantity, not on-hand or reserved")
+    void syncChangedSellableStock_pricePayloadUsesAvailableQuantity() {
+        channel.getMetadata().put("defaultWarehouseId", defaultWarehouse.getId().toString());
+        channel.getMetadata().put("lazadaWarehouseCode", "MY-WAREHOUSE-CODE");
+
+        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
+                .thenReturn(Optional.of(credential));
+        when(channelTokenService.getValidToken(channelId))
+                .thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
+        when(channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId))
+                .thenReturn(List.of(mapping));
+        when(inventoryItemRepository.findByVariantIdIn(List.of(variant.getId())))
+                .thenReturn(List.of(item));
+        when(marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping))
+                .thenReturn(8);
+        when(lazadaApiClient.executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap()))
+                .thenReturn("{\"code\":\"0\"}");
+        when(lazadaApiClient.executePost(eq(channelId), eq("/product/price_quantity/update"), anyMap()))
+                .thenReturn("{\"code\":\"0\"}");
+
+        service.syncChangedSellableStock(channelId, null, null, null);
+
+        ArgumentCaptor<Map<String, String>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(lazadaApiClient).executePost(eq(channelId), eq("/product/price_quantity/update"), paramsCaptor.capture());
+        String payload = paramsCaptor.getValue().get("payload");
+        assertThat(payload).contains("<ItemId>234234234</ItemId>");
+        assertThat(payload).contains("<SkuId>SKU-ID-1</SkuId>");
+        assertThat(payload).contains("<SellerSku>SKU-001</SellerSku>");
+        assertThat(payload).contains("<Price>199.99</Price>");
+        assertThat(payload).contains("<SalePrice>199.99</SalePrice>");
+        assertThat(payload).contains("<WarehouseCode>MY-WAREHOUSE-CODE</WarehouseCode>");
+        assertThat(payload).contains("<Quantity>8</Quantity>");
+        assertThat(payload).doesNotContain("<Quantity>10</Quantity>");
+        assertThat(payload).doesNotContain("<Quantity>2</Quantity>");
     }
 
     @Test

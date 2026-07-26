@@ -66,7 +66,7 @@ public class StockReceiveController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> syncPendingMarketplaceInventory() {
         int syncedVariantCount = stockReceiveService.syncPendingMarketplaceInventory();
         return ResponseEntity.ok(ApiResponse.success(
-                "Đồng bộ tồn kho phiếu nhập lên các sàn thành công",
+                "Đồng bộ tồn có thể bán và giá phiếu nhập lên các sàn thành công",
                 Map.of("syncedVariantCount", syncedVariantCount)
         ));
     }
@@ -76,7 +76,7 @@ public class StockReceiveController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> syncReceiptMarketplaceInventory(@PathVariable UUID id) {
         int syncedVariantCount = stockReceiveService.syncReceiptMarketplaceInventory(id);
         return ResponseEntity.ok(ApiResponse.success(
-                "Đồng bộ tồn kho phiếu nhập lên các sàn đang bán thành công",
+                "Đồng bộ tồn có thể bán và giá phiếu nhập lên các sàn đang bán thành công",
                 Map.of("syncedVariantCount", syncedVariantCount)
         ));
     }
