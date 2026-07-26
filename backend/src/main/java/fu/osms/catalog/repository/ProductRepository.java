@@ -22,6 +22,8 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
 
     Page<Product> findByCategoryIdAndDeletedAtIsNull(UUID categoryId, Pageable pageable);
 
+    boolean existsByCategoryIdAndDeletedAtIsNull(UUID categoryId);
+
     Optional<Product> findByIdAndDeletedAtIsNull(UUID id);
 
     boolean existsBySkuAndDeletedAtIsNull(String sku);

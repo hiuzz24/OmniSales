@@ -421,9 +421,14 @@ class CategoryServiceImplTest {
 
             CategoryProductCount count = new CategoryProductCount() {
                 @Override
-                public UUID getCategoryId() { return categoryId; }
+                public UUID getCategoryId() {
+                    return categoryId;
+                }
+
                 @Override
-                public Long getProductCount() { return 5L; }
+                public Long getProductCount() {
+                    return 5L;
+                }
             };
 
             CategoryResponseDTO dto = CategoryResponseDTO.builder()
@@ -479,8 +484,7 @@ class CategoryServiceImplTest {
             List<Category> categories = List.of(parentCategory, testCategory);
             List<CategoryResponse> responses = List.of(
                     CategoryResponse.builder().id(parentId).name("Parent").slug("parent").build(),
-                    CategoryResponse.builder().id(categoryId).name("Test").slug("test").build()
-            );
+                    CategoryResponse.builder().id(categoryId).name("Test").slug("test").build());
 
             when(categoryRepository.findAllByOrderBySortOrderAsc()).thenReturn(categories);
             when(categoryMapper.toResponse(parentCategory)).thenReturn(responses.get(0));
