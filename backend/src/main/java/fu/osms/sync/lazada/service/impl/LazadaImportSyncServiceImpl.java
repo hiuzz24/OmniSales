@@ -41,6 +41,7 @@ import fu.osms.sync.lazada.service.LazadaImportSyncService;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
+import fu.osms.sync.service.PlatformCatalogOwnershipPolicy;
 import fu.osms.sync.service.SyncAlertService;
 import fu.osms.sync.service.impl.ChannelProductAggregationService;
 import fu.osms.sync.service.impl.SyncJobProgressTracker;
@@ -96,6 +97,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
     private final SyncAlertService syncAlertService;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    private final PlatformCatalogOwnershipPolicy catalogOwnershipPolicy;
     private final ChannelProductAggregationService channelProductAggregationService;
     private final SyncJobProgressTracker syncJobProgressTracker;
 
@@ -145,7 +147,6 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 warehouseCount++;
             }
 
-            Map<String, String> lazadaCategoryNames = fetchCategoryNames(credential);
             Set<UUID> changedVariantIds = new HashSet<>();
             Set<String> importedProductExternalIds = new HashSet<>();
             Set<String> importedVariantExternalIds = new HashSet<>();
@@ -166,7 +167,6 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                             warehouseByCode,
                             masterWarehouse,
                             primaryWarehouseCode,
-                            lazadaCategoryNames,
                             importSyncLog
                     );
                     if (externalProductKey == null) {
@@ -451,7 +451,6 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                                           Map<String, Warehouse> warehouseByCode,
                                           Warehouse masterWarehouse,
                                           String primaryWarehouseCode,
-                                          Map<String, String> lazadaCategoryNames,
                                           SyncLog syncLog) {
         String externalProductId = resolveExternalProductId(productNode);
         if (externalProductId == null || externalProductId.isBlank()) {
@@ -464,14 +463,19 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 .orElseGet(ChannelProduct::new);
 
         Product product = channelProduct.getProduct();
-        if (product == null) {
+        boolean initialCreate = product == null;
+        if (initialCreate) {
             product = Product.builder()
                     .sku(fallbackSku(resolvedExternalProductId))
+                    .attributes(new HashMap<>())
                     .build();
         }
 
-        boolean lazadaOwned = product.getId() == null || isGeneratedPlatformSku(product.getSku());
-        product.setSku(product.getSku() == null ? fallbackSku(externalProductId) : product.getSku());
+        boolean lazadaOwned = initialCreate
+                || catalogOwnershipPolicy.isPlatformOwned(channelProduct, product, externalProductId);
+        if (initialCreate) {
+            product.setSku(fallbackSku(externalProductId));
+        }
         if (lazadaOwned) {
             product.setName(resolveProductName(productNode, externalProductId));
             product.setDescription(firstNonBlank(
@@ -479,20 +483,15 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                     productNode.path("attributes").path("description").asText(null)
             ));
             product.setBrand(resolveBrand(productNode));
-            product.setStatus(resolveProductStatus(firstText(productNode, "status", "seller_status")));
         }
-        product.setUnit(product.getUnit() == null ? "pcs" : product.getUnit());
-        Map<String, Object> productAttributes = product.getAttributes() == null
-                ? new HashMap<>()
-                : new HashMap<>(product.getAttributes());
-        productAttributes.put("lazadaProduct", toMap(productNode));
-        product.setAttributes(productAttributes);
-        Category category = resolveCategory(productNode, lazadaCategoryNames);
-        if (category != null) {
-            product.setCategory(category);
+        if (initialCreate) {
+            product.setStatus(resolveProductStatus(firstText(productNode, "status", "seller_status")));
+            product.setUnit("pcs");
         }
         product = productRepository.save(product);
-        upsertProductImages(product, extractProductImageUrls(productNode));
+        if (initialCreate) {
+            insertInitialProductImages(product, extractProductImageUrls(productNode));
+        }
 
         channelProduct.setChannel(channel);
         channelProduct.setProduct(product);
@@ -502,6 +501,9 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         channelProduct.setSyncStatus(SyncStatus.SYNCED);
         channelProduct.setLastSyncedAt(OffsetDateTime.now());
         channelProduct.setLastSyncError(null);
+        if (initialCreate) {
+            catalogOwnershipPolicy.markPlatformImported(channelProduct);
+        }
         channelProduct = channelProductRepository.save(channelProduct);
         channelProduct = channelProductAggregationService.normalizeImportedMapping(channelProduct);
 
@@ -511,21 +513,37 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         List<String> productImageUrls = extractProductImageUrls(productNode);
         for (JsonNode skuNode : extractSkus(productNode)) {
             String externalVariantId = resolveExternalVariantId(skuNode, externalProductId, variantCount);
-            ProductVariant variant = upsertVariant(channelProduct, product, skuNode, externalProductId, variantCount);
+            ProductVariant variant = upsertVariant(
+                    channelProduct, product, skuNode, externalProductId, variantCount, initialCreate);
+            if (variant == null) {
+                String warning = "Remote Lazada variant is not linked to an OSMS variant: "
+                        + resolveSellerSku(skuNode);
+                log.warn(
+                        "[LazadaImportSync] Skip unmapped remote variant for existing product channelId={} "
+                                + "externalProductId={} externalVariantId={} sellerSku={}",
+                        channel.getId(), externalProductId, externalVariantId, resolveSellerSku(skuNode)
+                );
+                appendSyncWarning(syncLog, warning);
+                continue;
+            }
             List<String> skuImageUrls = extractSkuImageUrls(skuNode);
-            upsertVariantImages(product, variant, skuImageUrls.isEmpty() ? productImageUrls : skuImageUrls);
+            if (initialCreate) {
+                insertInitialVariantImages(product, variant, skuImageUrls.isEmpty() ? productImageUrls : skuImageUrls);
+            }
             upsertChannelVariant(channelProduct, variant, skuNode, variantCount);
-            upsertInventoryItems(variant, skuNode, warehouseByCode, masterWarehouse, primaryWarehouseCode, syncLog);
-            variantIds.add(variant.getId());
+            if (initialCreate) {
+                upsertInventoryItems(variant, skuNode, warehouseByCode, masterWarehouse, primaryWarehouseCode, syncLog);
+                variantIds.add(variant.getId());
+            }
             externalVariantIds.add(externalProductId + "::" + externalVariantId);
             variantCount++;
         }
 
-        if (variantCount == 0) {
+        if (variantCount == 0 && initialCreate) {
             String externalVariantId = resolveExternalVariantId(productNode, externalProductId, 0);
             ProductVariant variant = upsertFallbackVariant(channelProduct, product, externalProductId);
             List<String> skuImageUrls = extractSkuImageUrls(productNode);
-            upsertVariantImages(product, variant, skuImageUrls.isEmpty() ? productImageUrls : skuImageUrls);
+            insertInitialVariantImages(product, variant, skuImageUrls.isEmpty() ? productImageUrls : skuImageUrls);
             upsertChannelVariant(channelProduct, variant, productNode, 0);
             upsertInventoryItems(variant, productNode, warehouseByCode, masterWarehouse, primaryWarehouseCode, syncLog);
             variantIds.add(variant.getId());
@@ -540,17 +558,29 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                                          Product product,
                                          JsonNode skuNode,
                                          String externalProductId,
-                                         int index) {
+                                         int index,
+                                         boolean initialCreate) {
         String externalVariantId = resolveExternalVariantId(skuNode, externalProductId, index);
         String sellerSku = resolveSellerSku(skuNode);
-        String localSku = resolveLocalVariantSku(channelProduct, sellerSku, externalProductId, externalVariantId);
-
-        ProductVariant variant = channelProductVariantRepository
+        ProductVariant mappedVariant = channelProductVariantRepository
                 .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
                 .map(ChannelProductVariant::getVariant)
                 .filter(existing -> shouldReuseMappedVariant(channelProduct, existing, externalVariantId))
-                .orElseGet(() -> productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), localSku)
-                        .orElseGet(ProductVariant::new));
+                .orElse(null);
+        if (!initialCreate) {
+            if (mappedVariant != null) {
+                return mappedVariant;
+            }
+            return sellerSku != null && !sellerSku.isBlank()
+                    ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sellerSku)
+                            .orElse(null)
+                    : null;
+        }
+        String localSku = resolveLocalVariantSku(channelProduct, sellerSku, externalProductId, externalVariantId);
+        ProductVariant variant = mappedVariant == null
+                ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), localSku)
+                        .orElseGet(ProductVariant::new)
+                : mappedVariant;
         variant.setProduct(product);
         variant.setSku(localSku);
         String variantName = firstNonBlank(resolveVariantName(skuNode), product.getName());
@@ -608,10 +638,6 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
 
     private String fallbackSku(String externalId) {
         return "EXT-" + firstNonBlank(externalId, UUID.randomUUID().toString());
-    }
-
-    private boolean isGeneratedPlatformSku(String sku) {
-        return sku != null && (sku.startsWith("SHOPIFY-") || sku.startsWith("LAZADA-") || sku.startsWith("TIKTOK-"));
     }
 
     private boolean isSkuUsableForExternalVariant(ChannelProduct channelProduct, String sku, String externalVariantId) {
@@ -710,7 +736,6 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             channelVariant.setSyncStatus(SyncStatus.SYNCED);
             channelVariant.setLastSyncedAt(OffsetDateTime.now());
         }
-        channelVariant.setMetadata(toMap(skuNode));
         applyExternalVariantId(channelProduct, channelVariant, externalVariantId);
         channelProductVariantRepository.save(channelVariant);
     }
@@ -893,25 +918,29 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         return value != null && !value.isBlank() && !looksLikeTechnicalValue(value);
     }
 
-    private void upsertProductImages(Product product, List<String> imageUrls) {
+    private void insertInitialProductImages(Product product, List<String> imageUrls) {
         if (product.getId() == null || imageUrls.isEmpty()) {
             return;
         }
 
-        productImageRepository.deleteProductLevelImages(product.getId());
-        productImageRepository.flush();
         boolean markFirstImagePrimary = !productImageRepository.existsByProductIdAndIsPrimaryTrue(product.getId());
-        productImageRepository.saveAll(buildProductImages(product, null, imageUrls, markFirstImagePrimary));
+        productImageRepository.saveAll(buildProductImages(
+                product, null, validHttpUrls(imageUrls), markFirstImagePrimary));
     }
 
-    private void upsertVariantImages(Product product, ProductVariant variant, List<String> imageUrls) {
+    private void insertInitialVariantImages(Product product, ProductVariant variant, List<String> imageUrls) {
         if (variant.getId() == null || imageUrls.isEmpty()) {
             return;
         }
 
-        productImageRepository.deleteVariantImages(variant.getId());
-        productImageRepository.flush();
-        productImageRepository.saveAll(buildProductImages(product, variant, imageUrls, false));
+        productImageRepository.saveAll(buildProductImages(
+                product, variant, validHttpUrls(imageUrls), false));
+    }
+
+    private List<String> validHttpUrls(List<String> imageUrls) {
+        return imageUrls.stream()
+                .filter(url -> url != null && (url.startsWith("http://") || url.startsWith("https://")))
+                .toList();
     }
 
     private List<ProductImage> buildProductImages(Product product,
@@ -1425,6 +1454,13 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             }
         }
         return null;
+    }
+
+    private void appendSyncWarning(SyncLog syncLog, String warning) {
+        String current = syncLog.getErrorSummary();
+        syncLog.setErrorSummary(current == null || current.isBlank()
+                ? warning
+                : current + System.lineSeparator() + warning);
     }
 
     private String stringValue(Object value) {

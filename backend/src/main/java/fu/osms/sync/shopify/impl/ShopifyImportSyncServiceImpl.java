@@ -3,10 +3,7 @@ package fu.osms.sync.shopify.impl;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.entity.ProductVariant;
-import fu.osms.catalog.entity.Category;
-import fu.osms.catalog.enums.CategoryStatus;
 import fu.osms.catalog.enums.ProductStatus;
-import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
@@ -35,6 +32,7 @@ import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
+import fu.osms.sync.service.PlatformCatalogOwnershipPolicy;
 import fu.osms.sync.service.impl.ChannelProductAggregationService;
 import fu.osms.sync.service.impl.SyncJobProgressTracker;
 import fu.osms.sync.shopify.ShopifyApiClient;
@@ -45,7 +43,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.text.Normalizer;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -73,7 +70,6 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
-    private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final ProductVariantRepository productVariantRepository;
@@ -83,6 +79,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
     private final SyncLogRepository syncLogRepository;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    private final PlatformCatalogOwnershipPolicy catalogOwnershipPolicy;
     private final ChannelProductAggregationService channelProductAggregationService;
     private final SyncJobProgressTracker syncJobProgressTracker;
 
@@ -153,19 +150,40 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                         continue;
                     }
 
-                    Product product = upsertProduct(channel, productNode, variantNode);
-                    ChannelProduct channelProduct = upsertChannelProduct(channel, product, productNode);
+                    ImportedCatalogProduct importedProduct = upsertProduct(channel, productNode, variantNode);
+                    Product product = importedProduct.product();
+                    ChannelProduct channelProduct = upsertChannelProduct(
+                            channel, product, productNode, importedProduct.initialCreate());
 
                     if (!processedProductIds.containsKey(externalProductId)) {
                         processedProductIds.put(externalProductId, true);
-                        upsertProductImages(product, productNode);
+                        if (importedProduct.initialCreate()) {
+                            insertInitialProductImages(product, productNode);
+                        }
                         productCount++;
                     }
 
-                    ProductVariant variant = upsertVariant(channelProduct, product, variantNode);
+                    ProductVariant variant = upsertVariant(
+                            channelProduct, product, variantNode, importedProduct.initialCreate());
+                    if (variant == null) {
+                        String warning = "Remote Shopify variant is not linked to an OSMS variant: "
+                                + stringValue(variantNode.get("sku"));
+                        log.warn(
+                                "[ShopifyImportSync] Skip unmapped remote variant for OSMS-owned product channelId={} "
+                                        + "externalProductId={} externalVariantId={} externalSku={}",
+                                channelId,
+                                externalProductId,
+                                numericId(stringValue(variantNode.get("id"))),
+                                stringValue(variantNode.get("sku"))
+                        );
+                        appendSyncWarning(syncLog, warning);
+                        continue;
+                    }
                     upsertChannelVariant(channelProduct, variant, variantNode);
-                    upsertInventoryItems(variant, variantNode, masterWarehouse, syncLog);
-                    changedVariantIds.add(variant.getId());
+                    if (importedProduct.initialCreate()) {
+                        upsertInventoryItems(variant, variantNode, masterWarehouse, syncLog);
+                        changedVariantIds.add(variant.getId());
+                    }
                     variantCount++;
                 }
                 syncJobProgressTracker.recordVariantBatch(nodes.size());
@@ -217,68 +235,45 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         }
     }
 
-    private Product upsertProduct(Channel channel,
-                                  Map<String, Object> productNode,
-                                  Map<String, Object> variantNode) {
+    private ImportedCatalogProduct upsertProduct(Channel channel,
+                                                 Map<String, Object> productNode,
+                                                 Map<String, Object> variantNode) {
         String externalProductId = numericId(stringValue(productNode.get("id")));
         String productName = firstNonBlank(stringValue(productNode.get("title")), "Shopify Product " + externalProductId);
-        Product product = channelProductRepository
+        ChannelProduct existingMapping = channelProductRepository
                 .findByChannelIdAndExternalProductId(channel.getId(), externalProductId)
-                .map(ChannelProduct::getProduct)
-                .orElseGet(() -> Product.builder()
-                        .sku(fallbackSku(externalProductId))
-                        .build());
-        boolean shopifyOwned = product.getId() == null || isGeneratedPlatformSku(product.getSku());
-        if (product.getId() == null) {
+                .orElse(null);
+        Product product = existingMapping == null ? null : existingMapping.getProduct();
+        boolean initialCreate = product == null;
+        if (initialCreate) {
+            product = Product.builder()
+                    .sku(fallbackSku(externalProductId))
+                    .attributes(new HashMap<>())
+                    .build();
             product.setSku(fallbackSku(externalProductId));
         }
-        if (shopifyOwned) {
+        boolean platformOwned = initialCreate
+                || catalogOwnershipPolicy.isPlatformOwned(existingMapping, product, externalProductId);
+        if (platformOwned) {
             product.setName(productName);
             product.setDescription(stringValue(productNode.get("descriptionHtml")));
             product.setBrand(stringValue(productNode.get("vendor")));
+        }
+        if (initialCreate) {
             product.setStatus(resolveStatus(stringValue(productNode.get("status"))));
+            product.setUnit("pcs");
+            product.setLowStockThreshold(5);
         }
-        product.setUnit(product.getUnit() == null ? "pcs" : product.getUnit());
-        product.setLowStockThreshold(product.getLowStockThreshold() == null ? 5 : product.getLowStockThreshold());
-        Category category = resolveCategory(productNode);
-        if (category != null) {
-            product.setCategory(category);
-        }
-        Map<String, Object> attributes = product.getAttributes() == null
-                ? new HashMap<>()
-                : new HashMap<>(product.getAttributes());
-        attributes.put("shopifyProductId", externalProductId);
-        attributes.put("productType", stringValue(productNode.get("productType")));
-        product.setAttributes(attributes);
-        return productRepository.save(product);
-    }
-
-    private Category resolveCategory(Map<String, Object> productNode) {
-        String productType = firstNonBlank(
-                stringValue(productNode.get("productType")),
-                stringValue(productNode.get("product_type"))
+        return new ImportedCatalogProduct(
+                productRepository.save(product),
+                initialCreate
         );
-        if (productType == null || productType.isBlank()) {
-            return null;
-        }
-
-        String resolvedName = productType.trim();
-        String slug = "shopify-" + toSlug(resolvedName);
-        Category category = categoryRepository.findBySlug(slug)
-                .or(() -> categoryRepository.findFirstByNameIgnoreCase(resolvedName))
-                .orElseGet(Category::new);
-        category.setName(resolvedName);
-        category.setSlug(slug);
-        if (category.getSortOrder() == null) {
-            category.setSortOrder(0);
-        }
-        if (category.getStatus() == null) {
-            category.setStatus(CategoryStatus.ACTIVE);
-        }
-        return categoryRepository.save(category);
     }
 
-    private ChannelProduct upsertChannelProduct(Channel channel, Product product, Map<String, Object> productNode) {
+    private ChannelProduct upsertChannelProduct(Channel channel,
+                                                Product product,
+                                                Map<String, Object> productNode,
+                                                boolean initialCreate) {
         String externalProductId = numericId(stringValue(productNode.get("id")));
         ChannelProduct channelProduct = channelProductRepository
                 .findByChannelIdAndExternalProductId(channel.getId(), externalProductId)
@@ -291,19 +286,35 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         channelProduct.setSyncStatus(SyncStatus.SYNCED);
         channelProduct.setLastSyncedAt(OffsetDateTime.now());
         channelProduct.setLastSyncError(null);
+        if (initialCreate) {
+            catalogOwnershipPolicy.markPlatformImported(channelProduct);
+        }
         channelProduct = channelProductRepository.save(channelProduct);
         return channelProductAggregationService.normalizeImportedMapping(channelProduct);
     }
 
-    private ProductVariant upsertVariant(ChannelProduct channelProduct, Product product, Map<String, Object> variantNode) {
+    private ProductVariant upsertVariant(ChannelProduct channelProduct,
+                                         Product product,
+                                         Map<String, Object> variantNode,
+                                         boolean initialCreate) {
         String externalVariantId = numericId(stringValue(variantNode.get("id")));
         String externalSku = stringValue(variantNode.get("sku"));
-        String sku = resolveLocalVariantSku(channelProduct, externalSku, externalVariantId);
-        ProductVariant variant = channelProductVariantRepository
+        ProductVariant mappedVariant = channelProductVariantRepository
                 .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalVariantId)
                 .map(ChannelProductVariant::getVariant)
                 .filter(existing -> shouldReuseMappedVariant(channelProduct, externalVariantId, existing))
-                .orElseGet(ProductVariant::new);
+                .orElse(null);
+        if (!initialCreate) {
+            if (mappedVariant != null) {
+                return mappedVariant;
+            }
+            return externalSku != null && !externalSku.isBlank()
+                    ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), externalSku)
+                            .orElse(null)
+                    : null;
+        }
+        String sku = resolveLocalVariantSku(channelProduct, externalSku, externalVariantId);
+        ProductVariant variant = mappedVariant == null ? new ProductVariant() : mappedVariant;
         Map<String, Object> optionValues = selectedOptionValues(variantNode);
         String optionName = joinedOptionValueName(optionValues);
         boolean preserveLocalPrice = shouldPreserveLocalPrice(channelProduct, externalVariantId);
@@ -337,7 +348,10 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
             channelVariant.setLastSyncedAt(OffsetDateTime.now());
         }
 
-        Map<String, Object> metadata = mapOf("shopifyVariantGid", stringValue(variantNode.get("id")));
+        Map<String, Object> metadata = channelVariant.getMetadata() == null
+                ? new HashMap<>()
+                : new HashMap<>(channelVariant.getMetadata());
+        metadata.put("shopifyVariantGid", stringValue(variantNode.get("id")));
         Map<String, Object> inventoryItem = map(variantNode.get("inventoryItem"));
         if (inventoryItem.get("id") != null) {
             metadata.put("inventory_item_id", numericId(stringValue(inventoryItem.get("id"))));
@@ -408,10 +422,6 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
 
     private String fallbackSku(String externalId) {
         return "EXT-" + firstNonBlank(externalId, UUID.randomUUID().toString());
-    }
-
-    private boolean isGeneratedPlatformSku(String sku) {
-        return sku != null && (sku.startsWith("SHOPIFY-") || sku.startsWith("LAZADA-") || sku.startsWith("TIKTOK-"));
     }
 
     private boolean isSkuUsableForExternalVariant(String sku) {
@@ -750,12 +760,13 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         return response;
     }
 
-    private void upsertProductImages(Product product, Map<String, Object> productNode) {
-        List<String> imageUrls = extractProductImageUrls(productNode);
+    private void insertInitialProductImages(Product product, Map<String, Object> productNode) {
+        List<String> imageUrls = extractProductImageUrls(productNode).stream()
+                .filter(this::isHttpUrl)
+                .toList();
         if (imageUrls.isEmpty()) {
             return;
         }
-        productImageRepository.deleteProductLevelImages(product.getId());
         List<ProductImage> images = new java.util.ArrayList<>();
         for (int index = 0; index < imageUrls.size(); index++) {
             images.add(ProductImage.builder()
@@ -767,6 +778,10 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                     .build());
         }
         productImageRepository.saveAll(images);
+    }
+
+    private boolean isHttpUrl(String value) {
+        return value != null && (value.startsWith("http://") || value.startsWith("https://"));
     }
 
     private List<String> extractProductImageUrls(Map<String, Object> productNode) {
@@ -940,6 +955,13 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         return map;
     }
 
+    private void appendSyncWarning(SyncLog syncLog, String warning) {
+        String current = syncLog.getErrorSummary();
+        syncLog.setErrorSummary(current == null || current.isBlank()
+                ? warning
+                : current + System.lineSeparator() + warning);
+    }
+
     private String firstNonBlank(String... values) {
         for (String value : values) {
             if (value != null && !value.isBlank()) {
@@ -947,15 +969,6 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
             }
         }
         return null;
-    }
-
-    private String toSlug(String value) {
-        String normalized = Normalizer.normalize(value == null ? "category" : value, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}", "")
-                .toLowerCase()
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-|-$)", "");
-        return normalized.isBlank() ? "category" : normalized;
     }
 
     private String truncate(String value, int maxLength) {
@@ -975,5 +988,11 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
             return address.substring(0, markerIndex).trim() + " " + marker;
         }
         return address.trim() + " " + marker;
+    }
+
+    private record ImportedCatalogProduct(
+            Product product,
+            boolean initialCreate
+    ) {
     }
 }

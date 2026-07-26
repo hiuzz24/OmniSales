@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -119,39 +118,22 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
                             : Set.of(mapping.getVariant().getId())
             );
             UUID warehouseId = defaultWarehouseId(mapping);
-            int available = scopedVariantIds.stream()
+            Map<String, List<InventoryItem>> itemsByWarehouse = scopedVariantIds.stream()
                     .flatMap(variantId -> inventoryByVariant.getOrDefault(variantId, List.of()).stream())
                     .filter(item -> warehouseId == null
                             || (item.getWarehouse() != null
                             && warehouseId.equals(item.getWarehouse().getId())))
-                    .mapToInt(this::availableQuantity)
-                    .max()
-                    .orElse(0);
+                    .collect(Collectors.groupingBy(
+                            this::warehouseKey,
+                            LinkedHashMap::new,
+                            Collectors.toList()
+                    ));
+            int available = itemsByWarehouse.values().stream()
+                    .mapToInt(this::sellableQuantityForSharedWarehouseStock)
+                    .sum();
             result.put(mapping.getId(), available);
         }
         return result;
-    }
-
-    private int maxAvailableQuantity(
-            Collection<UUID> variantIds,
-            UUID defaultWarehouseId) {
-        Set<UUID> sanitized = sanitizeVariantIds(variantIds);
-        if (sanitized.isEmpty()) {
-            return 0;
-        }
-        Map<String, List<InventoryItem>> itemsByWarehouse = inventoryItemRepository.findByVariantIdIn(sanitized)
-                .stream()
-                .filter(item -> defaultWarehouseId == null
-                        || (item.getWarehouse() != null
-                        && defaultWarehouseId.equals(item.getWarehouse().getId())))
-                .collect(Collectors.groupingBy(
-                        this::warehouseKey,
-                        LinkedHashMap::new,
-                        Collectors.toList()
-                ));
-        return itemsByWarehouse.values().stream()
-                .mapToInt(this::sellableQuantityForSharedWarehouseStock)
-                .sum();
     }
 
     private UUID defaultWarehouseId(ChannelProductVariant mapping) {

@@ -10,6 +10,7 @@ import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
+import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
 import fu.osms.sync.tiktok.TikTokInventoryUpdateService;
 import fu.osms.sync.tiktok.inventory.TikTokInventoryGateway;
 import fu.osms.sync.tiktok.inventory.TikTokInventorySetCommand;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -30,12 +32,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateService {
 
+    private static final String PRICE_UPDATE_PATH = "/product/202309/products/%s/prices/update";
+
     private final ChannelRepository channelRepository;
     private final ChannelProductVariantRepository mappingRepository;
     private final MarketplaceStockQuantityResolver quantityResolver;
     private final TikTokInventoryGateway inventoryGateway;
-    private final ChannelProductVariantRepository channelProductVariantRepository;
-    private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
     private final TikTokAuthorizedApiClient tikTokApiClient;
     private final ObjectMapper objectMapper;
 
@@ -100,26 +102,19 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
         if (commands.isEmpty()) {
             return 0;
         }
+
         inventoryGateway.setAvailable(channelId, shopCipher, commands);
+        updatePrices(channelId, shopCipher, channel, pushedMappings);
 
         OffsetDateTime syncedAt = OffsetDateTime.now();
         for (ChannelProductVariant mapping : pushedMappings) {
+            if (mapping.getVariant() != null
+                    && mapping.getVariant().getPrice() != null
+                    && mapping.getVariant().getPrice().signum() > 0) {
+                mapping.setExternalPrice(mapping.getVariant().getPrice());
+            }
             mapping.setSyncStatus(SyncStatus.SYNCED);
             mapping.setLastSyncedAt(syncedAt);
-            tikTokApiClient.updateInventory(channelId, shopCipher, entry.getKey(), skuPayloads);
-            updatePrices(channelId, shopCipher, channel, entry.getKey(), entry.getValue());
-            OffsetDateTime syncedAt = OffsetDateTime.now();
-            for (ChannelProductVariant mapping : entry.getValue()) {
-                if (mapping.getVariant() != null
-                        && mapping.getVariant().getPrice() != null
-                        && mapping.getVariant().getPrice().signum() > 0) {
-                    mapping.setExternalPrice(mapping.getVariant().getPrice());
-                }
-                mapping.setSyncStatus(SyncStatus.SYNCED);
-                mapping.setLastSyncedAt(syncedAt);
-            }
-            channelProductVariantRepository.saveAll(entry.getValue());
-            pushedVariantCount += entry.getValue().size();
         }
         mappingRepository.saveAll(pushedMappings);
         return pushedMappings.size();
@@ -128,9 +123,39 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
     private void updatePrices(UUID channelId,
                               String shopCipher,
                               Channel channel,
-                              String productId,
                               List<ChannelProductVariant> mappings) {
-        List<Map<String, Object>> skus = mappings.stream()
+        Map<String, List<ChannelProductVariant>> mappingsByProductId = new LinkedHashMap<>();
+        for (ChannelProductVariant mapping : mappings) {
+            if (mapping.getChannelProduct() == null
+                    || !hasText(mapping.getChannelProduct().getExternalProductId())) {
+                continue;
+            }
+            mappingsByProductId.computeIfAbsent(
+                    mapping.getChannelProduct().getExternalProductId(),
+                    ignored -> new ArrayList<>()
+            ).add(mapping);
+        }
+
+        for (Map.Entry<String, List<ChannelProductVariant>> entry : mappingsByProductId.entrySet()) {
+            List<Map<String, Object>> skus = pricePayload(entry.getValue(), channel);
+            if (skus.isEmpty()) {
+                continue;
+            }
+            String response = tikTokApiClient.executePost(
+                    channelId,
+                    PRICE_UPDATE_PATH.formatted(entry.getKey()),
+                    Map.of("shop_cipher", shopCipher),
+                    serialize(Map.of("skus", skus))
+            );
+            ensureSuccess(response);
+        }
+    }
+
+    private List<Map<String, Object>> pricePayload(
+            List<ChannelProductVariant> mappings,
+            Channel channel
+    ) {
+        return mappings.stream()
                 .filter(mapping -> mapping.getVariant() != null
                         && mapping.getVariant().getPrice() != null
                         && mapping.getVariant().getPrice().signum() > 0
@@ -147,17 +172,6 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
                     );
                 })
                 .toList();
-        if (skus.isEmpty()) {
-            return;
-        }
-
-        String response = tikTokApiClient.executePost(
-                channelId,
-                "/product/202309/products/" + productId + "/prices/update",
-                Map.of("shop_cipher", shopCipher),
-                serialize(Map.of("skus", skus))
-        );
-        ensureSuccess(response);
     }
 
     private Set<UUID> sanitizeVariantIds(Collection<UUID> variantIds) {
@@ -206,6 +220,15 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
 
     private String requireText(Map<String, Object> metadata, String... keys) {
         String value = optionalText(metadata, keys);
+        if (!hasText(value)) {
+            throw new AppException(
+                    ErrorCode.INVALID_REQUEST,
+                    "TikTok channel is missing shopCipher metadata."
+            );
+        }
+        return value;
+    }
+
     private String currency(Channel channel) {
         String region = optionalText(channel.getMetadata(), "region", "sellerBaseRegion");
         return switch (region == null ? "VN" : region.toUpperCase()) {
@@ -222,7 +245,7 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
         try {
             return objectMapper.writeValueAsString(value);
         } catch (Exception e) {
-            throw new IllegalStateException("Khong the tao payload cap nhat gia TikTok.", e);
+            throw new IllegalStateException("Cannot create TikTok price update payload.", e);
         }
     }
 
@@ -232,25 +255,15 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
             Object code = payload.get("code");
             if (code != null && !"0".equals(String.valueOf(code))) {
                 throw new IllegalStateException(
-                        "TikTok Shop price update failed: code=" + code + ", message=" + payload.get("message")
+                        "TikTok Shop price update failed: code=" + code
+                                + ", message=" + payload.get("message")
                 );
             }
         } catch (IllegalStateException e) {
             throw e;
         } catch (Exception e) {
-            throw new IllegalStateException("Khong doc duoc response cap nhat gia TikTok.", e);
+            throw new IllegalStateException("Cannot read TikTok price update response.", e);
         }
-    }
-
-    private UUID optionalUuid(Map<String, Object> metadata, String key) {
-        String value = optionalText(metadata, key);
-        if (!hasText(value)) {
-            throw new AppException(
-                    ErrorCode.INVALID_REQUEST,
-                    "TikTok channel is missing shopCipher metadata."
-            );
-        }
-        return value;
     }
 
     private boolean hasText(String value) {
