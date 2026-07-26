@@ -60,16 +60,16 @@ class ChannelServiceImplTest {
 
         private ChannelServiceImpl service;
 
-        @BeforeEach
-        void setUp() {
-                service = new ChannelServiceImpl(
-                                channelRepository,
-                                credentialRepository,
-                                channelMapper,
-                                connectionService,
-                                productQueryService,
-                                responseService);
-        }
+//        @BeforeEach
+//        void setUp() {
+//                service = new ChannelServiceImpl(
+//                                channelRepository,
+//                                credentialRepository,
+//                                channelMapper,
+//                                connectionService,
+//                                productQueryService,
+//                                responseService);
+//        }
 
         @Test
         @DisplayName("connectLazada delegates verbatim to ChannelConnectionService with all 6 args")

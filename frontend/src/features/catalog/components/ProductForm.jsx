@@ -1,10 +1,21 @@
+import { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductForm.module.css';
 
 const ProductForm = ({ categories = [] }) => {
-  const { register, formState: { errors } } = useFormContext();
-  const [hasOrders, hasVariants] = useWatch({ name: ['hasOrders', 'hasVariants'] });
+  const { register, control, formState: { errors } } = useFormContext();
+  const [hasOrders, hasVariants, currentCategoryId] = useWatch({
+    control,
+    name: ['hasOrders', 'hasVariants', 'categoryId']
+  });
+
+  const activeCategories = useMemo(() => {
+    if (!Array.isArray(categories)) return [];
+    return categories.filter((cat) => {
+      return cat.status === 'ACTIVE' || cat.id === currentCategoryId;
+    });
+  }, [categories, currentCategoryId]);
 
   return (
     <div className={styles.card}>
@@ -115,9 +126,9 @@ const ProductForm = ({ categories = [] }) => {
               {...register('categoryId')}
             >
               <option value="">Chọn danh mục</option>
-              {categories.map((cat) => (
+              {activeCategories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
-                  {cat.name}
+                  {cat.name} {cat.status && cat.status !== 'ACTIVE' ? ' (Đã ngưng hoạt động)' : ''}
                 </option>
               ))}
             </select>

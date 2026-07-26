@@ -64,12 +64,13 @@ const ImportProductsModal = ({ isOpen, onClose, onSuccess }) => {
     }
     if (categories.length > 0) {
       const usedCatNames = [...new Set(response.rows.map((r) => r.categoryName).filter(Boolean))];
-      const validCatNames = new Set(categories.map((c) => c.name.toLowerCase()));
+      const activeCats = categories.filter((c) => !c.status || c.status === 'ACTIVE');
+      const validCatNames = new Set(activeCats.map((c) => c.name.toLowerCase()));
       const bad = usedCatNames.filter((n) => !validCatNames.has(n.toLowerCase()));
       if (bad.length > 0) {
         setCategoryErrors(bad);
         setParseError(
-          `Danh mục không tồn tại trong hệ thống: ${bad.join(', ')}\n\nCác danh mục hợp lệ: ${categories.map((c) => c.name).join(', ')}`,
+          `Danh mục không tồn tại hoặc đã ngưng hoạt động: ${bad.join(', ')}\n\nCác danh mục hợp lệ: ${activeCats.map((c) => c.name).join(', ')}`,
         );
         setFile(null);
         return;

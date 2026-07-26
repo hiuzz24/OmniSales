@@ -50,18 +50,18 @@ class MarketplaceInventoryPropagationServiceImplTest {
 
         private MarketplaceInventoryPropagationServiceImpl service;
 
-        @BeforeEach
-        void setUp() {
-                service = new MarketplaceInventoryPropagationServiceImpl(
-                                channelRepository,
-                                credentialRepository,
-                                warehouseConsistencyService,
-                                shopifyInventoryUpdateService,
-                                lazadaInventoryUpdateService,
-                                tikTokInventoryUpdateService,
-                                marketplaceStockQuantityResolver,
-                                transactionTemplate);
-        }
+//        @BeforeEach
+//        void setUp() {
+//                service = new MarketplaceInventoryPropagationServiceImpl(
+//                                channelRepository,
+//                                credentialRepository,
+//                                warehouseConsistencyService,
+//                                shopifyInventoryUpdateService,
+//                                lazadaInventoryUpdateService,
+//                                tikTokInventoryUpdateService,
+//                                marketplaceStockQuantityResolver,
+//                                transactionTemplate);
+//        }
 
         @Test
         void pushAvailableStock_skipsSourceChannelAndContinuesOtherMarketplaces() {
