@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -57,48 +58,82 @@ public class MarketplaceStockQuantityResolverImpl implements MarketplaceStockQua
 
     @Override
     public int maxAvailableQuantityForSkuGroup(ChannelProductVariant mapping) {
-        String skuKey = skuKey(mapping);
-        if (skuKey == null) {
-            if (mapping == null || mapping.getVariant() == null || mapping.getVariant().getId() == null) {
-                return 0;
-            }
-            return maxAvailableQuantity(
-                    List.of(mapping.getVariant().getId()),
-                    defaultWarehouseId(mapping));
-        }
-
-        List<UUID> variantIds = channelProductVariantRepository
-                .findActiveByNormalizedExternalSkuInWithVariant(List.of(skuKey))
-                .stream()
-                .map(ChannelProductVariant::getVariant)
-                .filter(Objects::nonNull)
-                .map(variant -> variant.getId())
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        return maxAvailableQuantity(variantIds, defaultWarehouseId(mapping));
-    }
-
-    private int maxAvailableQuantity(
-            Collection<UUID> variantIds,
-            UUID defaultWarehouseId) {
-        Set<UUID> sanitized = sanitizeVariantIds(variantIds);
-        if (sanitized.isEmpty()) {
+        if (mapping == null || mapping.getId() == null) {
             return 0;
         }
-        Map<String, List<InventoryItem>> itemsByWarehouse = inventoryItemRepository.findByVariantIdIn(sanitized)
-                .stream()
-                .filter(item -> defaultWarehouseId == null
-                        || (item.getWarehouse() != null
-                        && defaultWarehouseId.equals(item.getWarehouse().getId())))
-                .collect(Collectors.groupingBy(
-                        this::warehouseKey,
-                        LinkedHashMap::new,
-                        Collectors.toList()
-                ));
-        return itemsByWarehouse.values().stream()
-                .mapToInt(this::sellableQuantityForSharedWarehouseStock)
-                .sum();
+        return resolveAvailableByMappingIds(List.of(mapping.getId()))
+                .getOrDefault(mapping.getId(), 0);
+    }
+
+    @Override
+    public Map<UUID, Integer> resolveAvailableByMappingIds(Collection<UUID> mappingIds) {
+        List<UUID> ids = mappingIds == null
+                ? List.of()
+                : mappingIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+
+        List<ChannelProductVariant> mappings =
+                channelProductVariantRepository.findAllWithChannelAndVariantByIdIn(ids);
+        Set<String> skuKeys = mappings.stream()
+                .map(this::skuKey)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        List<ChannelProductVariant> groupedMappings = skuKeys.isEmpty()
+                ? List.of()
+                : channelProductVariantRepository.findActiveByNormalizedExternalSkuInWithVariant(
+                        new ArrayList<>(skuKeys));
+
+        Map<String, Set<UUID>> variantIdsBySku = new HashMap<>();
+        for (ChannelProductVariant grouped : groupedMappings) {
+            String key = skuKey(grouped);
+            if (key != null && grouped.getVariant() != null && grouped.getVariant().getId() != null) {
+                variantIdsBySku.computeIfAbsent(key, ignored -> new LinkedHashSet<>())
+                        .add(grouped.getVariant().getId());
+            }
+        }
+
+        Set<UUID> allVariantIds = new LinkedHashSet<>();
+        for (ChannelProductVariant mapping : mappings) {
+            String key = skuKey(mapping);
+            Set<UUID> grouped = key == null ? null : variantIdsBySku.get(key);
+            if (grouped != null && !grouped.isEmpty()) {
+                allVariantIds.addAll(grouped);
+            } else if (mapping.getVariant() != null && mapping.getVariant().getId() != null) {
+                allVariantIds.add(mapping.getVariant().getId());
+            }
+        }
+        Map<UUID, List<InventoryItem>> inventoryByVariant = inventoryItemRepository
+                .findByVariantIdIn(allVariantIds).stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        item -> item.getVariant().getId()));
+
+        Map<UUID, Integer> result = new HashMap<>();
+        for (ChannelProductVariant mapping : mappings) {
+            Set<UUID> scopedVariantIds = variantIdsBySku.getOrDefault(
+                    skuKey(mapping),
+                    mapping.getVariant() == null || mapping.getVariant().getId() == null
+                            ? Set.of()
+                            : Set.of(mapping.getVariant().getId())
+            );
+            UUID warehouseId = defaultWarehouseId(mapping);
+            Map<String, List<InventoryItem>> itemsByWarehouse = scopedVariantIds.stream()
+                    .flatMap(variantId -> inventoryByVariant.getOrDefault(variantId, List.of()).stream())
+                    .filter(item -> warehouseId == null
+                            || (item.getWarehouse() != null
+                            && warehouseId.equals(item.getWarehouse().getId())))
+                    .collect(Collectors.groupingBy(
+                            this::warehouseKey,
+                            LinkedHashMap::new,
+                            Collectors.toList()
+                    ));
+            int available = itemsByWarehouse.values().stream()
+                    .mapToInt(this::sellableQuantityForSharedWarehouseStock)
+                    .sum();
+            result.put(mapping.getId(), available);
+        }
+        return result;
     }
 
     private UUID defaultWarehouseId(ChannelProductVariant mapping) {

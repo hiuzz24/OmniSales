@@ -131,6 +131,30 @@ public class DatabaseMigration {
 
         try {
             jdbcTemplate.execute("""
+                        ALTER TABLE notifications
+                        DROP CONSTRAINT IF EXISTS notifications_type_check,
+                        ADD CONSTRAINT notifications_type_check
+                        CHECK (type IN (
+                            'LOW_STOCK',
+                            'SYNC_FAILED',
+                            'ORDER_NEW',
+                            'ORDER_CANCELLED',
+                            'ORDER_PAID',
+                            'ORDER_PICK_REQUIRED',
+                            'ORDER_READY_SHIP',
+                            'STOCK_TRANSFER',
+                            'STOCKTAKE',
+                            'SYNC',
+                            'INVENTORY'
+                        ))
+                    """);
+            log.info("Migration: notifications_type_check updated with order workflow notification types");
+        } catch (Exception e) {
+            log.error("Migration error updating notifications type constraint: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
                         INSERT INTO system_settings (key, value, description, category, updated_at)
                         VALUES 
                         ('store.name', 'OmniSales Store', 'Tên thương hiệu / Cửa hàng', 'STORE', NOW()),

@@ -62,7 +62,8 @@ public class LazadaOrderPersistenceServiceImpl implements LazadaOrderPersistence
         orderItemRepository.saveAll(items.stream().map(item -> item.toEntity(saved)).toList());
         return new OrderImportOutcome(saved.getId(), upsert.created() ? OrderImportResult.CREATED : OrderImportResult.UPDATED,
                 upsert.created(), "PAID".equals(saved.getPaymentStatus()) && !"PAID".equals(oldPayment),
-                saved.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED, false);
+                saved.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED, false,
+                oldStatus, saved.getStatus());
     }
 
     @Override

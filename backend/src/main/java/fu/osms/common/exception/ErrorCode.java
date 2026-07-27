@@ -6,6 +6,8 @@ import org.springframework.http.HttpStatus;
 @Getter
 public enum ErrorCode {
 
+    ORDER_STOCK_DELIVERY_REQUIRED(HttpStatus.CONFLICT, "Đơn hàng chưa có phiếu xuất kho đang hoạt động"),
+
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi máy chủ nội bộ, vui lòng thử lại sau"),
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Dữ liệu đầu vào không hợp lệ"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên"),

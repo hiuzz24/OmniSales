@@ -30,6 +30,7 @@ const toChannelConfig = (sync) => ({
   categoryVersion: sync.platformConfig?.categoryVersion || (sync.platform === 'TIKTOK' ? 'v2' : null),
   brandId: sync.platformConfig?.brandId || '',
   brandName: sync.platformConfig?.brandName || '',
+  listingTitle: sync.platformConfig?.listingTitle || '',
   sizeChartImageUrl: sync.platformConfig?.sizeChartImageUrl || '',
   attributes: sync.platformConfig?.attributes || {},
   variantAttributeValueMappings: sync.platformConfig?.variantAttributeValueMappings || {},

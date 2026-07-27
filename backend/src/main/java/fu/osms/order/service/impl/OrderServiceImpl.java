@@ -19,6 +19,7 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.inventory.service.OrderStockDeliveryReadinessService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
@@ -53,6 +54,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import fu.osms.order.event.OrderCreatedEvent;
 import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderPaidEvent;
+import fu.osms.order.event.OrderStatusChangedEvent;
 
 import fu.osms.common.utils.SecurityUtils;
 import java.math.BigDecimal;
@@ -82,6 +84,7 @@ public class OrderServiceImpl implements OrderService {
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryAlertService inventoryAlertService;
     private final OrderStatusPushService orderStatusPushService;
+    private final OrderStockDeliveryReadinessService orderStockDeliveryReadinessService;
     private final ApplicationEventPublisher eventPublisher;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
@@ -165,7 +168,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse updateStatus(UUID id, OrderStatus status) {
-        Order order = orderRepository.findById(id)
+        Order order = orderRepository.findForUpdateById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
 
         OrderStatus oldStatus = order.getStatus();
@@ -176,6 +179,13 @@ public class OrderServiceImpl implements OrderService {
         }
 
         validateTikTokProcessingTransition(order, oldStatus, status);
+
+        if (status == OrderStatus.SHIPPED) {
+            if (oldStatus != OrderStatus.PROCESSING) {
+                throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
+            }
+            orderStockDeliveryReadinessService.requireReadyForShipment(id);
+        }
 
         OrderStatusPushResult pushResult = orderStatusPushService.push(order, status, OrderStatusPushContext.empty());
         if (shouldBlockLocalUpdate(order, status, pushResult)) {
@@ -218,6 +228,10 @@ public class OrderServiceImpl implements OrderService {
         }
         if ("PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus)) {
             eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
+        }
+        if (oldStatus != savedOrder.getStatus()) {
+            eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                    savedOrder.getId(), oldStatus, savedOrder.getStatus()));
         }
 
         return toResponseWithItems(savedOrder);
@@ -376,6 +390,8 @@ public class OrderServiceImpl implements OrderService {
 
         marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
         eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                savedOrder.getId(), oldStatus, savedOrder.getStatus()));
     }
 
     @Override

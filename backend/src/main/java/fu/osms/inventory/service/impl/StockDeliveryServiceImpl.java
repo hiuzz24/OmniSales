@@ -227,6 +227,10 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         if (!"DRAFT".equals(inventoryIssue.getStatus())) {
             throw new AppException(ErrorCode.ISSUE_ALREADY_CONFIRMED, "Order has already been processed for delivery.");
         }
+        if ("ORDER".equals(inventoryIssue.getIssueType())) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "Phiếu xuất theo đơn hàng được hoàn thành tự động khi đơn chuyển sang đang vận chuyển");
+        }
 
         User currentUser = getCurrentUser();
         Set<UUID> changedVariantIds = new HashSet<>();
@@ -258,7 +262,15 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         User currentUser = getCurrentUser();
         Set<UUID> changedVariantIds = new HashSet<>();
 
-        if ("DRAFT".equals(inventoryIssue.getStatus())) {
+        if ("ORDER".equals(inventoryIssue.getIssueType())
+                && "CONFIRMED".equals(inventoryIssue.getStatus())) {
+            throw new AppException(ErrorCode.ISSUE_ALREADY_CONFIRMED,
+                    "Phiếu xuất theo đơn hàng đã hoàn thành và không thể hủy");
+        }
+        if ("ORDER".equals(inventoryIssue.getIssueType())
+                && "DRAFT".equals(inventoryIssue.getStatus())) {
+            // Reservation belongs to the order and remains available when the issue is recreated.
+        } else if ("DRAFT".equals(inventoryIssue.getStatus())) {
             releaseDraftReservations(inventoryIssue, currentUser, "Stock delivery draft cancelled - reservation released");
         } else if ("CONFIRMED".equals(inventoryIssue.getStatus())) {
             for (InventoryIssueItem item : inventoryIssue.getItems()) {

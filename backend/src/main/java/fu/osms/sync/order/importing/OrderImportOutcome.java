@@ -1,5 +1,7 @@
 package fu.osms.sync.order.importing;
 
+import fu.osms.order.enums.OrderStatus;
+
 import java.util.UUID;
 
 public record OrderImportOutcome(
@@ -8,6 +10,11 @@ public record OrderImportOutcome(
         boolean created,
         boolean paymentBecamePaid,
         boolean becameCancelled,
-        boolean platformMetadataUpdated
+        boolean platformMetadataUpdated,
+        OrderStatus previousStatus,
+        OrderStatus currentStatus
 ) {
+    public boolean statusChanged() {
+        return previousStatus != null && currentStatus != null && previousStatus != currentStatus;
+    }
 }

@@ -64,6 +64,18 @@ public interface ChannelProductRepository extends JpaRepository<ChannelProduct, 
             "JOIN FETCH cp.product p " +
             "JOIN FETCH cp.channel ch " +
             "WHERE ch.id = :channelId " +
+            "AND cp.id IN :ids " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND p.deletedAt IS NULL")
+    List<ChannelProduct> findActiveByChannelIdAndIdInWithProduct(
+            @Param("channelId") UUID channelId,
+            @Param("ids") Collection<UUID> ids);
+
+    @Query("SELECT cp FROM ChannelProduct cp " +
+            "JOIN FETCH cp.product p " +
+            "JOIN FETCH cp.channel ch " +
+            "WHERE ch.id = :channelId " +
             "AND ch.deletedAt IS NULL " +
             "AND cp.mappingState = 'ACTIVE' " +
             "AND p.deletedAt IS NULL " +

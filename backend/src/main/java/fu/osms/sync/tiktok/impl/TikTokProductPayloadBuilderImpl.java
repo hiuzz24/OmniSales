@@ -4,8 +4,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.catalog.dto.response.PlatformAttributeOptionResponse;
 import fu.osms.catalog.dto.response.PlatformAttributeResponse;
+import fu.osms.catalog.dto.TikTokProductTitleInput;
+import fu.osms.catalog.dto.TikTokProductTitleResult;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.service.TikTokProductTitleResolver;
 import fu.osms.sync.tiktok.TikTokProductPayloadBuilder;
 import fu.osms.sync.tiktok.dto.TikTokProductPayloadContext;
 import lombok.RequiredArgsConstructor;
@@ -24,13 +27,22 @@ import java.util.UUID;
 public class TikTokProductPayloadBuilderImpl implements TikTokProductPayloadBuilder {
 
     private final ObjectMapper objectMapper;
+    private final TikTokProductTitleResolver titleResolver;
 
     @Override
     public Map<String, Object> buildPayload(TikTokProductPayloadContext context) {
         Product product = context.product();
         Map<String, Object> config = context.config();
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("title", product.getName());
+        TikTokProductTitleResult titleResult = titleResolver.resolve(new TikTokProductTitleInput(
+                text(config.get("listingTitle")),
+                product.getName(),
+                text(config.get("categoryName")),
+                text(config.get("brandName")),
+                product.getDescription()
+        ));
+        if (!titleResult.valid()) throw new IllegalStateException(titleResult.validationError());
+        payload.put("title", titleResult.title());
         payload.put("description", product.getDescription());
         payload.put("category_id", text(config.get("categoryId")));
         payload.put("category_version", defaultMessage(text(config.get("categoryVersion")), "v2"));

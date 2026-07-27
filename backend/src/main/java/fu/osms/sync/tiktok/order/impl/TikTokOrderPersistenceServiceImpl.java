@@ -50,7 +50,8 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
                 order.setPlatformMetadata(metadataMapper.merge(order.getPlatformMetadata(), context, model, false));
                 orderRepository.save(order);
             }
-            return new OrderImportOutcome(order.getId(), OrderImportResult.SKIPPED_STALE, upsert.created(), false, false, metadataUpdated);
+            return new OrderImportOutcome(order.getId(), OrderImportResult.SKIPPED_STALE,
+                    upsert.created(), false, false, metadataUpdated, order.getStatus(), order.getStatus());
         }
 
         OrderStatus oldStatus = order.getStatus();
@@ -77,7 +78,8 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
         itemRepository.saveAll(items.stream().map(item -> item.entity(saved)).toList());
         return new OrderImportOutcome(saved.getId(), upsert.created() ? OrderImportResult.CREATED : OrderImportResult.UPDATED,
                 upsert.created(), "PAID".equals(saved.getPaymentStatus()) && !"PAID".equals(oldPayment),
-                saved.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED, true);
+                saved.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED, true,
+                oldStatus, saved.getStatus());
     }
 
     @Override
