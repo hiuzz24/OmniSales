@@ -4,17 +4,21 @@ const {
   createTestSupplier,
   deactivateTestSupplier,
 } = require('../../utils/supplier-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Supplier API Tests', () => {
 
   let createdSupplierIds = [];
 
-  test.afterEach(async ({ request, managerHeaders }) => {
-    if (!createdSupplierIds.length) return;
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdSupplierIds.splice(0)) {
-      await deactivateTestSupplier(request, authToken, id);
+  test.afterEach(async ({ request }) => {
+    if (createdSupplierIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdSupplierIds.splice(0)) {
+        await deactivateTestSupplier(request, authToken, id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/suppliers

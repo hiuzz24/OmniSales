@@ -5,8 +5,14 @@ const {
   getOrderStats,
   API_BASE,
 } = require('../../utils/order-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Order API Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // GET /api/orders - List Orders
   test('P1 - GET /api/orders - List orders with pagination returns 200', async ({ request, managerHeaders }) => {

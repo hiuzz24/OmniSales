@@ -1,6 +1,12 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('User List E2E Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // USR-E2E-1
   test('USR-E2E-1 - Navigate to /users - Stats cards are visible', async ({ managerPage }) => {
@@ -209,24 +215,33 @@ test.describe('User List E2E Tests', () => {
     await managerPage.goto('/users', { waitUntil: 'domcontentloaded' });
     await managerPage.waitForSelector('table, [role="table"]', { timeout: 10000 });
 
-    const editBtn = managerPage.locator('button:has-text("Sửa"), button:has-text("Edit")').first();
-    if (await editBtn.count() > 0) {
+    // Skip the first N rows because they are base fixtures (admin,
+    // manager, viewer, staff, owner1). Targeting the *first* edit button
+    // would disable the manager and break every subsequent test that
+    // logs in via the managerPage fixture. We instead pick the last edit
+    // button — most likely a recently created test user.
+    const editButtons = managerPage.locator('button:has-text("Sửa"), button:has-text("Edit")');
+    const editCount = await editButtons.count();
+    // Treat rows 1-5 as base fixtures and prefer a row from index >=5.
+    const targetIdx = editCount > 5 ? 5 : Math.max(0, editCount - 1);
+    const editBtn = editButtons.nth(targetIdx);
+    if ((await editBtn.count()) > 0) {
       await editBtn.click();
       await managerPage.waitForTimeout(500);
 
       const statusSelect = managerPage.locator('select[name*="status"], select').last();
-      if (await statusSelect.count() > 0) {
+      if ((await statusSelect.count()) > 0) {
         await statusSelect.selectOption({ index: 1 });
       }
 
       const saveBtn = managerPage.locator('button:has-text("Lưu"), button:has-text("Save")').first();
-      if (await saveBtn.count() > 0) {
+      if ((await saveBtn.count()) > 0) {
         await saveBtn.click();
         await managerPage.waitForTimeout(1000);
       }
 
       const closeBtn = managerPage.locator('button[aria-label*="close"]').first();
-      if (await closeBtn.count() > 0) await closeBtn.click();
+      if ((await closeBtn.count()) > 0) await closeBtn.click();
     }
   });
 

@@ -1,5 +1,6 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE, TEST_EMAIL, TEST_PASSWORD } = require('../../utils/env-config');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 /**
  * Playwright API tests for the Invite Staff flow.
@@ -10,6 +11,11 @@ const { API_BASE, TEST_EMAIL, TEST_PASSWORD } = require('../../utils/env-config'
  *   - POST /api/auth/accept-invite (password mismatch / weak / happy + login)
  */
 test.describe('Invite Staff API Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // Generate a unique invite email per test to avoid colliding with prior runs.
   const uniqueEmail = () => `invitee+${Date.now()}-${Math.floor(Math.random() * 9999)}@osms-test.vn`;

@@ -92,13 +92,23 @@ test.describe('Product Detail E2E Tests', () => {
       await managerPage.waitForURL(/\/products\/[a-f0-9-]+$/);
     }
 
+    // Set up dialog handler BEFORE clicking the delete button
+    let dialogShown = false;
     managerPage.on('dialog', async (dialog) => {
+      dialogShown = true;
       expect(dialog.message()).toMatch(/xóa|delete|confirm/i);
       await dialog.dismiss();
     });
 
-    await managerPage.locator('button:has-text("Xóa"), button:has-text("Delete")').click();
-    await managerPage.waitForTimeout(500);
+    // Wait for delete button to be visible and clickable
+    const deleteBtn = managerPage.locator('button:has-text("Xóa"), button:has-text("Delete")');
+    await deleteBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await deleteBtn.click();
+
+    // Dialog should have been shown
+    expect(dialogShown).toBe(true);
+
+    // URL should still be on detail page (not navigated away)
     await expect(managerPage).toHaveURL(/\/products\/[a-f0-9-]+$/);
   });
 

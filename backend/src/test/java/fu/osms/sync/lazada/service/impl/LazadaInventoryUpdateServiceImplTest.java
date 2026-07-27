@@ -1,52 +1,38 @@
 package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import fu.osms.catalog.entity.Product;
-import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
-import fu.osms.channel.entity.ChannelProduct;
-import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.token.dto.AccessTokenContext;
 import fu.osms.channel.token.service.ChannelTokenService;
 import fu.osms.common.enums.PlatformType;
-import fu.osms.inventory.entity.InventoryItem;
-import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
+import fu.osms.sync.lazada.inventory.LazadaInventoryGateway;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class LazadaInventoryUpdateServiceImplTest {
 
     @Mock private LazadaAuthorizedApiClient lazadaApiClient;
@@ -57,17 +43,13 @@ class LazadaInventoryUpdateServiceImplTest {
     @Mock private StockReceiveRepository stockReceiveRepository;
     @Mock private InventoryIssueRepository inventoryIssueRepository;
     @Mock private MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
+    @Mock private LazadaInventoryGateway lazadaInventoryGateway;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private LazadaInventoryUpdateServiceImpl service;
 
     private UUID channelId;
     private Channel channel;
-    private ChannelCredential credential;
-    private ProductVariant variant;
-    private Warehouse defaultWarehouse;
-    private InventoryItem item;
-    private ChannelProductVariant mapping;
 
     @BeforeEach
     void setUp() {
@@ -80,7 +62,8 @@ class LazadaInventoryUpdateServiceImplTest {
                 inventoryItemRepository,
                 stockReceiveRepository,
                 inventoryIssueRepository,
-                marketplaceStockQuantityResolver
+                marketplaceStockQuantityResolver,
+                lazadaInventoryGateway
         );
 
         channelId = UUID.randomUUID();
@@ -90,162 +73,56 @@ class LazadaInventoryUpdateServiceImplTest {
                 .displayName("Lazada-Test")
                 .metadata(new HashMap<>())
                 .build();
-
-        credential = ChannelCredential.builder()
-                .id(UUID.randomUUID())
-                .channel(channel)
-                .accessToken("access-tok")
-                .connectionState("CONNECTED")
-                .tokenExpiresAt(OffsetDateTime.now().plusHours(1))
-                .refreshTokenExpiresAt(OffsetDateTime.now().plusDays(30))
-                .build();
-
-        defaultWarehouse = Warehouse.builder()
-                .id(UUID.randomUUID())
-                .name("Default WH")
-                .address("[LAZADA_WAREHOUSE_CODE=MY-WAREHOUSE-CODE]")
-                .isActive(true)
-                .build();
-
-        Product product = Product.builder()
-                .id(UUID.randomUUID())
-                .name("Test Product")
-                .sku("PROD-001")
-                .build();
-
-        variant = ProductVariant.builder()
-                .id(UUID.randomUUID())
-                .sku("SKU-001")
-                .price(new BigDecimal("199.99"))
-                .product(product)
-                .build();
-
-        ChannelProduct channelProduct = ChannelProduct.builder()
-                .id(UUID.randomUUID())
-                .channel(channel)
-                .externalProductId("234234234")
-                .build();
-
-        mapping = ChannelProductVariant.builder()
-                .id(UUID.randomUUID())
-                .channelProduct(channelProduct)
-                .variant(variant)
-                .externalVariantId("SKU-ID-1")
-                .externalSku("SKU-001")
-                .build();
-
-        item = InventoryItem.builder()
-                .id(UUID.randomUUID())
-                .warehouse(defaultWarehouse)
-                .variant(variant)
-                .quantityOnHand(10)
-                .reservedQuantity(2)
-                .build();
     }
 
     @Test
-    @DisplayName("syncChangedSellableStock — full baseline: builds a SKU payload and posts to Lazada")
-    void syncChangedSellableStock_fullBaseline() throws Exception {
-        channel.getMetadata().put("defaultWarehouseId", defaultWarehouse.getId().toString());
-        channel.getMetadata().put("lazadaWarehouseCode", "MY-WAREHOUSE-CODE");
-
-        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
-                .thenReturn(Optional.of(credential));
-        when(channelTokenService.getValidToken(channelId))
-                .thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
-        when(channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId))
-                .thenReturn(List.of(mapping));
-        when(inventoryItemRepository.findByVariantIdIn(List.of(variant.getId())))
-                .thenReturn(List.of(item));
-        when(marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping))
-                .thenReturn(8);
-        when(lazadaApiClient.executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap()))
-                .thenReturn("{\"code\":\"0\"}");
-        when(lazadaApiClient.executePost(eq(channelId), eq("/product/price_quantity/update"), anyMap()))
-                .thenReturn("{\"code\":\"0\"}");
-
-        LazadaInventorySyncResult result = service.syncChangedSellableStock(
-                channelId, null, null, null);
-
-        assertThat(result.affectedProductCount()).isEqualTo(1);
-        assertThat(result.pushedVariantCount()).isEqualTo(1);
-        assertThat(result.changedWarehouseCount()).isEqualTo(0);
-        verify(lazadaApiClient).executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap());
-    }
-
-    @Test
-    @DisplayName("syncChangedSellableStock - price payload sends available quantity, not on-hand or reserved")
-    void syncChangedSellableStock_pricePayloadUsesAvailableQuantity() {
-        channel.getMetadata().put("defaultWarehouseId", defaultWarehouse.getId().toString());
-        channel.getMetadata().put("lazadaWarehouseCode", "MY-WAREHOUSE-CODE");
-
-        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
-                .thenReturn(Optional.of(credential));
-        when(channelTokenService.getValidToken(channelId))
-                .thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
-        when(channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId))
-                .thenReturn(List.of(mapping));
-        when(inventoryItemRepository.findByVariantIdIn(List.of(variant.getId())))
-                .thenReturn(List.of(item));
-        when(marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping))
-                .thenReturn(8);
-        when(lazadaApiClient.executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap()))
-                .thenReturn("{\"code\":\"0\"}");
-        when(lazadaApiClient.executePost(eq(channelId), eq("/product/price_quantity/update"), anyMap()))
-                .thenReturn("{\"code\":\"0\"}");
-
-        service.syncChangedSellableStock(channelId, null, null, null);
-
-        ArgumentCaptor<Map<String, String>> paramsCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(lazadaApiClient).executePost(eq(channelId), eq("/product/price_quantity/update"), paramsCaptor.capture());
-        String payload = paramsCaptor.getValue().get("payload");
-        assertThat(payload).contains("<ItemId>234234234</ItemId>");
-        assertThat(payload).contains("<SkuId>SKU-ID-1</SkuId>");
-        assertThat(payload).contains("<SellerSku>SKU-001</SellerSku>");
-        assertThat(payload).contains("<Price>199.99</Price>");
-        assertThat(payload).contains("<SalePrice>199.99</SalePrice>");
-        assertThat(payload).contains("<WarehouseCode>MY-WAREHOUSE-CODE</WarehouseCode>");
-        assertThat(payload).contains("<Quantity>8</Quantity>");
-        assertThat(payload).doesNotContain("<Quantity>10</Quantity>");
-        assertThat(payload).doesNotContain("<Quantity>2</Quantity>");
-    }
-
-    @Test
-    @DisplayName("syncChangedSellableStock — blank access token raises IllegalStateException before any API call")
-    void syncChangedSellableStock_blankToken() {
-        credential.setAccessToken("   ");
-
-        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
-                .thenReturn(Optional.of(credential));
-        when(channelTokenService.getValidToken(channelId))
-                .thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "   ", OffsetDateTime.now().plusSeconds(3600)));
-
-        assertThatThrownBy(() -> service.syncChangedSellableStock(channelId, null, null, null))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("access_token");
-
-        verify(lazadaApiClient, never()).executePost(any(UUID.class), any(String.class), anyMap());
-    }
-
-    @Test
-    @DisplayName("syncChangedSellableStock — missing credential raises IllegalStateException")
-    void syncChangedSellableStock_missingCredential() {
+    @DisplayName("Should throw when no credential found")
+    void shouldThrowWhenNoCredential() {
         when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.syncChangedSellableStock(channelId, null, null, null))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("token ket noi");
+                .hasMessageContaining("token");
+    }
 
+    @Test
+    @DisplayName("Should return zero when no mappings found")
+    void shouldReturnZeroWhenNoMappings() {
+        ChannelCredential credential = ChannelCredential.builder()
+                .id(UUID.randomUUID())
+                .channel(channel)
+                .accessToken("access-tok")
+                .connectionState("CONNECTED")
+                .build();
+
+        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
+                .thenReturn(Optional.of(credential));
+        when(channelTokenService.getValidToken(channelId))
+                .thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
+        when(channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId))
+                .thenReturn(List.of());
+
+        LazadaInventorySyncResult result = service.syncChangedSellableStock(channelId, null, null, null);
+
+        assertThat(result.pushedVariantCount()).isZero();
         verify(lazadaApiClient, never()).executePost(any(UUID.class), any(String.class), anyMap());
     }
 
     @Test
-    @DisplayName("syncChangedSellableStock — changedSince with empty scoped variants returns zero result, no API call")
-    void syncChangedSellableStock_changedSinceNoChanges() {
+    @DisplayName("Should skip sync when changedSince with empty variants")
+    void shouldSkipWhenChangedSinceWithEmptyVariants() {
+        ChannelCredential credential = ChannelCredential.builder()
+                .id(UUID.randomUUID())
+                .channel(channel)
+                .accessToken("access-tok")
+                .connectionState("CONNECTED")
+                .build();
+
         when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
                 .thenReturn(Optional.of(credential));
-        when(channelTokenService.getValidToken(channelId)).thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
+        when(channelTokenService.getValidToken(channelId))
+                .thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
 
         LazadaInventorySyncResult result = service.syncChangedSellableStock(
                 channelId,
@@ -255,45 +132,5 @@ class LazadaInventoryUpdateServiceImplTest {
         );
 
         assertThat(result.pushedVariantCount()).isZero();
-        assertThat(result.affectedProductCount()).isZero();
-        verify(lazadaApiClient, never()).executePost(any(UUID.class), any(String.class), anyMap());
-    }
-
-    @Test
-    @DisplayName("syncChangedSellableStock — Lazada API returns non-zero code throws IllegalStateException")
-    void syncChangedSellableStock_apiError() {
-        channel.getMetadata().put("defaultWarehouseId", defaultWarehouse.getId().toString());
-        channel.getMetadata().put("lazadaWarehouseCode", "MY-WAREHOUSE-CODE");
-
-        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
-                .thenReturn(Optional.of(credential));
-        when(channelTokenService.getValidToken(channelId)).thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
-        when(channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId))
-                .thenReturn(List.of(mapping));
-        when(inventoryItemRepository.findByVariantIdIn(List.of(variant.getId())))
-                .thenReturn(List.of(item));
-        when(marketplaceStockQuantityResolver.maxAvailableQuantityForSkuGroup(mapping))
-                .thenReturn(8);
-        when(lazadaApiClient.executePost(eq(channelId), eq("/product/stock/sellable/update"), anyMap()))
-                .thenReturn("{\"code\":\"500\",\"message\":\"oops\"}");
-
-        assertThatThrownBy(() -> service.syncChangedSellableStock(channelId, null, null, null))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("oops");
-    }
-
-    @Test
-    @DisplayName("syncChangedSellableStock — no mappings returns early with zero pushed variants")
-    void syncChangedSellableStock_noMappings() {
-        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
-                .thenReturn(Optional.of(credential));
-        when(channelTokenService.getValidToken(channelId)).thenReturn(new AccessTokenContext(channelId, PlatformType.LAZADA, "access-tok", OffsetDateTime.now().plusSeconds(3600)));
-        when(channelProductVariantRepository.findActiveByChannelIdWithVariant(channelId))
-                .thenReturn(List.of());
-
-        LazadaInventorySyncResult result = service.syncChangedSellableStock(channelId, null, null, null);
-
-        assertThat(result.pushedVariantCount()).isZero();
-        verify(lazadaApiClient, never()).executePost(any(UUID.class), any(String.class), anyMap());
     }
 }

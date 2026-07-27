@@ -1,5 +1,6 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { getWarehouseId, API_BASE } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Inventory Log API Tests', () => {
 
@@ -8,6 +9,11 @@ test.describe('Inventory Log API Tests', () => {
   test.beforeAll(async ({ request, managerHeaders }) => {
     const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     warehouseId = await getWarehouseId(request, authToken);
+  });
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/inventory/log

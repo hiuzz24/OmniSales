@@ -1,8 +1,14 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 const BASE_URL = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:5174';
 
 test.describe('Stock Transfer E2E Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   test('ST-E2E-1 - Stock Transfer list page loads', async ({ managerPage }) => {
     await managerPage.goto(`${BASE_URL}/warehouse/transfers`);

@@ -25,7 +25,6 @@ const IMPORT_HEADERS = [
   'Trạng thái',
   'SKU biến thể',
   'Tên biến thể',
-  'Barcode',
   'Trọng lượng (g)',
 ];
 

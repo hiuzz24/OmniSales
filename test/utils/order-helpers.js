@@ -43,16 +43,13 @@ async function createTestOrder(request, token, overrides = {}) {
   const defaultOrder = {
     customerId: overrides.customerId || null,
     channelId: overrides.channelId || null,
-    items: overrides.items || [
-      {
-        variantId: overrides.variantId || null,
-        sku: `TEST-ORD-${timestamp}`,
-        name: `Test Order Item ${timestamp}`,
-        quantity: 1,
-        unitPrice: 150000,
-        discountAmount: 0,
-      },
-    ],
+    platform: overrides.platform || 'MANUAL',
+    channelName: overrides.channelName || `Test Channel ${timestamp}`,
+    externalOrderId: overrides.externalOrderId || `TEST-ORD-${timestamp}`,
+    status: overrides.status || 'PENDING',
+    paymentStatus: overrides.paymentStatus || 'UNPAID',
+    buyerName: overrides.buyerName || 'Test Customer',
+    buyerPhone: overrides.buyerPhone || '0912345678',
     shippingAddress: overrides.shippingAddress || {
       fullName: 'Test Customer',
       phone: '0912345678',
@@ -61,7 +58,20 @@ async function createTestOrder(request, token, overrides = {}) {
       district: 'District 1',
       ward: 'Ward 1',
     },
-    note: `Test order note ${timestamp}`,
+    subtotal: overrides.subtotal !== undefined ? overrides.subtotal : 150000,
+    discountAmount: overrides.discountAmount !== undefined ? overrides.discountAmount : 0,
+    shippingFee: overrides.shippingFee !== undefined ? overrides.shippingFee : 0,
+    currency: overrides.currency || 'VND',
+    note: overrides.note || `Test order note ${timestamp}`,
+    items: overrides.items || [
+      {
+        sku: `TEST-ORD-${timestamp}`,
+        name: `Test Order Item ${timestamp}`,
+        quantity: 1,
+        unitPrice: 150000,
+        discountAmount: 0,
+      },
+    ],
   };
 
   const response = await request.post(`${API_BASE}/orders`, {

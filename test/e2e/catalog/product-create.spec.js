@@ -1,5 +1,6 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { uniqueSku } = require('../../utils/product-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Product Create E2E Tests', () => {
 
@@ -7,6 +8,11 @@ test.describe('Product Create E2E Tests', () => {
     await managerPage.goto('/products/create');
     await managerPage.waitForLoadState('domcontentloaded');
     await managerPage.waitForTimeout(2000);
+  });
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // Basic UI tests (PC-E2E-1 to PC-E2E-6)
