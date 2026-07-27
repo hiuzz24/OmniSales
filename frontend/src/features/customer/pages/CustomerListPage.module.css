@@ -78,6 +78,54 @@
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2);
 }
 
+.btnOutline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.18);
+}
+
+.btnSync {
+  position: relative;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+.btnSync:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+}
+
+.btnSync:disabled {
+  background: linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.18);
+}
+
+.syncBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 4px;
+  background: #fbbf24;
+  color: #78350f;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.4);
+}
+
+.spinning {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .btnPrimary {
   display: inline-flex;
   align-items: center;
@@ -373,6 +421,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fromOrdersBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
 /* Contact info */

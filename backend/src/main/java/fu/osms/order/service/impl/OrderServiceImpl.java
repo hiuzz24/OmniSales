@@ -14,6 +14,7 @@ import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.customer.entity.Customer;
 import fu.osms.customer.repository.CustomerRepository;
+import fu.osms.customer.service.CustomerService;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
@@ -75,6 +76,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository orderItemRepository;
     private final ChannelRepository channelRepository;
     private final CustomerRepository customerRepository;
+    private final CustomerService customerService;
     private final AuditLogRepository auditLogRepository;
     private final AuditService auditService;
     private final OrderMapper orderMapper;
@@ -102,6 +104,9 @@ public class OrderServiceImpl implements OrderService {
         if (request.getCustomerId() != null) {
             Customer customer = customerRepository.findById(request.getCustomerId())
                     .orElseThrow(() -> new EntityNotFoundException("Customer not found: " + request.getCustomerId()));
+            order.setCustomer(customer);
+        } else if (order.getBuyerName() != null || order.getBuyerPhone() != null) {
+            Customer customer = customerService.findOrCreateFromBuyer(order.getBuyerName(), order.getBuyerPhone());
             order.setCustomer(customer);
         }
 
@@ -511,9 +516,9 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getFiltered(OrderStatus status, UUID channelId, String keyword,
                                                     OffsetDateTime from, OffsetDateTime to,
-                                                    int page, int size) {
+                                                    UUID customerId, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size);
-        Specification<Order> spec = OrderSpec.withFilters(status, channelId, keyword, from, to);
+        Specification<Order> spec = OrderSpec.withFilters(status, channelId, keyword, from, to, customerId);
         Page<Order> orderPage = orderRepository.findAll(spec, pageRequest);
         return toPageResponse(orderPage);
     }
@@ -531,6 +536,12 @@ public class OrderServiceImpl implements OrderService {
                 orderRepository.countByStatus(OrderStatus.CANCELLED),
                 orderRepository.sumRevenueDelivered()
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countOrdersWithoutCustomer() {
+        return orderRepository.countByCustomerIsNull();
     }
 
     @Override

@@ -26,7 +26,7 @@ public interface OrderService {
 
     PageResponse<OrderResponse> getFiltered(OrderStatus status, UUID channelId, String keyword,
                                             OffsetDateTime from, OffsetDateTime to,
-                                            int page, int size);
+                                            UUID customerId, int page, int size);
 
     OrderResponse updateStatus(UUID id, OrderStatus status);
 
@@ -39,6 +39,8 @@ public interface OrderService {
     List<CancelReasonResponse> getCancelReasons(UUID id);
 
     OrderStats getStats();
+
+    long countOrdersWithoutCustomer();
 
     PageResponse<AuditLogResponse> getOrderHistory(UUID orderId, int page, int size);
 }

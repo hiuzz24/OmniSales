@@ -6,12 +6,17 @@ import fu.osms.common.exception.ErrorCode;
 import fu.osms.customer.dto.request.CustomerRequest;
 import fu.osms.customer.dto.response.CustomerResponse;
 import fu.osms.customer.dto.response.CustomerStatsResponse;
+import fu.osms.customer.dto.response.CustomerWithOrderSourceResponse;
+import fu.osms.customer.dto.response.PageWithOrderCustomersResponse;
 import fu.osms.customer.entity.Customer;
 import fu.osms.customer.mapper.CustomerMapper;
 import fu.osms.customer.repository.CustomerRepository;
 import fu.osms.customer.service.CustomerService;
+import fu.osms.order.entity.Order;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.order.repository.projection.CustomerOrderAggregate;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -19,10 +24,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CustomerServiceImpl implements CustomerService {
 
     private final CustomerRepository customerRepository;
@@ -171,5 +178,143 @@ public class CustomerServiceImpl implements CustomerService {
                 .totalOrders(customerRepository.countAllOrders())
                 .totalSpent(customerRepository.sumTotalSpent())
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageWithOrderCustomersResponse getPageWithOrderCustomers(int page, int size, String search, String status, String gender) {
+        // 1. Get filtered page of customers with their existing per-customer order stats
+        PageResponse<CustomerResponse> filteredPage = getAll(page, size, search, status, gender);
+
+        Set<UUID> pageIds = filteredPage.getContent().stream()
+                .map(CustomerResponse::getId)
+                .collect(Collectors.toSet());
+
+        // 2. Find customer IDs that have orders (customer != null, not CANCELLED) but are NOT on the current page
+        List<UUID> allOrderCustomerIds = orderRepository.findCustomerIdsWithNonNullCustomer();
+        List<UUID> missingIds = allOrderCustomerIds.stream()
+                .filter(id -> !pageIds.contains(id))
+                .toList();
+
+        List<CustomerWithOrderSourceResponse> merged = new ArrayList<>(
+                filteredPage.getContent().size() + missingIds.size());
+
+        // 3. Existing customers: fromOrders = false
+        for (CustomerResponse r : filteredPage.getContent()) {
+            merged.add(CustomerWithOrderSourceResponse.from(r, false));
+        }
+
+        // 4. Aggregate order stats for missing customers in one bulk query
+        if (!missingIds.isEmpty()) {
+            Map<UUID, CustomerOrderAggregate> aggMap = orderRepository.aggregateByCustomerIds(missingIds).stream()
+                    .collect(Collectors.toMap(CustomerOrderAggregate::getCustomerId, a -> a));
+
+            List<UUID> idsWithOrders = missingIds.stream()
+                    .filter(aggMap::containsKey)
+                    .toList();
+
+            if (!idsWithOrders.isEmpty()) {
+                Map<UUID, Customer> customerMap = customerRepository.findAllById(idsWithOrders).stream()
+                        .collect(Collectors.toMap(Customer::getId, c -> c));
+
+                for (UUID cid : idsWithOrders) {
+                    Customer c = customerMap.get(cid);
+                    if (c == null) continue; // customer was deleted but orders remain
+                    CustomerOrderAggregate agg = aggMap.get(cid);
+                    CustomerResponse base = toCustomerResponse(c);
+                    base.setOrderCount(agg.getOrderCount());
+                    base.setTotalSpent(agg.getTotalSpent());
+                    merged.add(CustomerWithOrderSourceResponse.from(base, true));
+                }
+            }
+        }
+
+        // 5. Aggregate totals over the merged list
+        long totalOrders = merged.stream().mapToLong(r -> Optional.ofNullable(r.getOrderCount()).orElse(0L)).sum();
+        BigDecimal totalSpent = merged.stream()
+                .map(r -> Optional.ofNullable(r.getTotalSpent()).orElse(BigDecimal.ZERO))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        PageWithOrderCustomersResponse.AggregatedStats aggregated = PageWithOrderCustomersResponse.AggregatedStats.builder()
+                .totalOrders(totalOrders)
+                .totalSpent(totalSpent)
+                .build();
+
+        return PageWithOrderCustomersResponse.builder()
+                .content(merged)
+                .page(filteredPage.getPage())
+                .size(filteredPage.getSize())
+                .totalElements(filteredPage.getTotalElements())
+                .totalPages(filteredPage.getTotalPages())
+                .first(filteredPage.isFirst())
+                .last(filteredPage.isLast())
+                .aggregated(aggregated)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public Customer findOrCreateFromBuyer(String buyerName, String buyerPhone) {
+        // Normalize: null/blank inputs -> defaults
+        String safeName = (buyerName == null || buyerName.isBlank()) ? "Khách vãng lai" : buyerName.trim();
+        String safePhone = (buyerPhone == null || buyerPhone.isBlank()) ? null : buyerPhone.trim();
+
+        // Try dedupe by fullName + phone first
+        Optional<Customer> existing = customerRepository.findFirstByFullNameAndPhone(safeName, safePhone);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        // Fall back to phone-only match (some orders have empty buyerName but buyerPhone)
+        if (safePhone != null) {
+            existing = customerRepository.findByPhone(safePhone);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+
+        Customer customer = Customer.builder()
+                .fullName(safeName)
+                .phone(safePhone)
+                .isActive(true)
+                .build();
+        return customerRepository.save(customer);
+    }
+
+    @Override
+    @Transactional
+    public int syncCustomersFromOrders() {
+        long nullCount = orderRepository.countByCustomerIsNull();
+        if (nullCount == 0) {
+            log.info("[syncCustomersFromOrders] No orders with null customer; skip");
+            return 0;
+        }
+
+        List<Order> nullOrders = orderRepository.findAllByCustomerIsNullOrderByCreatedAtAsc();
+        log.info("[syncCustomersFromOrders] Backfilling {} orders with null customer", nullOrders.size());
+
+        int updated = 0;
+        Map<String, Customer> customerCache = new HashMap<>();
+
+        for (Order order : nullOrders) {
+            String buyerName = order.getBuyerName();
+            String buyerPhone = order.getBuyerPhone();
+            String safeName = (buyerName == null || buyerName.isBlank()) ? "Khách vãng lai" : buyerName.trim();
+            String safePhone = (buyerPhone == null || buyerPhone.isBlank()) ? null : buyerPhone.trim();
+            String cacheKey = safeName + "||" + safePhone;
+
+            Customer customer = customerCache.get(cacheKey);
+            if (customer == null) {
+                customer = findOrCreateFromBuyer(safeName, safePhone);
+                customerCache.put(cacheKey, customer);
+            }
+
+            order.setCustomer(customer);
+            updated++;
+        }
+
+        orderRepository.saveAll(nullOrders);
+        log.info("[syncCustomersFromOrders] Done. Updated {} orders", updated);
+        return updated;
     }
 }
