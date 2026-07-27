@@ -172,11 +172,12 @@ public class CustomerServiceImpl implements CustomerService {
     @Override
     @Transactional(readOnly = true)
     public CustomerStatsResponse getStats() {
+        BigDecimal totalSpent = customerRepository.sumTotalSpent();
         return CustomerStatsResponse.builder()
                 .totalCustomers(customerRepository.countAll())
                 .activeCustomers(customerRepository.countActive())
                 .totalOrders(customerRepository.countAllOrders())
-                .totalSpent(customerRepository.sumTotalSpent())
+                .totalSpent(totalSpent != null ? totalSpent : BigDecimal.ZERO)
                 .build();
     }
 

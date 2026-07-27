@@ -244,4 +244,67 @@ test.describe('Order API Tests', () => {
     );
     expect(hasData).toBeTruthy();
   });
+
+  // =========================================================
+  // Regression: stats.totalRevenue must equal Σ totalAmount of non-CANCELLED orders
+  // =========================================================
+
+  test('P17 - REGRESSION: totalRevenue excludes CANCELLED orders', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+
+    const before = await getOrderStats(request, authToken);
+    if (!before || before.totalRevenue === undefined) {
+      test.skip(true, 'Backend does not expose totalRevenue');
+      return;
+    }
+
+    const orderA = await createTestOrder(request, authToken, {
+      externalOrderId: `REG-REV-A-${Date.now()}`,
+      subtotal: 1000000,
+      discountAmount: 0,
+      shippingFee: 0,
+      status: 'CONFIRMED',
+    });
+    const orderB = await createTestOrder(request, authToken, {
+      externalOrderId: `REG-REV-B-${Date.now()}`,
+      subtotal: 500000,
+      discountAmount: 0,
+      shippingFee: 0,
+      status: 'PENDING',
+    });
+
+    const computeTotal = (o) =>
+      Math.max(0, Number(o.subtotal) - Number(o.discountAmount) + Number(o.shippingFee));
+
+    const afterCreate = await getOrderStats(request, authToken);
+    const expectedAfterCreate = Number(before.totalRevenue)
+      + computeTotal(orderA)
+      + computeTotal(orderB);
+    expect(Number(afterCreate.totalRevenue)).toBe(expectedAfterCreate);
+
+    await request.post(`${API_BASE}/orders/${orderB.id}/cancel`, {
+      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      data: { reason: 'regression test' },
+    });
+
+    const afterCancel = await getOrderStats(request, authToken);
+    const expectedAfterCancel = Number(before.totalRevenue) + computeTotal(orderA);
+    expect(Number(afterCancel.totalRevenue)).toBe(expectedAfterCancel);
+
+    await deleteTestOrder(request, authToken, orderA.id);
+  });
+
+  test('P18 - INVARIANT: totalRevenue is a non-negative number', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const stats = await getOrderStats(request, authToken);
+
+    if (!stats || stats.totalRevenue === undefined) {
+      test.skip(true, 'Backend does not expose totalRevenue');
+      return;
+    }
+
+    expect(typeof stats.totalRevenue).toBe('number');
+    expect(stats.totalRevenue).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(stats.totalRevenue)).toBe(true);
+  });
 });

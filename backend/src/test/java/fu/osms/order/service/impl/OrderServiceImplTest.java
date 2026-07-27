@@ -20,6 +20,7 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.inventory.service.OrderStockDeliveryReadinessService;
 import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
 import fu.osms.order.dto.request.OrderRequest;
@@ -95,6 +96,8 @@ class OrderServiceImplTest {
     private InventoryItemRepository inventoryItemRepository;
     @Mock
     private InventoryAlertService inventoryAlertService;
+    @Mock
+    private OrderStockDeliveryReadinessService orderStockDeliveryReadinessService;
     @Mock
     private OrderStatusPushService orderStatusPushService;
     @Mock
@@ -242,6 +245,7 @@ class OrderServiceImplTest {
                 .thenReturn(successPushResult);
         lenient().when(orderStatusPushService.push(any(Order.class), any(OrderStatus.class), any(OrderStatusPushContext.class)))
                 .thenReturn(successPushResult);
+        lenient().doNothing().when(orderStockDeliveryReadinessService).requireReadyForShipment(any());
         lenient().doNothing().when(eventPublisher).publishEvent(any());
     }
 
@@ -936,6 +940,43 @@ class OrderServiceImplTest {
             assertThat(result.deliveredCount()).isEqualTo(25L);
             assertThat(result.cancelledCount()).isEqualTo(5L);
             assertThat(result.totalRevenue()).isEqualTo(new BigDecimal("5000000"));
+        }
+
+        @Test
+        @DisplayName("Should propagate totalRevenue from repository (excludes CANCELLED)")
+        void shouldPropagateRevenueFromRepository() {
+            when(orderRepository.countAll()).thenReturn(0L);
+            when(orderRepository.countByStatus(any())).thenReturn(0L);
+            when(orderRepository.sumRevenueDelivered()).thenReturn(new BigDecimal("123456789"));
+
+            OrderStats result = orderService.getStats();
+
+            assertThat(result.totalRevenue()).isEqualTo(new BigDecimal("123456789"));
+        }
+
+        @Test
+        @DisplayName("Should return zero revenue when sumRevenueDelivered returns BigDecimal.ZERO")
+        void shouldReturnZeroRevenueWhenNoOrders() {
+            when(orderRepository.countAll()).thenReturn(0L);
+            when(orderRepository.countByStatus(any())).thenReturn(0L);
+            when(orderRepository.sumRevenueDelivered()).thenReturn(BigDecimal.ZERO);
+
+            OrderStats result = orderService.getStats();
+
+            assertThat(result.totalRevenue()).isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(result.totalRevenue()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Should preserve non-negative revenue values")
+        void shouldPreserveNonNegativeRevenue() {
+            when(orderRepository.countAll()).thenReturn(5L);
+            when(orderRepository.countByStatus(any())).thenReturn(0L);
+            when(orderRepository.sumRevenueDelivered()).thenReturn(new BigDecimal("0"));
+
+            OrderStats result = orderService.getStats();
+
+            assertThat(result.totalRevenue().signum()).isGreaterThanOrEqualTo(0);
         }
     }
 
