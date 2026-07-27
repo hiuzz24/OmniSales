@@ -88,7 +88,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
 
     Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
 
-    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId")
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId AND o.status <> 'CANCELLED'")
     Long countByCustomerId(@Param("customerId") UUID customerId);
 
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.customer.id = :customerId AND o.status <> 'CANCELLED'")
