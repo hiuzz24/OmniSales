@@ -3,6 +3,7 @@ package fu.osms.channel.repository;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.common.enums.PlatformType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -10,9 +11,53 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface ChannelProductVariantRepository extends JpaRepository<ChannelProductVariant, UUID> {
+
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "WHERE cpv.id IN :mappingIds")
+    List<ChannelProductVariant> findAllWithChannelAndVariantByIdIn(
+            @Param("mappingIds") List<UUID> mappingIds);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT cpv FROM ChannelProductVariant cpv " +
+            "JOIN FETCH cpv.channelProduct cp " +
+            "JOIN FETCH cp.channel ch " +
+            "JOIN FETCH cpv.variant v " +
+            "WHERE cpv.id = :mappingId")
+    Optional<ChannelProductVariant> findByIdForUpdate(@Param("mappingId") UUID mappingId);
+
+    @Query(value = """
+            SELECT cpv.id
+            FROM channel_product_variants cpv
+            JOIN channel_products cp ON cp.id = cpv.channel_product_id
+            JOIN channels ch ON ch.id = cp.channel_id
+            WHERE cp.mapping_state = 'ACTIVE'
+              AND ch.deleted_at IS NULL
+              AND CAST(ch.platform AS text) IN ('SHOPIFY', 'LAZADA', 'TIKTOK')
+              AND (
+                    (
+                      cpv.metadata #>> '{inventoryReconciliation,state}' IN ('PENDING', 'VERIFYING')
+                      AND (cpv.metadata #>> '{inventoryReconciliation,reconcileAfter}')::timestamptz <= NOW()
+                    )
+                    OR
+                    (
+                      cpv.metadata #>> '{inventoryReconciliation,state}' = 'PROCESSING'
+                      AND (cpv.metadata #>> '{inventoryReconciliation,processingStartedAt}')::timestamptz <= :processingCutoff
+                    )
+                  )
+            ORDER BY (cpv.metadata #>> '{inventoryReconciliation,reconcileAfter}')::timestamptz NULLS FIRST
+            FOR UPDATE SKIP LOCKED
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<UUID> claimDueInventoryReconciliationIds(
+            @Param("processingCutoff") java.time.OffsetDateTime processingCutoff,
+            @Param("limit") int limit);
 
     List<ChannelProductVariant> findByChannelProductId(UUID channelProductId);
 

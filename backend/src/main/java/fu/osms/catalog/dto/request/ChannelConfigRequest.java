@@ -25,6 +25,7 @@ public class ChannelConfigRequest {
     private String categoryVersion;
     private String brandId;
     private String brandName;
+    private String listingTitle;
     @Pattern(regexp = "(?i)^(|https?://.+)$", message = "Size chart image URL must start with http:// or https://")
     private String sizeChartImageUrl;
     private Map<String, Object> attributes;

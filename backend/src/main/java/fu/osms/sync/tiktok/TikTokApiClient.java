@@ -16,6 +16,7 @@ public interface TikTokApiClient {
 
     String uploadProductImage(String imageUrl, String useCase, String accessToken);
     Map<String, Object> searchInventory(String accessToken, String shopCipher, List<String> productIds);
+    Map<String, Object> searchInventoryBySkuIds(String accessToken, String shopCipher, List<String> skuIds);
 
     List<TikTokAuthorizedShop> getAuthorizedShops(String accessToken);
     Map<String, Object> getWarehouses(String accessToken, String shopCipher);

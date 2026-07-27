@@ -40,6 +40,18 @@ const stockDeliveryApi = {
   syncPendingMarketplaceInventory: () => {
     return axiosClient.post('/stock-deliveries/sync-marketplace-inventory');
   },
+
+  getOrderCandidates: (params = {}) => {
+    return axiosClient.get('/stock-deliveries/order-candidates', { params });
+  },
+
+  getOrderReadiness: (orderId) => {
+    return axiosClient.get(`/stock-deliveries/orders/${orderId}/readiness`);
+  },
+
+  createFromOrders: (orderIds) => {
+    return axiosClient.post('/stock-deliveries/from-orders', { orderIds });
+  },
 };
 
 export default stockDeliveryApi;

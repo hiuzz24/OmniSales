@@ -61,22 +61,16 @@ class ChannelServiceImplTest {
 
     private ChannelServiceImpl service;
 
-    @BeforeEach
-    void setUp() {
-        service = new ChannelServiceImpl(
-                channelRepository,
-                credentialRepository,
-                channelMapper,
-                connectionService,
-                mappingLifecycleService,
-                productQueryService,
-                responseService
-        );
-    }
-
-    @Nested
-    @DisplayName("OAuth connect delegations")
-    class ConnectDelegations {
+        @BeforeEach
+        void setUp() {
+                service = new ChannelServiceImpl(
+                                channelRepository,
+                                credentialRepository,
+                                channelMapper,
+                                connectionService,
+                                productQueryService,
+                                responseService);
+        }
 
         @Test
         @DisplayName("connectLazada delegates verbatim to ChannelConnectionService with all 6 args")

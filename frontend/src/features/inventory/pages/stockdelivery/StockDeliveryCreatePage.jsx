@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import inventoryApi from '../../../../api/inventoryApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
+import OrderStockDeliverySelector from './OrderStockDeliverySelector';
 import styles from '../CreatePage.module.css';
 
 const formatNumber = (v) => new Intl.NumberFormat('vi-VN').format(v ?? 0);
@@ -261,6 +262,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
 export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const fileRef = useRef(null);
   const [items, setItems] = useState([]);
@@ -269,9 +271,19 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const [warehouseVariants, setWarehouseVariants] = useState([]);
   const [loadingWarehouseVariants, setLoadingWarehouseVariants] = useState(false);
   const previousWarehouseIdRef = useRef('');
-  const [activeTab, setActiveTab] = useState('MANUAL'); // MANUAL or BY_ORDER
+  const requestedTab = searchParams.get('tab');
+  const linkedOrderId = searchParams.get('orderId');
+  const [activeTab, setActiveTab] = useState(
+    mode !== 'edit' && requestedTab === 'BY_ORDER' ? 'BY_ORDER' : 'MANUAL',
+  ); // MANUAL or BY_ORDER
   const [loadingDelivery, setLoadingDelivery] = useState(mode === 'edit');
   const isEdit = mode === 'edit';
+
+  useEffect(() => {
+    if (!isEdit && requestedTab === 'BY_ORDER') {
+      setActiveTab('BY_ORDER');
+    }
+  }, [isEdit, requestedTab]);
 
   const today = new Date().toISOString().split('T')[0];
   const { register, handleSubmit, watch, reset, setValue, formState: { errors, isSubmitting, isDirty } } = useForm({
@@ -536,12 +548,11 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6 }}>
         <button
-          disabled
-          style={{
-            padding: '7px 16px', borderRadius: 8, border: '1px solid #e2e8f0',
-            backgroundColor: '#f8fafc', color: '#94a3b8', fontSize: 13, fontWeight: 500,
-            cursor: 'not-allowed', opacity: 0.7,
-          }}
+          type="button"
+          disabled={isEdit}
+          onClick={() => setActiveTab('BY_ORDER')}
+          className={`${styles.actionBtn} ${activeTab === 'BY_ORDER' ? styles.primaryBtn : styles.secondaryBtn}`}
+          style={{ padding: '7px 16px' }}
         >
           Xuất theo đơn hàng
         </button>
@@ -554,17 +565,10 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
         </button>
       </div>
 
-      {/* Info for BY_ORDER */}
-      {activeTab === 'BY_ORDER' && (
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'start', gap: 10 }}>
-          <AlertCircle size={16} color="#2563eb" style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#1e40af', marginBottom: 2 }}>Tính năng đang phát triển</div>
-            <div style={{ fontSize: 12, color: '#3b82f6' }}>Xuất kho theo đơn hàng sẽ được cập nhật trong phiên bản tiếp theo. Vui lòng sử dụng tab "Xuất thủ công".</div>
-          </div>
-        </div>
-      )}
+      {activeTab === 'BY_ORDER' && <OrderStockDeliverySelector orderId={linkedOrderId} />}
 
+      {activeTab === 'MANUAL' && (
+        <>
       {/* Warning */}
       {overAvailableItem && (
         <div className={styles.warningBanner}>
@@ -734,6 +738,8 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
         products={warehouseVariants}
         loading={loadingWarehouseVariants}
       />
+        </>
+      )}
       {ConfirmDialog}
     </div>
   );

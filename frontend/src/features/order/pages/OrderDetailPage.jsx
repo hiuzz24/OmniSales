@@ -10,6 +10,7 @@ import {
   ShoppingBag, Store, PenTool, ChevronRight, ArrowRight,
 } from 'lucide-react';
 import orderService from '../services/orderService';
+import stockDeliveryService from '../../inventory/services/stockDeliveryService';
 import styles from './OrderDetailPage.module.css';
 
 const STATUS_CONFIG = {
@@ -72,6 +73,9 @@ const OrderDetailPage = () => {
   const [cancelReasons, setCancelReasons] = useState([]);
   const [cancelReasonsLoading, setCancelReasonsLoading] = useState(false);
   const [cancelReasonsError, setCancelReasonsError] = useState(null);
+  const [readiness, setReadiness] = useState(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
+  const [readinessError, setReadinessError] = useState(null);
 
   const fetchOrder = async ({ silent = false } = {}) => {
     if (!silent) {
@@ -101,13 +105,34 @@ const OrderDetailPage = () => {
     }
   };
 
+  const fetchReadiness = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setReadinessLoading(true);
+      setReadinessError(null);
+    }
+    try {
+      const response = await stockDeliveryService.getOrderReadiness(id);
+      setReadiness(response?.data ?? response);
+      setReadinessError(null);
+    } catch {
+      setReadiness(null);
+      setReadinessError('Không thể kiểm tra phiếu xuất kho');
+    } finally {
+      if (!silent) {
+        setReadinessLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     fetchOrder();
     fetchHistory();
+    fetchReadiness();
 
     const refreshInterval = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchOrder({ silent: true });
+        fetchReadiness({ silent: true });
       }
     }, 15_000);
 
@@ -127,8 +152,9 @@ const OrderDetailPage = () => {
       setOrder(updated);
       toast.success('Cập nhật trạng thái thành công');
       fetchHistory();
-    } catch {
-      toast.error('Cập nhật trạng thái thất bại');
+      fetchReadiness({ silent: true });
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || 'Cập nhật trạng thái thất bại');
     } finally {
       setUpdating(false);
       setConfirmStatus(null);
@@ -378,7 +404,8 @@ const OrderDetailPage = () => {
 
   const sc = STATUS_CONFIG[order.status] || { label: order.status, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' };
   const StatusIcon = sc.icon;
-  const canChangeStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
+  const canChangeStatus = role === ROLES.OWNER || role === ROLES.SALES;
+  const canChangePaymentStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
   const tikTokCancelPending = isTikTokOrder(order)
     && order.platformMetadata?.tiktok?.pendingConfirmation === true;
   const tikTokAwaitingShipment = order.platformMetadata?.tiktok?.rawOrderStatus === 'AWAITING_SHIPMENT';
@@ -398,6 +425,7 @@ const OrderDetailPage = () => {
   };
   const pc = paymentLabels[order.paymentStatus] || paymentLabels.UNPAID;
   const availableStatusOptions = getAvailableStatusOptions();
+  const shipmentReady = readiness?.readyForShipment === true;
   const groupedItems = groupOrderItems(order.items || []);
   const totalItemQuantity = groupedItems.reduce((sum, item) => sum + toNumber(item.quantity), 0);
 
@@ -460,11 +488,15 @@ const OrderDetailPage = () => {
                   {availableStatusOptions.map((s) => {
                     const cfg = STATUS_CONFIG[s];
                     const Icon = cfg.icon;
+                    const shipmentBlocked = s === 'SHIPPED'
+                      && (readinessLoading || readinessError || !shipmentReady);
                     return (
                       <button
                         key={s}
                         className={styles.dropdownItem}
                         onClick={() => handleUpdateStatus(s)}
+                        disabled={shipmentBlocked}
+                        title={shipmentBlocked ? 'Cần tạo phiếu xuất kho trước' : undefined}
                       >
                         <Icon size={13} style={{ color: cfg.color }} />
                         {cfg.label}
@@ -476,7 +508,7 @@ const OrderDetailPage = () => {
               )}
             </div>
           )}
-          {canChangeStatus && (
+          {canChangePaymentStatus && (
             <div className={styles.statusDropdown}>
               <button
                 className={styles.updatePaymentBtn}
@@ -518,6 +550,22 @@ const OrderDetailPage = () => {
           )}
         </div>
       </div>
+
+      {canChangeStatus && order.status === 'PROCESSING' && !shipmentReady && (
+        <div className={styles.readinessNotice}>
+          <AlertTriangle size={16} />
+          <span>
+            {readinessLoading
+              ? 'Đang kiểm tra phiếu xuất kho...'
+              : readinessError || 'Cần tạo phiếu xuất kho trước khi chuyển sang Sẵn sàng giao.'}
+          </span>
+          {readinessError && (
+            <button type="button" onClick={() => fetchReadiness()}>
+              Thử lại
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Order Progress */}
       {!['CANCELLED'].includes(order.status) && (

@@ -69,4 +69,21 @@ public interface ChannelRepository extends JpaRepository<Channel, UUID> {
             "LIMIT 1", nativeQuery = true)
     Optional<Channel> findActiveTikTokByShopId(@Param("shopId") String shopId);
 
+    @Query(value = """
+            SELECT * FROM channels
+            WHERE platform = 'TIKTOK'
+              AND deleted_at IS NULL
+              AND (
+                    (:openId <> '' AND (
+                        metadata->>'openId' = :openId
+                        OR metadata->>'accountId' = :openId
+                    ))
+                    OR (:sellerId <> '' AND metadata->>'shopId' = :sellerId)
+                  )
+            ORDER BY created_at
+            """, nativeQuery = true)
+    List<Channel> findActiveTikTokByWebhookIdentity(
+            @Param("openId") String openId,
+            @Param("sellerId") String sellerId);
+
 }

@@ -59,7 +59,6 @@ class MarketplaceInventoryPropagationServiceImplTest {
                 service = new MarketplaceInventoryPropagationServiceImpl(
                                 channelRepository,
                                 credentialRepository,
-                                channelProductVariantRepository,
                                 warehouseConsistencyService,
                                 shopifyInventoryUpdateService,
                                 lazadaInventoryUpdateService,

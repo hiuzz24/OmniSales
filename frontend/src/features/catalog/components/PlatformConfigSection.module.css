@@ -261,6 +261,21 @@
   --block-shadow: rgba(61, 91, 126, 0.055);
 }
 
+.titleBlock {
+  --block-accent: #6f8fb7;
+  --block-border: #d8e2ed;
+  --block-gradient-start: #f1f6fa;
+  --block-gradient-end: #f6f8fb;
+  --block-shadow: rgba(61, 91, 126, 0.05);
+}
+
+.titleBlock .sectionIcon {
+  color: #315f91;
+  border-color: #b9cee5;
+  background: linear-gradient(145deg, #ffffff 0%, #dbeafe 100%);
+  box-shadow: 0 3px 8px rgba(49, 95, 145, 0.12);
+}
+
 .categoryBlock .sectionIcon {
   color: #2563eb;
   border-color: #93c5fd;
@@ -373,6 +388,26 @@
   font-weight: 650;
 }
 
+.titleModeAuto,
+.titleModeOverride {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid #bfd3e7;
+  border-radius: 999px;
+  color: #315f91;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.titleModeOverride {
+  border-color: #c7d2fe;
+  color: #4f46e5;
+  background: #f5f3ff;
+}
+
 .requiredMark {
   color: #dc2626;
 }
@@ -440,6 +475,65 @@
   background: #eef2f6;
   box-shadow: none;
   cursor: not-allowed;
+}
+
+.titleInput {
+  min-height: 66px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.titleFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.titleCount,
+.titleCountInvalid {
+  color: #64748b;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.titleCountInvalid,
+.titleError {
+  color: #b91c1c;
+}
+
+.titleError {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.resetTitleButton {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  background: #ffffff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.resetTitleButton:hover {
+  border-color: #93b4d5;
+  color: #315f91;
+  background: #f4f8fc;
+}
+
+.resetTitleButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--editor-focus, rgba(37, 99, 235, 0.18));
 }
 
 .iconButton,
@@ -768,6 +862,11 @@
     margin-left: 40px;
   }
 
+  .titleModeAuto,
+  .titleModeOverride {
+    margin-left: 40px;
+  }
+
   .selectedCategorySummary {
     align-items: flex-start;
     flex-direction: column;
@@ -791,6 +890,11 @@
   .fileUploadRow {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+
+  .titleFooter {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .fileInput {

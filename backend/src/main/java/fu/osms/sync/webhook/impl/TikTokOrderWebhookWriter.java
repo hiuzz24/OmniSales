@@ -2,12 +2,14 @@ package fu.osms.sync.webhook.impl;
 
 import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
+import fu.osms.order.event.OrderStatusChangedEvent;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.order.importing.OrderImportOutcome;
 import fu.osms.sync.repository.WebhookEventRepository;
 import fu.osms.sync.tiktok.order.*;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,7 @@ public class TikTokOrderWebhookWriter {
     private final TikTokOrderMapper mapper;
     private final TikTokOrderPersistenceService persistenceService;
     private final PlatformOrderInventoryService inventoryService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void write(UUID eventId, Map<String, Object> detail) {
@@ -33,6 +36,10 @@ public class TikTokOrderWebhookWriter {
         if (outcome.result() != fu.osms.sync.order.importing.OrderImportResult.SKIPPED_STALE) {
             Order order = persistenceService.getOrder(outcome);
             inventoryService.syncReservations(order);
+            if (outcome.statusChanged()) {
+                eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                        outcome.orderId(), outcome.previousStatus(), outcome.currentStatus()));
+            }
         }
     }
 

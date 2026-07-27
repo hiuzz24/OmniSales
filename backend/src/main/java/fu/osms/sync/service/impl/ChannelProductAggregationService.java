@@ -1,7 +1,5 @@
 package fu.osms.sync.service.impl;
 
-import fu.osms.catalog.entity.Product;
-import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
@@ -33,7 +31,6 @@ public class ChannelProductAggregationService {
 
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
-    private final ProductRepository productRepository;
 
     public ChannelProduct normalizeImportedMapping(ChannelProduct importedMapping) {
         if (importedMapping == null
@@ -46,9 +43,7 @@ public class ChannelProductAggregationService {
 
         stampPrimaryWarehouseMetadata(importedMapping);
         ChannelProduct saved = channelProductRepository.save(importedMapping);
-        ChannelProduct canonical = mergeDuplicateActiveMappings(saved);
-        updateProductMarketplaceWarehouseMetadata(canonical);
-        return canonical;
+        return mergeDuplicateActiveMappings(saved);
     }
 
     private ChannelProduct mergeDuplicateActiveMappings(ChannelProduct importedMapping) {
@@ -164,24 +159,6 @@ public class ChannelProductAggregationService {
         duplicate.setLastSyncError(null);
         duplicate.setLastSyncedAt(OffsetDateTime.now());
         channelProductRepository.save(duplicate);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void updateProductMarketplaceWarehouseMetadata(ChannelProduct mapping) {
-        Product product = mapping.getProduct();
-        Channel channel = mapping.getChannel();
-        if (product == null || channel == null || channel.getPlatform() == null) {
-            return;
-        }
-
-        Map<String, Object> attributes = mutableMap(product.getAttributes());
-        Map<String, Object> warehouses = attributes.get("marketplacePrimaryWarehouses") instanceof Map<?, ?> existing
-                ? new LinkedHashMap<>((Map<String, Object>) existing)
-                : new LinkedHashMap<>();
-        warehouses.put(channel.getPlatform().name(), primaryWarehouseMetadata(channel));
-        attributes.put("marketplacePrimaryWarehouses", warehouses);
-        product.setAttributes(attributes);
-        productRepository.save(product);
     }
 
     private void stampPrimaryWarehouseMetadata(ChannelProduct mapping) {

@@ -106,6 +106,33 @@
   margin-left: auto;
 }
 
+.readinessNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12.5px;
+}
+
+.readinessNotice span {
+  flex: 1;
+}
+
+.readinessNotice button {
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  background: #fff;
+  color: #92400e;
+  padding: 5px 9px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* ── Status Dropdown ── */
 .statusDropdown {
   position: relative;
@@ -193,6 +220,7 @@
   text-align: left;
 }
 .dropdownItem:hover { background: #f8fafc; }
+.dropdownItem:disabled { cursor: not-allowed; opacity: 0.5; }
 
 /* ── Cancel ── */
 .cancelBtn {

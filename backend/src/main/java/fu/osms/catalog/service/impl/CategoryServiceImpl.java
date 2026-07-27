@@ -144,9 +144,12 @@ public class CategoryServiceImpl implements CategoryService {
     public void delete(UUID id) {
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Category not found"));
-        category.setStatus(CategoryStatus.INACTIVE);
-        categoryRepository.save(category);
-        deactivateChildrenRecursively(id);
+
+        if (productRepository.existsByCategoryIdAndDeletedAtIsNull(id)) {
+            throw new IllegalStateException("Không thể xóa danh mục đang có sản phẩm");
+        }
+
+        categoryRepository.delete(category);
     }
 
     private void deactivateChildrenRecursively(UUID parentId) {

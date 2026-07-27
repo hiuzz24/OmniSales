@@ -6,6 +6,7 @@ import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -14,15 +15,18 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TikTokWebhookHandler implements PlatformWebhookHandler {
 
     private static final String ORDER_STATUS_EVENT = "TIKTOK_ORDER_STATUS_UPDATE";
     private static final String REVERSE_STATUS_EVENT = "TIKTOK_REVERSE_STATUS_UPDATE";
+    private static final String INVENTORY_CHANGED_EVENT = "TIKTOK_INVENTORY_CHANGED";
 
     private final ChannelRepository channelRepository;
 
@@ -69,6 +73,9 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
         if ("2".equals(type)) {
             return REVERSE_STATUS_EVENT;
         }
+        if ("68".equals(type)) {
+            return INVENTORY_CHANGED_EVENT;
+        }
         return "TIKTOK_TYPE_" + (hasText(type) ? type : "UNKNOWN");
     }
 
@@ -76,18 +83,38 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
     public String extractExternalEventId(Map<String, String> headers,
                                          Map<String, Object> payload,
                                          String rawBody) {
-        String notificationId = WebhookPayloadUtils.text(payload.get("tts_notification_id"));
+        String notificationId = "68".equals(WebhookPayloadUtils.text(payload.get("type")))
+                ? WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresentInData(payload, "event_id"))
+                : null;
+        if (!hasText(notificationId)) {
+            notificationId = WebhookPayloadUtils.text(payload.get("tts_notification_id"));
+        }
         return hasText(notificationId) ? notificationId : "tiktok-" + sha256(rawBody);
     }
 
     @Override
     public boolean shouldIgnore(Map<String, Object> payload) {
         String type = WebhookPayloadUtils.text(payload.get("type"));
-        return !"1".equals(type) && !"2".equals(type);
+        return !"1".equals(type) && !"2".equals(type) && !"68".equals(type);
     }
 
     @Override
     public Optional<Channel> resolveChannel(Map<String, String> headers, Map<String, Object> payload) {
+        if ("68".equals(WebhookPayloadUtils.text(payload.get("type")))) {
+            String openId = WebhookPayloadUtils.text(payload.get("seller_open_id"));
+            String sellerId = WebhookPayloadUtils.text(
+                    WebhookPayloadUtils.firstPresentInData(payload, "seller_id"));
+            List<Channel> candidates = channelRepository.findActiveTikTokByWebhookIdentity(
+                    blankToEmpty(openId),
+                    blankToEmpty(sellerId)
+            );
+            if (candidates.size() > 1) {
+                log.error("[TikTokWebhook] Multiple active channels match inventory webhook openId={} sellerId={}",
+                        openId, sellerId);
+                return Optional.empty();
+            }
+            return candidates.stream().findFirst();
+        }
         String shopId = WebhookPayloadUtils.text(payload.get("shop_id"));
         if (!hasText(shopId)) {
             return Optional.empty();
@@ -113,5 +140,9 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank() && !"null".equalsIgnoreCase(value);
+    }
+
+    private String blankToEmpty(String value) {
+        return hasText(value) ? value : "";
     }
 }

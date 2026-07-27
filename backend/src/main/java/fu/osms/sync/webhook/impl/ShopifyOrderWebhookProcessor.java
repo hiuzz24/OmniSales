@@ -6,6 +6,7 @@ import fu.osms.order.entity.Order;
 import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderCreatedEvent;
 import fu.osms.order.event.OrderPaidEvent;
+import fu.osms.order.event.OrderStatusChangedEvent;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.order.importing.OrderImportOutcome;
 import fu.osms.sync.service.PlatformOrderWebhookProcessor;
@@ -37,6 +38,10 @@ public class ShopifyOrderWebhookProcessor implements PlatformOrderWebhookProcess
         if (outcome.created()) eventPublisher.publishEvent(new OrderCreatedEvent(order));
         if (outcome.becameCancelled()) eventPublisher.publishEvent(new OrderCancelledEvent(order));
         if (outcome.paymentBecamePaid()) eventPublisher.publishEvent(new OrderPaidEvent(order));
+        if (outcome.statusChanged()) {
+            eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                    outcome.orderId(), outcome.previousStatus(), outcome.currentStatus()));
+        }
         return "PROCESSED";
     }
 }

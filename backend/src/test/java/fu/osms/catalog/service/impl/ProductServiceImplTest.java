@@ -570,18 +570,17 @@ class ProductServiceImplTest {
         @Test
         @DisplayName("Should filter by platform correctly")
         void shouldFilterByPlatform() {
-            when(productRepository.findAll(any(Specification.class))).thenReturn(List.of(product));
+            Page<Product> page = new PageImpl<>(List.of(product), PageRequest.of(0, 6), 1);
+
+            when(productRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
             when(productMapper.toResponse(product)).thenReturn(response);
             setupCommonSearchMocks();
-            // The service rewrites channels from channelService response — make it return SHOPIFY
-            when(channelService.getProductChannels(anyList()))
-                    .thenReturn(Map.of(productId, List.of("Shopify")));
 
             PageResponse<ProductResponse> result = productService.search(null, null,
-                    java.util.List.of(fu.osms.common.enums.PlatformType.SHOPIFY), 0, 6);
+                    fu.osms.common.enums.PlatformType.SHOPIFY, 0, 6);
 
             assertThat(result.getContent()).hasSize(1);
-            verify(productRepository).findAll(any(Specification.class));
+            verify(productRepository).findAll(any(Specification.class), any(PageRequest.class));
         }
 
         @Test
