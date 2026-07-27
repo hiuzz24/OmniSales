@@ -406,7 +406,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
                 when(orderMapper.toResponseWithItems(updatedOrder)).thenReturn(orderResponse);
 
@@ -437,7 +437,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
                 when(orderMapper.toResponseWithItems(updatedOrder)).thenReturn(orderResponse);
 
@@ -467,7 +467,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
                 when(orderMapper.toResponseWithItems(updatedOrder)).thenReturn(orderResponse);
 
@@ -503,7 +503,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(deliveredOrder);
                 when(orderMapper.toResponseWithItems(deliveredOrder)).thenReturn(orderResponse);
 
@@ -538,7 +538,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(deliveredOrder);
                 when(orderMapper.toResponseWithItems(deliveredOrder)).thenReturn(orderResponse);
 
@@ -553,7 +553,7 @@ class OrderServiceImplTest {
         @DisplayName("Should throw ORDER_ALREADY_CANCELLED when order is already cancelled")
         void shouldThrowWhenOrderAlreadyCancelled() {
             order.setStatus(OrderStatus.CANCELLED);
-            when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+            when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
 
             assertThatThrownBy(() -> orderService.updateStatus(orderId, OrderStatus.CANCELLED))
                     .isInstanceOf(AppException.class)
@@ -582,6 +582,7 @@ class OrderServiceImplTest {
                         .build();
 
                 when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderItemRepository.findByOrderId(orderId)).thenReturn(List.of(orderItem));
                 when(productVariantRepository.findBySkuAndDeletedAtIsNull("TEST-001")).thenReturn(Optional.of(variant));
                 when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
@@ -598,7 +599,7 @@ class OrderServiceImplTest {
         @Test
         @DisplayName("Should throw EntityNotFoundException when order not found for status update")
         void shouldThrowWhenOrderNotFoundForStatusUpdate() {
-            when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
+            when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.updateStatus(orderId, OrderStatus.CONFIRMED))
                     .isInstanceOf(EntityNotFoundException.class)

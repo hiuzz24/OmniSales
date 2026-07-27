@@ -68,6 +68,7 @@ class ChannelServiceImplTest {
                                 credentialRepository,
                                 channelMapper,
                                 connectionService,
+                                mappingLifecycleService,
                                 productQueryService,
                                 responseService);
         }
@@ -138,7 +139,6 @@ class ChannelServiceImplTest {
             assertThat(actual).isSameAs(expected);
             verify(connectionService).connectShopify("demo.myshopify.com", "shpat-token");
         }
-    }
 
     @Nested
     @DisplayName("getById() Tests")

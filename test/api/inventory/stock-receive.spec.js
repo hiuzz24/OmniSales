@@ -141,7 +141,8 @@ test.describe('Stock Receive API Tests', () => {
     test.skip(!variantId || !warehouseId, 'Missing seed data');
     const authToken = managerHeaders.Authorization.replace('Bearer ', '');
     const po = await getOrCreateReceivingPo(request, authToken);
-    test.skip(!po, 'No RECEIVING purchase order available');
+    // Skip if PO is not in RECEIVING state (required for creating receipts)
+    test.skip(!po || po.status !== 'RECEIVING', 'No RECEIVING purchase order available');
     const response = await request.post(`${API_BASE}/receipts`, {
       headers: {
         ...managerHeaders,

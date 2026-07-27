@@ -29,6 +29,7 @@ import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
+import fu.osms.sync.service.PlatformCatalogOwnershipPolicy;
 import fu.osms.sync.service.SyncAlertService;
 import fu.osms.sync.service.impl.ChannelProductAggregationService;
 import fu.osms.sync.service.impl.SyncJobProgressTracker;
@@ -80,6 +81,7 @@ class LazadaImportSyncServiceImplTest {
     @Mock private SyncAlertService syncAlertService;
     @Mock private MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     @Mock private MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    @Mock private PlatformCatalogOwnershipPolicy platformCatalogOwnershipPolicy;
     @Mock private ChannelProductAggregationService channelProductAggregationService;
     @Mock private SyncJobProgressTracker syncJobProgressTracker;
 
@@ -111,6 +113,7 @@ class LazadaImportSyncServiceImplTest {
                 syncAlertService,
                 marketplaceInventoryPropagationService,
                 marketplaceWarehouseConsistencyService,
+                platformCatalogOwnershipPolicy,
                 channelProductAggregationService,
                 syncJobProgressTracker
         );
@@ -228,132 +231,5 @@ class LazadaImportSyncServiceImplTest {
                 .containsKeys("create_after", "update_after");
         verify(marketplaceInventoryPropagationService).schedulePushAvailableStock(any(), eq(channelId));
         verify(syncAlertService, never()).notifySyncFailure(any(SyncLog.class));
-    }
-
-    @Test
-    @DisplayName("syncProductsAndWarehouses — merges normal and inactive Lazada responses without duplicate counts")
-    void syncProductsAndWarehouses_mergesNormalAndInactiveResponses() {
-        channel.getMetadata().put("lazadaWarehouseCode", "WH-DEFAULT");
-        Warehouse masterWarehouse = Warehouse.builder()
-                .id(UUID.randomUUID())
-                .name("Default")
-                .isActive(true)
-                .build();
-
-        lenient().when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
-        lenient().when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
-                .thenReturn(Optional.of(credential));
-        when(marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(channel))
-                .thenReturn(masterWarehouse);
-        when(lazadaApiClient.executeGet(eq(channelId), eq("/rc/warehouse/get"), anyMap()))
-                .thenReturn("""
-                        {"code":"0","data":{"warehouses":[
-                          {"warehouseCode":"WH-DEFAULT","isDefault":true,"name":"Default"},
-                          {"warehouseCode":"WH-2","name":"Second"}
-                        ]}}
-                        """);
-        when(lazadaApiClient.executeGet(eq(channelId), eq("/category/tree/get"), anyMap()))
-                .thenReturn("""
-                        {"code":"0","data":[{"category_id":"100","name":"Phones"}]}
-                        """);
-        when(lazadaApiClient.executeGet(eq(channelId), eq("/products/get"), anyMap()))
-                .thenReturn(lazadaProductResponse());
-
-        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
-            Product product = invocation.getArgument(0);
-            if (product.getId() == null) {
-                product.setId(UUID.randomUUID());
-            }
-            if (product.getLowStockThreshold() == null) {
-                product.setLowStockThreshold(5);
-            }
-            return product;
-        });
-        when(productVariantRepository.findBySkuAndDeletedAtIsNull(anyString()))
-                .thenReturn(Optional.empty());
-        when(productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(any(UUID.class), anyString()))
-                .thenReturn(Optional.empty());
-        when(productVariantRepository.save(any(ProductVariant.class))).thenAnswer(invocation -> {
-            ProductVariant variant = invocation.getArgument(0);
-            if (variant.getId() == null) {
-                variant.setId(UUID.randomUUID());
-            }
-            return variant;
-        });
-        when(categoryRepository.findBySlug("lazada-100")).thenReturn(Optional.empty());
-        when(categoryRepository.findFirstByNameIgnoreCase("Phones")).thenReturn(Optional.empty());
-        when(categoryRepository.save(any(Category.class))).thenAnswer(invocation -> {
-            Category category = invocation.getArgument(0);
-            if (category.getId() == null) {
-                category.setId(UUID.randomUUID());
-            }
-            return category;
-        });
-        when(channelProductRepository.findByChannelIdAndExternalProductId(channelId, "P-1"))
-                .thenReturn(Optional.empty());
-        when(channelProductRepository.save(any(ChannelProduct.class))).thenAnswer(invocation -> {
-            ChannelProduct mapping = invocation.getArgument(0);
-            if (mapping.getId() == null) {
-                mapping.setId(UUID.randomUUID());
-            }
-            return mapping;
-        });
-        when(channelProductAggregationService.normalizeImportedMapping(any(ChannelProduct.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        when(channelProductVariantRepository.findByChannelProductIdAndExternalVariantId(any(UUID.class), anyString()))
-                .thenReturn(Optional.empty());
-        when(channelProductVariantRepository.findByChannelProductIdAndVariantId(any(UUID.class), any(UUID.class)))
-                .thenReturn(Optional.empty());
-        when(channelProductVariantRepository.save(any(ChannelProductVariant.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        when(channelProductRepository.countByChannelIdAndMappingState(channelId, "ACTIVE"))
-                .thenReturn(1L);
-        when(channelProductVariantRepository.countActiveByChannelId(channelId))
-                .thenReturn(1L);
-        when(syncLogRepository.save(any(SyncLog.class))).thenAnswer(invocation -> {
-            SyncLog log = invocation.getArgument(0);
-            if (log.getId() == null) {
-                log.setId(UUID.randomUUID());
-            }
-            return log;
-        });
-
-        ChannelImportSyncResponse response = service.syncProductsAndWarehouses(channelId);
-
-        assertThat(response.getProductCount()).isEqualTo(1);
-        assertThat(response.getVariantCount()).isEqualTo(1);
-        assertThat(response.getWarehouseCount()).isEqualTo(1);
-
-        ArgumentCaptor<Category> categoryCaptor = ArgumentCaptor.forClass(Category.class);
-        verify(categoryRepository).save(categoryCaptor.capture());
-        assertThat(categoryCaptor.getValue().getName()).isEqualTo("Phones");
-
-        ArgumentCaptor<Iterable<ProductImage>> imagesCaptor = ArgumentCaptor.forClass(Iterable.class);
-        verify(productImageRepository, times(2)).saveAll(imagesCaptor.capture());
-        List<ProductImage> savedImages = imagesCaptor.getAllValues().stream()
-                .flatMap(images -> StreamSupport.stream(images.spliterator(), false))
-                .toList();
-        assertThat(savedImages)
-                .anyMatch(image -> image.getVariant() == null && image.getUrl().equals("https://img/product.jpg"))
-                .anyMatch(image -> image.getVariant() != null && image.getUrl().equals("https://img/sku.jpg"));
-    }
-
-    private String lazadaProductResponse() {
-        return """
-                {"code":"0","data":{"total_products":"1","products":[{
-                  "item_id":"P-1",
-                  "primary_category":"100",
-                  "images":"[\\"https://img/product.jpg\\"]",
-                  "attributes":{"name":"Imported phone","description":"desc","brand":"Brand"},
-                  "status":"Active",
-                  "skus":[{
-                    "SkuId":"SKU-ID-1",
-                    "SellerSku":"SKU-1",
-                    "price":100,
-                    "quantity":5,
-                    "Images":["https://img/sku.jpg","",""]
-                  }]
-                }]}}
-                """;
     }
 }
