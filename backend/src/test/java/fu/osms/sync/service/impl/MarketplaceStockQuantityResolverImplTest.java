@@ -41,15 +41,21 @@ class MarketplaceStockQuantityResolverImplTest {
         Warehouse warehouse = Warehouse.builder().id(warehouseId).build();
         ProductVariant shopifyVariant = ProductVariant.builder().id(UUID.randomUUID()).sku("SKU-SHOPIFY").build();
         ProductVariant tiktokVariant = ProductVariant.builder().id(UUID.randomUUID()).sku("SKU-TIKTOK").build();
+        UUID mappingId = UUID.randomUUID();
+        UUID linkedMappingId = UUID.randomUUID();
         ChannelProductVariant mapping = ChannelProductVariant.builder()
+                .id(mappingId)
                 .variant(shopifyVariant)
                 .externalSku("shared-sku")
                 .build();
         ChannelProductVariant linkedMapping = ChannelProductVariant.builder()
+                .id(linkedMappingId)
                 .variant(tiktokVariant)
                 .externalSku("shared-sku")
                 .build();
 
+        when(channelProductVariantRepository.findAllWithChannelAndVariantByIdIn(List.of(mappingId)))
+                .thenReturn(List.of(mapping, linkedMapping));
         when(channelProductVariantRepository.findActiveByNormalizedExternalSkuInWithVariant(List.of("shared-sku")))
                 .thenReturn(List.of(mapping, linkedMapping));
         when(inventoryItemRepository.findByVariantIdIn(anyCollection()))

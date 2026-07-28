@@ -232,10 +232,14 @@ public class TikTokSyncServiceImpl implements PlatformSyncService {
 
     private void mapResponse(JsonNode data, List<ProductVariant> variants, ChannelProduct channelProduct, boolean isCreate) {
         String productId = firstText(data, "id", "product_id");
+        String externalStatus = firstText(data, "status", "product_status");
         if (isCreate && (productId == null || productId.isBlank())) {
             throw new IllegalStateException("TikTok create response is missing product ID");
         }
         if (productId != null && !productId.isBlank()) channelProduct.setExternalProductId(productId);
+        if (externalStatus != null && !externalStatus.isBlank()) {
+            channelProduct.setExternalStatus(externalStatus);
+        }
         Map<String, ProductVariant> variantsBySku = variants.stream()
                 .collect(Collectors.toMap(ProductVariant::getSku, value -> value, (first, ignored) -> first));
         JsonNode skus = data.path("skus");

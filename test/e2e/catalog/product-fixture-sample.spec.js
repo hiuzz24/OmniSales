@@ -38,7 +38,9 @@ test.describe('Product Listing E2E Tests (fixture-based)', () => {
     await managerPage.goto('/products');
     await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
-    const statusSelect = managerPage.locator('select').nth(1);
+    // The product filter bar exposes a single <select> for status. There is
+    // no other select on the page, so use the status option text directly.
+    const statusSelect = managerPage.locator('select').first();
     await statusSelect.selectOption('ACTIVE');
     await managerPage.waitForTimeout(500);
     await expect(managerPage.getByRole('heading', { name: /Danh sách sản phẩm/ })).toBeVisible();

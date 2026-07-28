@@ -4,17 +4,23 @@ const {
   createTestChannel,
   deleteTestChannel,
 } = require('../../utils/channel-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Channel API Tests', () => {
 
   let createdChannelIds = [];
 
-  test.afterEach(async ({ request, managerHeaders }) => {
-    if (!createdChannelIds.length) return;
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdChannelIds.splice(0)) {
-      await deleteTestChannel(request, authToken, id);
+  test.afterEach(async ({ request }) => {
+    // Auto-cleanup any tracked ids we created in this test
+    if (createdChannelIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdChannelIds.splice(0)) {
+        await deleteTestChannel(request, authToken, id);
+      }
     }
+    // Marker-based cleanup for anything else we may have created
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/channels

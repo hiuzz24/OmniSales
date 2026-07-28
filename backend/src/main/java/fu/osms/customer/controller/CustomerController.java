@@ -5,6 +5,8 @@ import fu.osms.common.dto.PageResponse;
 import fu.osms.customer.dto.request.CustomerRequest;
 import fu.osms.customer.dto.response.CustomerResponse;
 import fu.osms.customer.dto.response.CustomerStatsResponse;
+import fu.osms.customer.dto.response.PageWithOrderCustomersResponse;
+import fu.osms.customer.dto.response.SyncOrdersResponse;
 import fu.osms.customer.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +51,27 @@ public class CustomerController {
     public ResponseEntity<ApiResponse<CustomerStatsResponse>> getStats() {
         CustomerStatsResponse stats = customerService.getStats();
         return ResponseEntity.ok(ApiResponse.success(stats));
+    }
+
+    @GetMapping("/page-with-order-customers")
+    public ResponseEntity<ApiResponse<PageWithOrderCustomersResponse>> getPageWithOrderCustomers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String gender) {
+        PageWithOrderCustomersResponse result = customerService.getPageWithOrderCustomers(page, size, search, status, gender);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    @PostMapping("/sync-from-orders")
+    public ResponseEntity<ApiResponse<SyncOrdersResponse>> syncFromOrders() {
+        int updated = customerService.syncCustomersFromOrders();
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã đồng bộ " + updated + " đơn hàng về khách hàng",
+                SyncOrdersResponse.builder()
+                        .updatedCount(updated)
+                        .build()));
     }
 
     @PutMapping("/{id}")

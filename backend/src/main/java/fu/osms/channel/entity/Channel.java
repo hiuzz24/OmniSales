@@ -51,6 +51,9 @@ public class Channel {
     @Column(name = "last_synced_at")
     private OffsetDateTime lastSyncedAt;
 
+    @Column(name = "last_synced_application_at")
+    private OffsetDateTime lastSyncedApplicationAt;
+
     @Column(name = "sync_enabled", nullable = false)
     @Builder.Default
     private Boolean syncEnabled = true;

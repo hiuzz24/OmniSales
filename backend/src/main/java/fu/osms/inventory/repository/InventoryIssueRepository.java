@@ -55,16 +55,21 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
     Long countDeliveries();
 
     @Query("SELECT DISTINCT item.productVariant.id FROM InventoryIssueItem item " +
-            "WHERE item.inventoryIssue.status <> 'DRAFT' " +
-            "AND item.inventoryIssue.updatedAt >= :changedSince " +
-            "AND item.inventoryIssue.updatedAt <= :changedUntil")
+            "WHERE item.inventoryIssue.status = 'CONFIRMED' " +
+            "AND ((item.inventoryIssue.createdAt > :changedSince AND item.inventoryIssue.createdAt <= :changedUntil) " +
+            "OR (item.inventoryIssue.updatedAt > :changedSince AND item.inventoryIssue.updatedAt <= :changedUntil))")
     List<UUID> findChangedAppliedVariantIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                    @Param("changedUntil") OffsetDateTime changedUntil);
 
+    @Query("SELECT DISTINCT item.productVariant.id FROM InventoryIssueItem item " +
+            "WHERE item.inventoryIssue.status = 'CONFIRMED' " +
+            "AND (item.inventoryIssue.createdAt <= :changedUntil OR item.inventoryIssue.updatedAt <= :changedUntil)")
+    List<UUID> findConfirmedVariantIdsUpTo(@Param("changedUntil") OffsetDateTime changedUntil);
+
     @Query("SELECT DISTINCT item.inventoryIssue.warehouse.id FROM InventoryIssueItem item " +
-            "WHERE item.inventoryIssue.status <> 'DRAFT' " +
-            "AND item.inventoryIssue.updatedAt >= :changedSince " +
-            "AND item.inventoryIssue.updatedAt <= :changedUntil")
+            "WHERE item.inventoryIssue.status = 'CONFIRMED' " +
+            "AND ((item.inventoryIssue.createdAt > :changedSince AND item.inventoryIssue.createdAt <= :changedUntil) " +
+            "OR (item.inventoryIssue.updatedAt > :changedSince AND item.inventoryIssue.updatedAt <= :changedUntil))")
     List<UUID> findChangedAppliedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                      @Param("changedUntil") OffsetDateTime changedUntil);
 

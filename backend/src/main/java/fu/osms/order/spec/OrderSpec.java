@@ -19,7 +19,8 @@ public class OrderSpec {
             UUID channelId,
             String keyword,
             OffsetDateTime from,
-            OffsetDateTime to
+            OffsetDateTime to,
+            UUID customerId
     ) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -30,6 +31,10 @@ public class OrderSpec {
 
             if (channelId != null) {
                 predicates.add(cb.equal(root.get("channel").get("id"), channelId));
+            }
+
+            if (customerId != null) {
+                predicates.add(cb.equal(root.get("customer").get("id"), customerId));
             }
 
             if (keyword != null && !keyword.isBlank()) {

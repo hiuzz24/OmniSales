@@ -28,7 +28,7 @@ const DIRECTION_OPTIONS = {
   },
   'from-app': {
     title: 'Đồng bộ từ ứng dụng',
-    description: 'Đẩy các thay đổi lên tất cả sàn đã liên kết',
+    description: 'Chỉ cập nhật tồn kho và giá từ các phiếu nhập/xuất kho chưa đồng bộ',
     icon: UploadCloud,
     color: '#0f766e',
     background: '#ecfdf5',
@@ -201,6 +201,28 @@ const getChannelLabel = (channel) => {
   return `${platformLabel} - ${channel.displayName ?? 'Chưa đặt tên'}`;
 };
 const toCount = (value) => Number(value ?? 0).toLocaleString('vi-VN');
+const formatApplicationSyncTime = (value) => {
+  if (!value) return 'lần đồng bộ đầu tiên';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'lần đồng bộ ứng dụng gần nhất'
+    : date.toLocaleString('vi-VN');
+};
+
+const showApplicationSyncStarted = (syncableChannels) => {
+  const cursors = syncableChannels
+    .map((channel) => channel.lastSyncedApplicationAt)
+    .filter(Boolean)
+    .sort();
+  const cursor = cursors.length === 0 ? null : cursors[0];
+  toast.info(
+    cursor
+      ? `Đang đồng bộ các phiếu nhập/xuất kho thay đổi sau ${formatApplicationSyncTime(cursor)}.`
+      : 'Đang kiểm tra các phiếu nhập/xuất kho chưa từng đồng bộ lên sàn.',
+  );
+};
+
+const hasNoApplicationChanges = (result) => Number(result?.pushedVariantCount || 0) === 0;
 const syncIdentity = (detail) => detail?.sellerId || detail?.shopId || detail?.shopDomain || 'chưa có seller/shop id';
 
 const formatDetailLine = (detail) => {
@@ -220,7 +242,7 @@ const defaultSuccessMessage = ({ channel, direction, result }) => {
   if (direction === 'from-marketplace') {
     return `Đã đồng bộ ${channelLabel}: lấy ${toCount(result?.productCount)} sản phẩm, ${toCount(result?.variantCount)} sản phẩm con từ sàn về ứng dụng.`;
   }
-  return `Đã đồng bộ ${channelLabel}: đẩy ${toCount(result?.productCount)} sản phẩm, ${toCount(result?.pushedVariantCount)} SKU tồn kho lên sàn.`;
+  return `Đã đồng bộ ${channelLabel}: cập nhật tồn kho và giá cho ${toCount(result?.pushedVariantCount)} SKU trên sàn.`;
 };
 
 export default function MarketplaceSyncButton({
@@ -330,12 +352,14 @@ export default function MarketplaceSyncButton({
       setDirection(null);
       setSyncingChannelId('all-connected-channels');
       try {
+        showApplicationSyncStarted(syncableChannels);
         const result = await channelSyncService.syncAllFromApp();
         const summaryMessage = formatSyncResultMessage(
-          'Đã đẩy các thay đổi từ ứng dụng lên tất cả sàn đã liên kết.',
+          'Đã cập nhật tồn kho và giá từ các phiếu kho lên tất cả sàn đã liên kết.',
           result,
         );
         if (String(result?.status || '').toUpperCase() === 'FAILED') toast.warn(summaryMessage);
+        else if (hasNoApplicationChanges(result)) toast.info(summaryMessage);
         else toast.success(summaryMessage);
         await onSynced?.({ channel: null, direction: nextDirection, result });
       } catch (error) {
@@ -388,11 +412,13 @@ export default function MarketplaceSyncButton({
 
       if (syncingChannelId) return;
       setSyncingChannelId(channel.id);
+      showApplicationSyncStarted([channel]);
       const result = await channelSyncService.syncChannelFromApp(channel.id);
       const message = getSuccessMessage?.({ channel, direction, result })
         || defaultSuccessMessage({ channel, direction, result });
       const summaryMessage = formatSyncResultMessage(message, result);
       if (String(result?.status || '').toUpperCase() === 'FAILED') toast.warn(summaryMessage);
+      else if (hasNoApplicationChanges(result)) toast.info(summaryMessage);
       else toast.success(summaryMessage);
       await onSynced?.({ channel, direction, result });
     } catch (error) {

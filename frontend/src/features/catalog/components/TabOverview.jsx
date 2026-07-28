@@ -6,15 +6,14 @@ const TabOverview = ({ product }) => {
   let priceDisplay = '0 đ';
   let costDisplay = '0 đ';
   let profitDisplay = '0 đ';
-  let profitVal = 0;
 
   if (product.variants && product.variants.length > 0) {
     if (product.variants.length === 1) {
       const v = product.variants[0];
       priceDisplay = `${v.price?.toLocaleString()} đ`;
       costDisplay = `${v.costPrice?.toLocaleString() || 0} đ`;
-      profitVal = (v.price || 0) - (v.costPrice || 0);
-      profitDisplay = `${profitVal.toLocaleString()} đ`;
+      const profitValue = (v.price || 0) - (v.costPrice || 0);
+      profitDisplay = `${profitValue.toLocaleString()} đ`;
     } else {
       const prices = product.variants.map(v => v.price || 0);
       const minP = Math.min(...prices);
@@ -33,6 +32,39 @@ const TabOverview = ({ product }) => {
   }
 
   const barcodeDisplay = product.variants?.length === 1 ? product.variants[0].barcode : 'Theo biến thể';
+
+  const normalizeDescription = (rawDescription) => {
+    const emptyDescription = 'Chưa có mô tả';
+
+    if (typeof rawDescription !== 'string') {
+      return emptyDescription;
+    }
+
+    const value = rawDescription.trim();
+    const textOnlyValue = value
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .trim();
+
+    if (!value || !textOnlyValue) {
+      return emptyDescription;
+    }
+
+    const looksLikeHtml = /<\/?[a-z][^>]*>/i.test(value);
+
+    if (!looksLikeHtml) {
+      return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\n/g, '<br />');
+    }
+
+    return value;
+  };
+
+  const descriptionHtml = normalizeDescription(product.description);
 
   return (
     <div className={styles.tabContainer}>
@@ -103,9 +135,13 @@ const TabOverview = ({ product }) => {
           <span className={styles.cardIcon}><AlignLeft aria-hidden="true" /></span>
           <h3 className={styles.cardTitle}>Mô tả sản phẩm</h3>
         </div>
-        <p className={styles.description}>
-          {product.description || 'Chưa có mô tả.'}
-        </p>
+        <div
+          className={styles.description}
+          style={{ whiteSpace: 'pre-wrap' }}
+          dangerouslySetInnerHTML={{
+            __html: descriptionHtml
+          }}
+        />
       </section>
 
       {/* Thông tin vận chuyển */}

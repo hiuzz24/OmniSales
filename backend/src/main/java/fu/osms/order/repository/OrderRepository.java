@@ -15,6 +15,8 @@ import org.springframework.stereotype.Repository;
 import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -86,11 +88,29 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
 
     Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
 
-    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId")
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId AND o.status <> 'CANCELLED'")
     Long countByCustomerId(@Param("customerId") UUID customerId);
 
-    @Query("SELECT COALESCE(SUM(o.subtotal - o.discountAmount + o.shippingFee), 0) FROM Order o WHERE o.customer.id = :customerId")
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.customer.id = :customerId AND o.status <> 'CANCELLED'")
     BigDecimal sumTotalSpentByCustomerId(@Param("customerId") UUID customerId);
+
+    @Query("SELECT DISTINCT o.customer.id FROM Order o WHERE o.customer IS NOT NULL AND o.status <> 'CANCELLED'")
+    List<UUID> findCustomerIdsWithNonNullCustomer();
+
+    @Query("SELECT o FROM Order o WHERE o.customer IS NULL ORDER BY o.createdAt ASC")
+    List<Order> findAllByCustomerIsNullOrderByCreatedAtAsc();
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.customer IS NULL")
+    long countByCustomerIsNull();
+
+    @Query("SELECT new fu.osms.order.repository.projection.CustomerOrderAggregate(" +
+            "o.customer.id, COUNT(o), COALESCE(SUM(o.totalAmount), 0)) " +
+            "FROM Order o " +
+            "WHERE o.customer.id IN :customerIds " +
+            "AND o.status <> 'CANCELLED' " +
+            "GROUP BY o.customer.id")
+    List<fu.osms.order.repository.projection.CustomerOrderAggregate> aggregateByCustomerIds(
+            @Param("customerIds") Collection<UUID> customerIds);
 
     @Query("SELECT o FROM Order o WHERE o.createdAt BETWEEN :from AND :to")
     Page<Order> findByDateRange(@Param("from") OffsetDateTime from,

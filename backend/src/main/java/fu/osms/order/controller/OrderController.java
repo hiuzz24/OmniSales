@@ -9,6 +9,7 @@ import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderStats;
+import fu.osms.order.dto.response.UncustomerdCountResponse;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.service.OrderService;
 import jakarta.validation.Valid;
@@ -50,6 +51,7 @@ public class OrderController {
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getOrders(
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(required = false) UUID channelId,
+            @RequestParam(required = false) UUID customerId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -60,7 +62,7 @@ public class OrderController {
         OffsetDateTime toDt = to != null ? to.atTime(LocalTime.MAX).atOffset(OffsetDateTime.now().getOffset()) : null;
 
         PageResponse<OrderResponse> result = orderService.getFiltered(
-                status, channelId, keyword, fromDt, toDt, page, size);
+                status, channelId, keyword, fromDt, toDt, customerId, page, size);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
@@ -77,6 +79,13 @@ public class OrderController {
     public ResponseEntity<ApiResponse<OrderStats>> getStats() {
         OrderStats stats = orderService.getStats();
         return ResponseEntity.ok(ApiResponse.success(stats));
+    }
+
+    @GetMapping("/uncustomerd-count")
+    public ResponseEntity<ApiResponse<UncustomerdCountResponse>> getUncustomerdCount() {
+        long count = orderService.countOrdersWithoutCustomer();
+        return ResponseEntity.ok(ApiResponse.success(
+                UncustomerdCountResponse.builder().count(count).build()));
     }
 
     @PatchMapping("/{id}/status")

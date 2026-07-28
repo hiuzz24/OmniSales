@@ -6,17 +6,21 @@ const {
   getFirstCategoryId,
   API_BASE,
 } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Category API Tests', () => {
 
   let createdIds = [];
 
-  test.afterEach(async ({ request, managerHeaders }) => {
-    if (!createdIds.length) return;
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdIds.splice(0)) {
-      await deleteTestCategory(request, authToken, id);
+  test.afterEach(async ({ request }) => {
+    if (createdIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdIds.splice(0)) {
+        await deleteTestCategory(request, authToken, id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/categories

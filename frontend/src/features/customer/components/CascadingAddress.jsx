@@ -335,11 +335,11 @@ const CascadingAddress = ({ value = {}, onChange, countryCode: countryCodeProp }
           <label className={styles.label}>Địa chỉ chi tiết</label>
           <input
             type="text"
-            className={`${styles.input} ${!provinceCode || !districtCode ? styles.inputDisabled : ''}`}
+            className={`${styles.input} ${!provinceCode ? styles.inputDisabled : ''}`}
             value={value.detail || ''}
             onChange={handleDetailVietnamChange}
-            placeholder={provinceCode && districtCode ? 'Ví dụ: 123 Nguyễn Huệ, Tầng 3' : 'Vui lòng chọn Tỉnh và Quận trước'}
-            disabled={!provinceCode || !districtCode}
+            placeholder={provinceCode ? 'Ví dụ: 123 Nguyễn Huệ, Tầng 3 (có thể chọn thêm Quận/Huyện và Phường/Xã, không bắt buộc)' : 'Vui lòng chọn Tỉnh/Thành phố trước'}
+            disabled={!provinceCode}
           />
         </div>
       </div>

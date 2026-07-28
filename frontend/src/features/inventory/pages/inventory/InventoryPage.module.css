@@ -1644,6 +1644,26 @@
   background: #fafbfc;
 }
 
+.outOfStockRow .td,
+.outOfStockRow.trAlt .td {
+  background: #fef2f2;
+  border-bottom-color: #fecaca;
+}
+
+.outOfStockRow .td:first-child {
+  box-shadow: inset 4px 0 #ef4444;
+}
+
+.outOfStockRow:hover .td,
+.outOfStockRow.trAlt:hover .td {
+  background: #fee2e2;
+}
+
+.outOfStockRow .variantName,
+.outOfStockRow .warehouseLink {
+  color: #991b1b;
+}
+
 /* Compact single-line inventory table */
 .table {
   table-layout: fixed;

@@ -20,6 +20,10 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
 
     Optional<Customer> findByEmail(String email);
 
+    Optional<Customer> findFirstByFullNameAndPhone(String fullName, String phone);
+
+    Optional<Customer> findFirstByPhoneAndFullName(String phone, String fullName);
+
     @Query("SELECT c FROM Customer c WHERE " +
            "LOWER(c.code) LIKE :keyword OR " +
            "LOWER(c.fullName) LIKE :keyword OR " +
@@ -76,6 +80,6 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
     @Query("SELECT COUNT(DISTINCT o.id) FROM Order o")
     long countAllOrders();
 
-    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o")
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.status <> 'CANCELLED'")
     BigDecimal sumTotalSpent();
 }

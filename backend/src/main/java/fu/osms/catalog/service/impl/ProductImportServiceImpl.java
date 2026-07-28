@@ -373,6 +373,7 @@ public class ProductImportServiceImpl implements ProductImportService {
         }
 
         request.setLowStockThreshold(5);
+        request.setWeightGrams(firstPositiveWeightGrams(allRows));
         request.setAttributes(new HashMap<>());
         request.setVariants(variants);
         request.setImages(new ArrayList<>());
@@ -393,6 +394,21 @@ public class ProductImportServiceImpl implements ProductImportService {
 
     private String emptyToNull(String s) {
         return (s == null || s.isEmpty()) ? null : s;
+    }
+
+    private Integer firstPositiveWeightGrams(List<ExcelRow> rows) {
+        if (rows == null) return null;
+        for (ExcelRow row : rows) {
+            String weightStr = row.values.getOrDefault("weightGrams", "");
+            if (weightStr.isBlank()) continue;
+            try {
+                int weightGrams = Integer.parseInt(weightStr);
+                if (weightGrams > 0) return weightGrams;
+            } catch (NumberFormatException ignore) {
+                // Invalid rows are handled by product validation after request mapping.
+            }
+        }
+        return null;
     }
 
     private static class ExcelRow {

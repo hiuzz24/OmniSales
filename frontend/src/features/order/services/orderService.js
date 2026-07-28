@@ -40,6 +40,10 @@ const orderService = {
   getStats: async () => {
     return await orderApi.getStats();
   },
+
+  getUncustomerdCount: async () => {
+    return await orderApi.getUncustomerdCount();
+  },
 };
 
 export default orderService;

@@ -300,21 +300,43 @@ async function createTestReceipt(request, token, overrides = {}) {
     }
   }
 
+  if (!supplierId) {
+    // No active supplier in the DB — create one so the PO can be created.
+    supplierId = await createTestSupplierInline(request, token);
+  }
+
+  const items = (overrides.items && overrides.items.length > 0)
+    ? overrides.items
+    : [{
+        variantId,
+        quantity: (overrides.quantity ?? 10),
+        unitCost: (overrides.unitCost ?? 50000),
+        notes: overrides.notes || `Test item ${Date.now()}`,
+      }];
+
+  const itemVariantId = items[0] && items[0].variantId;
+  const itemQuantity = items[0] && items[0].quantity;
+
+  // The receipt endpoint requires a RECEIVING Purchase Order. Create one
+  // matching the receipt items so the backend's PO↔receipt validation
+  // passes (the receipt must contain at least the same qty of each line
+  // item from the PO).
+  const purchaseOrderId = await createReceivingPurchaseOrderInline(
+    request, token, { supplierId, variantId: itemVariantId, quantity: itemQuantity }
+  );
+  if (!purchaseOrderId) {
+    return null;
+  }
+
   const timestamp = Date.now();
 
   const defaultReceipt = {
+    purchaseOrderId,
     warehouseId: warehouseId,
     supplierId: supplierId,
     receivedAt: new Date().toISOString().split('T')[0],
     isDraft: false,
-    items: variantId ? [
-      {
-        variantId: variantId,
-        quantity: 10,
-        unitCost: 50000,
-        notes: `Test item ${timestamp}`,
-      },
-    ] : [],
+    items,
   };
 
   const receiptData = { ...defaultReceipt, ...overrides };
@@ -330,6 +352,89 @@ async function createTestReceipt(request, token, overrides = {}) {
 
   const body = await response.json();
   return body.data;
+}
+
+/**
+ * Create a fresh, active supplier. Used as a fallback when no supplier is
+ * present in the DB (e.g. after the global SQL cleanup marked them all
+ * inactive). Returns the supplier id, or null on failure.
+ */
+async function createTestSupplierInline(request, token) {
+  const ts = Date.now();
+  const body = {
+    name: `TestSup${ts}-${Math.floor(Math.random() * 9999)}`,
+    contactName: 'Test Contact',
+    email: `supplier${ts}-${Math.floor(Math.random() * 9999)}@example.com`,
+    phone: '0987654321',
+    address: 'Test Address',
+    isActive: true,
+  };
+  try {
+    const resp = await request.post(`${API_BASE}/suppliers`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      data: body,
+    });
+    if (resp.status() === 200 || resp.status() === 201) {
+      const j = await resp.json();
+      return (j.data && j.data.id) || null;
+    }
+  } catch (_) {
+    // ignore
+  }
+  return null;
+}
+
+/**
+ * Create a RECEIVING Purchase Order matching the receipt items. Waits up
+ * to 15s for the backend scheduler to flip the PO from SENT_TO_SUPPLIER to
+ * RECEIVING. Returns the PO id (or null on failure/timeout).
+ */
+async function createReceivingPurchaseOrderInline(
+  request, token, { supplierId, variantId, quantity = 10, unitCost = 50000, maxWaitMs = 15000 }
+) {
+  if (!supplierId || !variantId) return null;
+  const expectedReceiptDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split('T')[0];
+
+  const createResp = await request.post(`${API_BASE}/purchase-orders`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    data: {
+      supplierId,
+      expectedReceiptDate,
+      isDraft: false,
+      items: [{ variantId, quantity, unitCost }],
+    },
+  });
+
+  if (createResp.status() !== 200 && createResp.status() !== 201) {
+    return null;
+  }
+
+  const created = (await createResp.json()).data;
+  const orderId = created && created.id;
+  if (!orderId) return null;
+
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    const poll = await request.get(`${API_BASE}/purchase-orders/${orderId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (poll.status() === 200) {
+      const data = (await poll.json()).data;
+      if (data && data.status === 'RECEIVING') {
+        return orderId;
+      }
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return null;
 }
 
 async function createTestDelivery(request, token, overrides = {}) {
@@ -588,6 +693,61 @@ async function addInventory(request, token, warehouseId, variantId, quantity, un
   return receipt;
 }
 
+/**
+ * Create a test warehouse via POST /api/warehouses (OWNER role required).
+ * Returns the created warehouse object with id, or null on failure.
+ */
+async function createTestWarehouse(request, token, overrides = {}) {
+  const ts = Date.now();
+  const payload = {
+    name: overrides.name || `TestWH-${ts}-${Math.floor(Math.random() * 9999)}`,
+    address: overrides.address || 'Test Address',
+    isActive: overrides.isActive !== undefined ? overrides.isActive : true,
+  };
+  try {
+    const resp = await request.post(`${API_BASE}/warehouses`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: payload,
+    });
+    if (resp.status() === 200 || resp.status() === 201) {
+      const body = await resp.json();
+      return body.data || body;
+    }
+  } catch (_) {
+    // ignore — return null
+  }
+  return null;
+}
+
+/**
+ * Delete a test warehouse by id (best-effort).
+ */
+async function deleteTestWarehouse(request, token, warehouseId) {
+  if (!warehouseId) return;
+  try {
+    await request.delete(`${API_BASE}/warehouses/${warehouseId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (_) {
+    // best-effort
+  }
+}
+
+/**
+ * Toggle warehouse active flag (PATCH /api/warehouses/{id}/status).
+ */
+async function toggleWarehouseStatus(request, token, warehouseId, isActive = true) {
+  if (!warehouseId) return;
+  try {
+    await request.patch(`${API_BASE}/warehouses/${warehouseId}/status`, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      data: { isActive: !!isActive },
+    });
+  } catch (_) {
+    // best-effort
+  }
+}
+
 module.exports = {
   loginAsOwner,
   loginAsOperations,
@@ -606,6 +766,9 @@ module.exports = {
   createTestDelivery,
   createTestStocktake,
   createTestTransfer,
+  createTestWarehouse,
+  deleteTestWarehouse,
+  toggleWarehouseStatus,
   addInventory,
   uniqueCode,
   cleanupTestData,

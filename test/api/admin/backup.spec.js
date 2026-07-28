@@ -1,7 +1,13 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/admin-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Backup API Tests (admin role)', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // BAK-1
   test('BAK-1 - GET /api/backups - Lists backup files paginated', async ({ request, adminHeaders }) => {
