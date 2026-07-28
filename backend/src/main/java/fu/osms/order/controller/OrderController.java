@@ -102,6 +102,7 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id,
                                                     @RequestBody(required = false) CancelOrderRequest request,
                                                     @RequestParam(required = false) String reason) {
@@ -114,6 +115,7 @@ public class OrderController {
     }
 
     @GetMapping("/{id}/cancel-reasons")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<List<CancelReasonResponse>>> getCancelReasons(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getCancelReasons(id)));
     }

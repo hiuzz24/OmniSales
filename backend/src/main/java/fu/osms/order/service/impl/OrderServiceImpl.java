@@ -20,6 +20,7 @@ import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.inventory.service.OrderStockDeliveryReadinessService;
+import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
@@ -86,6 +87,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderStatusPushService orderStatusPushService;
     private final OrderStockDeliveryReadinessService orderStockDeliveryReadinessService;
     private final ApplicationEventPublisher eventPublisher;
+    private final PlatformOrderInventoryService platformOrderInventoryService;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
     @Override
@@ -174,8 +176,8 @@ public class OrderServiceImpl implements OrderService {
         OrderStatus oldStatus = order.getStatus();
         String oldPaymentStatus = order.getPaymentStatus();
 
-        if (oldStatus == OrderStatus.CANCELLED && status == OrderStatus.CANCELLED) {
-            throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
+        if (status == OrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.ORDER_CANCEL_ENDPOINT_REQUIRED);
         }
 
         validateTikTokProcessingTransition(order, oldStatus, status);
@@ -192,12 +194,7 @@ public class OrderServiceImpl implements OrderService {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION, pushResult.getMessage());
         }
 
-        if (status == OrderStatus.CANCELLED) {
-            order.setStatus(OrderStatus.CANCELLED);
-            marketplaceInventoryPropagationService.schedulePushAvailableStock(releaseReservedInventory(order));
-        } else {
-            order.setStatus(status);
-        }
+        order.setStatus(status);
 
         boolean shouldAutoMarkPaid = shouldAutoMarkPaid(order, status);
         if (shouldAutoMarkPaid) {
@@ -223,9 +220,6 @@ public class OrderServiceImpl implements OrderService {
         }
         auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id, id.toString(), auditChanges);
 
-        if (savedOrder.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED) {
-            eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
-        }
         if ("PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus)) {
             eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
         }
@@ -361,11 +355,16 @@ public class OrderServiceImpl implements OrderService {
             return;
         }
 
-        Set<UUID> changedVariantIds = releaseReservedInventory(order);
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
         order.setStatusChangedAt(OffsetDateTime.now());
         Order savedOrder = orderRepository.save(order);
+        if (isPlatformOrder(savedOrder)) {
+            platformOrderInventoryService.syncReservations(savedOrder);
+        } else {
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(
+                    releaseReservedInventory(savedOrder));
+        }
 
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
@@ -388,7 +387,6 @@ public class OrderServiceImpl implements OrderService {
         auditService.record(actorId, actorEmail, "ORDER_CANCEL", "ORDER", id,
                 order.getId().toString(), auditChanges);
 
-        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
         eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 savedOrder.getId(), oldStatus, savedOrder.getStatus()));

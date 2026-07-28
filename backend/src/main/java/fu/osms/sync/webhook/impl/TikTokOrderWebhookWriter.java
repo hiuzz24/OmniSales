@@ -2,6 +2,7 @@ package fu.osms.sync.webhook.impl;
 
 import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
+import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderStatusChangedEvent;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.order.importing.OrderImportOutcome;
@@ -36,6 +37,9 @@ public class TikTokOrderWebhookWriter {
         if (outcome.result() != fu.osms.sync.order.importing.OrderImportResult.SKIPPED_STALE) {
             Order order = persistenceService.getOrder(outcome);
             inventoryService.syncReservations(order);
+            if (outcome.becameCancelled()) {
+                eventPublisher.publishEvent(new OrderCancelledEvent(order));
+            }
             if (outcome.statusChanged()) {
                 eventPublisher.publishEvent(new OrderStatusChangedEvent(
                         outcome.orderId(), outcome.previousStatus(), outcome.currentStatus()));

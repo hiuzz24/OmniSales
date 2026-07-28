@@ -363,7 +363,9 @@ const OrderDetailPage = () => {
       return [];
     }
     if (!isPlatformOrder(order)) {
-      return STATUS_FLOW.filter((status) => status !== order.status);
+      return STATUS_FLOW.filter(
+        (status) => status !== order.status && status !== 'CANCELLED',
+      );
     }
 
     const tikTokRawStatus = order.platformMetadata?.tiktok?.rawOrderStatus;
@@ -539,7 +541,7 @@ const OrderDetailPage = () => {
               )}
             </div>
           )}
-          {isCancellable && (
+          {canChangeStatus && isCancellable && (
             <button
               className={styles.cancelBtn}
               onClick={handleOpenCancelModal}

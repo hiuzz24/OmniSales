@@ -53,6 +53,7 @@ public enum ErrorCode {
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng"),
     ORDER_STATUS_INVALID_TRANSITION(HttpStatus.BAD_REQUEST, "Không thể chuyển đổi trạng thái đơn hàng này"),
     ORDER_ALREADY_CANCELLED(HttpStatus.CONFLICT, "Đơn hàng đã bị hủy trước đó"),
+    ORDER_CANCEL_ENDPOINT_REQUIRED(HttpStatus.BAD_REQUEST, "Hãy sử dụng chức năng Hủy đơn để hủy đơn hàng"),
 
     WAREHOUSE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy kho hàng"),
     INVENTORY_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy sản phẩm trong kho"),
