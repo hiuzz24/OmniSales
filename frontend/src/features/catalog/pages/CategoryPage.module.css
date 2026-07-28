@@ -11,14 +11,14 @@
   --catalog-shadow: 0 10px 28px rgba(61, 91, 126, 0.065), 0 2px 5px rgba(15, 23, 42, 0.03);
   width: calc(100% + 48px);
   max-width: none;
-  height: calc(100dvh - 64px);
+  /* height: calc(100dvh - 64px); */
   min-height: 0;
   margin: -24px;
   padding: 24px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* overflow: hidden; */
   color: var(--catalog-ink);
   background:
     radial-gradient(circle at 8% 2%, rgba(189, 219, 242, 0.28), transparent 27%),

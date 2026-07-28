@@ -989,10 +989,12 @@ const InventoryPage = () => {
                 {displayRows.map((row, idx) => {
                   const status = deriveStatus(row);
                   const isProductRow = row.type === 'product';
+                  const isOutOfStockVariant = !isProductRow
+                    && Number(row.availableQuantity ?? 0) === 0;
                   return (
                     <tr
                       key={row.id}
-                      className={`${styles.tr} ${idx % 2 === 1 ? styles.trAlt : ''} ${isProductRow ? styles.productRow : styles.variantRow}`}
+                      className={`${styles.tr} ${idx % 2 === 1 ? styles.trAlt : ''} ${isProductRow ? styles.productRow : styles.variantRow} ${isOutOfStockVariant ? styles.outOfStockRow : ''}`}
                     >
                       <td className={styles.td}>
                         {isProductRow ? (
