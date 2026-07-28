@@ -28,6 +28,14 @@ const customerService = {
   getStats: async () => {
     return await customerApi.getStats();
   },
+
+  getPageWithOrderCustomers: async (page = 0, size = 20, search = '', status = 'ALL', gender = 'ALL') => {
+    return await customerApi.getPageWithOrderCustomers(page, size, search, status, gender);
+  },
+
+  syncFromOrders: async () => {
+    return await customerApi.syncFromOrders();
+  },
 };
 
 export default customerService;

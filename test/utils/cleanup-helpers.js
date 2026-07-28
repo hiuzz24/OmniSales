@@ -464,8 +464,8 @@ async function cleanupAllTestDataSQL(pg) {
     `UPDATE suppliers SET is_active=false WHERE name LIKE 'TestSup%' OR name LIKE 'ToUpdate%' OR name LIKE 'StatusTest%' OR name LIKE 'DuplicateTest%' OR name LIKE 'Some Supplier %' OR email LIKE 'supplier%@example.com'`,
 
     // ── Categories (clear FK then delete) ──────────────────────────────
-    `UPDATE categories SET parent_id=NULL WHERE parent_id IN (SELECT id FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR slug LIKE 'test-category-%')`,
-    `DELETE FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR slug LIKE 'test-category-%'`,
+    `UPDATE categories SET parent_id=NULL WHERE parent_id IN (SELECT id FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR name = 'API Sub Category Attempt' OR slug LIKE 'test-category-%' OR name = 'X' OR slug LIKE 'unauth--%' OR slug LIKE 'uniqueSlug%')`,
+    `DELETE FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR name = 'API Sub Category Attempt' OR slug LIKE 'test-category-%' OR name = 'X' OR slug LIKE 'unauth--%' OR slug LIKE 'uniqueSlug%'`,
 
     // ── Products (deep clean) ───────────────────────────────────────────
     // SKU prefixes used across catalog specs — see comment in

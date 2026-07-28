@@ -33,6 +33,20 @@ const customerApi = {
     const response = await axiosClient.get('/customers/stats');
     return response.data.data;
   },
+
+  getPageWithOrderCustomers: async (page = 0, size = 20, search = '', status = 'ALL', gender = 'ALL') => {
+    const params = { page, size };
+    if (search) params.search = search;
+    if (status && status !== 'ALL') params.status = status;
+    if (gender && gender !== 'ALL') params.gender = gender;
+    const response = await axiosClient.get('/customers/page-with-order-customers', { params });
+    return response.data.data;
+  },
+
+  syncFromOrders: async () => {
+    const response = await axiosClient.post('/customers/sync-from-orders');
+    return response.data.data;
+  },
 };
 
 export default customerApi;

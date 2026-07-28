@@ -80,11 +80,11 @@ const STATEMENTS = [
 
   // 8. Categories (after products since products has FK to categories)
   // First: reassign children of test categories to NULL so we don't block the FK
-  `UPDATE categories SET parent_id = NULL WHERE parent_id IN (SELECT id FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR slug LIKE 'test-category-%')`,
-  `DELETE FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR slug LIKE 'test-category-%'`,
+  `UPDATE categories SET parent_id = NULL WHERE parent_id IN (SELECT id FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR name = 'API Sub Category Attempt' OR slug LIKE 'test-category-%' OR name = 'X' OR slug LIKE 'unauth--%' OR slug LIKE 'uniqueSlug%')`,
+  `DELETE FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR name = 'API Sub Category Attempt' OR slug LIKE 'test-category-%' OR name = 'X' OR slug LIKE 'unauth--%' OR slug LIKE 'uniqueSlug%'`,
 
-  // 9. Suppliers
-  `DELETE FROM suppliers WHERE name LIKE 'TestSup%' OR name LIKE 'ToUpdate%' OR name LIKE 'StatusTest%' OR name LIKE 'DuplicateTest%' OR email LIKE 'supplier%@example.com'`,
+  // 9. Suppliers — soft-delete via is_active=false (FK constraints from purchase_orders)
+  `UPDATE suppliers SET is_active = false WHERE name LIKE 'TestSup%' OR name LIKE 'ToUpdate%' OR name LIKE 'StatusTest%' OR name LIKE 'DuplicateTest%' OR email LIKE 'supplier%@example.com'`,
 
   // 10. User invite tokens (must come before user delete)
   `DELETE FROM user_invite_tokens WHERE email LIKE 'invitee+%@osms-test.vn'`,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ROUTES } from '../../../app/router/routes';
@@ -7,11 +7,35 @@ import useAuth from '../../auth/hooks/useAuth';
 import {
   ArrowLeft, Pencil, Trash2, Phone, Mail, MapPin,
   Calendar, User, UserCheck, UserX, Clock, FileText,
+  ShoppingBag, ChevronRight, Package,
 } from 'lucide-react';
 import customerService from '../services/customerService';
+import orderService from '../../order/services/orderService';
 import styles from './CustomerDetailPage.module.css';
 
 const GENDER_MAP = { Nam: 'MALE', Nữ: 'FEMALE', Khác: 'OTHER' };
+
+const ORDER_STATUS_LABEL = {
+  PENDING: 'Chờ xử lý',
+  CONFIRMED: 'Đã xác nhận',
+  PROCESSING: 'Đang xử lý',
+  SHIPPED: 'Sẵn sàng giao',
+  IN_TRANSIT: 'Đang vận chuyển',
+  DELIVERED: 'Đã giao',
+  CANCELLED: 'Đã hủy',
+};
+
+const ORDER_STATUS_COLORS = {
+  PENDING:    { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa' },
+  CONFIRMED:  { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+  PROCESSING: { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
+  SHIPPED:    { bg: '#f0fdfa', color: '#0d9488', border: '#99f6e4' },
+  IN_TRANSIT: { bg: '#f0f9ff', color: '#0284c7', border: '#bae6fd' },
+  DELIVERED:  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+  CANCELLED:  { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+};
+
+const PAGE_SIZE = 5;
 
 const CustomerDetailPage = () => {
   const { id } = useParams();
@@ -24,6 +48,12 @@ const CustomerDetailPage = () => {
   const [error, setError] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersPage, setOrdersPage] = useState(0);
+  const [ordersTotalPages, setOrdersTotalPages] = useState(0);
+  const [ordersTotalElements, setOrdersTotalElements] = useState(0);
 
   const canEdit = role === ROLES.OWNER || role === ROLES.SALES;
   const canDelete = role === ROLES.OWNER;
@@ -43,6 +73,29 @@ const CustomerDetailPage = () => {
     };
     fetchCustomer();
   }, [id]);
+
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const data = await orderService.getAll({
+        customerId: id,
+        page: ordersPage,
+        size: PAGE_SIZE,
+      });
+      setOrders(data.content || []);
+      setOrdersTotalPages(data.totalPages || 0);
+      setOrdersTotalElements(data.totalElements || 0);
+    } catch (err) {
+      console.error('Failed to fetch customer orders:', err);
+      setOrders([]);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [id, ordersPage]);
+
+  useEffect(() => {
+    if (customer) fetchOrders();
+  }, [customer, fetchOrders]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -76,6 +129,27 @@ const CustomerDetailPage = () => {
   const getInitials = (name) => {
     if (!name) return '?';
     return name.trim().split(' ').pop().charAt(0).toUpperCase();
+  };
+
+  const formatCurrency = (amount) => {
+    if (amount == null) return '-';
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency', currency: 'VND', minimumFractionDigits: 0, maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatOrderDate = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('vi-VN', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+  };
+
+  const getOrderItemsSummary = (order) => {
+    const items = order.items || [];
+    if (items.length === 0) return 'Không có sản phẩm';
+    if (items.length === 1) return `${items[0].name} ×${items[0].quantity || 1}`;
+    return `${items[0].name} ×${items[0].quantity || 1} (+${items.length - 1} SP)`;
   };
 
   if (loading) {
@@ -262,6 +336,103 @@ const CustomerDetailPage = () => {
           <p className={styles.notes}>{customer.notes}</p>
         </div>
       )}
+
+      {/* Lịch sử đơn hàng */}
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardIcon}>
+            <ShoppingBag size={15} />
+          </div>
+          <h3 className={styles.cardTitle}>Đơn hàng đã mua</h3>
+          {ordersTotalElements > 0 && (
+            <span className={styles.orderCountBadge}>
+              {ordersTotalElements} đơn
+            </span>
+          )}
+        </div>
+
+        {ordersLoading ? (
+          <div className={styles.ordersLoading}>Đang tải danh sách đơn...</div>
+        ) : orders.length === 0 ? (
+          <div className={styles.ordersEmpty}>
+            <Package size={32} />
+            <span>Khách hàng chưa có đơn hàng nào.</span>
+          </div>
+        ) : (
+          <>
+            <div className={styles.ordersList}>
+              {orders.map((order) => {
+                const statusCfg = ORDER_STATUS_COLORS[order.status] || ORDER_STATUS_COLORS.PENDING;
+                return (
+                  <button
+                    key={order.id}
+                    type="button"
+                    className={styles.orderItem}
+                    onClick={() => navigate(ROUTES.ORDER_DETAIL.replace(':id', order.id))}
+                  >
+                    <div className={styles.orderItemTop}>
+                      <div className={styles.orderItemLeft}>
+                        <span className={styles.orderExternalId}>
+                          #{order.externalOrderId || order.id?.substring(0, 8)}
+                        </span>
+                        <span className={styles.orderChannel}>
+                          {order.channelName || order.platform || 'Manual'}
+                        </span>
+                      </div>
+                      <span
+                        className={styles.orderStatus}
+                        style={{
+                          background: statusCfg.bg,
+                          color: statusCfg.color,
+                          borderColor: statusCfg.border,
+                        }}
+                      >
+                        {ORDER_STATUS_LABEL[order.status] || order.status}
+                      </span>
+                    </div>
+                    <div className={styles.orderItemBottom}>
+                      <div className={styles.orderItemSummary}>
+                        {getOrderItemsSummary(order)}
+                      </div>
+                      <div className={styles.orderItemRight}>
+                        <span className={styles.orderItemDate}>{formatOrderDate(order.createdAt)}</span>
+                        <span className={styles.orderItemTotal}>
+                          {formatCurrency(order.totalAmount)}
+                        </span>
+                        <ChevronRight size={16} className={styles.orderChevron} />
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {ordersTotalPages > 1 && (
+              <div className={styles.ordersPagination}>
+                <button
+                  type="button"
+                  className={styles.pageNavBtn}
+                  disabled={ordersPage === 0}
+                  onClick={() => setOrdersPage((p) => Math.max(0, p - 1))}
+                >
+                  ‹ Trước
+                </button>
+                <span className={styles.pageInfo}>
+                  Trang {ordersPage + 1} / {ordersTotalPages}
+                </span>
+                <button
+                  type="button"
+                  className={styles.pageNavBtn}
+                  disabled={ordersPage + 1 >= ordersTotalPages}
+                  onClick={() => setOrdersPage((p) => p + 1)}
+                >
+                  Sau ›
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Thông tin hệ thống */}
       <div className={styles.card}>

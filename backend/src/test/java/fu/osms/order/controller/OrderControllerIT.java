@@ -93,7 +93,7 @@ class OrderControllerIT {
                 .content(List.of(sampleOrder(id)))
                 .page(0).size(20).totalElements(1).totalPages(1).first(true).last(true)
                 .build();
-        when(orderService.getFiltered(eq(null), eq(null), eq(null), eq(null), eq(null), eq(0), eq(20)))
+        when(orderService.getFiltered(eq(null), eq(null), eq(null), eq(null), eq(null), eq(null), eq(0), eq(20)))
                 .thenReturn(page);
 
         mvc.perform(get("/api/orders?page=0&size=20"))
@@ -186,6 +186,7 @@ class OrderControllerIT {
                 eq(channelId),
                 eq("test keyword"),
                 any(), any(),
+                eq(null),
                 eq(0),
                 eq(20)))
                 .thenReturn(page);
@@ -211,6 +212,7 @@ class OrderControllerIT {
         when(orderService.getFiltered(
                 eq(null), eq(null), eq(null),
                 any(), any(),
+                eq(null),
                 eq(0), eq(20)))
                 .thenReturn(page);
 

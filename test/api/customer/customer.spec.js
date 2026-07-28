@@ -7,6 +7,10 @@ const {
   getCustomerStats,
   API_BASE,
 } = require('../../utils/customer-helpers');
+const {
+  createTestOrder,
+  deleteTestOrder,
+} = require('../../utils/order-helpers');
 const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Customer API Tests', () => {
@@ -302,5 +306,101 @@ test.describe('Customer API Tests', () => {
     });
 
     expect(page1.status()).toBe(200);
+  });
+
+  // =========================================================
+  // Regression: totalSpent must equal Σ totalAmount of non-CANCELLED orders
+  // =========================================================
+
+  test('C19 - REGRESSION: customer.totalSpent excludes CANCELLED orders', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+
+    const customer = await createTestCustomer(request, authToken, {});
+    if (!customer?.id) {
+      test.skip(true, 'Failed to create test customer');
+      return;
+    }
+    createdCustomerIds.push(customer.id);
+
+    const orderA = await createTestOrder(request, authToken, {
+      customerId: customer.id,
+      externalOrderId: `REG-A-${Date.now()}`,
+      subtotal: 300000,
+      discountAmount: 0,
+      shippingFee: 0,
+      status: 'CONFIRMED',
+    });
+    const orderB = await createTestOrder(request, authToken, {
+      customerId: customer.id,
+      externalOrderId: `REG-B-${Date.now()}`,
+      subtotal: 500000,
+      discountAmount: 100000,
+      shippingFee: 25000,
+      status: 'PENDING',
+    });
+    const orderC = await createTestOrder(request, authToken, {
+      customerId: customer.id,
+      externalOrderId: `REG-C-${Date.now()}`,
+      subtotal: 200000,
+      discountAmount: 0,
+      shippingFee: 0,
+      status: 'CONFIRMED',
+    });
+
+    const computeTotal = (o) =>
+      Math.max(0, Number(o.subtotal) - Number(o.discountAmount) + Number(o.shippingFee));
+
+    const beforeCancel = await getCustomerById(request, authToken, customer.id);
+    const expectedBefore =
+      computeTotal(orderA) + computeTotal(orderB) + computeTotal(orderC);
+    expect(Number(beforeCancel.totalSpent)).toBe(expectedBefore);
+
+    await request.post(`${API_BASE}/orders/${orderC.id}/cancel`, {
+      headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      data: { reason: 'regression test' },
+    });
+
+    const afterCancel = await getCustomerById(request, authToken, customer.id);
+    const expectedAfter = computeTotal(orderA) + computeTotal(orderB);
+    expect(Number(afterCancel.totalSpent)).toBe(expectedAfter);
+
+    await deleteTestOrder(request, authToken, orderA.id);
+    await deleteTestOrder(request, authToken, orderB.id);
+  });
+
+  test('C20 - INVARIANT: every customer.totalSpent is a non-negative number', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/customers?page=0&size=100`, {
+      headers: managerHeaders,
+    });
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+
+    for (const customer of body.data.content) {
+      expect(typeof customer.totalSpent).toBe('number');
+      expect(customer.totalSpent).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(customer.totalSpent)).toBe(true);
+    }
+  });
+
+  test('C21 - INVARIANT: customer.totalSpent equals orderCount vs active orders ratio', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+
+    const listResp = await request.get(`${API_BASE}/customers?page=0&size=5`, {
+      headers: managerHeaders,
+    });
+    const listBody = await listResp.json();
+
+    for (const summary of listBody.data.content) {
+      const detail = await getCustomerById(request, authToken, summary.id);
+      if (!detail) continue;
+
+      if (Number(detail.totalSpent) > 0) {
+        expect(Number(detail.orderCount)).toBeGreaterThan(0);
+      }
+      if (Number(detail.orderCount) === 0) {
+        expect(Number(detail.totalSpent)).toBe(0);
+      }
+    }
   });
 });

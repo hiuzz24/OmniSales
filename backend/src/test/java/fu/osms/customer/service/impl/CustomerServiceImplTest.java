@@ -215,6 +215,35 @@ class CustomerServiceImplTest {
 
             assertThat(result.getTotalSpent()).isEqualTo(BigDecimal.ZERO);
         }
+
+        @Test
+        @DisplayName("REGRESSION: customer detail totalSpent propagates repository value")
+        void shouldPropagateRepositoryTotalSpentValue() {
+            when(customerRepository.findById(customerId)).thenReturn(Optional.of(customer));
+            when(customerMapper.toResponse(customer)).thenReturn(customerResponse);
+            when(orderRepository.countByCustomerId(customerId)).thenReturn(7L);
+            when(orderRepository.sumTotalSpentByCustomerId(customerId))
+                    .thenReturn(new BigDecimal("1800000"));
+
+            CustomerResponse result = customerService.getById(customerId);
+
+            assertThat(result.getOrderCount()).isEqualTo(7L);
+            assertThat(result.getTotalSpent()).isEqualByComparingTo(new BigDecimal("1800000"));
+        }
+
+        @Test
+        @DisplayName("INVARIANT: customer detail totalSpent is non-negative")
+        void shouldReturnNonNegativeTotalSpent() {
+            when(customerRepository.findById(customerId)).thenReturn(Optional.of(customer));
+            when(customerMapper.toResponse(customer)).thenReturn(customerResponse);
+            when(orderRepository.countByCustomerId(customerId)).thenReturn(0L);
+            when(orderRepository.sumTotalSpentByCustomerId(customerId)).thenReturn(BigDecimal.ZERO);
+
+            CustomerResponse result = customerService.getById(customerId);
+
+            assertThat(result.getTotalSpent()).isNotNull();
+            assertThat(result.getTotalSpent().signum()).isGreaterThanOrEqualTo(0);
+        }
     }
 
     // =========================================================
@@ -437,9 +466,37 @@ class CustomerServiceImplTest {
 
             CustomerStatsResponse result = customerService.getStats();
 
-            // Note: getStats() does not convert null to BigDecimal.ZERO
-            // This is the actual behavior of the service
-            assertThat(result.getTotalSpent()).isNull();
+            assertThat(result.getTotalSpent()).isEqualTo(BigDecimal.ZERO);
+        }
+
+        @Test
+        @DisplayName("REGRESSION: stats totalSpent propagates repository value")
+        void shouldPropagateRepositoryTotalSpentValue() {
+            when(customerRepository.countAll()).thenReturn(6L);
+            when(customerRepository.countActive()).thenReturn(5L);
+            when(customerRepository.countAllOrders()).thenReturn(20L);
+            when(customerRepository.sumTotalSpent()).thenReturn(new BigDecimal("104171200"));
+
+            CustomerStatsResponse result = customerService.getStats();
+
+            assertThat(result.getTotalCustomers()).isEqualTo(6L);
+            assertThat(result.getActiveCustomers()).isEqualTo(5L);
+            assertThat(result.getTotalOrders()).isEqualTo(20L);
+            assertThat(result.getTotalSpent()).isEqualByComparingTo(new BigDecimal("104171200"));
+        }
+
+        @Test
+        @DisplayName("INVARIANT: stats totalSpent is non-negative even for empty data")
+        void shouldReturnNonNegativeStatsTotalSpent() {
+            when(customerRepository.countAll()).thenReturn(0L);
+            when(customerRepository.countActive()).thenReturn(0L);
+            when(customerRepository.countAllOrders()).thenReturn(0L);
+            when(customerRepository.sumTotalSpent()).thenReturn(BigDecimal.ZERO);
+
+            CustomerStatsResponse result = customerService.getStats();
+
+            assertThat(result.getTotalSpent()).isNotNull();
+            assertThat(result.getTotalSpent().signum()).isGreaterThanOrEqualTo(0);
         }
     }
 }
