@@ -12,6 +12,7 @@ public interface ChannelMapper {
 
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "lastSyncedAt", ignore = true)
+    @Mapping(target = "lastSyncedApplicationAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "deletedAt", ignore = true)
@@ -27,6 +28,7 @@ public interface ChannelMapper {
 
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "lastSyncedAt", ignore = true)
+    @Mapping(target = "lastSyncedApplicationAt", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "deletedAt", ignore = true)

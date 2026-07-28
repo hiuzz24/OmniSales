@@ -33,15 +33,20 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
 
     @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
             "WHERE item.receipt.status = 'CONFIRMED' " +
-            "AND item.receipt.updatedAt >= :changedSince " +
-            "AND item.receipt.updatedAt <= :changedUntil")
+            "AND ((item.receipt.createdAt > :changedSince AND item.receipt.createdAt <= :changedUntil) " +
+            "OR (item.receipt.updatedAt > :changedSince AND item.receipt.updatedAt <= :changedUntil))")
     List<UUID> findChangedConfirmedVariantIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                      @Param("changedUntil") OffsetDateTime changedUntil);
 
+    @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
+            "WHERE item.receipt.status = 'CONFIRMED' " +
+            "AND (item.receipt.createdAt <= :changedUntil OR item.receipt.updatedAt <= :changedUntil)")
+    List<UUID> findConfirmedVariantIdsUpTo(@Param("changedUntil") OffsetDateTime changedUntil);
+
     @Query("SELECT DISTINCT item.receipt.warehouse.id FROM InventoryReceiptItem item " +
             "WHERE item.receipt.status = 'CONFIRMED' " +
-            "AND item.receipt.updatedAt >= :changedSince " +
-            "AND item.receipt.updatedAt <= :changedUntil")
+            "AND ((item.receipt.createdAt > :changedSince AND item.receipt.createdAt <= :changedUntil) " +
+            "OR (item.receipt.updatedAt > :changedSince AND item.receipt.updatedAt <= :changedUntil))")
     List<UUID> findChangedConfirmedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                        @Param("changedUntil") OffsetDateTime changedUntil);
 

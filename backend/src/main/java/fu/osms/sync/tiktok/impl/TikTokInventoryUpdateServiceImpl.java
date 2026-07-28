@@ -16,6 +16,7 @@ import fu.osms.sync.tiktok.inventory.TikTokInventoryGateway;
 import fu.osms.sync.tiktok.inventory.TikTokInventorySetCommand;
 import fu.osms.sync.tiktok.inventory.TikTokInventoryTarget;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -30,6 +31,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateService {
 
     private static final String PRICE_UPDATE_PATH = "/product/202309/products/%s/prices/update";
@@ -66,13 +68,26 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
 
         List<TikTokInventorySetCommand> commands = new ArrayList<>();
         List<ChannelProductVariant> pushedMappings = new ArrayList<>();
+        List<String> skippedMappings = new ArrayList<>();
         for (ChannelProductVariant mapping : mappings) {
             String productId = mapping.getChannelProduct().getExternalProductId();
             String externalStatus = mapping.getChannelProduct().getExternalStatus();
-            if (!"ACTIVATE".equalsIgnoreCase(externalStatus)
-                    || !hasText(productId)
-                    || !hasText(mapping.getExternalVariantId())) {
+            if (hasText(externalStatus) && !"ACTIVATE".equalsIgnoreCase(externalStatus)) {
+                skippedMappings.add(mappingLabel(mapping) + " trạng thái " + externalStatus);
                 continue;
+            }
+            if (!hasText(productId) || !hasText(mapping.getExternalVariantId())) {
+                skippedMappings.add(mappingLabel(mapping) + " thiếu product ID hoặc SKU ID TikTok");
+                continue;
+            }
+            if (!hasText(externalStatus)) {
+                log.warn(
+                        "[TikTokInventorySync] Product status is missing; let TikTok validate inventory update "
+                                + "channelId={} productId={} externalSku={}",
+                        channelId,
+                        productId,
+                        mapping.getExternalSku()
+                );
             }
 
             List<String> warehouseIds = warehouseIds(mapping, configuredWarehouseId);
@@ -100,6 +115,15 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
         }
 
         if (commands.isEmpty()) {
+            if (!mappings.isEmpty()) {
+                throw new AppException(
+                        ErrorCode.INVALID_REQUEST,
+                        "Không có SKU TikTok đủ điều kiện để cập nhật tồn kho"
+                                + (skippedMappings.isEmpty()
+                                ? "."
+                                : ": " + String.join("; ", skippedMappings))
+                );
+            }
             return 0;
         }
 
@@ -118,6 +142,16 @@ public class TikTokInventoryUpdateServiceImpl implements TikTokInventoryUpdateSe
         }
         mappingRepository.saveAll(pushedMappings);
         return pushedMappings.size();
+    }
+
+    private String mappingLabel(ChannelProductVariant mapping) {
+        if (hasText(mapping.getExternalSku())) {
+            return "SKU " + mapping.getExternalSku();
+        }
+        if (mapping.getVariant() != null && hasText(mapping.getVariant().getSku())) {
+            return "SKU " + mapping.getVariant().getSku();
+        }
+        return "mapping " + mapping.getId();
     }
 
     private void updatePrices(UUID channelId,
