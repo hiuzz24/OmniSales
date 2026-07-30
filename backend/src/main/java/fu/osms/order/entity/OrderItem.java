@@ -33,6 +33,9 @@ public class OrderItem {
     @JoinColumn(name = "channel_variant_id")
     private ChannelProductVariant channelVariant;
 
+    @Column(name = "external_item_id", length = 200)
+    private String externalItemId;
+
     @Column(length = 100)
     private String sku;
 

@@ -38,7 +38,9 @@ public class TikTokOrderMapperImpl implements TikTokOrderMapper {
     }
 
     private TikTokOrderWriteModel.Item item(Map<String, Object> value) {
-        return new TikTokOrderWriteModel.Item(text(value, "sku_id", "id"), text(value, "seller_sku", "sku"),
+        return new TikTokOrderWriteModel.Item(
+                text(value, "order_line_item_id", "line_item_id", "id"),
+                text(value, "sku_id"), text(value, "seller_sku", "sku"),
                 fallback(text(value, "product_name", "sku_name", "name"), "TikTok item"),
                 WebhookPayloadUtils.integer(value.get("quantity"), 1), decimal(value, "sale_price", "original_price", "price"),
                 decimal(value, "seller_discount").add(decimal(value, "platform_discount")));

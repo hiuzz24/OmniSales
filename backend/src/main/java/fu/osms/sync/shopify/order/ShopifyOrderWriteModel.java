@@ -12,7 +12,7 @@ public record ShopifyOrderWriteModel(
         BigDecimal shippingFee, String currency, String note, String trackingNumber, String cancelReason,
         List<Item> items
 ) {
-    public record Item(String externalVariantId, String sku, String name, int quantity,
+    public record Item(String externalItemId, String externalVariantId, String sku, String name, int quantity,
                        BigDecimal unitPrice, BigDecimal discountAmount) {
     }
 }

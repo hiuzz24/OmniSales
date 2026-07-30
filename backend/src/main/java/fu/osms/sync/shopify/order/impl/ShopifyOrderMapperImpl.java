@@ -38,7 +38,8 @@ public class ShopifyOrderMapperImpl implements ShopifyOrderMapper {
     }
 
     private ShopifyOrderWriteModel.Item item(Map<String, Object> item) {
-        return new ShopifyOrderWriteModel.Item(text(item, "variant_id"), text(item, "sku"),
+        return new ShopifyOrderWriteModel.Item(text(item, "id", "line_item_id"),
+                text(item, "variant_id"), text(item, "sku"),
                 fallback(text(item, "name", "title"), "Shopify item"),
                 WebhookPayloadUtils.integer(WebhookPayloadUtils.firstPresent(item, "quantity", "current_quantity"), 1),
                 decimal(item, "price"), decimal(item, "total_discount"));

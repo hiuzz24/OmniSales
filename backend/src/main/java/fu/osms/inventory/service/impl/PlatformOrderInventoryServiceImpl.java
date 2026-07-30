@@ -6,11 +6,13 @@ import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.InventoryTransaction;
+import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
@@ -22,7 +24,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -41,6 +42,7 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final InventoryAlertService inventoryAlertService;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @Override
     @Transactional
@@ -80,57 +82,40 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
             return;
         }
 
-        List<InventoryItem> inventoryItems = inventoryItemRepository.findByVariantIdWithLock(variant.getId());
-        if (inventoryItems.isEmpty()) {
-            throw new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND,
-                    "SKU " + variant.getSku() + " is not available in any warehouse.");
-        }
+        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
+        InventoryItem inventoryItem = inventoryItemRepository
+                .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), variant.getId())
+                .orElseThrow(() -> new AppException(
+                        ErrorCode.INVENTORY_ITEM_NOT_FOUND,
+                        "SKU " + variant.getSku() + " không tồn tại trong Kho mặc định đa sàn."));
 
-        int totalAvailable = inventoryItems.stream().mapToInt(this::availableQuantity).sum();
-        if (totalAvailable < quantity) {
+        int available = availableQuantity(inventoryItem);
+        if (available < quantity) {
             throw new AppException(ErrorCode.INSUFFICIENT_STOCK,
-                    "SKU " + variant.getSku() + " has only " + totalAvailable + " available units.");
+                    "SKU " + variant.getSku() + " chỉ còn " + available
+                            + " sản phẩm có thể bán trong Kho mặc định đa sàn.");
         }
 
-        int remaining = quantity;
-        List<InventoryItem> changedItems = new ArrayList<>();
-        for (InventoryItem inventoryItem : inventoryItems) {
-            if (remaining <= 0) {
-                break;
-            }
+        int quantityOnHand = safeInt(inventoryItem.getQuantityOnHand());
+        int reservedBefore = safeInt(inventoryItem.getReservedQuantity());
+        int reservedAfter = reservedBefore + quantity;
+        inventoryItem.setReservedQuantity(reservedAfter);
+        inventoryItemRepository.save(inventoryItem);
 
-            int reserveQuantity = Math.min(availableQuantity(inventoryItem), remaining);
-            if (reserveQuantity <= 0) {
-                continue;
-            }
+        inventoryTransactionRepository.save(InventoryTransaction.builder()
+                .warehouse(warehouse)
+                .variant(variant)
+                .type(InvTxnType.ORDER_DEDUCT)
+                .referenceType(ORDER_REFERENCE_TYPE)
+                .referenceId(order.getId())
+                .quantityChange(-quantity)
+                .quantityBefore(quantityOnHand - reservedBefore)
+                .quantityAfter(quantityOnHand - reservedAfter)
+                .unitCost(resolveUnitCost(inventoryItem, orderItem))
+                .note("Platform order reserved: " + order.getExternalOrderId())
+                .build());
 
-            int quantityOnHand = safeInt(inventoryItem.getQuantityOnHand());
-            int reservedBefore = safeInt(inventoryItem.getReservedQuantity());
-            int availableBefore = quantityOnHand - reservedBefore;
-            int reservedAfter = reservedBefore + reserveQuantity;
-            int availableAfter = quantityOnHand - reservedAfter;
-
-            inventoryItem.setReservedQuantity(reservedAfter);
-            changedItems.add(inventoryItem);
-
-            inventoryTransactionRepository.save(InventoryTransaction.builder()
-                    .warehouse(inventoryItem.getWarehouse())
-                    .variant(variant)
-                    .type(InvTxnType.ORDER_DEDUCT)
-                    .referenceType(ORDER_REFERENCE_TYPE)
-                    .referenceId(order.getId())
-                    .quantityChange(-reserveQuantity)
-                    .quantityBefore(availableBefore)
-                    .quantityAfter(availableAfter)
-                    .unitCost(resolveUnitCost(inventoryItem, orderItem))
-                    .note("Platform order reserved: " + order.getExternalOrderId())
-                    .build());
-
-            remaining -= reserveQuantity;
-        }
-
-        inventoryItemRepository.saveAll(changedItems);
-        changedItems.forEach(inventoryAlertService::notifyLowStockAfterStockChange);
+        inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
     }
 
     private void releaseOrderReservations(Order order) {

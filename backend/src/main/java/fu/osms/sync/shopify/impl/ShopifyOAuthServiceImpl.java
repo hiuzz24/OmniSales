@@ -14,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.UUID;
 
 @Slf4j
@@ -97,14 +98,16 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
     }
 
     private String normalizeScopes(String scopes) {
-        if (scopes == null || scopes.isBlank()) {
-            return "";
+        LinkedHashSet<String> requestedScopes = new LinkedHashSet<>();
+        if (scopes != null && !scopes.isBlank()) {
+            java.util.Arrays.stream(scopes.split(","))
+                    .map(String::trim)
+                    .filter(scope -> !scope.isBlank())
+                    .forEach(requestedScopes::add);
         }
-        return String.join(",",
-                java.util.Arrays.stream(scopes.split(","))
-                        .map(String::trim)
-                        .filter(scope -> !scope.isBlank())
-                        .toList());
+        requestedScopes.add("read_returns");
+        requestedScopes.add("write_returns");
+        return String.join(",", requestedScopes);
     }
 
     private void validateOAuthConfig() {

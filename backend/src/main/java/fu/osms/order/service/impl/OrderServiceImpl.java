@@ -239,6 +239,9 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse updatePaymentStatus(UUID id, PaymentStatus paymentStatus) {
+        if (paymentStatus == PaymentStatus.REFUNDED) {
+            throw new AppException(ErrorCode.ORDER_REFUND_SYSTEM_MANAGED);
+        }
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
 

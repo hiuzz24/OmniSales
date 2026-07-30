@@ -67,6 +67,10 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
     @Override
     public String extractEventType(Map<String, String> headers, Map<String, Object> payload) {
         String type = WebhookPayloadUtils.text(payload.get("type"));
+        if ("RETURN_STATUS_CHANGE".equalsIgnoreCase(type)
+                || "RETURN_STATUS_CHANGED".equalsIgnoreCase(type)) {
+            return type.toUpperCase();
+        }
         if ("1".equals(type)) {
             return ORDER_STATUS_EVENT;
         }
@@ -95,7 +99,11 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
     @Override
     public boolean shouldIgnore(Map<String, Object> payload) {
         String type = WebhookPayloadUtils.text(payload.get("type"));
-        return !"1".equals(type) && !"2".equals(type) && !"68".equals(type);
+        return !"1".equals(type)
+                && !"2".equals(type)
+                && !"68".equals(type)
+                && !"RETURN_STATUS_CHANGE".equalsIgnoreCase(type)
+                && !"RETURN_STATUS_CHANGED".equalsIgnoreCase(type);
     }
 
     @Override

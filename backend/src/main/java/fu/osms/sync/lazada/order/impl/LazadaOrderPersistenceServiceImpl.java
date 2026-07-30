@@ -92,7 +92,7 @@ public class LazadaOrderPersistenceServiceImpl implements LazadaOrderPersistence
 
     private record ResolvedItem(LazadaOrderWriteModel.Item item, ChannelProductVariant mapping) {
         private OrderItem toEntity(Order order) {
-            return OrderItem.builder().order(order).channelVariant(mapping)
+            return OrderItem.builder().order(order).externalItemId(item.externalItemId()).channelVariant(mapping)
                     .variant(mapping == null ? null : mapping.getVariant()).sku(item.sku()).name(item.name())
                     .quantity(item.quantity()).unitPrice(item.unitPrice()).discountAmount(item.discountAmount())
                     .costPrice(mapping == null ? null : mapping.getVariant().getCostPrice()).build();

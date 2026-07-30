@@ -39,6 +39,8 @@ import StockTransferCreatePage from '../../features/inventory/pages/stocktransfe
 import OrderListPage from '../../features/order/pages/OrderListPage';
 import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
 import OrderLogPage from '../../features/order/pages/OrderLogPage';
+import OrderReturnListPage from '../../features/orderreturn/pages/OrderReturnListPage';
+import OrderReturnDetailPage from '../../features/orderreturn/pages/OrderReturnDetailPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
@@ -158,6 +160,8 @@ const AppRouter = () => {
               <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
               <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
               <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
+              <Route path={ROUTES.ORDER_RETURNS} element={<OrderReturnListPage />} />
+              <Route path={ROUTES.ORDER_RETURN_DETAIL} element={<OrderReturnDetailPage />} />
               <Route path={ROUTES.NOTIFICATIONS} element={<NotificationListPage />} />
             </Route>
           </Route>
