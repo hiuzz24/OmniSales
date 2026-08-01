@@ -1,6 +1,7 @@
 package fu.osms.orderreturn.service.impl;
 
 import fu.osms.auth.entity.User;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.common.utils.SecurityUtils;
@@ -37,7 +38,7 @@ public class OrderReturnInventoryPostingServiceImpl implements OrderReturnInvent
     private final MarketplaceInventoryPropagationService propagationService;
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 10)
     public void postIfReady(UUID returnId) {
         OrderReturn orderReturn = returnRepository.findForUpdateById(returnId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_RETURN_NOT_FOUND));
@@ -47,6 +48,10 @@ public class OrderReturnInventoryPostingServiceImpl implements OrderReturnInvent
             return;
         }
         if (orderReturn.getInspectedAt() == null || orderReturn.getRefundConfirmedAt() == null) {
+            return;
+        }
+        if (orderReturn.getPlatform() == PlatformType.SHOPIFY
+                && !"CLOSED".equalsIgnoreCase(orderReturn.getPlatformStatus())) {
             return;
         }
         if (orderReturn.getWarehouse() == null) {
@@ -101,7 +106,7 @@ public class OrderReturnInventoryPostingServiceImpl implements OrderReturnInvent
     }
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 10)
     public void markPending(UUID returnId, String error) {
         returnRepository.findForUpdateById(returnId).ifPresent(orderReturn -> {
             if (orderReturn.getInventoryPostedAt() == null) {

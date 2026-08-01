@@ -4,9 +4,11 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.dto.request.OrderStockDeliveryBatchRequest;
+import fu.osms.inventory.dto.request.OrderStockDeliveryGiftItemRequest;
 import fu.osms.inventory.dto.response.*;
 import fu.osms.inventory.entity.*;
 import fu.osms.inventory.enums.InvTxnType;
@@ -16,12 +18,14 @@ import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.inventory.service.OrderGiftReservationService;
 import fu.osms.inventory.service.OrderStockDeliveryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -55,7 +59,9 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
     private final ProductVariantRepository variantRepository;
     private final UserRepository userRepository;
     private final MarketplaceWarehouseConsistencyService warehouseConsistencyService;
+    private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     private final InventoryAlertService inventoryAlertService;
+    private final OrderGiftReservationService orderGiftReservationService;
     private final StockDeliveryMapper stockDeliveryMapper;
     private final OrderStockDeliveryBatchService batchService;
     private final ApplicationEventPublisher eventPublisher;
@@ -76,7 +82,9 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public StockDeliveryResponse createFromOrder(UUID orderId) {
+    public StockDeliveryResponse createFromOrder(
+            UUID orderId,
+            List<OrderStockDeliveryGiftItemRequest> giftItemRequests) {
         Order order = orderRepository.findForUpdateById(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
         if (order.getStatus() != OrderStatus.PROCESSING) {
@@ -91,6 +99,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
 
         Warehouse warehouse = warehouseConsistencyService.resolveMasterWarehouse();
         List<ResolvedOrderItem> resolvedItems = resolveOrderItems(order);
+        List<ResolvedGiftItem> resolvedGifts = resolveGiftItems(giftItemRequests);
         validateReservation(order, warehouse, resolvedItems);
 
         InventoryIssue issue = InventoryIssue.builder()
@@ -108,9 +117,24 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
                 .quantity(resolved.item().getQuantity())
                 .unitCost(resolveUnitCost(resolved))
                 .notes(resolved.item().getName())
+                .isGift(false)
+                .build()));
+        resolvedGifts.forEach(resolved -> issue.addItem(InventoryIssueItem.builder()
+                .productVariant(resolved.variant())
+                .quantity(resolved.quantity())
+                .unitCost(resolveGiftUnitCost(warehouse, resolved.variant()))
+                .notes("Quà tặng: " + resolveVariantDisplayName(resolved.variant()))
+                .isGift(true)
                 .build()));
         issue.calculateTotals();
         InventoryIssue savedIssue = issueRepository.save(issue);
+        Set<UUID> changedVariantIds = orderGiftReservationService.reserveGiftReservations(
+                savedIssue,
+                savedIssue.getItems().stream().filter(this::isGift).toList(),
+                savedIssue.getCreatedBy());
+        if (!changedVariantIds.isEmpty()) {
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        }
         eventPublisher.publishEvent(new OrderStockDeliveryCreatedEvent(
                 order.getId(), savedIssue.getId(), savedIssue.getIssueCode()));
         return stockDeliveryMapper.toResponse(savedIssue);
@@ -143,8 +167,14 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
                                 orderId, ORDER_ISSUE, "DRAFT")
                         .flatMap(issue -> issueRepository.findByIdForUpdate(issue.getId()))
                         .ifPresent(issue -> {
+                            Set<UUID> changedVariantIds = orderGiftReservationService
+                                    .releaseGiftReservations(issue, issue.getCreatedBy());
                             issue.setStatus("CANCELLED");
                             issueRepository.save(issue);
+                            if (!changedVariantIds.isEmpty()) {
+                                marketplaceInventoryPropagationService
+                                        .schedulePushAvailableStock(changedVariantIds);
+                            }
                         }));
     }
 
@@ -159,7 +189,9 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
             throw new AppException(ErrorCode.VALIDATION_FAILED,
                     "Đơn hàng đang giữ hàng ngoài Kho mặc định đa sàn");
         }
-        Map<UUID, Integer> issueQuantities = issue.getItems().stream().collect(Collectors.toMap(
+        Map<UUID, Integer> issueQuantities = issue.getItems().stream()
+                .filter(item -> !isGift(item))
+                .collect(Collectors.toMap(
                 item -> item.getProductVariant().getId(),
                 item -> safeQuantity(item.getQuantity()),
                 Integer::sum));
@@ -188,6 +220,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
             inventoryAlertService.notifyLowStockAfterStockChange(inventory);
 
             InventoryIssueItem issueItem = issue.getItems().stream()
+                    .filter(item -> !isGift(item))
                     .filter(item -> entry.getKey().equals(item.getProductVariant().getId()))
                     .findFirst().orElseThrow();
             transactionRepository.save(InventoryTransaction.builder()
@@ -204,6 +237,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
                     .note("Xuất kho cho đơn hàng " + order.getExternalOrderId())
                     .build());
         }
+        orderGiftReservationService.commitGiftReservations(issue, actor);
         issue.setStatus("CONFIRMED");
         issue.setApprovedBy(actor);
         issue.setConfirmedAt(OffsetDateTime.now());
@@ -273,6 +307,40 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
         }).toList();
     }
 
+    private List<ResolvedGiftItem> resolveGiftItems(
+            List<OrderStockDeliveryGiftItemRequest> giftItemRequests) {
+        if (giftItemRequests == null || giftItemRequests.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Integer> quantityByVariantId = new LinkedHashMap<>();
+        for (OrderStockDeliveryGiftItemRequest request : giftItemRequests) {
+            if (request == null || request.productVariantId() == null
+                    || request.quantity() == null || request.quantity() <= 0) {
+                throw new AppException(ErrorCode.VALIDATION_FAILED,
+                        "Sản phẩm và số lượng quà tặng phải hợp lệ");
+            }
+            quantityByVariantId.merge(request.productVariantId(), request.quantity(), Integer::sum);
+        }
+
+        Map<UUID, ProductVariant> variantsById = variantRepository
+                .findAllById(quantityByVariantId.keySet()).stream()
+                .collect(Collectors.toMap(ProductVariant::getId, variant -> variant));
+        if (variantsById.size() != quantityByVariantId.size()) {
+            throw new AppException(ErrorCode.VARIANT_NOT_FOUND,
+                    "Có sản phẩm quà tặng không tồn tại trong OSMS");
+        }
+        return quantityByVariantId.entrySet().stream()
+                .map(entry -> {
+                    ProductVariant variant = variantsById.get(entry.getKey());
+                    if (variant.getDeletedAt() != null || !Boolean.TRUE.equals(variant.getIsActive())) {
+                        throw new AppException(ErrorCode.VARIANT_NOT_FOUND,
+                                "SKU " + variant.getSku() + " không còn hoạt động");
+                    }
+                    return new ResolvedGiftItem(variant, entry.getValue());
+                })
+                .toList();
+    }
+
     private OrderStockDeliveryCandidateResponse toCandidate(Order order) {
         List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
         List<OrderStockDeliveryCandidateItemResponse> itemResponses = items.stream()
@@ -307,6 +375,28 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
         return item.variant().getCostPrice() == null ? BigDecimal.ZERO : item.variant().getCostPrice();
     }
 
+    private BigDecimal resolveGiftUnitCost(Warehouse warehouse, ProductVariant variant) {
+        BigDecimal averageCost = inventoryItemRepository
+                .findByWarehouseIdAndVariantId(warehouse.getId(), variant.getId())
+                .map(InventoryItem::getAverageCost)
+                .orElse(null);
+        if (ProductCostPolicy.isPositive(averageCost)) {
+            return averageCost;
+        }
+        return ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice());
+    }
+
+    private String resolveVariantDisplayName(ProductVariant variant) {
+        if (variant.getProduct() != null && variant.getProduct().getName() != null) {
+            return variant.getProduct().getName();
+        }
+        return Objects.toString(variant.getName(), variant.getSku());
+    }
+
+    private boolean isGift(InventoryIssueItem item) {
+        return Boolean.TRUE.equals(item.getIsGift());
+    }
+
     private String generateIssueCode() {
         return "PX-" + Year.now().getValue() + "-" +
                 UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
@@ -322,5 +412,8 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
     }
 
     private record ResolvedOrderItem(OrderItem item, ProductVariant variant) {
+    }
+
+    private record ResolvedGiftItem(ProductVariant variant, int quantity) {
     }
 }

@@ -53,8 +53,7 @@ public class ShopifyOrderMapperImpl implements ShopifyOrderMapper {
         if (contains(fulfillment, "DELIVER")) return OrderStatus.DELIVERED;
         if (contains(fulfillment, "FULFILLED") || contains(fulfillment, "SHIP") || contains(fulfillment, "PARTIAL"))
             return OrderStatus.SHIPPED;
-        return contains(text(payload, "financial_status", "payment_status"), "PAID")
-                ? OrderStatus.CONFIRMED : OrderStatus.PENDING;
+        return OrderStatus.PENDING;
     }
 
     private boolean hasDeliveredFulfillment(Map<String, Object> payload) {

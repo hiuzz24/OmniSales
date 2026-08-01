@@ -77,7 +77,8 @@ public class StockDeliveryMapper {
                 .quantity(item.getQuantity())
                 .unitCost(item.getUnitCost())
                 .totalCost(resolveItemTotalCost(item))
-                .note(item.getNotes());
+                .note(item.getNotes())
+                .isGift(Boolean.TRUE.equals(item.getIsGift()));
 
         if (item.getProductVariant().getProduct() != null) {
             builder.productName(item.getProductVariant().getProduct().getName());

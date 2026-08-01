@@ -63,11 +63,22 @@ public class TikTokReturnSnapshotMapper {
     }
 
     private OrderReturnStatus mapStatus(String status) {
-        if (contains(status, "REJECT") || contains(status, "CANCEL")) return OrderReturnStatus.REJECTED;
-        if (isCompleted(status)) return OrderReturnStatus.PLATFORM_PROCESSING;
-        if (contains(status, "TRANSIT") || contains(status, "SHIPPING")) return OrderReturnStatus.RETURN_IN_TRANSIT;
-        if (contains(status, "APPROV") || contains(status, "WAITING")) return OrderReturnStatus.AWAITING_RETURN;
-        return OrderReturnStatus.PENDING_APPROVAL;
+        String normalized = normalize(status);
+        return switch (normalized) {
+            case "RETURN_OR_REFUND_REQUEST_PENDING" -> OrderReturnStatus.PENDING_APPROVAL;
+            case "AWAITING_BUYER_SHIP" -> OrderReturnStatus.AWAITING_RETURN;
+            case "BUYER_SHIPPED_ITEM" -> OrderReturnStatus.RETURN_IN_TRANSIT;
+            case "REQUEST_SUCCESS", "RETURN_OR_REFUND_REQUEST_COMPLETE" ->
+                    OrderReturnStatus.PLATFORM_PROCESSING;
+            case "REQUEST_REJECTED", "RECEIVE_REJECTED", "RETURN_OR_REFUND_CANCEL" ->
+                    OrderReturnStatus.REJECTED;
+            default -> {
+                if (contains(normalized, "REJECT") || contains(normalized, "CANCEL")) {
+                    yield OrderReturnStatus.REJECTED;
+                }
+                yield OrderReturnStatus.PENDING_APPROVAL;
+            }
+        };
     }
 
     private boolean isRefundOnly(Map<String, Object> source) {
@@ -76,7 +87,11 @@ public class TikTokReturnSnapshotMapper {
     }
 
     private boolean isCompleted(String status) {
-        return contains(status, "COMPLETED") || contains(status, "CLOSED") || contains(status, "REFUNDED");
+        return "RETURN_OR_REFUND_REQUEST_COMPLETE".equals(normalize(status));
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
     }
 
     private Map<String, Object> data(Map<String, Object> source) {

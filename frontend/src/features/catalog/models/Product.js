@@ -60,7 +60,6 @@ export const productEditorSchema = z.object({
 }).superRefine((data, ctx) => {
   if (!data.hasVariants) {
     [
-      ['barcode', data.barcode, 'Barcode không được để trống'],
       ['size', data.size, 'Size không được để trống'],
       ['color', data.color, 'Màu sắc không được để trống'],
     ].forEach(([path, value, message]) => {
@@ -79,9 +78,6 @@ export const productEditorSchema = z.object({
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'sku'], message: 'SKU không được để trống' });
     } else if (variant.sku.length > 100) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'sku'], message: 'SKU tối đa 100 ký tự' });
-    }
-    if (!variant.barcode?.trim()) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'barcode'], message: 'Barcode không được để trống' });
     }
     if (!String(variant.optionValues?.Size || '').trim()) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['variants', index, 'optionValues', 'Size'], message: 'Size không được để trống' });
@@ -111,6 +107,51 @@ export const defaultProductFormValues = {
 };
 
 const optionValues = (values) => Object.fromEntries(Object.entries(values).filter(([, value]) => value));
+
+const firstOptionValue = (options, keys) => keys
+  .map((key) => options?.[key])
+  .find((value) => value != null && String(value).trim());
+
+export function normalizeVariantForEditor(variant = {}) {
+  const options = { ...(variant.optionValues || {}) };
+  const size = firstOptionValue(options, ['Size', 'size', 'Kích thước', 'Option 2']);
+  const color = firstOptionValue(options, ['Màu', 'Màu sắc', 'Color', 'Colour', 'color', 'Option 1']);
+
+  if (size != null) options.Size = size;
+  if (color != null) options['Màu'] = color;
+  if (size != null) delete options['Option 2'];
+  if (color != null) delete options['Option 1'];
+
+  return { ...variant, optionValues: options };
+}
+
+export function seedVariantFromProduct(values) {
+  const currentVariants = values.variants || [];
+  if (currentVariants.length > 1) return currentVariants;
+
+  const current = normalizeVariantForEditor(currentVariants[0]);
+  const currentOptions = current.optionValues || {};
+  const currentImages = current.images || [];
+  const productImages = values.images || [];
+
+  return [{
+    ...current,
+    sku: current.sku || values.sku || '',
+    barcode: current.barcode || values.barcode || '',
+    name: current.name || values.name || '',
+    price: current.price ?? values.price ?? '0',
+    costPrice: current.costPrice ?? values.costPrice ?? '0',
+    isActive: current.isActive !== false,
+    optionValues: {
+      ...currentOptions,
+      Size: currentOptions.Size || values.size || '',
+      'Màu': currentOptions['Màu'] || values.color || '',
+    },
+    images: currentImages.length > 0
+      ? currentImages
+      : productImages.slice(0, 1),
+  }];
+}
 
 export function buildProductRequest(values, { mode, existingAttributes = {} }) {
   const isCreate = mode === 'create';

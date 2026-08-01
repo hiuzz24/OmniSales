@@ -8,13 +8,16 @@ import fu.osms.sync.service.PlatformReturnWebhookProcessor;
 import fu.osms.sync.shopify.returning.ShopifyReturnGraphQlClient;
 import fu.osms.sync.shopify.returning.ShopifyReturnSnapshotMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.ArrayList;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class ShopifyReturnWebhookProcessor implements PlatformReturnWebhookProcessor {
@@ -50,11 +53,21 @@ public class ShopifyReturnWebhookProcessor implements PlatformReturnWebhookProce
             orderWebhookProcessor.process(event);
         }
 
-        boolean refundConfirmed = "REFUNDS_CREATE".equals(eventType);
+        List<String> failures = new ArrayList<>();
         for (String returnId : returnIds) {
-            Map<String, Object> remote = client.getReturn(event.getChannel().getId(), returnId);
-            OrderReturnSnapshot snapshot = mapper.map(remote, event.getExternalEventId(), refundConfirmed);
-            persistenceService.upsert(event.getChannel(), snapshot);
+            try {
+                Map<String, Object> remote = client.getReturn(event.getChannel().getId(), returnId);
+                OrderReturnSnapshot snapshot = mapper.map(remote, event.getExternalEventId());
+                persistenceService.upsert(event.getChannel(), snapshot);
+            } catch (RuntimeException exception) {
+                String message = rootMessage(exception);
+                failures.add(returnId + ": " + message);
+                log.error("[ShopifyReturnWebhook] Failed externalReturnId={} eventId={}",
+                        returnId, event.getId(), exception);
+            }
+        }
+        if (!failures.isEmpty()) {
+            throw new IllegalStateException("Some Shopify returns failed: " + String.join(" | ", failures));
         }
         return "PROCESSED";
     }
@@ -104,5 +117,11 @@ public class ShopifyReturnWebhookProcessor implements PlatformReturnWebhookProce
 
     private String normalize(String value) {
         return value == null ? "" : value.toUpperCase().replace('/', '_');
+    }
+
+    private String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) current = current.getCause();
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
 }

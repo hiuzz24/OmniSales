@@ -5,6 +5,7 @@ import fu.osms.orderreturn.enums.ReturnAction;
 import fu.osms.orderreturn.model.OrderReturnSnapshot;
 import fu.osms.orderreturn.model.ReturnActionContext;
 import fu.osms.orderreturn.model.ReturnPlatformActionResult;
+import fu.osms.orderreturn.model.ReturnRejectCommand;
 import fu.osms.orderreturn.service.OrderReturnPlatformGateway;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
@@ -35,8 +36,14 @@ public class LazadaOrderReturnGateway implements OrderReturnPlatformGateway {
     }
 
     @Override
-    public ReturnPlatformActionResult reject(ReturnActionContext context, String reason) {
-        return action(context, "REJECT", reason);
+    public ReturnPlatformActionResult reject(ReturnActionContext context, ReturnRejectCommand command) {
+        String comment = command == null ? null : command.comment();
+        if (comment == null || comment.isBlank()) {
+            throw new fu.osms.common.exception.AppException(
+                    fu.osms.common.exception.ErrorCode.INVALID_REQUEST,
+                    "Vui lòng nhập lý do từ chối Lazada");
+        }
+        return action(context, "REJECT", comment.trim());
     }
 
     @Override

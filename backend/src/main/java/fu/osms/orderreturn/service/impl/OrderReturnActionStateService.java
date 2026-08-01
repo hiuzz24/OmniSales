@@ -9,6 +9,7 @@ import fu.osms.orderreturn.enums.ReturnAction;
 import fu.osms.orderreturn.enums.ReturnActionState;
 import fu.osms.orderreturn.enums.ReturnDataValidationState;
 import fu.osms.orderreturn.model.ReturnActionContext;
+import fu.osms.orderreturn.model.ReturnRejectCommand;
 import fu.osms.orderreturn.repository.OrderReturnItemRepository;
 import fu.osms.orderreturn.repository.OrderReturnRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +18,9 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -28,7 +31,7 @@ public class OrderReturnActionStateService {
     private final OrderReturnItemRepository itemRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public ReturnActionContext beginNew(UUID returnId, ReturnAction action) {
+    public ReturnActionContext beginNew(UUID returnId, ReturnAction action, ReturnRejectCommand rejectCommand) {
         OrderReturn orderReturn = lock(returnId);
         validateAction(orderReturn, action);
         if (orderReturn.getActionState() == ReturnActionState.PROCESSING
@@ -39,6 +42,9 @@ public class OrderReturnActionStateService {
         orderReturn.setActionState(ReturnActionState.PROCESSING);
         orderReturn.setActionRequestId(UUID.randomUUID());
         orderReturn.setActionError(null);
+        if (action == ReturnAction.REJECT) {
+            storeRejectCommand(orderReturn, rejectCommand);
+        }
         if (action == ReturnAction.PROCESS) {
             orderReturn.setStatus(OrderReturnStatus.PLATFORM_PROCESSING);
         }
@@ -74,6 +80,21 @@ public class OrderReturnActionStateService {
                 && orderReturn.getActionState() != ReturnActionState.FAILED) {
             throw new AppException(ErrorCode.ORDER_RETURN_ACTION_NOT_RETRYABLE);
         }
+        return context(orderReturn);
+    }
+
+    @Transactional(readOnly = true)
+    public ReturnActionContext contextForRefresh(UUID returnId) {
+        OrderReturn orderReturn = returnRepository.findById(returnId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_RETURN_NOT_FOUND));
+        return context(orderReturn);
+    }
+
+    @Transactional(readOnly = true)
+    public ReturnActionContext contextForRejectOptions(UUID returnId) {
+        OrderReturn orderReturn = returnRepository.findById(returnId)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_RETURN_NOT_FOUND));
+        validateAction(orderReturn, ReturnAction.REJECT);
         return context(orderReturn);
     }
 
@@ -133,7 +154,37 @@ public class OrderReturnActionStateService {
                 orderReturn.getExternalReturnId(),
                 orderReturn.getLastAction(),
                 orderReturn.getActionRequestId(),
+                rejectCommand(orderReturn),
                 items);
+    }
+
+    private void storeRejectCommand(OrderReturn orderReturn, ReturnRejectCommand command) {
+        if (command == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Thiếu lý do từ chối");
+        }
+        Map<String, Object> metadata = orderReturn.getMetadata() == null
+                ? new LinkedHashMap<>()
+                : new LinkedHashMap<>(orderReturn.getMetadata());
+        Map<String, Object> payload = new LinkedHashMap<>();
+        putIfText(payload, "reasonCode", command.reasonCode());
+        putIfText(payload, "comment", command.comment());
+        metadata.put("lastRejectAction", payload);
+        orderReturn.setMetadata(metadata);
+    }
+
+    private ReturnRejectCommand rejectCommand(OrderReturn orderReturn) {
+        if (orderReturn.getMetadata() == null) return null;
+        Object raw = orderReturn.getMetadata().get("lastRejectAction");
+        if (!(raw instanceof Map<?, ?> source)) return null;
+        return new ReturnRejectCommand(text(source.get("reasonCode")), text(source.get("comment")));
+    }
+
+    private void putIfText(Map<String, Object> target, String key, String value) {
+        if (value != null && !value.isBlank()) target.put(key, value.trim());
+    }
+
+    private String text(Object value) {
+        return value == null || value.toString().isBlank() ? null : value.toString();
     }
 
     private ReturnActionContext.Item contextItem(OrderReturnItem item) {

@@ -25,6 +25,7 @@ public record OrderReturnResponse(
         ReturnDataValidationState dataValidationState,
         ReturnAction lastAction,
         ReturnActionState actionState,
+        boolean actionRetryAllowed,
         String actionError,
         String lastSyncError,
         OffsetDateTime platformUpdatedAt,

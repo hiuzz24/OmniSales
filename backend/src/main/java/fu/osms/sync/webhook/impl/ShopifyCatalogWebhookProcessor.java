@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -87,11 +88,12 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
 
         Product product = channelProduct.getProduct();
         updateProduct(product, payload);
+        Map<Integer, String> optionNames = optionNames(payload);
         Object variantValue = payload.get("variants");
         if (variantValue instanceof List<?> variants) {
             for (Object variantObject : variants) {
                 if (variantObject instanceof Map<?, ?> variantMap) {
-                    upsertVariant(channelProduct, product, WebhookPayloadUtils.copyMap(variantMap));
+                    upsertVariant(channelProduct, product, WebhookPayloadUtils.copyMap(variantMap), optionNames);
                 }
             }
         }
@@ -165,7 +167,10 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         product.setAttributes(attributes);
     }
 
-    private void upsertVariant(ChannelProduct channelProduct, Product product, Map<String, Object> variantPayload) {
+    private void upsertVariant(ChannelProduct channelProduct,
+                               Product product,
+                               Map<String, Object> variantPayload,
+                               Map<Integer, String> optionNames) {
         String externalVariantId = numericId(WebhookPayloadUtils.text(
                 WebhookPayloadUtils.firstPresent(variantPayload, "id", "variant_id", "admin_graphql_api_id")));
         if (externalVariantId == null || externalVariantId.isBlank()) {
@@ -179,7 +184,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
                 ? mapping.getVariant()
                 : resolveOrCreateVariant(product, externalVariantId, variantPayload);
 
-        updateVariant(variant, externalVariantId, variantPayload);
+        updateVariant(variant, externalVariantId, variantPayload, optionNames);
         variant = productVariantRepository.save(variant);
         ProductVariant savedVariant = variant;
 
@@ -251,7 +256,10 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
                 .build();
     }
 
-    private void updateVariant(ProductVariant variant, String externalVariantId, Map<String, Object> variantPayload) {
+    private void updateVariant(ProductVariant variant,
+                               String externalVariantId,
+                               Map<String, Object> variantPayload,
+                               Map<Integer, String> optionNames) {
         String sku = usableSku(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(variantPayload, "sku")));
         if (sku != null && canUseSku(variant, sku)) {
             variant.setSku(sku);
@@ -276,17 +284,57 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         if (weight != null && weight > 0) {
             variant.setWeightGrams(weight);
         }
-        variant.setOptionValues(optionValues(variantPayload));
+        Map<String, Object> incomingOptionValues = optionValues(variantPayload, optionNames);
+        if (!incomingOptionValues.isEmpty()) {
+            variant.setOptionValues(incomingOptionValues);
+        }
         variant.setIsActive(true);
         variant.setDeletedAt(null);
     }
 
-    private Map<String, Object> optionValues(Map<String, Object> variantPayload) {
-        Map<String, Object> values = new HashMap<>();
-        putIfPresent(values, "Option 1", variantPayload.get("option1"));
-        putIfPresent(values, "Option 2", variantPayload.get("option2"));
-        putIfPresent(values, "Option 3", variantPayload.get("option3"));
+    private Map<String, Object> optionValues(Map<String, Object> variantPayload,
+                                             Map<Integer, String> optionNames) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (int position = 1; position <= 3; position++) {
+            String optionName = optionNames.getOrDefault(position, "Option " + position);
+            putIfPresent(values, normalizeOptionName(optionName), variantPayload.get("option" + position));
+        }
         return values;
+    }
+
+    private Map<Integer, String> optionNames(Map<String, Object> productPayload) {
+        Object value = productPayload.get("options");
+        if (!(value instanceof List<?> options)) {
+            return Map.of();
+        }
+        Map<Integer, String> names = new HashMap<>();
+        for (Object optionValue : options) {
+            if (!(optionValue instanceof Map<?, ?> optionMap)) {
+                continue;
+            }
+            Map<String, Object> option = WebhookPayloadUtils.copyMap(optionMap);
+            int position = WebhookPayloadUtils.integer(option.get("position"), 0);
+            String name = WebhookPayloadUtils.text(option.get("name"));
+            if (position > 0 && name != null && !name.isBlank()) {
+                names.put(position, name.trim());
+            }
+        }
+        return names;
+    }
+
+    private String normalizeOptionName(String name) {
+        if (name == null) return "";
+        String normalized = name.trim();
+        if (normalized.equalsIgnoreCase("size") || normalized.equalsIgnoreCase("kích thước")) {
+            return "Size";
+        }
+        if (normalized.equalsIgnoreCase("color")
+                || normalized.equalsIgnoreCase("colour")
+                || normalized.equalsIgnoreCase("màu")
+                || normalized.equalsIgnoreCase("màu sắc")) {
+            return "Màu";
+        }
+        return normalized;
     }
 
     private void putIfPresent(Map<String, Object> map, String key, Object value) {

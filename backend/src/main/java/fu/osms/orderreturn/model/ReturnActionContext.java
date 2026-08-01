@@ -13,6 +13,7 @@ public record ReturnActionContext(
         String externalReturnId,
         ReturnAction action,
         UUID requestId,
+        ReturnRejectCommand rejectCommand,
         List<Item> items
 ) {
     public record Item(

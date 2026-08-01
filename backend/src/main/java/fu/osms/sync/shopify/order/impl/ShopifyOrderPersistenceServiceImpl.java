@@ -39,11 +39,12 @@ public class ShopifyOrderPersistenceServiceImpl implements ShopifyOrderPersisten
         Order order = upsert.order();
         OrderStatus oldStatus = order.getStatus();
         String oldPayment = order.getPaymentStatus();
+        OrderStatus resolvedStatus = resolveStatus(upsert.created(), oldStatus, model.status());
         order.setChannel(channel);
         order.setChannelName(channel.getDisplayName());
         order.setPlatform(PlatformType.SHOPIFY);
-        if (upsert.created() || oldStatus != model.status()) order.setStatusChangedAt(OffsetDateTime.now());
-        order.setStatus(model.status());
+        if (upsert.created() || oldStatus != resolvedStatus) order.setStatusChangedAt(OffsetDateTime.now());
+        order.setStatus(resolvedStatus);
         order.setPaymentStatus(model.paymentStatus());
         setText(model.buyerName(), order::setBuyerName);
         setText(model.buyerPhone(), order::setBuyerPhone);
@@ -75,6 +76,23 @@ public class ShopifyOrderPersistenceServiceImpl implements ShopifyOrderPersisten
     }
     private void setText(String value, java.util.function.Consumer<String> setter) {
         if (value != null && !value.isBlank() && !value.contains("***")) setter.accept(value);
+    }
+    private OrderStatus resolveStatus(boolean created, OrderStatus currentStatus, OrderStatus incomingStatus) {
+        if (created || currentStatus == null) return incomingStatus;
+        if (incomingStatus == null || currentStatus == OrderStatus.CANCELLED) return currentStatus;
+        if (incomingStatus == OrderStatus.CANCELLED) return OrderStatus.CANCELLED;
+        return statusRank(incomingStatus) >= statusRank(currentStatus) ? incomingStatus : currentStatus;
+    }
+    private int statusRank(OrderStatus status) {
+        return switch (status) {
+            case PENDING -> 0;
+            case CONFIRMED -> 1;
+            case PROCESSING -> 2;
+            case SHIPPED -> 3;
+            case IN_TRANSIT -> 4;
+            case DELIVERED -> 5;
+            case CANCELLED -> throw new IllegalArgumentException("CANCELLED is not a linear Shopify order status");
+        };
     }
     private boolean shouldReplaceAddress(Order order, java.util.Map<String, Object> incoming) {
         if (incoming == null || incoming.isEmpty()) return false;

@@ -124,9 +124,82 @@
 }
 
 .quantityCell {
-  width: 76px;
+  width: 112px;
   text-align: right !important;
   font-weight: 700;
+}
+
+.quantityCell strong {
+  display: block;
+  color: #0f172a;
+}
+
+.quantityBreakdown {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.actionCell {
+  width: 178px;
+  text-align: center !important;
+}
+
+.actionButtons {
+  display: flex;
+  min-width: 166px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.viewButton {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #cddbea;
+  border-radius: 7px;
+  background: #fff;
+  color: #315f92;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease, color 0.16s ease;
+}
+
+.viewButton:hover {
+  border-color: #79a7d8;
+  background: #eef6ff;
+  color: #1f5f9f;
+}
+
+.viewButton:focus-visible {
+  outline: 3px solid rgba(53, 109, 169, 0.2);
+  outline-offset: 2px;
+}
+
+.giftButton {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid #d6a36f;
+  border-radius: 7px;
+  background: #fff8ef;
+  color: #96551f;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.giftButton:hover {
+  border-color: #bb7a3c;
+  background: #fff1df;
 }
 
 .orderCode {
@@ -140,6 +213,37 @@
   margin-top: 3px;
   color: #7a899c;
   font-size: 11px;
+}
+
+.giftList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.giftItem {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0 !important;
+  padding: 3px 5px;
+  border: 1px solid #efd0ad;
+  border-radius: 5px;
+  background: #fff8ef;
+  color: #8d5527 !important;
+}
+
+.giftItem button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #a76631;
+  cursor: pointer;
 }
 
 .platform {
@@ -221,6 +325,17 @@
 .note {
   color: #6b7c90;
   font-size: 11px;
+}
+
+.stockWarning {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid #efd1ae;
+  border-radius: 7px;
+  background: #fff8ef;
+  color: #9a5a22;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .createButton {

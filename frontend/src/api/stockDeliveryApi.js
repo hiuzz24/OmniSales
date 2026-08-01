@@ -49,8 +49,9 @@ const stockDeliveryApi = {
     return axiosClient.get(`/stock-deliveries/orders/${orderId}/readiness`);
   },
 
-  createFromOrders: (orderIds) => {
-    return axiosClient.post('/stock-deliveries/from-orders', { orderIds });
+  createFromOrders: (request) => {
+    const payload = Array.isArray(request) ? { orderIds: request } : request;
+    return axiosClient.post('/stock-deliveries/from-orders', payload);
   },
 };
 

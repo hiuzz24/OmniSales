@@ -1,6 +1,7 @@
 package fu.osms.inventory.service.impl;
 
 import fu.osms.inventory.dto.request.OrderStockDeliveryBatchRequest;
+import fu.osms.inventory.dto.request.OrderStockDeliveryCreateRequest;
 import fu.osms.inventory.dto.response.OrderStockDeliveryBatchItemResponse;
 import fu.osms.inventory.dto.response.OrderStockDeliveryBatchResponse;
 import fu.osms.inventory.dto.response.StockDeliveryResponse;
@@ -9,9 +10,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 public class OrderStockDeliveryBatchService {
@@ -27,9 +27,13 @@ public class OrderStockDeliveryBatchService {
         List<OrderStockDeliveryBatchItemResponse> results = new ArrayList<>();
         OrderStockDeliveryService orderStockDeliveryService =
                 orderStockDeliveryServiceProvider.getObject();
-        for (UUID orderId : new LinkedHashSet<>(request.orderIds())) {
+        LinkedHashMap<java.util.UUID, OrderStockDeliveryCreateRequest> requestsByOrderId = new LinkedHashMap<>();
+        request.normalizedOrders().forEach(item -> requestsByOrderId.putIfAbsent(item.orderId(), item));
+        for (OrderStockDeliveryCreateRequest item : requestsByOrderId.values()) {
+            java.util.UUID orderId = item.orderId();
             try {
-                StockDeliveryResponse response = orderStockDeliveryService.createFromOrder(orderId);
+                StockDeliveryResponse response = orderStockDeliveryService.createFromOrder(
+                        orderId, item.giftItems());
                 results.add(OrderStockDeliveryBatchItemResponse.created(orderId, response));
             } catch (Exception exception) {
                 results.add(OrderStockDeliveryBatchItemResponse.failed(orderId, readableMessage(exception)));

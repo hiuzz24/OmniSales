@@ -10,7 +10,7 @@ public interface ShopifyReturnGraphQlClient {
 
     Map<String, Object> approve(UUID channelId, String returnGid);
 
-    Map<String, Object> decline(UUID channelId, String returnGid, String reason);
+    Map<String, Object> decline(UUID channelId, String returnGid, String reasonCode, String comment);
 
     Map<String, Object> process(UUID channelId, String returnGid, ReturnActionContext context);
 }

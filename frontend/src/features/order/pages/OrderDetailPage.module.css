@@ -109,6 +109,7 @@
 .readinessNotice {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 9px 12px;
   border: 1px solid #fde68a;
@@ -120,9 +121,13 @@
 
 .readinessNotice span {
   flex: 1;
+  min-width: 220px;
 }
 
 .readinessNotice button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid #f59e0b;
   border-radius: 6px;
   background: #fff;
@@ -130,7 +135,20 @@
   padding: 5px 9px;
   font: inherit;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.readinessNotice .readinessPrimaryAction {
+  border-color: #d97706;
+  background: #d97706;
+  color: #fff;
+  padding: 7px 11px;
+}
+
+.readinessNotice .readinessPrimaryAction:hover {
+  background: #b45309;
+  border-color: #b45309;
 }
 
 /* ── Status Dropdown ── */

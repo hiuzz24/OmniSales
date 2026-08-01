@@ -216,6 +216,7 @@ CREATE TABLE products (
                           description         TEXT,
                           brand               VARCHAR(255),
                           unit                VARCHAR(50),
+                          has_variants        BOOLEAN        NOT NULL DEFAULT FALSE,
                           status              product_status NOT NULL DEFAULT 'DRAFT',
                           low_stock_threshold INT            NOT NULL DEFAULT 5  CHECK (low_stock_threshold >= 0),
                           weight_grams        INT                                CHECK (weight_grams IS NULL OR weight_grams >= 0),

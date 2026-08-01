@@ -136,7 +136,7 @@ const ProductVariantForm = ({
                 <th>Size *</th>
                 <th>Màu *</th>
                 <th>SKU *</th>
-                <th>Barcode *</th>
+                <th>Barcode</th>
                 <th>Giá *</th>
                 <th style={{ width: '130px' }}>Giá đề xuất</th>
                 <th>Giá vốn *</th>

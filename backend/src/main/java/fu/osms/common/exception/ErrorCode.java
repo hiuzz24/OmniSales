@@ -14,6 +14,9 @@ public enum ErrorCode {
     ORDER_RETURN_ITEM_IDENTITY_MISSING(HttpStatus.BAD_REQUEST, "Return item identity is missing"),
     ORDER_RETURN_QUANTITY_INVALID(HttpStatus.BAD_REQUEST, "Return quantities are invalid"),
     ORDER_RETURN_STOCK_PENDING(HttpStatus.CONFLICT, "Return stock posting is still pending"),
+    ORDER_RETURN_PLATFORM_NOT_READY(HttpStatus.CONFLICT, "Sàn chưa ở trạng thái cho phép nhận hàng trả"),
+    ORDER_RETURN_PARTIAL_REQUIRES_MANUAL(HttpStatus.CONFLICT,
+            "TikTok V1 chỉ tự động xác nhận khi nhận đủ hàng; vui lòng xử lý thủ công trên TikTok Seller Center"),
 
     ORDER_STOCK_DELIVERY_REQUIRED(HttpStatus.CONFLICT, "Đơn hàng chưa có phiếu xuất kho đang hoạt động"),
 

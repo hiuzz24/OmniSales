@@ -36,6 +36,7 @@ public interface InventoryIssueMapper {
     @Mapping(target = "inventoryIssue", ignore = true)
     @Mapping(target = "productVariant", ignore = true)
     @Mapping(target = "totalCost", ignore = true)
+    @Mapping(target = "isGift", constant = "false")
     InventoryIssueItem toItemEntity(InventoryIssueItemRequest request);
 
     @Mapping(target = "variantId", source = "productVariant.id")

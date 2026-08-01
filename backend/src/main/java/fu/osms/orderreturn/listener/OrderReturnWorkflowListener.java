@@ -19,12 +19,21 @@ public class OrderReturnWorkflowListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onChanged(OrderReturnChangedEvent event) {
-        paymentService.projectPayment(event.returnId());
+        try {
+            paymentService.projectPayment(event.returnId());
+        } catch (Exception exception) {
+            log.error("[OrderReturn] Failed to project payment returnId={}", event.returnId(), exception);
+        }
         try {
             inventoryPostingService.postIfReady(event.returnId());
         } catch (Exception exception) {
             log.error("[OrderReturn] Failed to post return stock returnId={}", event.returnId(), exception);
-            inventoryPostingService.markPending(event.returnId(), rootMessage(exception));
+            try {
+                inventoryPostingService.markPending(event.returnId(), rootMessage(exception));
+            } catch (Exception pendingException) {
+                log.error("[OrderReturn] Failed to mark pending stock returnId={}",
+                        event.returnId(), pendingException);
+            }
         }
     }
 

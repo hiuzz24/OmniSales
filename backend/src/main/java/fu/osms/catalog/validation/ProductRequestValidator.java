@@ -50,10 +50,7 @@ public class ProductRequestValidator implements ConstraintValidator<ValidProduct
                 addVariantViolation(context, index, "sku", "SKU tối đa 100 ký tự");
                 valid = false;
             }
-            if (!hasText(variant.getBarcode())) {
-                addVariantViolation(context, index, "barcode", "Barcode không được để trống");
-                valid = false;
-            } else if (variant.getBarcode().trim().length() > 100) {
+            if (hasText(variant.getBarcode()) && variant.getBarcode().trim().length() > 100) {
                 addVariantViolation(context, index, "barcode", "Barcode tối đa 100 ký tự");
                 valid = false;
             }

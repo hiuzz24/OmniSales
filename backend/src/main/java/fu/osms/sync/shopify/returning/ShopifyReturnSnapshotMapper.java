@@ -11,7 +11,7 @@ import java.util.*;
 @Component
 public class ShopifyReturnSnapshotMapper {
 
-    public OrderReturnSnapshot map(Map<String, Object> source, String webhookEventId, boolean refundConfirmedEvent) {
+    public OrderReturnSnapshot map(Map<String, Object> source, String webhookEventId) {
         String externalReturnId = text(source, "id", "admin_graphql_api_id", "return_id");
         Map<String, Object> order = object(source.get("order"));
         String externalOrderId = firstText(order, "legacyResourceId", "legacy_resource_id", "id");
@@ -26,12 +26,9 @@ public class ShopifyReturnSnapshotMapper {
             if (orderItemId != null && orderItemId.startsWith("gid://")) orderItemId = gidTail(orderItemId);
             int quantity = integer(item.get("quantity"), 0);
             int refundedQuantity = integer(item.get("refundedQuantity"), 0);
-            Integer confirmedRefundedQuantity = null;
-            if (refundedQuantity > 0) {
-                confirmedRefundedQuantity = Math.min(refundedQuantity, quantity);
-            } else if (refundConfirmedEvent) {
-                confirmedRefundedQuantity = quantity;
-            }
+            Integer confirmedRefundedQuantity = refundedQuantity > 0
+                    ? Math.min(refundedQuantity, quantity)
+                    : null;
             return new OrderReturnSnapshot.Item(
                     firstText(item, "id"),
                     orderItemId,
@@ -41,9 +38,11 @@ public class ShopifyReturnSnapshotMapper {
                     quantity,
                     confirmedRefundedQuantity);
         }).toList();
-        boolean refundConfirmed = refundConfirmedEvent || (!items.isEmpty() && items.stream().allMatch(item ->
-                item.refundedQuantity() != null
-                        && item.refundedQuantity() >= item.approvedQuantity()));
+        boolean refundConfirmed = hasSuccessfulRefund(source);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("shopifyReturnName", fallback(firstText(source, "name"), ""));
+        metadata.put("shopifyProcessEvidence", hasProcessEvidence(source));
+        metadata.put("shopifyRefundState", refundState(source));
         return new OrderReturnSnapshot(
                 externalReturnId,
                 externalOrderId,
@@ -57,7 +56,50 @@ public class ShopifyReturnSnapshotMapper {
                 false,
                 refundConfirmed,
                 items,
-                Map.of("shopifyReturnName", fallback(firstText(source, "name"), "")));
+                metadata);
+    }
+
+    private boolean hasProcessEvidence(Map<String, Object> source) {
+        boolean processedLine = returnItems(source).stream()
+                .anyMatch(item -> integer(item.get("processedQuantity"), 0) > 0);
+        boolean disposition = connectionNodes(object(source.get("reverseFulfillmentOrders"))).stream()
+                .flatMap(order -> connectionNodes(object(order.get("lineItems"))).stream())
+                .anyMatch(line -> !maps(line.get("dispositions")).isEmpty());
+        boolean refund = !connectionNodes(object(source.get("refunds"))).isEmpty();
+        return processedLine || disposition || refund;
+    }
+
+    private String refundState(Map<String, Object> source) {
+        List<String> statuses = connectionNodes(object(source.get("refunds"))).stream()
+                .flatMap(refund -> connectionNodes(object(refund.get("transactions"))).stream())
+                .map(transaction -> firstText(transaction, "status"))
+                .filter(Objects::nonNull)
+                .map(value -> value.toUpperCase(Locale.ROOT))
+                .toList();
+        if (statuses.stream().anyMatch("SUCCESS"::equals)) return "SUCCESS";
+        if (statuses.stream().anyMatch(status -> "FAILURE".equals(status) || "ERROR".equals(status))) {
+            return "FAILURE";
+        }
+        if (!statuses.isEmpty()) return "PENDING";
+        return "NONE";
+    }
+
+    private boolean hasSuccessfulRefund(Map<String, Object> source) {
+        Map<String, Object> connection = object(source.get("refunds"));
+        return connectionNodes(connection).stream()
+                .flatMap(refund -> connectionNodes(object(refund.get("transactions"))).stream())
+                .map(transaction -> firstText(transaction, "status"))
+                .anyMatch(status -> "SUCCESS".equalsIgnoreCase(status));
+    }
+
+    private List<Map<String, Object>> connectionNodes(Map<String, Object> connection) {
+        Object nodes = connection.get("nodes");
+        if (nodes instanceof List<?>) return maps(nodes);
+        Object edges = connection.get("edges");
+        if (edges instanceof List<?>) {
+            return maps(edges).stream().map(edge -> object(edge.get("node"))).toList();
+        }
+        return List.of();
     }
 
     private List<Map<String, Object>> returnItems(Map<String, Object> source) {

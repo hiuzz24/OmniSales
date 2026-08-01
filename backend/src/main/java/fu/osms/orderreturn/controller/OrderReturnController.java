@@ -5,6 +5,7 @@ import fu.osms.common.dto.PageResponse;
 import fu.osms.orderreturn.dto.request.OrderReturnInspectionRequest;
 import fu.osms.orderreturn.dto.request.OrderReturnRejectRequest;
 import fu.osms.orderreturn.dto.response.OrderReturnResponse;
+import fu.osms.orderreturn.dto.response.OrderReturnRejectOptionsResponse;
 import fu.osms.orderreturn.service.OrderReturnService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -44,7 +45,13 @@ public class OrderReturnController {
     public ResponseEntity<ApiResponse<OrderReturnResponse>> reject(
             @PathVariable UUID id,
             @Valid @RequestBody OrderReturnRejectRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(service.reject(id, request.reason())));
+        return ResponseEntity.ok(ApiResponse.success(service.reject(id, request)));
+    }
+
+    @GetMapping("/{id}/reject-options")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<OrderReturnRejectOptionsResponse>> getRejectOptions(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(service.getRejectOptions(id)));
     }
 
     @PostMapping("/{id}/inspect")
@@ -53,6 +60,12 @@ public class OrderReturnController {
             @PathVariable UUID id,
             @Valid @RequestBody OrderReturnInspectionRequest request) {
         return ResponseEntity.ok(ApiResponse.success(service.inspect(id, request)));
+    }
+
+    @PostMapping("/{id}/refresh")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<OrderReturnResponse>> refresh(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(service.refresh(id)));
     }
 
     @PostMapping("/{id}/check-action")

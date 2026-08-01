@@ -226,7 +226,6 @@ export default function MainLayout() {
         loadedNotifications.forEach((notification) => {
           if (!notification.id || seenNotificationIdsRef.current.has(notification.id)) return;
           const isWorkflowNotification = [
-            'ORDER_PICK_REQUIRED',
             'ORDER_READY_SHIP',
           ].includes(notification.type);
           if (!isWorkflowNotification || notification.readAt) {
@@ -236,9 +235,7 @@ export default function MainLayout() {
           if (document.hidden) return;
 
           seenNotificationIdsRef.current.add(notification.id);
-          const actionLabel = notification.type === 'ORDER_PICK_REQUIRED'
-            ? 'Mở màn tạo phiếu xuất'
-            : 'Mở chi tiết đơn hàng';
+          const actionLabel = 'Mở chi tiết đơn hàng';
           toast.info(
             <div style={{ display: 'grid', gap: 5, cursor: 'pointer' }}>
               <strong style={{ color: '#0f172a' }}>{notification.title}</strong>
