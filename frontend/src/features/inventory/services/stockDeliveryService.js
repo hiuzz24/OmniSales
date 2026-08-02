@@ -98,9 +98,9 @@ const stockDeliveryService = {
     }
   },
 
-  createFromOrders: async (orderIds) => {
+  createFromOrders: async (request) => {
     try {
-      const response = await stockDeliveryApi.createFromOrders(orderIds);
+      const response = await stockDeliveryApi.createFromOrders(request);
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

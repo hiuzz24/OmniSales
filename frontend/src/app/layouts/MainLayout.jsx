@@ -5,7 +5,7 @@ import {
   Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User, Tag, Database, ShoppingBag,
+  ChevronRight, User, Tag, Database, ShoppingBag, RotateCcw,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -45,6 +45,7 @@ const NAV_ITEMS = [
   { name: 'Đơn mua hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
+  { name: 'Trả hàng', href: ROUTES.ORDER_RETURNS, icon: RotateCcw, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
   { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
   {
     name: 'Nhân sự',
@@ -225,7 +226,6 @@ export default function MainLayout() {
         loadedNotifications.forEach((notification) => {
           if (!notification.id || seenNotificationIdsRef.current.has(notification.id)) return;
           const isWorkflowNotification = [
-            'ORDER_PICK_REQUIRED',
             'ORDER_READY_SHIP',
           ].includes(notification.type);
           if (!isWorkflowNotification || notification.readAt) {
@@ -235,9 +235,7 @@ export default function MainLayout() {
           if (document.hidden) return;
 
           seenNotificationIdsRef.current.add(notification.id);
-          const actionLabel = notification.type === 'ORDER_PICK_REQUIRED'
-            ? 'Mở màn tạo phiếu xuất'
-            : 'Mở chi tiết đơn hàng';
+          const actionLabel = 'Mở chi tiết đơn hàng';
           toast.info(
             <div style={{ display: 'grid', gap: 5, cursor: 'pointer' }}>
               <strong style={{ color: '#0f172a' }}>{notification.title}</strong>

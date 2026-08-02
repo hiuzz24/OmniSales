@@ -38,7 +38,8 @@ public class LazadaOrderMapperImpl implements LazadaOrderMapper {
     }
 
     private LazadaOrderWriteModel.Item mapItem(Map<String, Object> item) {
-        return new LazadaOrderWriteModel.Item(text(item, "sku_id"), text(item, "sku", "shop_sku"),
+        return new LazadaOrderWriteModel.Item(text(item, "order_item_id", "order_line_id", "trade_order_line_id"),
+                text(item, "sku_id"), text(item, "sku", "shop_sku"),
                 fallback(text(item, "name"), "Lazada item"), 1,
                 decimal(item, "item_price", "paid_price"), decimal(item, "voucher_amount"));
     }

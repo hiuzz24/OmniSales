@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   DollarSign,
   FileText,
+  Gift,
   Hash,
   Loader2,
   Package,
@@ -283,7 +284,14 @@ export default function StockDeliveryDetailPage() {
                     return (
                       <tr key={item.id ?? index} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '12px 14px' }}>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{item.productName ?? '-'}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#0f172a' }}>
+                            {item.productName ?? '-'}
+                            {item.isGift && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 5px', borderRadius: 4, background: '#fff3e8', color: '#9a5a22', fontSize: 9, fontWeight: 700 }}>
+                                <Gift size={10} /> Quà tặng
+                              </span>
+                            )}
+                          </div>
                           {item.productVariantName && <div style={{ fontSize: 10, color: '#94a3b8' }}>{item.productVariantName}</div>}
                         </td>
                         <td style={{ padding: '12px 14px' }}>

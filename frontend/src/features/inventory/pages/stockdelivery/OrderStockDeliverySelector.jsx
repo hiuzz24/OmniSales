@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, PackageCheck, Search, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Eye, Gift, Loader2, PackageCheck, Plus, Search, Trash2, XCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import stockDeliveryService from '../../services/stockDeliveryService';
+import OrderDetailPreviewModal from './OrderDetailPreviewModal';
+import OrderGiftProductPickerModal from './OrderGiftProductPickerModal';
 import styles from './OrderStockDeliverySelector.module.css';
 
 const PAGE_SIZE = 8;
@@ -22,8 +24,12 @@ export default function OrderStockDeliverySelector({ orderId }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [detailOrderId, setDetailOrderId] = useState(null);
+  const [giftPickerOrder, setGiftPickerOrder] = useState(null);
+  const [giftItemsByOrderId, setGiftItemsByOrderId] = useState({});
   useEffect(() => {
     setSelectedIds(orderId ? [orderId] : []);
+    setGiftItemsByOrderId({});
     setPage(0);
   }, [orderId]);
 
@@ -57,11 +63,39 @@ export default function OrderStockDeliverySelector({ orderId }) {
   const selectedCount = selectedIds.length;
   const totalPages = Math.max(1, pageData.totalPages || 1);
 
-  const selectedQuantity = useMemo(
-    () => orders.filter((order) => selectedIds.includes(order.orderId))
-      .reduce((sum, order) => sum + (order.totalQuantity || 0), 0),
-    [orders, selectedIds],
-  );
+  const giftQuantityForOrder = (orderIdValue) => (giftItemsByOrderId[orderIdValue] || [])
+    .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+  const selectedQuantity = useMemo(() => {
+    const orderQuantity = orders.filter((order) => selectedIds.includes(order.orderId))
+      .reduce((sum, order) => sum + (order.totalQuantity || 0), 0);
+    const giftQuantity = selectedIds.reduce(
+      (sum, selectedOrderId) => sum + (giftItemsByOrderId[selectedOrderId] || [])
+        .reduce((giftSum, item) => giftSum + Number(item.quantity || 0), 0),
+      0,
+    );
+    return orderQuantity + giftQuantity;
+  }, [giftItemsByOrderId, orders, selectedIds]);
+
+  const overAvailableGifts = useMemo(() => {
+    const totals = new Map();
+    selectedIds.forEach((selectedOrderId) => {
+      (giftItemsByOrderId[selectedOrderId] || []).forEach((item) => {
+        const current = totals.get(item.productVariantId) || {
+          sku: item.sku,
+          quantity: 0,
+          availableQuantity: Number(item.availableQuantity ?? 0),
+        };
+        current.quantity += Number(item.quantity || 0);
+        current.availableQuantity = Math.min(
+          current.availableQuantity,
+          Number(item.availableQuantity ?? 0),
+        );
+        totals.set(item.productVariantId, current);
+      });
+    });
+    return [...totals.values()].filter((item) => item.quantity > item.availableQuantity);
+  }, [giftItemsByOrderId, selectedIds]);
 
   const submitSearch = (event) => {
     event.preventDefault();
@@ -79,16 +113,46 @@ export default function OrderStockDeliverySelector({ orderId }) {
     setSelectedIds(allSelected ? [] : orders.map((order) => order.orderId));
   };
 
+  const saveGifts = (order, giftItems) => {
+    setGiftItemsByOrderId((current) => ({ ...current, [order.orderId]: giftItems }));
+    if (giftItems.length > 0) {
+      setSelectedIds((current) => current.includes(order.orderId) ? current : [...current, order.orderId]);
+    }
+    setGiftPickerOrder(null);
+  };
+
+  const removeGift = (orderIdValue, productVariantId) => {
+    setGiftItemsByOrderId((current) => ({
+      ...current,
+      [orderIdValue]: (current[orderIdValue] || [])
+        .filter((item) => item.productVariantId !== productVariantId),
+    }));
+  };
+
   const createDeliveries = async () => {
     if (selectedIds.length === 0) return;
     setSubmitting(true);
     try {
-      const response = await stockDeliveryService.createFromOrders(selectedIds);
+      const response = await stockDeliveryService.createFromOrders({
+        orders: selectedIds.map((selectedOrderId) => ({
+          orderId: selectedOrderId,
+          giftItems: (giftItemsByOrderId[selectedOrderId] || []).map((item) => ({
+            productVariantId: item.productVariantId,
+            quantity: Number(item.quantity),
+          })),
+        })),
+      });
       const data = unwrap(response) || {};
       setResults(data.results || []);
       if (data.successCount > 0) toast.success(`Đã tạo ${data.successCount} phiếu xuất kho`);
       if (data.failCount > 0) toast.error(`${data.failCount} đơn hàng chưa tạo được phiếu`);
-      setSelectedIds([]);
+      const successfulOrderIds = new Set((data.results || [])
+        .filter((result) => result.status === 'CREATED')
+        .map((result) => result.orderId));
+      setSelectedIds((current) => current.filter((id) => !successfulOrderIds.has(id)));
+      setGiftItemsByOrderId((current) => Object.fromEntries(
+        Object.entries(current).filter(([id]) => !successfulOrderIds.has(id)),
+      ));
       await loadCandidates();
     } catch (error) {
       toast.error(errorText(error));
@@ -130,14 +194,15 @@ export default function OrderStockDeliverySelector({ orderId }) {
                 <th>Khách hàng</th>
                 <th>Sản phẩm</th>
                 <th className={styles.quantityCell}>Số lượng</th>
+                <th className={styles.actionCell}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className={styles.state}><Loader2 className={styles.spin} /> Đang tải đơn hàng...</td></tr>
+                <tr><td colSpan={7} className={styles.state}><Loader2 className={styles.spin} /> Đang tải đơn hàng...</td></tr>
               )}
               {!loading && orders.length === 0 && (
-                <tr><td colSpan={6} className={styles.state}>Không có đơn hàng phù hợp để tạo phiếu xuất.</td></tr>
+                <tr><td colSpan={7} className={styles.state}>Không có đơn hàng phù hợp để tạo phiếu xuất.</td></tr>
               )}
               {!loading && orders.map((order) => (
                 <tr key={order.orderId} className={selectedIds.includes(order.orderId) ? styles.selectedRow : ''}>
@@ -168,8 +233,53 @@ export default function OrderStockDeliverySelector({ orderId }) {
                       ))}
                       {(order.items || []).length > 2 && <span>+{order.items.length - 2} sản phẩm khác</span>}
                     </div>
+                    {(giftItemsByOrderId[order.orderId] || []).length > 0 && (
+                      <div className={styles.giftList}>
+                        {(giftItemsByOrderId[order.orderId] || []).map((giftItem) => (
+                          <span key={giftItem.productVariantId} className={styles.giftItem}>
+                            <Gift size={12} />
+                            <b>{giftItem.sku}</b> x{giftItem.quantity}
+                            <button
+                              type="button"
+                              onClick={() => removeGift(order.orderId, giftItem.productVariantId)}
+                              aria-label={`Bỏ quà ${giftItem.sku}`}
+                              title="Bỏ quà"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </td>
-                  <td className={styles.quantityCell}>{order.totalQuantity || 0}</td>
+                  <td className={styles.quantityCell}>
+                    <strong>{Number(order.totalQuantity || 0) + giftQuantityForOrder(order.orderId)}</strong>
+                    {giftQuantityForOrder(order.orderId) > 0 && (
+                      <span className={styles.quantityBreakdown}>
+                        {Number(order.totalQuantity || 0)} hàng + {giftQuantityForOrder(order.orderId)} quà
+                      </span>
+                    )}
+                  </td>
+                  <td className={styles.actionCell}>
+                    <div className={styles.actionButtons}>
+                      <button
+                        type="button"
+                        className={styles.viewButton}
+                        onClick={() => setDetailOrderId(order.orderId)}
+                        aria-label={`Xem chi tiết đơn hàng ${order.externalOrderId}`}
+                        title="Xem chi tiết đơn hàng"
+                      >
+                        <Eye size={16} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.giftButton}
+                        onClick={() => setGiftPickerOrder(order)}
+                      >
+                        <Plus size={15} /> Thêm sản phẩm
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -193,8 +303,13 @@ export default function OrderStockDeliverySelector({ orderId }) {
         <div className={styles.summary}>
           <PackageCheck size={20} />
           <div><span>Đã chọn</span><strong>{selectedCount} đơn</strong></div>
-          <div><span>Tổng số lượng</span><strong>{selectedQuantity}</strong></div>
+          <div><span>Tổng lượng xuất</span><strong>{selectedQuantity}</strong></div>
         </div>
+        {overAvailableGifts.length > 0 && (
+          <div className={styles.stockWarning}>
+            Quà {overAvailableGifts.map((item) => item.sku).join(', ')} đang vượt tồn có thể xuất.
+          </div>
+        )}
         <button className={styles.createButton} type="button" disabled={selectedCount === 0 || submitting} onClick={createDeliveries}>
           {submitting ? <Loader2 className={styles.spin} size={17} /> : <PackageCheck size={17} />}
           {submitting ? 'Đang tạo phiếu...' : `Tạo phiếu cho ${selectedCount} đơn hàng`}
@@ -216,6 +331,22 @@ export default function OrderStockDeliverySelector({ orderId }) {
           </div>
         )}
       </aside>
+
+      {detailOrderId && (
+        <OrderDetailPreviewModal
+          orderId={detailOrderId}
+          giftItems={giftItemsByOrderId[detailOrderId] || []}
+          onClose={() => setDetailOrderId(null)}
+        />
+      )}
+      {giftPickerOrder && (
+        <OrderGiftProductPickerModal
+          order={giftPickerOrder}
+          value={giftItemsByOrderId[giftPickerOrder.orderId] || []}
+          onConfirm={(giftItems) => saveGifts(giftPickerOrder, giftItems)}
+          onClose={() => setGiftPickerOrder(null)}
+        />
+      )}
     </div>
   );
 }

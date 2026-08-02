@@ -109,7 +109,8 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
     private Long epoch(Object value) { try { return value == null ? null : Long.parseLong(String.valueOf(value)); } catch (NumberFormatException e) { return null; } }
     private record ResolvedItem(TikTokOrderWriteModel.Item item, ChannelProductVariant mapping) {
         private OrderItem entity(Order order) {
-            return OrderItem.builder().order(order).channelVariant(mapping).variant(mapping == null ? null : mapping.getVariant())
+            return OrderItem.builder().order(order).externalItemId(item.externalItemId())
+                    .channelVariant(mapping).variant(mapping == null ? null : mapping.getVariant())
                     .sku(item.sku()).name(item.name()).quantity(item.quantity()).unitPrice(item.unitPrice())
                     .discountAmount(item.discountAmount()).costPrice(mapping == null ? null : mapping.getVariant().getCostPrice()).build();
         }

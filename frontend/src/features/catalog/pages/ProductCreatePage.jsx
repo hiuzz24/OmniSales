@@ -16,7 +16,7 @@ import ProductVariantForm from '../components/ProductVariantForm';
 import ProductShippingInfo from '../components/ProductShippingInfo';
 import ProductChannelSidebar from '../components/ProductChannelSidebar';
 import PlatformConfigSection from '../components/PlatformConfigSection';
-import { buildProductRequest, defaultProductFormValues, productEditorSchema } from '../models/Product';
+import { buildProductRequest, defaultProductFormValues, productEditorSchema, seedVariantFromProduct } from '../models/Product';
 import styles from './ProductCreatePage.module.css';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -24,7 +24,7 @@ const unwrap = (response) => response?.data?.data || response?.data || response;
 const ProductCreatePage = () => {
   const navigate = useNavigate();
   const methods = useForm({ resolver: zodResolver(productEditorSchema), mode: 'onBlur', reValidateMode: 'onChange', defaultValues: defaultProductFormValues });
-  const { control, setValue, setError, formState: { errors } } = methods;
+  const { control, getValues, setValue, setError, formState: { errors } } = methods;
   const [channels, setChannels] = useState([]);
   const [categories, setCategories] = useState([]);
   const [hasVariants, selectedChannels, price, costPrice] = useWatch({ control, name: ['hasVariants', 'channelIds', 'price', 'costPrice'] });
@@ -50,6 +50,15 @@ const ProductCreatePage = () => {
     }
   };
   const onInvalid = () => toast.error('Vui lòng kiểm tra lại thông tin');
+  const toggleVariants = () => {
+    if (!hasVariants) {
+      setValue('variants', seedVariantFromProduct(getValues()), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+    setValue('hasVariants', !hasVariants, { shouldDirty: true, shouldValidate: true });
+  };
   const selectedChannelDetails = channels.filter((channel, index) => (selectedChannels || []).includes(channel.id || channel._id || (channel.platform + index)));
 
   return <FormProvider {...methods}><div className={styles.page}>
@@ -59,7 +68,7 @@ const ProductCreatePage = () => {
         <ProductImageUploader />
         <ProductForm categories={categories} />
       </section>
-      <div className={styles.variantToggleCard}><div className={styles.variantToggleInfo}><div className={styles.variantToggleTitle}>Biến thể sản phẩm</div><div className={styles.variantToggleSubtitle}>{hasVariants ? 'Sản phẩm có nhiều biến thể (size, màu...)' : 'Sản phẩm không có biến thể. Nhấn để thêm biến thể.'}</div></div><button type="button" className={`${styles.variantToggleBtn} ${hasVariants ? styles.variantToggleBtnActive : styles.variantToggleBtnInactive}`} onClick={() => setValue('hasVariants', !hasVariants, { shouldValidate: true })}>{hasVariants ? 'Đã bật biến thể' : 'Tạo biến thể'}</button></div>
+      <div className={styles.variantToggleCard}><div className={styles.variantToggleInfo}><div className={styles.variantToggleTitle}>Biến thể sản phẩm</div><div className={styles.variantToggleSubtitle}>{hasVariants ? 'Sản phẩm có nhiều biến thể (size, màu...)' : 'Sản phẩm không có biến thể. Nhấn để thêm biến thể.'}</div></div><button type="button" className={`${styles.variantToggleBtn} ${hasVariants ? styles.variantToggleBtnActive : styles.variantToggleBtnInactive}`} onClick={toggleVariants}>{hasVariants ? 'Đã bật biến thể' : 'Tạo biến thể'}</button></div>
       {!hasVariants ? <ProductPriceStock price={price} costPrice={costPrice} onChange={(field, value) => setValue(field, value, { shouldDirty: true, shouldValidate: true })} errors={errors} channels={channels} selectedChannels={selectedChannels} disableCostPrice /> : <ProductVariantForm channels={channels} selectedChannels={selectedChannels} disableCostPrice />}
       <ProductShippingInfo />
       <PlatformConfigSection channels={selectedChannelDetails} />

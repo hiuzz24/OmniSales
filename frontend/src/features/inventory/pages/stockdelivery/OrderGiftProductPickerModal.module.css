@@ -1,0 +1,288 @@
+.backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(18, 31, 49, 0.52);
+}
+
+.modal {
+  display: grid;
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  grid-template-rows: auto auto minmax(180px, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #d6e0eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(15, 30, 48, 0.25);
+}
+
+.header,
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+}
+
+.header {
+  border-bottom: 1px solid #e5ebf2;
+}
+
+.heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.heading h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 16px;
+}
+
+.heading p {
+  margin: 3px 0 0;
+  color: #708096;
+  font-size: 11px;
+}
+
+.icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 7px;
+  background: #fff3e8;
+  color: #b35c1f;
+}
+
+.iconButton {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #d8e1eb;
+  border-radius: 7px;
+  background: #fff;
+  color: #587087;
+  cursor: pointer;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 18px;
+  padding: 0 11px;
+  border: 1px solid #d7e1ec;
+  border-radius: 7px;
+  color: #77879a;
+}
+
+.searchBox:focus-within {
+  border-color: #75a7d9;
+  box-shadow: 0 0 0 3px rgba(53, 109, 169, 0.1);
+}
+
+.searchBox input {
+  width: 100%;
+  height: 38px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1d2b3d;
+}
+
+.content {
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid #e8edf3;
+}
+
+.productRow {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: 24px minmax(0, 1fr) 88px 82px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid #edf1f5;
+  cursor: pointer;
+}
+
+.productRow:hover,
+.selectedRow {
+  background: #f5f9fd;
+}
+
+.checkbox {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid #b9c7d7;
+  border-radius: 4px;
+  background: #fff;
+  color: #fff;
+}
+
+.selectedRow .checkbox {
+  border-color: #356da9;
+  background: #356da9;
+}
+
+.productInfo {
+  min-width: 0;
+}
+
+.productInfo strong,
+.productInfo > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.productInfo strong {
+  color: #223147;
+  font-size: 12px;
+}
+
+.productInfo > span {
+  margin-top: 3px;
+  color: #75859a;
+  font-size: 11px;
+}
+
+.meta {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.meta code,
+.meta span {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #edf3f8;
+  color: #52677e;
+  font-size: 10px;
+}
+
+.stock,
+.quantity {
+  text-align: right;
+}
+
+.stock span,
+.quantity span {
+  display: block;
+  color: #77889b;
+  font-size: 10px;
+}
+
+.stock strong {
+  display: block;
+  margin-top: 3px;
+  color: #287250;
+  font-size: 13px;
+}
+
+.quantity input {
+  width: 68px;
+  height: 30px;
+  margin-top: 4px;
+  border: 1px solid #cbd7e4;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.state,
+.error {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #6e7f93;
+  font-size: 12px;
+}
+
+.error {
+  color: #a84747;
+}
+
+.footer {
+  border-top: 1px solid #e4eaf1;
+  background: #fafbfd;
+}
+
+.footer > div:first-child strong,
+.warning {
+  display: block;
+}
+
+.footer > div:first-child strong {
+  color: #29384d;
+  font-size: 12px;
+}
+
+.warning {
+  margin-top: 3px;
+  color: #b65f1e;
+  font-size: 10px;
+}
+
+.footerActions {
+  display: flex;
+  gap: 8px;
+}
+
+.cancelButton,
+.confirmButton {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancelButton {
+  border: 1px solid #cfd9e4;
+  background: #fff;
+  color: #50647a;
+}
+
+.confirmButton {
+  border: 1px solid #356da9;
+  background: #356da9;
+  color: #fff;
+}
+
+.confirmButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .backdrop { padding: 10px; }
+  .modal { max-height: calc(100vh - 20px); }
+  .productRow { grid-template-columns: 22px minmax(0, 1fr) 74px; }
+  .stock { display: none; }
+  .footer { align-items: flex-end; }
+}

@@ -46,6 +46,10 @@ public class Product {
     @Column(length = 50)
     private String unit;
 
+    @Column(name = "has_variants", nullable = false)
+    @Builder.Default
+    private Boolean hasVariants = false;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false)

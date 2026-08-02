@@ -27,6 +27,7 @@ public class ProductResponse {
     private String description;
     private String brand;
     private String unit;
+    private Boolean hasVariants;
     private Boolean hasOrders;
     private ProductStatus status;
     private Integer lowStockThreshold;

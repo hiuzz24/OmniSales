@@ -146,11 +146,14 @@ const OrderDetailPage = () => {
 
   const handleConfirmStatus = async () => {
     if (!confirmStatus) return;
+    const targetStatus = confirmStatus;
     setUpdating(true);
     try {
-      const updated = await orderService.updateStatus(id, confirmStatus);
+      const updated = await orderService.updateStatus(id, targetStatus);
       setOrder(updated);
-      toast.success('Cập nhật trạng thái thành công');
+      if (targetStatus !== 'PROCESSING') {
+        toast.success('Cập nhật trạng thái thành công');
+      }
       fetchHistory();
       fetchReadiness({ silent: true });
     } catch (requestError) {
@@ -363,7 +366,9 @@ const OrderDetailPage = () => {
       return [];
     }
     if (!isPlatformOrder(order)) {
-      return STATUS_FLOW.filter((status) => status !== order.status);
+      return STATUS_FLOW.filter(
+        (status) => status !== order.status && status !== 'CANCELLED',
+      );
     }
 
     const tikTokRawStatus = order.platformMetadata?.tiktok?.rawOrderStatus;
@@ -405,6 +410,7 @@ const OrderDetailPage = () => {
   const sc = STATUS_CONFIG[order.status] || { label: order.status, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' };
   const StatusIcon = sc.icon;
   const canChangeStatus = role === ROLES.OWNER || role === ROLES.SALES;
+  const canCreateOrderDelivery = role === ROLES.OWNER || role === ROLES.OPERATIONS;
   const canChangePaymentStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
   const tikTokCancelPending = isTikTokOrder(order)
     && order.platformMetadata?.tiktok?.pendingConfirmation === true;
@@ -539,7 +545,7 @@ const OrderDetailPage = () => {
               )}
             </div>
           )}
-          {isCancellable && (
+          {canChangeStatus && isCancellable && (
             <button
               className={styles.cancelBtn}
               onClick={handleOpenCancelModal}
@@ -551,17 +557,31 @@ const OrderDetailPage = () => {
         </div>
       </div>
 
-      {canChangeStatus && order.status === 'PROCESSING' && !shipmentReady && (
+      {order.status === 'PROCESSING' && !shipmentReady && (
         <div className={styles.readinessNotice}>
           <AlertTriangle size={16} />
           <span>
             {readinessLoading
               ? 'Đang kiểm tra phiếu xuất kho...'
-              : readinessError || 'Cần tạo phiếu xuất kho trước khi chuyển sang Sẵn sàng giao.'}
+              : readinessError
+                || (canCreateOrderDelivery
+                  ? 'Đơn hàng chưa có phiếu xuất kho. Hãy tạo phiếu trước khi chuyển sang Sẵn sàng giao.'
+                  : 'Đơn hàng đang chờ bộ phận kho tạo phiếu xuất kho.')}
           </span>
           {readinessError && (
             <button type="button" onClick={() => fetchReadiness()}>
               Thử lại
+            </button>
+          )}
+          {!readinessLoading && !readinessError && canCreateOrderDelivery && (
+            <button
+              type="button"
+              className={styles.readinessPrimaryAction}
+              onClick={() => navigate(`${ROUTES.STOCK_DELIVERY_CREATE}?tab=BY_ORDER&orderId=${order.id}`)}
+            >
+              <Package size={14} />
+              Tạo phiếu xuất kho
+              <ArrowRight size={14} />
             </button>
           )}
         </div>

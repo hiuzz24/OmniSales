@@ -57,7 +57,7 @@ const ProductForm = ({ categories = [] }) => {
         </div>
         {!hasVariants && (
           <div className={styles.field}>
-            <label className={styles.label}>Barcode <span className={styles.required}>*</span></label>
+            <label className={styles.label}>Barcode</label>
             <input
               id="product-barcode"
               type="text"

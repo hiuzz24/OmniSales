@@ -17,6 +17,7 @@ import fu.osms.inventory.enums.InvTxnType;
 import fu.osms.inventory.mapper.StockDeliveryMapper;
 import fu.osms.inventory.repository.*;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.inventory.service.OrderGiftReservationService;
 import fu.osms.inventory.service.StockDeliveryService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
@@ -65,6 +66,7 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     private final UserRepository userRepository;
     private final StockDeliveryMapper stockDeliveryMapper;
     private final InventoryAlertService inventoryAlertService;
+    private final OrderGiftReservationService orderGiftReservationService;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
@@ -269,7 +271,8 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         }
         if ("ORDER".equals(inventoryIssue.getIssueType())
                 && "DRAFT".equals(inventoryIssue.getStatus())) {
-            // Reservation belongs to the order and remains available when the issue is recreated.
+            changedVariantIds.addAll(orderGiftReservationService
+                    .releaseGiftReservations(inventoryIssue, currentUser));
         } else if ("DRAFT".equals(inventoryIssue.getStatus())) {
             releaseDraftReservations(inventoryIssue, currentUser, "Stock delivery draft cancelled - reservation released");
         } else if ("CONFIRMED".equals(inventoryIssue.getStatus())) {

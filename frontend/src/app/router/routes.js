@@ -46,6 +46,8 @@ export const ROUTES = {
   ORDER_LIST: '/orders',
   ORDER_DETAIL: '/orders/:id',
   ORDER_LOGS: '/orders/logs',
+  ORDER_RETURNS: '/order-returns',
+  ORDER_RETURN_DETAIL: '/order-returns/:id',
   INVENTORY_LOGS: '/inventory/logs',
   SUPPLIERS: '/inventory/suppliers',
   PURCHASE_ORDERS: '/purchases',

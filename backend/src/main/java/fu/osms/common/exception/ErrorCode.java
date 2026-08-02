@@ -6,6 +6,18 @@ import org.springframework.http.HttpStatus;
 @Getter
 public enum ErrorCode {
 
+    ORDER_REFUND_SYSTEM_MANAGED(HttpStatus.BAD_REQUEST, "Refunded payment status is managed by the return workflow"),
+    ORDER_RETURN_NOT_FOUND(HttpStatus.NOT_FOUND, "Order return was not found"),
+    ORDER_RETURN_INVALID_STATE(HttpStatus.CONFLICT, "Order return is not in a valid state for this action"),
+    ORDER_RETURN_ACTION_IN_PROGRESS(HttpStatus.CONFLICT, "Another return action is already in progress"),
+    ORDER_RETURN_ACTION_NOT_RETRYABLE(HttpStatus.CONFLICT, "The last return action cannot be retried"),
+    ORDER_RETURN_ITEM_IDENTITY_MISSING(HttpStatus.BAD_REQUEST, "Return item identity is missing"),
+    ORDER_RETURN_QUANTITY_INVALID(HttpStatus.BAD_REQUEST, "Return quantities are invalid"),
+    ORDER_RETURN_STOCK_PENDING(HttpStatus.CONFLICT, "Return stock posting is still pending"),
+    ORDER_RETURN_PLATFORM_NOT_READY(HttpStatus.CONFLICT, "Sàn chưa ở trạng thái cho phép nhận hàng trả"),
+    ORDER_RETURN_PARTIAL_REQUIRES_MANUAL(HttpStatus.CONFLICT,
+            "TikTok V1 chỉ tự động xác nhận khi nhận đủ hàng; vui lòng xử lý thủ công trên TikTok Seller Center"),
+
     ORDER_STOCK_DELIVERY_REQUIRED(HttpStatus.CONFLICT, "Đơn hàng chưa có phiếu xuất kho đang hoạt động"),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi máy chủ nội bộ, vui lòng thử lại sau"),
@@ -53,6 +65,7 @@ public enum ErrorCode {
     ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy đơn hàng"),
     ORDER_STATUS_INVALID_TRANSITION(HttpStatus.BAD_REQUEST, "Không thể chuyển đổi trạng thái đơn hàng này"),
     ORDER_ALREADY_CANCELLED(HttpStatus.CONFLICT, "Đơn hàng đã bị hủy trước đó"),
+    ORDER_CANCEL_ENDPOINT_REQUIRED(HttpStatus.BAD_REQUEST, "Hãy sử dụng chức năng Hủy đơn để hủy đơn hàng"),
 
     WAREHOUSE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy kho hàng"),
     INVENTORY_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy sản phẩm trong kho"),

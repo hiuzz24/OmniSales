@@ -792,7 +792,6 @@ public class ProductServiceImpl implements ProductService {
                 .orElse(null);
         if (marketplaceSku != null) {
             product.setMarketplaceSku(marketplaceSku);
-            product.setSku(marketplaceSku);
         }
         if (product.getProductIds() == null || product.getProductIds().isEmpty()) {
             product.setProductIds(product.getId() == null ? List.of() : List.of(product.getId()));
