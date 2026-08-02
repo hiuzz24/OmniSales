@@ -2,14 +2,10 @@ package fu.osms.sync.service.impl;
 
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
-import fu.osms.channel.entity.ChannelProductVariant;
-import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
-import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
-import fu.osms.sync.service.InventoryAutoPushSyncLogService;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
@@ -19,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.Optional;
@@ -39,8 +36,6 @@ class MarketplaceInventoryPropagationServiceImplTest {
         @Mock
         private ChannelCredentialRepository credentialRepository;
         @Mock
-        private ChannelProductVariantRepository channelProductVariantRepository;
-        @Mock
         private MarketplaceWarehouseConsistencyService warehouseConsistencyService;
         @Mock
         private ShopifyInventoryUpdateService shopifyInventoryUpdateService;
@@ -51,7 +46,7 @@ class MarketplaceInventoryPropagationServiceImplTest {
         @Mock
         private MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
         @Mock
-        private InventoryAutoPushSyncLogService inventoryAutoPushSyncLogService;
+        private TransactionTemplate transactionTemplate;
 
         private MarketplaceInventoryPropagationServiceImpl service;
 
@@ -60,13 +55,12 @@ class MarketplaceInventoryPropagationServiceImplTest {
                 service = new MarketplaceInventoryPropagationServiceImpl(
                                 channelRepository,
                                 credentialRepository,
-                                channelProductVariantRepository,
                                 warehouseConsistencyService,
                                 shopifyInventoryUpdateService,
                                 lazadaInventoryUpdateService,
                                 tikTokInventoryUpdateService,
                                 marketplaceStockQuantityResolver,
-                                inventoryAutoPushSyncLogService);
+                                transactionTemplate);
         }
 
         @Test
@@ -77,6 +71,8 @@ class MarketplaceInventoryPropagationServiceImplTest {
                 Channel lazada = connectedChannel(sourceChannelId, PlatformType.LAZADA);
                 Channel shopify = connectedChannel(shopifyChannelId, PlatformType.SHOPIFY);
 
+                when(marketplaceStockQuantityResolver.expandVariantIdsBySkuGroup(Set.of(variantId)))
+                                .thenReturn(Set.of(variantId));
                 when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(lazada, shopify));
                 when(credentialRepository.findByChannelIdAndConnectionState(any(UUID.class), eq("CONNECTED")))
                                 .thenAnswer(invocation -> Optional.of(ChannelCredential.builder()
@@ -84,11 +80,6 @@ class MarketplaceInventoryPropagationServiceImplTest {
                                                                 : shopify)
                                                 .accessToken("token")
                                                 .connectionState("CONNECTED")
-                                                .build()));
-                when(channelProductVariantRepository
-                                .findActiveByChannelIdAndVariantIdInWithVariant(any(UUID.class), any()))
-                                .thenReturn(List.of(ChannelProductVariant.builder()
-                                                .variant(ProductVariant.builder().id(variantId).build())
                                                 .build()));
 
                 service.pushAvailableStock(Set.of(variantId), sourceChannelId);
