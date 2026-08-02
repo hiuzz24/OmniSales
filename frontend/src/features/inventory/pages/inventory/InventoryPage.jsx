@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -34,6 +34,7 @@ import MarketplaceSyncButton from '../components/MarketplaceSyncButton';
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20];
 const INVENTORY_FETCH_SIZE = 500;
+const STOCK_ALERT_REFRESH_INTERVAL_MS = 5000;
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Tất cả trạng thái' },
@@ -254,10 +255,10 @@ const flattenInventoryGroups = (groups) => groups.flatMap((group) => [group.pare
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const StatusBadge = ({ status, item }) => {
   const map = {
-    'in-stock':    { label: 'Đủ hàng', cls: styles.badgeGreen },
-    'low-stock':   { label: 'Sắp hết', cls: styles.badgeOrange },
-    'out-of-stock':{ label: 'Hết hàng', cls: styles.badgeGray },
-    'negative':    { label: 'Tồn âm', cls: styles.badgeRed },
+    'in-stock': { label: 'Đủ hàng', cls: styles.badgeGreen },
+    'low-stock': { label: 'Sắp hết', cls: styles.badgeOrange },
+    'out-of-stock': { label: 'Hết hàng', cls: styles.badgeGray },
+    'negative': { label: 'Tồn âm', cls: styles.badgeRed },
   };
   const { label, cls } = map[status] ?? { label: status, cls: '' };
 
@@ -337,8 +338,6 @@ const InventoryPage = () => {
     totalProducts: 0,
     totalSkus: 0,
     totalQuantity: 0,
-    lowStockCount: 0,
-    negativeCount: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -354,10 +353,8 @@ const InventoryPage = () => {
     try {
       const data = await inventoryService.getLowStockItems();
       setLowStockItems(Array.isArray(data) ? data : []);
-      window.dispatchEvent(new Event('notifications:refresh'));
     } catch (err) {
       console.error('Lỗi tải cảnh báo tồn kho:', err);
-      setLowStockItems([]);
     }
   }, []);
 
@@ -438,12 +435,10 @@ const InventoryPage = () => {
         totalProducts: Number(firstPage.totalProducts ?? buildInventoryGroups(allRows).length),
         totalSkus: Number(firstPage.totalSkus ?? firstPage.totalElements ?? allRows.length),
         totalQuantity: allRows.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0),
-        lowStockCount: allRows.filter((item) => deriveStatus(item) === 'low-stock').length,
-        negativeCount: allRows.filter((item) => Number(item.availableQuantity ?? 0) < 0).length,
       });
     } catch (err) {
       console.error('Lỗi tải thống kê tồn kho:', err);
-      setSummaryStats({ totalProducts: 0, totalSkus: 0, totalQuantity: 0, lowStockCount: 0, negativeCount: 0 });
+      setSummaryStats({ totalProducts: 0, totalSkus: 0, totalQuantity: 0 });
     }
   }, []);
 
@@ -456,13 +451,26 @@ const InventoryPage = () => {
   }, [categoryFilter, getInventoryFilters, fetchInventory, search]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      fetchLowStockItems();
-      fetchSummaryStats();
-    }, 0);
-
+    const timer = window.setTimeout(fetchSummaryStats, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchLowStockItems, fetchSummaryStats]);
+  }, [fetchSummaryStats]);
+
+  useEffect(() => {
+    const refreshAlertsWhenVisible = () => {
+      if (!document.hidden) fetchLowStockItems();
+    };
+
+    refreshAlertsWhenVisible();
+    const interval = window.setInterval(refreshAlertsWhenVisible, STOCK_ALERT_REFRESH_INTERVAL_MS);
+    window.addEventListener('focus', refreshAlertsWhenVisible);
+    document.addEventListener('visibilitychange', refreshAlertsWhenVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshAlertsWhenVisible);
+      document.removeEventListener('visibilitychange', refreshAlertsWhenVisible);
+    };
+  }, [fetchLowStockItems]);
 
   const togglePlatformFilter = (platform) => {
     setSelectedPlatformFilters((prev) => (
@@ -596,10 +604,13 @@ const InventoryPage = () => {
   };
 
   // ── Derived alert counts from the full inventory snapshot
-  const negativeCount = summaryStats.negativeCount;
-  const lowStockCount = summaryStats.lowStockCount;
-  const outOfStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) <= 0);
+  const negativeStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) < 0);
+  const outOfStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) === 0);
   const lowStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) > 0);
+  const negativeCount = negativeStockAlerts.length;
+  const lowStockCount = lowStockAlerts.length;
+  const outOfStockCount = outOfStockAlerts.length;
+  const stockNoticeItems = [...outOfStockAlerts, ...lowStockAlerts];
   const totalQuantityAll = summaryStats.totalQuantity;
 
   const quantityColor = (v) => {
@@ -614,6 +625,7 @@ const InventoryPage = () => {
       fetchSummaryStats(),
       fetchLowStockItems(),
     ]);
+    window.dispatchEvent(new Event('notifications:refresh'));
   }, [categoryFilter, fetchInventory, fetchLowStockItems, fetchSummaryStats, getInventoryFilters]);
 
   const actions = (
@@ -671,466 +683,469 @@ const InventoryPage = () => {
 
   return (
     <>
-    <div className={`${styles.page} product-workspace`}>
-      {/* ── Header ── */}
-      <div className={styles.pageHeader}>
+      <div className={`${styles.page} product-workspace`}>
+        {/* ── Header ── */}
+        <div className={styles.pageHeader}>
           <PageHeader
             title="Danh sách tồn kho"
             subtitle="Theo dõi và quản lý tồn kho theo SKU, kho hàng và trạng thái"
             icon={<Warehouse size={20} />}
             actions={actions}
           />
-      </div>
+        </div>
 
-      {/* ── Summary Cards ── */}
-      <div className={styles.summaryGrid}>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryIconWrap} style={{ background: '#e0f2fe', color: '#0284c7' }}>
-            <Layers size={20} />
+        {/* ── Summary Cards ── */}
+        <div className={styles.summaryGrid}>
+          <div className={styles.summaryCard}>
+            <div className={styles.summaryIconWrap} style={{ background: '#e0f2fe', color: '#0284c7' }}>
+              <Layers size={20} />
+            </div>
+            <div className={styles.summaryInfo}>
+              <span className={styles.summaryLabel}>Tổng sản phẩm</span>
+              <span className={styles.summaryValue}>{summaryStats.totalProducts.toLocaleString('vi-VN')}</span>
+              <span className={styles.summaryMeta}>{summaryStats.totalSkus.toLocaleString('vi-VN')} sản phẩm con (SKU)</span>
+            </div>
           </div>
-          <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Tổng sản phẩm</span>
-            <span className={styles.summaryValue}>{summaryStats.totalProducts.toLocaleString('vi-VN')}</span>
-            <span className={styles.summaryMeta}>{summaryStats.totalSkus.toLocaleString('vi-VN')} sản phẩm con (SKU)</span>
+          <div className={styles.summaryCard}>
+            <div className={styles.summaryIconWrap} style={{ background: '#f3e8ff', color: '#9333ea' }}>
+              <Box size={20} />
+            </div>
+            <div className={styles.summaryInfo}>
+              <span className={styles.summaryLabel}>Tổng đơn vị tồn kho</span>
+              <span className={styles.summaryValue}>{totalQuantityAll.toLocaleString('vi-VN')}</span>
+              <span className={styles.summaryMeta}>Trên toàn bộ kho hàng</span>
+            </div>
+          </div>
+          <div className={styles.summaryCard}>
+            <div className={styles.summaryIconWrap} style={{ background: '#fef3c7', color: '#d97706' }}>
+              <AlertTriangle size={20} />
+            </div>
+            <div className={styles.summaryInfo}>
+              <span className={styles.summaryLabel}>SKU sắp hết hàng</span>
+              <span className={styles.summaryValue}>{lowStockCount.toLocaleString('vi-VN')}</span>
+              <span className={styles.summaryMeta}>Dưới mức tồn tối thiểu</span>
+            </div>
+          </div>
+          <div className={styles.summaryCard}>
+            <div className={styles.summaryIconWrap} style={{ background: '#fee2e2', color: '#dc2626' }}>
+              <AlertCircle size={20} />
+            </div>
+            <div className={styles.summaryInfo}>
+              <span className={`${styles.summaryLabel} ${styles.textRed}`}>SKU tồn kho âm</span>
+              <span className={`${styles.summaryValue} ${styles.textRed}`}>{negativeCount.toLocaleString('vi-VN')}</span>
+              <span className={styles.summaryMeta}>Cần kiểm tra ngay</span>
+            </div>
           </div>
         </div>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryIconWrap} style={{ background: '#f3e8ff', color: '#9333ea' }}>
-            <Box size={20} />
-          </div>
-          <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Tổng đơn vị tồn kho</span>
-            <span className={styles.summaryValue}>{totalQuantityAll.toLocaleString('vi-VN')}</span>
-            <span className={styles.summaryMeta}>Trên toàn bộ kho hàng</span>
-          </div>
-        </div>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryIconWrap} style={{ background: '#fef3c7', color: '#d97706' }}>
-            <AlertTriangle size={20} />
-          </div>
-          <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>SKU sắp hết hàng</span>
-            <span className={styles.summaryValue}>{lowStockCount.toLocaleString('vi-VN')}</span>
-            <span className={styles.summaryMeta}>Dưới mức tồn tối thiểu</span>
-          </div>
-        </div>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryIconWrap} style={{ background: '#fee2e2', color: '#dc2626' }}>
-            <AlertCircle size={20} />
-          </div>
-          <div className={styles.summaryInfo}>
-            <span className={`${styles.summaryLabel} ${styles.textRed}`}>SKU tồn kho âm</span>
-            <span className={`${styles.summaryValue} ${styles.textRed}`}>{negativeCount.toLocaleString('vi-VN')}</span>
-            <span className={styles.summaryMeta}>Cần kiểm tra ngay</span>
-          </div>
-        </div>
-      </div>
 
-      {/* ── Alerts ── */}
-      {!loading && negativeCount > 0 && (
-        <div className={`${styles.alert} ${styles.alertError}`}>
-          <AlertCircle size={16} className={styles.alertIcon} />
-          <div>
-            <span className={styles.alertBold}>Cảnh báo: </span>
-            Có {negativeCount} SKU đang tồn kho âm trong toàn bộ kho. Cần kiểm tra và điều chỉnh ngay.
-          </div>
-        </div>
-      )}
-
-      {!loading && lowStockCount > 0 && (
-        <div className={`${styles.alert} ${styles.alertWarn}`}>
-          <AlertTriangle size={16} className={styles.alertIcon} />
-          <div>
-            Có {lowStockCount} SKU dưới mức tồn tối thiểu trong toàn bộ kho. Cần nhập hàng.
-          </div>
-        </div>
-      )}
-
-      {lowStockItems.length > 0 && (
-        <section className={styles.stockNoticePanel}>
-          <div className={styles.stockNoticeHeader}>
+        {/* ── Alerts ── */}
+        {!loading && negativeCount > 0 && (
+          <div className={`${styles.alert} ${styles.alertError}`}>
+            <AlertCircle size={16} className={styles.alertIcon} />
             <div>
-              <h2 className={styles.stockNoticeTitle}>Thông báo tồn kho</h2>
-              <p className={styles.stockNoticeSubtitle}>
-                {outOfStockAlerts.length} SKU hết hàng, {lowStockAlerts.length} SKU dưới tồn kho tối thiểu.
-              </p>
+              <span className={styles.alertBold}>Cảnh báo: </span>
+              Có {negativeCount} SKU đang tồn kho âm trong toàn bộ kho. Cần kiểm tra và điều chỉnh ngay.
             </div>
-            <button
-              className={styles.btnOutline}
-              type="button"
-              onClick={fetchLowStockItems}
-            >
-              Làm mới
-            </button>
           </div>
-          <div className={styles.stockNoticeList}>
-            {lowStockItems.slice(0, 6).map((item) => {
-              const available = Number(item.availableQuantity ?? 0);
-              const threshold = Number(item.lowStockThreshold ?? 0);
-              const urgent = available <= 0;
-              return (
-                <button
-                  key={item.id}
-                  className={styles.stockNoticeItem}
-                  type="button"
-                  onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', item.id)}?variantId=${item.variantId}`)}
-                >
-                  <span className={`${styles.stockNoticeDot} ${urgent ? styles.stockNoticeDotDanger : styles.stockNoticeDotWarn}`} />
-                  <span className={styles.stockNoticeMain}>
-                    <span className={styles.stockNoticeName}>{item.variantSku} · {item.variantName}</span>
-                    <span className={styles.stockNoticeMeta}>{item.warehouseName} · Còn bán {available} / tối thiểu {threshold}</span>
-                  </span>
-                  <StatusBadge status={urgent ? 'out-of-stock' : 'low-stock'} />
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
+        )}
 
-      {/* ── Error ── */}
-      {error && (
-        <div className={`${styles.alert} ${styles.alertError}`}>
-          <AlertCircle size={16} className={styles.alertIcon} />
-          <div>{error}</div>
-        </div>
-      )}
-
-      <div className={styles.filtersPanel}>
-        <div className={styles.filterSection}>
-          <div className={styles.filterSectionHeader}>
-            <span className={styles.filterSectionTitle}>Bộ lọc tồn kho</span>
-            <span className={styles.filterSectionHint}>Tìm nhanh theo SKU, tên sản phẩm hoặc kết hợp nhiều sàn</span>
-          </div>
-
-          <div className={styles.filtersPrimaryRow}>
-            <div className={styles.searchWrapper}>
-              <Search className={styles.searchIcon} size={18} />
-              <input
-                id="input-inventory-search"
-                className={styles.searchInput}
-                placeholder="Tìm theo SKU hoặc tên sản phẩm..."
-                value={search}
-                onChange={e => {
-                  setSearch(e.target.value);
-                  setCurrentPage(0);
-                }}
-              />
+        {!loading && (lowStockCount > 0 || outOfStockCount > 0) && (
+          <div className={`${styles.alert} ${styles.alertWarn}`}>
+            <AlertTriangle size={16} className={styles.alertIcon} />
+            <div>
+              Có {lowStockCount.toLocaleString('vi-VN')} SKU tồn kho thấp và {outOfStockCount.toLocaleString('vi-VN')} SKU hết hàng trong toàn bộ kho. Cần nhập hàng.
             </div>
-            <div className={styles.selectWrapper}>
-              <select
-                className={styles.select}
-                value={categoryFilter}
-                onChange={e => {
-                  setCategoryFilter(e.target.value);
-                  setCurrentPage(0);
-                }}
+          </div>
+        )}
+
+        {stockNoticeItems.length > 0 && (
+          <section className={styles.stockNoticePanel}>
+            <div className={styles.stockNoticeHeader}>
+              <div>
+                <h2 className={styles.stockNoticeTitle}>Thông báo tồn kho</h2>
+                <p className={styles.stockNoticeSubtitle}>
+                  {lowStockCount.toLocaleString('vi-VN')} SKU tồn kho thấp, {outOfStockCount.toLocaleString('vi-VN')} SKU hết hàng.
+                </p>
+              </div>
+              <button
+                className={styles.btnOutline}
+                type="button"
+                onClick={fetchLowStockItems}
               >
-                <option value="all">Tất cả danh mục</option>
-                {renderCategoryOptions(categoryTree)}
-              </select>
-              <ChevronDown className={styles.selectIcon} size={14} />
+                Làm mới
+              </button>
             </div>
-            <Select value={statusFilter} onChange={(value) => { setStatusFilter(value); setCurrentPage(0); }} options={STATUS_OPTIONS} />
-          </div>
-        </div>
-
-        <div className={styles.filterQuickRow}>
-          <div className={styles.platformFilterWrap}>
-            <div className={styles.platformFilterHeader}>
-              <span className={styles.platformFilterLabel}>Kênh bán</span>
-              <span className={styles.platformFilterHint}>Chọn nhiều để xem sản phẩm có đủ các sàn</span>
-              {selectedPlatformFilters.length > 0 && (
-                <button
-                  type="button"
-                  className={styles.platformFilterClear}
-                  onClick={() => {
-                    setSelectedPlatformFilters([]);
-                    setCurrentPage(0);
-                  }}
-                >
-                  Bỏ chọn
-                </button>
-              )}
-            </div>
-            <div className={styles.platformFilterGroup} aria-label="Lọc theo kênh bán">
-              {PLATFORM_FILTER_OPTIONS.map((platform) => {
-                const active = selectedPlatformFilters.includes(platform.value);
+            <div className={styles.stockNoticeList}>
+              {stockNoticeItems.slice(0, 6).map((item) => {
+                const available = Number(item.availableQuantity ?? 0);
+                const threshold = Number(item.lowStockThreshold ?? 0);
+                const urgent = available <= 0;
+                const alertStatus = available < 0
+                  ? 'negative'
+                  : available === 0 ? 'out-of-stock' : 'low-stock';
                 return (
                   <button
-                    key={platform.value}
+                    key={item.id}
+                    className={styles.stockNoticeItem}
                     type="button"
-                    aria-pressed={active}
-                    title={active ? `Bỏ lọc ${platform.label}` : `Lọc sản phẩm có ${platform.label}`}
-                    className={`${styles.platformFilterTag} ${styles[`platformFilter${platform.value}`]} ${active ? styles.platformFilterTagActive : ''}`}
-                    onClick={() => togglePlatformFilter(platform.value)}
+                    onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', item.id)}?variantId=${item.variantId}`)}
                   >
-                    <span className={styles.platformFilterDot} />
-                    <span>{platform.label}</span>
-                    {active && <span className={styles.platformFilterCheck}>✓</span>}
+                    <span className={`${styles.stockNoticeDot} ${urgent ? styles.stockNoticeDotDanger : styles.stockNoticeDotWarn}`} />
+                    <span className={styles.stockNoticeMain}>
+                      <span className={styles.stockNoticeName}>{item.variantSku} · {item.variantName}</span>
+                      <span className={styles.stockNoticeMeta}>{item.warehouseName} · Còn bán {available} / tối thiểu {threshold}</span>
+                    </span>
+                    <StatusBadge status={alertStatus} />
                   </button>
                 );
               })}
             </div>
+          </section>
+        )}
+
+        {/* ── Error ── */}
+        {error && (
+          <div className={`${styles.alert} ${styles.alertError}`}>
+            <AlertCircle size={16} className={styles.alertIcon} />
+            <div>{error}</div>
           </div>
+        )}
 
-          <div className={styles.sortFilterWrap}>
-            <span className={styles.sortLabel}>Sắp xếp</span>
-            <button
-              id="btn-sort-name"
-              className={`${styles.sortBtn} ${nameSort !== 'none' ? styles.sortBtnActive : ''}`}
-              onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
-              title="Sắp xếp theo tên sản phẩm"
-            >
-              {nameSort === 'desc'
-                ? <ArrowDownAZ size={14} />
-                : <ArrowUpAZ size={14} />}
-              Tên A-Z
-              {nameSort !== 'none' && (
-                <span className={styles.sortDirChip}>
-                  {nameSort === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
-            </button>
-            <button
-              id="btn-sort-qty"
-              className={`${styles.sortBtn} ${qtySort !== 'none' ? styles.sortBtnActive : ''}`}
-              onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
-              title="Sắp xếp theo số lượng trong kho"
-            >
-              {qtySort === 'desc'
-                ? <ArrowDown10 size={14} />
-                : <ArrowUp01 size={14} />}
-              Số lượng
-              {qtySort !== 'none' && (
-                <span className={styles.sortDirChip}>
-                  {qtySort === 'asc' ? '↑' : '↓'}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {(categoryFilter !== 'all' || selectedPlatformFilters.length > 0 || statusFilter !== 'all' || nameSort !== 'none' || qtySort !== 'none' || search) && (
-            <button
-              id="btn-reset-filters"
-              className={styles.resetBtn}
-              onClick={() => {
-                setSearch('');
-                setStatusFilter('all');
-                setSelectedPlatformFilters([]);
-                setCategoryFilter('all');
-                setNameSort('none');
-                setQtySort('none');
-                setCurrentPage(0);
-              }}
-            >
-              Xoá bộ lọc
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Table Card ── */}
-      <div className={styles.tableCard}>
-        <div className={styles.tableCardHeader}>
-          <div>
-            <h2 className={styles.tableTitle}>
-              Danh sách tồn kho
-            </h2>
-            <p className={styles.tableSubtitle}>
-              <strong>{totalProducts.toLocaleString('vi-VN')}</strong> sản phẩm · <strong>{totalSkuElements.toLocaleString('vi-VN')}</strong> sản phẩm con (SKU)
-            </p>
-          </div>
-        </div>
-
-        <div className={styles.tableWrapper}>
-          {loading ? (
-            <div className={styles.loadingOverlay}>
-              <Loader2 size={28} className={styles.spinnerIcon} />
-              <span>Đang tải dữ liệu...</span>
+        <div className={styles.filtersPanel}>
+          <div className={styles.filterSection}>
+            <div className={styles.filterSectionHeader}>
+              <span className={styles.filterSectionTitle}>Bộ lọc tồn kho</span>
+              <span className={styles.filterSectionHint}>Tìm nhanh theo SKU, tên sản phẩm hoặc kết hợp nhiều sàn</span>
             </div>
-          ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th className={styles.th}>SKU</th>
-                  <th
-                    className={`${styles.th} ${styles.thSortable}`}
-                    onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
-                    title="Click để sắp xếp theo tên"
+
+            <div className={styles.filtersPrimaryRow}>
+              <div className={styles.searchWrapper}>
+                <Search className={styles.searchIcon} size={18} />
+                <input
+                  id="input-inventory-search"
+                  className={styles.searchInput}
+                  placeholder="Tìm theo SKU hoặc tên sản phẩm..."
+                  value={search}
+                  onChange={e => {
+                    setSearch(e.target.value);
+                    setCurrentPage(0);
+                  }}
+                />
+              </div>
+              <div className={styles.selectWrapper}>
+                <select
+                  className={styles.select}
+                  value={categoryFilter}
+                  onChange={e => {
+                    setCategoryFilter(e.target.value);
+                    setCurrentPage(0);
+                  }}
+                >
+                  <option value="all">Tất cả danh mục</option>
+                  {renderCategoryOptions(categoryTree)}
+                </select>
+                <ChevronDown className={styles.selectIcon} size={14} />
+              </div>
+              <Select value={statusFilter} onChange={(value) => { setStatusFilter(value); setCurrentPage(0); }} options={STATUS_OPTIONS} />
+            </div>
+          </div>
+
+          <div className={styles.filterQuickRow}>
+            <div className={styles.platformFilterWrap}>
+              <div className={styles.platformFilterHeader}>
+                <span className={styles.platformFilterLabel}>Kênh bán</span>
+                <span className={styles.platformFilterHint}>Chọn nhiều để xem sản phẩm có đủ các sàn</span>
+                {selectedPlatformFilters.length > 0 && (
+                  <button
+                    type="button"
+                    className={styles.platformFilterClear}
+                    onClick={() => {
+                      setSelectedPlatformFilters([]);
+                      setCurrentPage(0);
+                    }}
                   >
-                    Tên sản phẩm
-                    {nameSort === 'asc' && <ArrowUpAZ size={12} style={{ marginLeft: 4 }} />}
-                    {nameSort === 'desc' && <ArrowDownAZ size={12} style={{ marginLeft: 4 }} />}
-                    {nameSort === 'none' && <ArrowUpAZ size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
-                  </th>
-                  <th className={styles.th}>Kho hàng</th>
-                  <th className={styles.th}>Kênh bán</th>
-                  <th
-                    className={`${styles.th} ${styles.thRight} ${styles.thSortable}`}
-                    onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
-                    title="Click để sắp xếp theo số lượng"
-                  >
-                    Trong kho
-                    {qtySort === 'asc' && <ArrowUp01 size={12} style={{ marginLeft: 4 }} />}
-                    {qtySort === 'desc' && <ArrowDown10 size={12} style={{ marginLeft: 4 }} />}
-                    {qtySort === 'none' && <ArrowUp01 size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
-                  </th>
-                  <th className={`${styles.th} ${styles.thRight}`}>Hàng đang nhập</th>
-                  <th className={`${styles.th} ${styles.thRight}`}>Hàng đang xuất</th>
-                  <th className={`${styles.th} ${styles.thRight}`}>Giữ hàng</th>
-                  <th className={`${styles.th} ${styles.thRight}`}>Có thể bán</th>
-                  <th className={`${styles.th} ${styles.thRight}`}>Tồn tối thiểu</th>
-                  <th className={styles.th}>Trạng thái</th>
-                  <th className={styles.th}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {displayRows.map((row, idx) => {
-                  const status = deriveStatus(row);
-                  const isProductRow = row.type === 'product';
-                  const isOutOfStockVariant = !isProductRow
-                    && Number(row.availableQuantity ?? 0) === 0;
+                    Bỏ chọn
+                  </button>
+                )}
+              </div>
+              <div className={styles.platformFilterGroup} aria-label="Lọc theo kênh bán">
+                {PLATFORM_FILTER_OPTIONS.map((platform) => {
+                  const active = selectedPlatformFilters.includes(platform.value);
                   return (
-                    <tr
-                      key={row.id}
-                      className={`${styles.tr} ${idx % 2 === 1 ? styles.trAlt : ''} ${isProductRow ? styles.productRow : styles.variantRow} ${isOutOfStockVariant ? styles.outOfStockRow : ''}`}
+                    <button
+                      key={platform.value}
+                      type="button"
+                      aria-pressed={active}
+                      title={active ? `Bỏ lọc ${platform.label}` : `Lọc sản phẩm có ${platform.label}`}
+                      className={`${styles.platformFilterTag} ${styles[`platformFilter${platform.value}`]} ${active ? styles.platformFilterTagActive : ''}`}
+                      onClick={() => togglePlatformFilter(platform.value)}
                     >
-                      <td className={styles.td}>
-                        {isProductRow ? (
-                          <span className={styles.productSkuSummary}>{row.items.length} SKU</span>
-                        ) : (
-                          <span className={styles.skuChip}>{row.variantSku}</span>
-                        )}
-                      </td>
-                      <td className={styles.td}>
-                        {isProductRow ? (
-                          <div className={styles.productInfo}>
-                            <span className={styles.productName} title={row.productName}>{row.productName}</span>
-                            <span className={styles.productMeta}>{row.items.length} sản phẩm con</span>
-                          </div>
-                        ) : (
-                          <div className={styles.variantInfo}>
-                            <span className={styles.variantIndent} />
-                            <div>
-                              <div className={styles.variantName} title={row.variantName || row.productName}>{row.variantName || row.productName}</div>
-                              {row.productName && row.productName !== row.variantName && (
-                                <div className={styles.variantMeta} title={row.productName}>{row.productName}</div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </td>
-                      <td className={styles.td}>
-                        <span className={styles.warehouseLink}>{row.warehouseName}</span>
-                      </td>
-                      <td className={styles.td}>
-                        <ChannelBadge item={row} />
-                      </td>
-                      <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.quantityOnHand)}`}>
-                        {row.quantityOnHand}
-                      </td>
-                      <td className={`${styles.td} ${styles.tdRight} ${Number(row.incomingQuantity ?? 0) > 0 ? styles.qtyPositive : styles.cellMuted}`}>
-                        {row.incomingQuantity ?? 0}
-                      </td>
-                      <td className={`${styles.td} ${styles.tdRight} ${Number(row.outgoingQuantity ?? 0) > 0 ? styles.qtyWarning : styles.cellMuted}`}>
-                        {row.outgoingQuantity ?? 0}
-                      </td>
-                      <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
-                        {row.reservedQuantity}
-                      </td>
-                      <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.availableQuantity)}`}>
-                        {row.availableQuantity < 0 ? (
-                          <span className={styles.negativeCell}>{row.availableQuantity}</span>
-                        ) : row.availableQuantity === 0 ? (
-                          <span className={styles.zeroCell}>{row.availableQuantity}</span>
-                        ) : (
-                          row.availableQuantity
-                        )}
-                      </td>
-                      <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
-                        {row.lowStockThreshold}
-                      </td>
-                      <td className={styles.td}>
-                        <div className={styles.statusCell}>
-                          <StatusBadge status={status} item={row} />
-                        </div>
-                      </td>
-                      <td className={styles.td}>
-                        {isProductRow ? (
-                          <span className={styles.productActionHint}>Nhóm sản phẩm</span>
-                        ) : (
-                          <button
-                            id={`btn-view-${row.variantSku}`}
-                            className={styles.viewBtn}
-                            onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', row.inventoryItemId)}?variantId=${row.variantId}`)}
-                          >
-                            <Eye size={14} />
-                            View
-                          </button>
-                        )}
-                      </td>
-                    </tr>
+                      <span className={styles.platformFilterDot} />
+                      <span>{platform.label}</span>
+                      {active && <span className={styles.platformFilterCheck}>✓</span>}
+                    </button>
                   );
                 })}
+              </div>
+            </div>
 
-                {!loading && displayRows.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className={styles.emptyRow}>
-                      {items.length === 0
-                        ? 'Không có dữ liệu tồn kho.'
-                        : 'Không tìm thấy kết quả phù hợp với bộ lọc.'}
-                    </td>
-                  </tr>
+            <div className={styles.sortFilterWrap}>
+              <span className={styles.sortLabel}>Sắp xếp</span>
+              <button
+                id="btn-sort-name"
+                className={`${styles.sortBtn} ${nameSort !== 'none' ? styles.sortBtnActive : ''}`}
+                onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
+                title="Sắp xếp theo tên sản phẩm"
+              >
+                {nameSort === 'desc'
+                  ? <ArrowDownAZ size={14} />
+                  : <ArrowUpAZ size={14} />}
+                Tên A-Z
+                {nameSort !== 'none' && (
+                  <span className={styles.sortDirChip}>
+                    {nameSort === 'asc' ? '↑' : '↓'}
+                  </span>
                 )}
-              </tbody>
-            </table>
+              </button>
+              <button
+                id="btn-sort-qty"
+                className={`${styles.sortBtn} ${qtySort !== 'none' ? styles.sortBtnActive : ''}`}
+                onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
+                title="Sắp xếp theo số lượng trong kho"
+              >
+                {qtySort === 'desc'
+                  ? <ArrowDown10 size={14} />
+                  : <ArrowUp01 size={14} />}
+                Số lượng
+                {qtySort !== 'none' && (
+                  <span className={styles.sortDirChip}>
+                    {qtySort === 'asc' ? '↑' : '↓'}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {(categoryFilter !== 'all' || selectedPlatformFilters.length > 0 || statusFilter !== 'all' || nameSort !== 'none' || qtySort !== 'none' || search) && (
+              <button
+                id="btn-reset-filters"
+                className={styles.resetBtn}
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter('all');
+                  setSelectedPlatformFilters([]);
+                  setCategoryFilter('all');
+                  setNameSort('none');
+                  setQtySort('none');
+                  setCurrentPage(0);
+                }}
+              >
+                Xoá bộ lọc
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Table Card ── */}
+        <div className={styles.tableCard}>
+          <div className={styles.tableCardHeader}>
+            <div>
+              <h2 className={styles.tableTitle}>
+                Danh sách tồn kho
+              </h2>
+              <p className={styles.tableSubtitle}>
+                <strong>{totalProducts.toLocaleString('vi-VN')}</strong> sản phẩm · <strong>{totalSkuElements.toLocaleString('vi-VN')}</strong> sản phẩm con (SKU)
+              </p>
+            </div>
+          </div>
+
+          <div className={styles.tableWrapper}>
+            {loading ? (
+              <div className={styles.loadingOverlay}>
+                <Loader2 size={28} className={styles.spinnerIcon} />
+                <span>Đang tải dữ liệu...</span>
+              </div>
+            ) : (
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th className={styles.th}>SKU</th>
+                    <th
+                      className={`${styles.th} ${styles.thSortable}`}
+                      onClick={() => { setNameSort(nextSort(nameSort)); setQtySort('none'); setCurrentPage(0); }}
+                      title="Click để sắp xếp theo tên"
+                    >
+                      Tên sản phẩm
+                      {nameSort === 'asc' && <ArrowUpAZ size={12} style={{ marginLeft: 4 }} />}
+                      {nameSort === 'desc' && <ArrowDownAZ size={12} style={{ marginLeft: 4 }} />}
+                      {nameSort === 'none' && <ArrowUpAZ size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
+                    </th>
+                    <th className={styles.th}>Kho hàng</th>
+                    <th className={styles.th}>Kênh bán</th>
+                    <th
+                      className={`${styles.th} ${styles.thRight} ${styles.thSortable}`}
+                      onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
+                      title="Click để sắp xếp theo số lượng"
+                    >
+                      Trong kho
+                      {qtySort === 'asc' && <ArrowUp01 size={12} style={{ marginLeft: 4 }} />}
+                      {qtySort === 'desc' && <ArrowDown10 size={12} style={{ marginLeft: 4 }} />}
+                      {qtySort === 'none' && <ArrowUp01 size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
+                    </th>
+                    <th className={`${styles.th} ${styles.thRight}`}>Hàng đang nhập</th>
+                    <th className={`${styles.th} ${styles.thRight}`}>Hàng đang xuất</th>
+                    <th className={`${styles.th} ${styles.thRight}`}>Giữ hàng</th>
+                    <th className={`${styles.th} ${styles.thRight}`}>Có thể bán</th>
+                    <th className={`${styles.th} ${styles.thRight}`}>Tồn tối thiểu</th>
+                    <th className={styles.th}>Trạng thái</th>
+                    <th className={styles.th}>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayRows.map((row, idx) => {
+                    const status = deriveStatus(row);
+                    const isProductRow = row.type === 'product';
+                    const isOutOfStockVariant = !isProductRow
+                      && Number(row.availableQuantity ?? 0) === 0;
+                    return (
+                      <tr
+                        key={row.id}
+                        className={`${styles.tr} ${idx % 2 === 1 ? styles.trAlt : ''} ${isProductRow ? styles.productRow : styles.variantRow} ${isOutOfStockVariant ? styles.outOfStockRow : ''}`}
+                      >
+                        <td className={styles.td}>
+                          {isProductRow ? (
+                            <span className={styles.productSkuSummary}>{row.items.length} SKU</span>
+                          ) : (
+                            <span className={styles.skuChip}>{row.variantSku}</span>
+                          )}
+                        </td>
+                        <td className={styles.td}>
+                          {isProductRow ? (
+                            <div className={styles.productInfo}>
+                              <span className={styles.productName} title={row.productName}>{row.productName}</span>
+                              <span className={styles.productMeta}>{row.items.length} sản phẩm con</span>
+                            </div>
+                          ) : (
+                            <div className={styles.variantInfo}>
+                              <span className={styles.variantIndent} />
+                              <div>
+                                <div className={styles.variantName} title={row.variantName || row.productName}>{row.variantName || row.productName}</div>
+                                {row.productName && row.productName !== row.variantName && (
+                                  <div className={styles.variantMeta} title={row.productName}>{row.productName}</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        <td className={styles.td}>
+                          <span className={styles.warehouseLink}>{row.warehouseName}</span>
+                        </td>
+                        <td className={styles.td}>
+                          <ChannelBadge item={row} />
+                        </td>
+                        <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.quantityOnHand)}`}>
+                          {row.quantityOnHand}
+                        </td>
+                        <td className={`${styles.td} ${styles.tdRight} ${Number(row.incomingQuantity ?? 0) > 0 ? styles.qtyPositive : styles.cellMuted}`}>
+                          {row.incomingQuantity ?? 0}
+                        </td>
+                        <td className={`${styles.td} ${styles.tdRight} ${Number(row.outgoingQuantity ?? 0) > 0 ? styles.qtyWarning : styles.cellMuted}`}>
+                          {row.outgoingQuantity ?? 0}
+                        </td>
+                        <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
+                          {row.reservedQuantity}
+                        </td>
+                        <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.availableQuantity)}`}>
+                          {row.availableQuantity < 0 ? (
+                            <span className={styles.negativeCell}>{row.availableQuantity}</span>
+                          ) : row.availableQuantity === 0 ? (
+                            <span className={styles.zeroCell}>{row.availableQuantity}</span>
+                          ) : (
+                            row.availableQuantity
+                          )}
+                        </td>
+                        <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
+                          {row.lowStockThreshold}
+                        </td>
+                        <td className={styles.td}>
+                          <div className={styles.statusCell}>
+                            <StatusBadge status={status} item={row} />
+                          </div>
+                        </td>
+                        <td className={styles.td}>
+                          {isProductRow ? (
+                            <span className={styles.productActionHint}>Nhóm sản phẩm</span>
+                          ) : (
+                            <button
+                              id={`btn-view-${row.variantSku}`}
+                              className={styles.viewBtn}
+                              onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', row.inventoryItemId)}?variantId=${row.variantId}`)}
+                            >
+                              <Eye size={14} />
+                              View
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {!loading && displayRows.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className={styles.emptyRow}>
+                        {items.length === 0
+                          ? 'Không có dữ liệu tồn kho.'
+                          : 'Không tìm thấy kết quả phù hợp với bộ lọc.'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className={styles.tableFooter}>
+            <span className={styles.footerMetric}>
+              <span className={styles.footerMetricLabel}>Trang hiện tại</span>
+              <strong>{paginatedProductGroups.length} sản phẩm</strong>
+            </span>
+            <span className={styles.footerMetric}>
+              <span className={styles.footerMetricLabel}>Sản phẩm con trên trang</span>
+              <strong>{currentSkuCount.toLocaleString('vi-VN')} SKU</strong>
+            </span>
+          </div>
+          {/* ── Product-group Pagination ── */}
+          {!loading && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalElements={totalProducts}
+              pageSize={pageSize}
+              currentCount={paginatedProductGroups.length}
+              itemLabel="sản phẩm"
+              onPageChange={handlePageChange}
+              showPageSizeSelector
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              pageSizeLabel="Số sản phẩm mỗi trang"
+              onPageSizeChange={(nextPageSize) => {
+                setPageSize(nextPageSize);
+                setCurrentPage(0);
+              }}
+            />
           )}
         </div>
-
-        <div className={styles.tableFooter}>
-          <span className={styles.footerMetric}>
-            <span className={styles.footerMetricLabel}>Trang hiện tại</span>
-            <strong>{paginatedProductGroups.length} sản phẩm</strong>
-          </span>
-          <span className={styles.footerMetric}>
-            <span className={styles.footerMetricLabel}>Sản phẩm con trên trang</span>
-            <strong>{currentSkuCount.toLocaleString('vi-VN')} SKU</strong>
-          </span>
-        </div>
-        {/* ── Product-group Pagination ── */}
-        {!loading && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalElements={totalProducts}
-            pageSize={pageSize}
-            currentCount={paginatedProductGroups.length}
-            itemLabel="sản phẩm"
-            onPageChange={handlePageChange}
-            showPageSizeSelector
-            pageSizeOptions={PAGE_SIZE_OPTIONS}
-            pageSizeLabel="Số sản phẩm mỗi trang"
-            onPageSizeChange={(nextPageSize) => {
-              setPageSize(nextPageSize);
-              setCurrentPage(0);
-            }}
-          />
-        )}
       </div>
-    </div>
-    <InventoryExportModal
-      open={exportOpen}
-      onClose={() => setExportOpen(false)}
-      rows={visibleItems}
-      columns={INVENTORY_EXPORT_COLUMNS}
-      getDateValue={(item) => item.updatedAt ?? item.createdAt}
-      loadRows={loadInventoryExportRows}
-      loadExtraSheets={loadInventoryExportExtraSheets}
-      title="BẢNG KÊ TỒN KHO"
-      fileName="bang-ke-ton-kho"
-      sheetName="tồn kho"
-    />
+      <InventoryExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        rows={visibleItems}
+        columns={INVENTORY_EXPORT_COLUMNS}
+        getDateValue={(item) => item.updatedAt ?? item.createdAt}
+        loadRows={loadInventoryExportRows}
+        loadExtraSheets={loadInventoryExportExtraSheets}
+        title="BẢNG KÊ TỒN KHO"
+        fileName="bang-ke-ton-kho"
+        sheetName="tồn kho"
+      />
     </>
   );
 };

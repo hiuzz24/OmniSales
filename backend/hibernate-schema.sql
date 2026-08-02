@@ -1235,3 +1235,5 @@ INSERT INTO system_settings (key, value, description, category) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 
+ALTER TABLE channels
+    ADD COLUMN last_synced_application_at TIMESTAMPTZ;
