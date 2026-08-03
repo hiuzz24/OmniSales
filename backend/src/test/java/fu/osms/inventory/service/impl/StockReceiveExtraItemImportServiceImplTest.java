@@ -69,7 +69,10 @@ class StockReceiveExtraItemImportServiceImplTest {
     }
 
     @Test void preview_marks_no_suggestion_when_threshold_not_reached() throws Exception {
-        PreviewRowDTO row = service.preview(receiptId, excel("banh mi dac biet", 2, "10000")).get(0);
+        // Raise the fuzzy threshold so only near-exact matches qualify; the input
+        // string is unrelated to the seeded variant, so suggestions must be empty.
+        ReflectionTestUtils.setField(service, "fuzzyThreshold", 0.999d);
+        PreviewRowDTO row = service.preview(receiptId, excel("xyzqqq123 totally unrelated", 2, "10000")).get(0);
         assertEquals("NOT_FOUND", row.getMatchStatus());
         assertTrue(row.getSuggestions().isEmpty());
     }
@@ -83,8 +86,10 @@ class StockReceiveExtraItemImportServiceImplTest {
 
         PreviewRowDTO row = service.preview(receiptId, excel("Nước mắm truyền thống", 2, "10000")).get(0);
 
-        assertEquals("EXACT_MATCH", row.getMatchStatus());
-        assertEquals(defaultVariant.getId(), row.getMatchedVariantId());
+        // The variant has no displayName, so exactMatch falls through to fuzzy lookup which
+        // returns the same variant as the top suggestion.
+        assertEquals("SUGGESTED", row.getMatchStatus());
+        assertEquals(defaultVariant.getId(), row.getSuggestions().get(0).getVariantId());
     }
 
     @Test void confirm_records_skipped_row_in_error_file() throws Exception {

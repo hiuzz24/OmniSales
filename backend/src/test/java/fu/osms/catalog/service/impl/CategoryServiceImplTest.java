@@ -304,36 +304,27 @@ class CategoryServiceImplTest {
     class DeleteTests {
 
         @Test
-        @DisplayName("Should soft delete category successfully")
+        @DisplayName("Should hard delete category successfully")
         void delete_success() {
             when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(testCategory));
-            when(categoryRepository.save(any(Category.class))).thenAnswer(i -> i.getArgument(0));
-            when(categoryRepository.findByParentId(categoryId)).thenReturn(Collections.emptyList());
+            when(productRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId)).thenReturn(false);
 
             categoryService.delete(categoryId);
 
-            verify(categoryRepository).save(argThat(c -> c.getStatus() == CategoryStatus.INACTIVE));
+            verify(categoryRepository).delete(testCategory);
         }
 
         @Test
-        @DisplayName("Should deactivate children recursively when deleting")
-        void delete_inactiveChildrenRecursively() {
-            Category child = Category.builder()
-                    .id(UUID.randomUUID())
-                    .name("Child Category")
-                    .slug("child-category")
-                    .status(CategoryStatus.ACTIVE)
-                    .parent(testCategory)
-                    .build();
-
+        @DisplayName("Should throw when category has products")
+        void delete_hasProductsThrows() {
             when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(testCategory));
-            when(categoryRepository.save(any(Category.class))).thenAnswer(i -> i.getArgument(0));
-            when(categoryRepository.findByParentId(categoryId)).thenReturn(List.of(child));
-            when(categoryRepository.findByParentId(child.getId())).thenReturn(Collections.emptyList());
+            when(productRepository.existsByCategoryIdAndDeletedAtIsNull(categoryId)).thenReturn(true);
 
-            categoryService.delete(categoryId);
+            assertThatThrownBy(() -> categoryService.delete(categoryId))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Không thể xóa danh mục đang có sản phẩm");
 
-            verify(categoryRepository, atLeast(2)).save(any(Category.class));
+            verify(categoryRepository, never()).delete(any(Category.class));
         }
 
         @Test

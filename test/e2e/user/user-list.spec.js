@@ -57,7 +57,7 @@ test.describe('User List E2E Tests', () => {
   // USR-E2E-4
   test('USR-E2E-4 - Filter by Status dropdown', async ({ managerPage }) => {
     await managerPage.goto('/users');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.waitForLoadState('domcontentloaded');
 
     const selects = managerPage.locator('select');
     const count = await selects.count();

@@ -188,4 +188,101 @@ test.describe('Category API Tests', () => {
     );
     expect([404, 500]).toContain(response.status());
   });
+
+  // =========================================================
+  // Phase B5: New endpoints ({id}, roots, {parentId}/subcategories)
+  // =========================================================
+
+  // CAT-15 - GET /api/categories/{id} (with auth, non-existent)
+  test('CAT-15 - GET /api/categories/{id} - Non-existent id returns 404', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/categories/${fakeId}`, {
+      headers: managerHeaders,
+    });
+
+    expect([404, 500]).toContain(response.status());
+  });
+
+  // CAT-16 - GET /api/categories/{id} (no auth)
+  test('CAT-16 - GET /api/categories/{id} - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/categories/${fakeId}`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // CAT-17 - GET /api/categories/{id} (with auth, invalid uuid)
+  test('CAT-17 - GET /api/categories/{id} - Invalid UUID returns 400/500', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/categories/not-a-uuid`, {
+      headers: managerHeaders,
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
+
+  // CAT-18 - GET /api/categories/roots (with auth)
+  test('CAT-18 - GET /api/categories/roots - Returns list of root categories 200', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/categories/roots`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 500]).toContain(response.status());
+    if (response.status() === 200) {
+      const body = await response.json();
+      expect(body.success).toBe(true);
+      expect(Array.isArray(body.data)).toBe(true);
+    }
+  });
+
+  // CAT-19 - GET /api/categories/roots (no auth)
+  test('CAT-19 - GET /api/categories/roots - Without auth returns 401 or 403', async ({ request }) => {
+    const response = await request.get(`${API_BASE}/categories/roots`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // CAT-20 - GET /api/categories/{parentId}/subcategories (with auth, valid parent)
+  test('CAT-20 - GET /api/categories/{parentId}/subcategories - With manager auth returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const root = await createTestCategory(request, authToken);
+    test.skip(!root, 'Cannot create root category');
+
+    const response = await request.get(`${API_BASE}/categories/${root.id}/subcategories`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 500]).toContain(response.status());
+    if (response.status() === 200) {
+      const body = await response.json();
+      expect(body.success).toBe(true);
+      expect(Array.isArray(body.data)).toBe(true);
+    }
+  });
+
+  // CAT-21 - GET /api/categories/{parentId}/subcategories (no auth)
+  test('CAT-21 - GET /api/categories/{parentId}/subcategories - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/categories/${fakeId}/subcategories`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // CAT-22 - GET /api/categories/{parentId}/subcategories (non-existent parent)
+  test('CAT-22 - GET /api/categories/{parentId}/subcategories - Non-existent parent returns 200 (empty) or 404', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/categories/${fakeId}/subcategories`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+  });
+
+  // CAT-23 - GET /api/categories/{parentId}/subcategories (invalid uuid)
+  test('CAT-23 - GET /api/categories/{parentId}/subcategories - Invalid UUID returns 400/500', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/categories/not-a-uuid/subcategories`, {
+      headers: managerHeaders,
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
 });

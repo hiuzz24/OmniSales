@@ -50,6 +50,8 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
 
     Optional<InventoryIssue> findTopByIssueCodeStartingWithOrderByIssueCodeDesc(String prefix);
 
+    List<InventoryIssue> findByIssueCodeStartingWithOrderByIssueCodeDesc(String prefix);
+
     @Query("SELECT COUNT(ii) FROM InventoryIssue ii " +
             "WHERE ii.issueType IN ('ORDER', 'ADJUSTMENT', 'DISPOSAL', 'TRANSFER')")
     Long countDeliveries();

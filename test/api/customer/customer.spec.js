@@ -403,4 +403,92 @@ test.describe('Customer API Tests', () => {
       }
     }
   });
+
+  // =========================================================
+  // Phase B3: New endpoints (page-with-order-customers, sync-from-orders)
+  // =========================================================
+
+  // C22 - GET /api/customers/page-with-order-customers
+  test('C22 - GET /api/customers/page-with-order-customers - Returns paginated customers with order stats', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/customers/page-with-order-customers?page=0&size=10`, {
+      headers: managerHeaders,
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.data).toHaveProperty('content');
+    expect(Array.isArray(body.data.content)).toBe(true);
+  });
+
+  // C23 - GET /api/customers/page-with-order-customers with search filter
+  test('C23 - GET /api/customers/page-with-order-customers - Search filter returns results', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/customers/page-with-order-customers?page=0&size=10&search=test`, {
+      headers: managerHeaders,
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+  });
+
+  // C24 - GET /api/customers/page-with-order-customers with status filter
+  test('C24 - GET /api/customers/page-with-order-customers - Status filter returns results', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/customers/page-with-order-customers?page=0&size=10&status=ACTIVE`, {
+      headers: managerHeaders,
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+  });
+
+  // C25 - GET /api/customers/page-with-order-customers without auth
+  test('C25 - GET /api/customers/page-with-order-customers - Without auth returns 401 or 403', async ({ request }) => {
+    const response = await request.get(`${API_BASE}/customers/page-with-order-customers`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // C26 - POST /api/customers/sync-from-orders
+  test('C26 - POST /api/customers/sync-from-orders - Triggers customer sync and returns 200', async ({ request, managerHeaders }) => {
+    const response = await request.post(`${API_BASE}/customers/sync-from-orders`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 202, 500]).toContain(response.status());
+    if (response.status() < 300) {
+      const body = await response.json();
+      expect(body.success).toBe(true);
+    }
+  });
+
+  // C27 - POST /api/customers/sync-from-orders without auth
+  test('C27 - POST /api/customers/sync-from-orders - Without auth returns 401 or 403', async ({ request }) => {
+    const response = await request.post(`${API_BASE}/customers/sync-from-orders`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // C28 - GET /api/customers/page-with-order-customers with gender filter
+  test('C28 - GET /api/customers/page-with-order-customers - Gender filter returns results', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/customers/page-with-order-customers?page=0&size=10&gender=MALE`, {
+      headers: managerHeaders,
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+  });
+
+  // C29 - GET /api/customers/page-with-order-customers with combined filters
+  test('C29 - GET /api/customers/page-with-order-customers - Combined search + status filter returns results', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/customers/page-with-order-customers?page=0&size=5&search=te&status=ACTIVE&gender=FEMALE`, {
+      headers: managerHeaders,
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+  });
 });

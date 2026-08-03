@@ -75,6 +75,13 @@ const ROUTES = {
   '/channels/connection-history':{ exists: true, requiresRole: null },
   '/sync/history':               { exists: true, requiresRole: null },
 
+  // --- Order returns ---
+  '/order-returns':               { exists: true, requiresRole: null },
+
+  // --- Purchase orders ---
+  '/purchases':                  { exists: true, requiresRole: null },
+  '/purchases/create':           { exists: true, requiresRole: null },
+
   // --- Known wrong paths in legacy specs (kept here so specs can self-report) ---
   '/admin/backup':  { exists: false, correctPath: '/backups',          note: 'Use /backups' },
   '/admin/logs':    { exists: false, correctPath: '/system-logs',      note: 'Use /system-logs' },
