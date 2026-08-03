@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
 import {
-  ArrowLeft, Save, Loader2, AlertCircle, Edit3, Trash2, Plus, Search, X,
+  ArrowLeft, Save, Loader2, AlertCircle, Edit3, Trash2, Plus, Search, X, FileSpreadsheet, Download,
 } from 'lucide-react';
 
 import warehouseService from '../../services/warehouseService';
@@ -188,6 +188,9 @@ export default function StockReceiveEditPage() {
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [importRows, setImportRows] = useState(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const importFileRef = useRef(null);
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, setValue } = useForm({
     resolver: zodResolver(schema),
@@ -289,6 +292,41 @@ export default function StockReceiveEditPage() {
     });
   };
 
+  const downloadBlob = (blob, name) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const onDownloadTemplate = async () => {
+    setImportBusy(true);
+    try { const result = await stockReceiveService.downloadExtraItemsTemplate(id); downloadBlob(result.data, 'stock-in-extra-items-template.xlsx'); }
+    catch { toast.error('Không thể tải template Excel.'); }
+    finally { setImportBusy(false); }
+  };
+  const onImportFile = async (event) => {
+    const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
+    setImportBusy(true);
+    try {
+      const response = await stockReceiveService.previewExtraItemsImport(id, file);
+      const rows = response.data?.data ?? response.data ?? [];
+      setImportRows(rows.map((row) => ({ ...row, variantId: row.matchedVariantId || '', skipped: row.matchStatus === 'NOT_FOUND' })));
+    } catch (error) { toast.error(error?.response?.data?.message || 'Không thể đọc file Excel.'); }
+    finally { setImportBusy(false); }
+  };
+  const canConfirmImport = (importRows ?? []).every((row) => row.skipped || row.variantId);
+  const confirmImport = async () => {
+    if (!canConfirmImport) { toast.error('Hãy chọn sản phẩm hoặc bỏ qua tất cả các dòng chưa xác định.'); return; }
+    setImportBusy(true);
+    try {
+      const response = await stockReceiveService.confirmExtraItemsImport(id, importRows.map((row) => ({ rowIndex: row.rowIndex, rawInputName: row.rawInputName, variantId: row.variantId || null, quantity: row.quantity, unitPrice: row.unitPrice, skipped: Boolean(row.skipped) })));
+      const result = response.data?.data ?? response.data;
+      toast.success(`Nhập thành công ${result.successCount} sản phẩm, bỏ qua ${result.skippedCount} sản phẩm.`);
+      if (result.errorFileUrl) window.open(result.errorFileUrl, '_blank', 'noopener,noreferrer');
+      setImportRows(null); await fetchData();
+    } catch (error) { toast.error(error?.response?.data?.message || 'Không thể xác nhận import.'); }
+    finally { setImportBusy(false); }
+  };
+
   // ── Submit - Save Draft ────────────────────────────────────────────────────
   const onSubmit = handleSubmit(async (data) => {
     if (items.length === 0) { 
@@ -373,6 +411,11 @@ export default function StockReceiveEditPage() {
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: 0 }}>Danh sách sản phẩm</h3>
               <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Cập nhật số lượng và đơn giá</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={onDownloadTemplate} disabled={importBusy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><Download size={14} /> Template</button>
+              <button type="button" onClick={() => importFileRef.current?.click()} disabled={importBusy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><FileSpreadsheet size={14} /> Import Excel</button>
+              <input ref={importFileRef} type="file" accept=".xlsx" onChange={onImportFile} style={{ display: 'none' }} />
             </div>
             <button type="button" onClick={() => setModalOpen(true)}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none', background: '#009688', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -529,6 +572,17 @@ export default function StockReceiveEditPage() {
         onAdd={onAddProduct}
         existingVariantIds={items.flatMap((item) => item.variantIds ?? [item.variantId])}
       />
+      {importRows && <div style={modalBackdropStyle}>
+        <div style={{ ...modalStyle, width: 'min(1050px, 100%)', maxHeight: '84vh' }}>
+          <div style={modalHeaderStyle}><div><h2 style={modalTitleStyle}>Xem trước import Excel</h2><p style={modalSubtitleStyle}>Chọn gợi ý hoặc bỏ qua dòng chưa xác định trước khi lưu.</p></div><button type="button" onClick={() => setImportRows(null)} style={modalCloseButtonStyle}><X size={18} /></button></div>
+          <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}><table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}><thead><tr>{['Dòng', 'Tên đã nhập', 'SL', 'Đơn giá', 'Sản phẩm', 'Bỏ qua'].map((title) => <th key={title} style={{ padding: 9, textAlign: 'left', background: '#f8fafc', color: '#64748b' }}>{title}</th>)}</tr></thead><tbody>{importRows.map((row, index) => {
+            const tone = row.matchStatus === 'EXACT_MATCH' ? '#ecfdf5' : row.matchStatus === 'SUGGESTED' ? '#fffbeb' : '#fef2f2';
+            const choices = [{ variantId: row.matchedVariantId, productName: row.matchedProductName }, ...(row.suggestions || [])].filter((choice) => choice.variantId);
+            return <tr key={row.rowIndex} style={{ background: tone, borderTop: '1px solid #e2e8f0' }}><td style={{ padding: 9 }}>{row.rowIndex}</td><td style={{ padding: 9 }}>{row.rawInputName}<div style={{ color: '#dc2626', fontSize: 10 }}>{row.reason}</div></td><td style={{ padding: 9 }}>{row.quantity}</td><td style={{ padding: 9 }}>{Number(row.unitPrice || 0).toLocaleString('vi-VN')}</td><td style={{ padding: 9 }}><select value={row.variantId} disabled={row.skipped} onChange={(event) => setImportRows((rows) => rows.map((item, itemIndex) => itemIndex === index ? { ...item, variantId: event.target.value } : item))} style={{ minWidth: 260, padding: 6, borderRadius: 6, border: '1px solid #cbd5e1' }}><option value="">{row.matchStatus === 'SUGGESTED' ? 'Chọn gợi ý' : 'Không có sản phẩm phù hợp'}</option>{choices.map((choice) => <option key={choice.variantId} value={choice.variantId}>{choice.productName}</option>)}</select></td><td style={{ padding: 9 }}><input type="checkbox" checked={row.skipped} onChange={(event) => setImportRows((rows) => rows.map((item, itemIndex) => itemIndex === index ? { ...item, skipped: event.target.checked } : item))} /></td></tr>;
+          })}</tbody></table></div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}><button type="button" onClick={() => setImportRows(null)} style={{ padding: '8px 12px', border: '1px solid #cbd5e1', background: '#fff', borderRadius: 7 }}>Hủy</button><button type="button" disabled={importBusy || !canConfirmImport} onClick={confirmImport} style={{ padding: '8px 12px', border: 'none', background: '#2563eb', color: '#fff', borderRadius: 7 }}>Xác nhận lưu</button></div>
+        </div>
+      </div>}
       {ConfirmDialog}
     </div>
   );

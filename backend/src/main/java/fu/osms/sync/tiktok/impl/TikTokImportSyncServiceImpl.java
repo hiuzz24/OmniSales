@@ -349,7 +349,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             Map<String, Object> skuDetail = detailsBySkuId.getOrDefault(externalSkuId, skuSource);
             Map<String, Object> skuInventory = inventorySkus.isEmpty() ? skuSource : skuSource;
             ProductVariant variant = upsertVariant(
-                    channelProduct, product, skuInventory, skuDetail, initialCreate);
+                    channelProduct, product, skuInventory, skuDetail);
             if (variant == null) {
                 String warning = "Remote TikTok variant is not linked to an OSMS variant: "
                         + firstNonBlank(
@@ -392,8 +392,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private ProductVariant upsertVariant(ChannelProduct channelProduct,
                                          Product product,
                                          Map<String, Object> inventorySku,
-                                         Map<String, Object> detailSku,
-                                         boolean initialCreate) {
+                                         Map<String, Object> detailSku) {
         String externalSkuId = stringValue(inventorySku.get("id"));
         String sellerSku = firstNonBlank(
                 stringValue(inventorySku.get("seller_sku")),
@@ -404,30 +403,16 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 .findByChannelProductIdAndExternalVariantId(channelProduct.getId(), externalSkuId)
                 .map(ChannelProductVariant::getVariant)
                 .orElse(null);
-        if (!initialCreate) {
-            if (mappedVariant != null) {
-                return mappedVariant;
-            }
-            String localSku = firstNonBlank(
-                    stringValue(inventorySku.get("seller_sku")),
-                    stringValue(detailSku.get("seller_sku"))
-            );
-            return hasText(localSku)
-                    ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), localSku)
-                            .orElse(null)
-                    : null;
-        }
-        ProductVariant variant = mappedVariant == null ? new ProductVariant() : mappedVariant;
+        ProductVariant variant = mappedVariant == null
+                ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sellerSku)
+                        .orElseGet(ProductVariant::new)
+                : mappedVariant;
         if (variant.getId() == null) {
             variant.setProduct(product);
             variant.setSku(uniqueSku(sellerSku, externalSkuId));
-            variant.setName(firstNonBlank(
-                    stringValue(detailSku.get("seller_sku")),
-                    stringValue(detailSku.get("title")),
-                    product.getName()
-            ));
             variant.setOptionValues(Map.of("source", "TikTok Shop"));
         }
+        variant.setName(product.getName());
 
         Object priceObject = detailSku.get("price");
         if ((!shouldPreserveLocalPrice(channelProduct, externalSkuId) || variant.getPrice() == null)

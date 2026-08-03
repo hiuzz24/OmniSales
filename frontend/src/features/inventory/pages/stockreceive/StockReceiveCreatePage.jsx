@@ -46,6 +46,161 @@ const platformBadgeBaseStyle = {
 
 const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
 
+const normalizeImportKey = (value) => String(value ?? '').trim().toLocaleLowerCase('vi-VN');
+
+const importLookupKeys = (item) => {
+  const productName = String(item?.productName ?? '').trim();
+  const variantName = String(item?.name ?? '').trim();
+  // Use both internal SKU and marketplace SKU as separate keys — the Excel template
+  // display name uses the internal variantSku, but users may also type the marketplace SKU.
+  const sku = String(item?.sku ?? item?.variantSku ?? '').trim();
+  const marketplaceSku = String(item?.marketplaceSku ?? '').trim();
+
+  // The backend formats display names as: "{productName} - {variantName} [{sku}]"
+  // (where sku = v.getSku() = internal SKU). We must generate this exact key so that
+  // values from the Excel column A (which come from the template dropdown) always match.
+  const displayNameInternal = sku
+    ? `${productName}${variantName ? ` - ${variantName}` : ''} [${sku}]`
+    : '';
+  const displayNameMarketplace = marketplaceSku && marketplaceSku !== sku
+    ? `${productName}${variantName ? ` - ${variantName}` : ''} [${marketplaceSku}]`
+    : '';
+
+  return uniqueValues([
+    sku,
+    marketplaceSku,
+    productName,
+    variantName,
+    variantName ? `${productName} - ${variantName}` : '',
+    displayNameInternal,
+    displayNameMarketplace,
+  ]).map(normalizeImportKey).filter(Boolean);
+};
+
+const downloadImportErrors = (errors) => {
+  const sheet = XLSX.utils.json_to_sheet(errors.map((error) => ({
+    'Dòng Excel': error.rowNumber,
+    'Giá trị cột A': error.input,
+    'Số lượng': error.quantity ?? '',
+    'Đơn giá': error.unitPrice ?? '',
+    'Lý do lỗi': error.reason,
+  })));
+  sheet['!cols'] = [{ wch: 12 }, { wch: 55 }, { wch: 14 }, { wch: 16 }, { wch: 55 }];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Lỗi import');
+  XLSX.writeFile(workbook, 'stock-in-import-errors.xlsx');
+};
+
+// importProductKey: primary key is internal SKU (variantSku), fallback to marketplaceSku,
+// then variantIds. Using the internal SKU aligns with the Excel template display names
+// (which are built from v.getSku() = internal SKU on the backend).
+const importProductKey = (item) => {
+  const sku = normalizeImportKey(item?.variantSku ?? item?.sku ?? item?.marketplaceSku ?? '');
+  if (sku) return `sku:${sku}`;
+  return uniqueValues(item?.variantIds ?? [item?.id ?? item?.variantId])
+    .map(String).sort().join('|') || '';
+};
+
+const parseExcelImportRows = (rows, variants, existingItems) => {
+  // Build lookup maps from warehouse variants
+  const variantsByImportKey = new Map();  // normalized text key → variant
+  const variantsBySkuKey = new Map();     // "sku:<normalized-sku>" → variant
+  const variantsById = new Map();         // variantId string → variant
+
+  variants.forEach((item) => {
+    // Text-based lookup (product name, variant name, display name with SKU in brackets)
+    importLookupKeys(item).forEach((key) => variantsByImportKey.set(key, item));
+    // Internal SKU lookup (matches the template dropdown display names built by backend)
+    const internalSku = normalizeImportKey(item?.variantSku ?? item?.sku ?? '');
+    if (internalSku) variantsBySkuKey.set(`sku:${internalSku}`, item);
+    // Marketplace SKU lookup (secondary — user may type marketplace SKU)
+    const mktSku = normalizeImportKey(item?.marketplaceSku ?? '');
+    if (mktSku && mktSku !== internalSku) variantsBySkuKey.set(`sku:${mktSku}`, item);
+    // ID-based lookup: register ALL variantIds in the group (the hidden column D UUID may be
+    // any of the merged variant IDs, not just the representative one stored in item.variantId)
+    uniqueValues([...(item.variantIds ?? []), item.id ?? item.variantId])
+      .forEach((id) => variantsById.set(String(id), item));
+  });
+
+  const valid = [];
+  const errors = [];
+
+  // Build the set of already-used keys from items already on the receipt.
+  // Register both importProductKey and raw sku keys for both internal and marketplace SKUs
+  // so purchase-order items (which may lack variantIds or differ in variantId sets) are matched.
+  const usedProductKeys = new Set();
+  (existingItems ?? []).forEach((item) => {
+    const pk = importProductKey(item);
+    if (pk) usedProductKeys.add(pk);
+    // Register all SKU variants so nothing slips through
+    const internalSku = normalizeImportKey(item?.variantSku ?? item?.sku ?? '');
+    if (internalSku) usedProductKeys.add(`sku:${internalSku}`);
+    const mktSku = normalizeImportKey(item?.marketplaceSku ?? '');
+    if (mktSku && mktSku !== internalSku) usedProductKeys.add(`sku:${mktSku}`);
+    // Also register all variantIds so that UUID-based dedup works across channel variants
+    uniqueValues([...(item.variantIds ?? []), item.variantId, item.id])
+      .forEach((id) => { if (id) usedProductKeys.add(`id:${String(id)}`); });
+  });
+
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const [rawProduct, rawQuantity, rawUnitPrice, rawVariantId] = row;
+    if (!rawProduct && !rawQuantity && !rawUnitPrice && !rawVariantId) return;
+
+    const input = rawProduct ? String(rawProduct).trim() : '';
+    const reasons = [];
+
+    if (!input) reasons.push('Tên sản phẩm hoặc SKU không hợp lệ.');
+
+    const variantId = rawVariantId ? String(rawVariantId).trim() : '';
+
+    // Lookup order:
+    // 1. Explicit variantId in hidden column D (most precise)
+    // 2. SKU key match (internal or marketplace SKU typed in column A)
+    // 3. Text/display-name match (full display name from template dropdown)
+    const inputSkuKey = `sku:${normalizeImportKey(input)}`;
+    const variant =
+      variantsById.get(variantId) ??
+      variantsBySkuKey.get(inputSkuKey) ??
+      variantsByImportKey.get(normalizeImportKey(input));
+
+    if (input && !variant) reasons.push('Không tìm thấy sản phẩm trong kho đã chọn.');
+
+    const quantity = Number(rawQuantity);
+    if (!rawQuantity || Number.isNaN(quantity) || quantity <= 0) reasons.push('Số lượng phải lớn hơn 0.');
+
+    const unitPrice = rawUnitPrice === undefined || rawUnitPrice === null || rawUnitPrice === ''
+      ? Number(variant?.unitPrice ?? 0)
+      : Number(rawUnitPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      reasons.push('Đơn giá không hợp lệ.');
+    }
+
+    // Dedup check using importProductKey (SKU-based) to reliably match across purchase order
+    // items and warehouse variants regardless of variantId set differences.
+    // Also check all variantIds so multi-channel variants (same product, different channel UUIDs)
+    // are correctly detected as duplicates.
+    const productKey = variant ? importProductKey(variant) : null;
+    const isDuplicate = (productKey && usedProductKeys.has(productKey))
+      || (variant && uniqueValues([...(variant.variantIds ?? []), variant.variantId, variant.id])
+          .some((id) => id && usedProductKeys.has(`id:${String(id)}`)));
+    if (isDuplicate) {
+      reasons.push('Sản phẩm đã có trong phiếu hoặc bị trùng trong file.');
+    }
+
+    if (reasons.length > 0) {
+      errors.push({ rowNumber, input, quantity: rawQuantity, unitPrice: rawUnitPrice, reason: reasons.join(' ') });
+      return;
+    }
+    valid.push({ ...variant, quantity, unitPrice });
+    if (productKey) usedProductKeys.add(productKey);
+    // Register all variantIds of this group so sibling variants are also blocked
+    uniqueValues([...(variant?.variantIds ?? []), variant?.variantId, variant?.id])
+      .forEach((id) => { if (id) usedProductKeys.add(`id:${String(id)}`); });
+  });
+  return { valid, errors };
+};
+
 const normalizePlatform = (value) => {
   const text = String(value ?? '').trim().toUpperCase();
   if (!text) return null;
@@ -102,14 +257,28 @@ const renderPlatformBadges = (item) => {
 
 const normalizeWarehouseVariant = (item) => {
   const variantId = item.variantId ?? item.id;
-  const sku = item.marketplaceSku ?? item.sku ?? item.variantSku ?? '';
+  // internalVariantSku = raw variant.sku from DB — ALWAYS the value used in the Excel template
+  // display name: "{productName} - {variantName} [{internalVariantSku}]"
+  // The backend now returns this as a separate field so it's never overridden by marketplaceSku.
+  const internalVariantSku = item.internalVariantSku ?? item.variantSku ?? item.sku ?? '';
+  const marketplaceSku = item.marketplaceSku ?? '';
+  // Primary SKU for dedup and grouping: use internalVariantSku so it matches the template.
+  const sku = internalVariantSku || marketplaceSku;
   const salePrice = item.salePrice ?? item.currentSalePrice ?? item.price ?? item.unitPrice ?? 0;
   const unitPrice = item.unitPrice ?? item.price ?? 0;
+  // variantIds from the API covers ALL variants grouped under this SKU (both channels).
+  // This is essential for the dedup check — a purchase-order item may reference any of these variant IDs.
+  const variantIds = uniqueValues([
+    ...(item.variantIds ?? []),
+    variantId,
+  ]).filter(Boolean);
   return {
     id: variantId,
     variantId,
-    variantIds: uniqueValues(item.variantIds ?? [variantId]),
-    sku,
+    variantIds,
+    sku,                          // primary SKU = internalVariantSku (matches template display name)
+    variantSku: internalVariantSku, // always internal SKU for lookup key building
+    marketplaceSku,               // marketplace/external SKU (for secondary lookup)
     productName: item.productName ?? item.product?.name ?? item.variantName ?? sku,
     name: item.variantName ?? item.name ?? '',
     unitPrice,
@@ -129,7 +298,9 @@ const normalizeWarehouseVariant = (item) => {
 const aggregateWarehouseVariantsBySku = (variants) => {
   const groups = new Map();
   variants.forEach((item) => {
-    const skuKey = String(item.sku ?? '').trim().toLowerCase();
+    // Group by internal SKU (variantSku) — the primary stable identifier.
+    // item.sku is already set to variantSku by normalizeWarehouseVariant.
+    const skuKey = String(item.variantSku ?? item.sku ?? '').trim().toLowerCase();
     const key = skuKey || `variant:${item.variantId ?? item.id}`;
     if (!groups.has(key)) {
       groups.set(key, {
@@ -177,6 +348,7 @@ const groupPurchaseOrderItems = (orderItems = []) => {
         variantName: item.variantName,
         quantity: item.quantity,
         unitPrice: item.unitCost ?? 0,
+        salePrice: item.salePrice ?? 0,
         platforms: uniqueValues(item.platforms),
         mergedVariantCount: 1,
         fromPurchaseOrder: true,
@@ -186,6 +358,7 @@ const groupPurchaseOrderItems = (orderItems = []) => {
     const existing = groups.get(groupKey);
     existing.variantIds = uniqueValues([...existing.variantIds, item.variantId]);
     existing.platforms = uniqueValues([...existing.platforms, ...(item.platforms ?? [])]);
+    existing.salePrice = existing.salePrice || item.salePrice || 0;
     existing.mergedVariantCount += 1;
   });
   return [...groups.values()];
@@ -495,6 +668,20 @@ export default function StockReceiveCreatePage() {
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
   const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
 
+  const onDownloadExcelTemplate = async () => {
+    try {
+      const response = await stockReceiveService.downloadNewReceiptExtraItemsTemplate();
+      const url = URL.createObjectURL(response.data);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'stock-in-extra-items-template.xlsx';
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Không thể tải template Excel. Vui lòng thử lại.');
+    }
+  };
+
   const onAddProducts = (newItems) => {
     setItems((p) => {
       const skuKeys = new Set(p.map((it) => String(it.sku ?? '').trim().toLowerCase()).filter(Boolean));
@@ -522,45 +709,34 @@ export default function StockReceiveCreatePage() {
       toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.');
       return;
     }
-    const variantBySku = new Map(warehouseVariants.map((item) => [String(item.sku ?? '').trim().toLowerCase(), item]));
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+        // cellFormula:false + cellNF:false → SheetJS uses the cached formula result (v field)
+        // instead of re-evaluating VLOOKUP. This means hidden column D (_Variant ID) will
+        // contain the UUID that Excel last computed when user opened the template.
+        const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellFormula: false, cellNF: false });
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: undefined }).slice(1);
-        const valid = []; const errs = [];
-        rows.forEach((row, idx) => {
-          const rn = idx + 2;
-          const rawSku = row[0]; const rawQty = row[1]; const rawPrice = row[2];
-          if (!rawSku && !rawQty && !rawPrice) return;
-          let ok = true;
-          const sku = rawSku ? String(rawSku).trim() : '';
-          if (!sku) { errs.push(`Dòng ${rn}: SKU không hợp lệ.`); ok = false; }
-          const variant = variantBySku.get(sku.toLowerCase());
-          if (sku && !variant) { errs.push(`Dòng ${rn}: SKU không thuộc kho đã chọn.`); ok = false; }
-          const qty = Number(rawQty);
-          if (!rawQty || isNaN(qty) || qty <= 0) { errs.push(`Dòng ${rn}: Số lượng phải lớn hơn 0.`); ok = false; }
-          const price = Number(rawPrice);
-          if (rawPrice === undefined || isNaN(price) || price < 0) { errs.push(`Dòng ${rn}: Đơn giá không hợp lệ.`); ok = false; }
-          if (ok) valid.push({ ...variant, quantity: qty, unitPrice: price });
-        });
-        if (valid.length === 0) { toast.error('Không có dòng hợp lệ nào trong file.'); return; }
-        if (errs.length > 0) toast.warn(`Có ${errs.length} dòng lỗi. Chỉ nhập ${valid.length} dòng hợp lệ.`);
-        else toast.success(`Đã nhập ${valid.length} sản phẩm từ Excel.`);
-        setItems((prev) => {
-          const updated = [...prev];
-          valid.forEach((p) => {
-            const idx2 = updated.findIndex((it) => it.sku === p.sku);
-            if (idx2 >= 0) {
-              if (!updated[idx2].fromPurchaseOrder) {
-                updated[idx2] = { ...updated[idx2], quantity: p.quantity, unitPrice: p.unitPrice };
-              }
-              return;
-            }
-            updated.push({ variantId: p.id, variantIds: uniqueValues(p.variantIds ?? [p.id]), sku: p.sku, productName: p.productName, variantName: p.name, quantity: p.quantity, unitPrice: p.unitPrice, salePrice: p.salePrice ?? 0, platforms: itemPlatforms(p), channelNames: uniqueValues(p.channelNames ?? [p.channelName]), mergedVariantCount: p.mergedVariantCount ?? 1, fromPurchaseOrder: false });
+        const parsed = parseExcelImportRows(rows, warehouseVariants, items);
+        if (parsed.valid.length === 0) {
+          if (parsed.errors.length > 0) downloadImportErrors(parsed.errors);
+          toast.error('Không có dòng hợp lệ trong file. Đã tải file lỗi để kiểm tra.');
+          return;
+        }
+        if (parsed.errors.length > 0) {
+          downloadImportErrors(parsed.errors);
+          toast.warn(`Có ${parsed.errors.length} dòng lỗi. Đã tải file lỗi; chỉ nhập ${parsed.valid.length} dòng hợp lệ.`);
+        } else {
+          toast.success(`Đã nhập ${parsed.valid.length} sản phẩm từ Excel.`);
+        }
+        setItems((previous) => {
+          const updated = [...previous];
+          parsed.valid.forEach((product) => {
+            updated.push({ variantId: product.id, variantIds: uniqueValues(product.variantIds ?? [product.id]), sku: product.sku, productName: product.productName, variantName: product.name, quantity: product.quantity, unitPrice: product.unitPrice, salePrice: product.salePrice ?? 0, platforms: itemPlatforms(product), channelNames: uniqueValues(product.channelNames ?? [product.channelName]), mergedVariantCount: product.mergedVariantCount ?? 1, fromPurchaseOrder: false });
           });
           return updated;
         });
+        return;
       } catch { toast.error('Không thể đọc dữ liệu từ file Excel.'); }
     };
     reader.onerror = () => toast.error('Không thể đọc dữ liệu từ file Excel.');
@@ -737,6 +913,9 @@ export default function StockReceiveCreatePage() {
                 </div>
               </div>
               <div className={styles.tableCardActions}>
+                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={onDownloadExcelTemplate} disabled={!purchaseOrderId}>
+                  <FileSpreadsheet className={styles.importIcon} /> Tải template
+                </button>
                 <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
                   <FileSpreadsheet className={styles.importIcon} /> Import Excel
                 </button>

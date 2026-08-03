@@ -514,7 +514,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         for (JsonNode skuNode : extractSkus(productNode)) {
             String externalVariantId = resolveExternalVariantId(skuNode, externalProductId, variantCount);
             ProductVariant variant = upsertVariant(
-                    channelProduct, product, skuNode, externalProductId, variantCount, initialCreate);
+                    channelProduct, product, skuNode, externalProductId, variantCount);
             if (variant == null) {
                 String warning = "Remote Lazada variant is not linked to an OSMS variant: "
                         + resolveSellerSku(skuNode);
@@ -558,8 +558,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                                          Product product,
                                          JsonNode skuNode,
                                          String externalProductId,
-                                         int index,
-                                         boolean initialCreate) {
+                                         int index) {
         String externalVariantId = resolveExternalVariantId(skuNode, externalProductId, index);
         String sellerSku = resolveSellerSku(skuNode);
         ProductVariant mappedVariant = channelProductVariantRepository
@@ -567,15 +566,6 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 .map(ChannelProductVariant::getVariant)
                 .filter(existing -> shouldReuseMappedVariant(channelProduct, existing, externalVariantId))
                 .orElse(null);
-        if (!initialCreate) {
-            if (mappedVariant != null) {
-                return mappedVariant;
-            }
-            return sellerSku != null && !sellerSku.isBlank()
-                    ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sellerSku)
-                            .orElse(null)
-                    : null;
-        }
         String localSku = resolveLocalVariantSku(channelProduct, sellerSku, externalProductId, externalVariantId);
         ProductVariant variant = mappedVariant == null
                 ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), localSku)
@@ -583,8 +573,8 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 : mappedVariant;
         variant.setProduct(product);
         variant.setSku(localSku);
-        String variantName = firstNonBlank(resolveVariantName(skuNode), product.getName());
-        variant.setName(variantName);
+        String variantName = product.getName();
+        variant.setName(product.getName());
         variant.setBarcode(firstText(skuNode, "barcode", "BarCode", "bar_code"));
         if (!shouldPreserveLocalPrice(channelProduct, externalVariantId) || variant.getPrice() == null) {
             variant.setPrice(firstDecimal(skuNode, "price", "special_price", "sale_price", "salePrice"));
