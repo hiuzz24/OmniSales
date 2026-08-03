@@ -607,7 +607,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                             .productName(item.getVariant().getProduct().getName())
                             .variantName(item.getVariant().getName()).platforms(platforms)
                             .quantity(item.getQuantity()).unitCost(item.getUnitCost())
-                            .totalCost(item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()))).build();
+                            .totalCost(item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity())))
+                            .salePrice(item.getVariant().getPrice())
+                            .build();
                 })
                 .toList();
         return PurchaseOrderResponse.builder()

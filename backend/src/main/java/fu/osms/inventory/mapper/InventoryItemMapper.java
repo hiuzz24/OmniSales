@@ -27,6 +27,8 @@ public interface InventoryItemMapper {
     @Mapping(target = "productId", source = "variant.product.id")
     @Mapping(target = "variantId", source = "variant.id")
     @Mapping(target = "variantSku", source = "variant.sku")
+    @Mapping(target = "internalVariantSku", source = "variant.sku")
+    @Mapping(target = "variantIds", ignore = true)
     @Mapping(target = "productName", source = "variant.product.name")
     @Mapping(target = "variantName", source = "variant.name")
     @Mapping(target = "unitPrice", source = "variant.price")

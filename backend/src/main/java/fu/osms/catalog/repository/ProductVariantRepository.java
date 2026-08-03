@@ -60,4 +60,16 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             "ORDER BY v.createdAt DESC")
     Page<ProductVariant> findAllActive(Pageable pageable);
 
+    @Query("SELECT v FROM ProductVariant v JOIN FETCH v.product p " +
+            "WHERE v.isActive = true AND v.deletedAt IS NULL " +
+            "AND p.deletedAt IS NULL " +
+            "AND CAST(p.status AS string) = 'ACTIVE' " +
+            "ORDER BY p.name, v.name, v.sku")
+    List<ProductVariant> findAllImportableWithProduct();
+
+    @Query("SELECT v FROM ProductVariant v JOIN FETCH v.product p " +
+            "WHERE v.id = :id AND v.isActive = true AND v.deletedAt IS NULL " +
+            "AND p.deletedAt IS NULL")
+    Optional<ProductVariant> findImportableById(@Param("id") UUID id);
+
 }

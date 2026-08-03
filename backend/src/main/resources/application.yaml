@@ -44,6 +44,9 @@ spring:
           write timeout: 5000
 
 app:
+  inventory-extra-import:
+    fuzzy-threshold: ${INVENTORY_EXTRA_IMPORT_FUZZY_THRESHOLD:0.4}
+    error-directory: ${INVENTORY_EXTRA_IMPORT_ERROR_DIRECTORY:${java.io.tmpdir}/osms/inventory-extra-import-errors}
   inventory-reconciliation:
     enabled: ${INVENTORY_RECONCILIATION_ENABLED:true}
     fixed-delay-ms: ${INVENTORY_RECONCILIATION_FIXED_DELAY_MS:5000}

@@ -44,14 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -164,7 +157,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                     }
 
                     ProductVariant variant = upsertVariant(
-                            channelProduct, product, variantNode, importedProduct.initialCreate());
+                            channelProduct, product, variantNode);
                     if (variant == null) {
                         String warning = "Remote Shopify variant is not linked to an OSMS variant: "
                                 + stringValue(variantNode.get("sku"));
@@ -235,40 +228,52 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
         }
     }
 
-    private ImportedCatalogProduct upsertProduct(Channel channel,
-                                                 Map<String, Object> productNode,
-                                                 Map<String, Object> variantNode) {
-        String externalProductId = numericId(stringValue(productNode.get("id")));
-        String productName = firstNonBlank(stringValue(productNode.get("title")), "Shopify Product " + externalProductId);
-        ChannelProduct existingMapping = channelProductRepository
+private ImportedCatalogProduct upsertProduct(Channel channel,
+                                              Map<String, Object> productNode,
+                                              Map<String, Object> variantNode) {
+    String externalProductId = numericId(stringValue(productNode.get("id")));
+    String productName = firstNonBlank(stringValue(productNode.get("title")), "Shopify Product " + externalProductId);
+    String sku = fallbackSku(externalProductId);
+
+    // Check if product with this SKU already exists in the database
+    Optional<Product> existingProductBySku = productRepository.findFirstBySkuAndDeletedAtIsNull(sku);
+    Product product = existingProductBySku.orElse(null);
+    boolean initialCreate = product == null;
+
+    // If product doesn't exist by SKU, check if there's a mapping for this external ID
+    ChannelProduct existingMapping = null;
+    if (initialCreate) {
+        existingMapping = channelProductRepository
                 .findByChannelIdAndExternalProductId(channel.getId(), externalProductId)
                 .orElse(null);
-        Product product = existingMapping == null ? null : existingMapping.getProduct();
-        boolean initialCreate = product == null;
-        if (initialCreate) {
+        if (existingMapping != null) {
+            product = existingMapping.getProduct();
+            initialCreate = false;
+        } else {
             product = Product.builder()
-                    .sku(fallbackSku(externalProductId))
+                    .sku(sku)
                     .attributes(new HashMap<>())
                     .build();
-            product.setSku(fallbackSku(externalProductId));
+            product.setSku(sku);
         }
-        boolean platformOwned = initialCreate
-                || catalogOwnershipPolicy.isPlatformOwned(existingMapping, product, externalProductId);
-        if (platformOwned) {
-            product.setName(productName);
-            product.setDescription(stringValue(productNode.get("descriptionHtml")));
-            product.setBrand(stringValue(productNode.get("vendor")));
-        }
-        if (initialCreate) {
-            product.setStatus(resolveStatus(stringValue(productNode.get("status"))));
-            product.setUnit("pcs");
-            product.setLowStockThreshold(5);
-        }
-        return new ImportedCatalogProduct(
-                productRepository.save(product),
-                initialCreate
-        );
     }
+    boolean platformOwned = initialCreate
+            || catalogOwnershipPolicy.isPlatformOwned(existingMapping, product, externalProductId);
+    if (platformOwned) {
+        product.setName(productName);
+        product.setDescription(stringValue(productNode.get("descriptionHtml")));
+        product.setBrand(stringValue(productNode.get("vendor")));
+    }
+    if (initialCreate) {
+        product.setStatus(resolveStatus(stringValue(productNode.get("status"))));
+        product.setUnit("pcs");
+        product.setLowStockThreshold(5);
+    }
+    return new ImportedCatalogProduct(
+            productRepository.save(product),
+            initialCreate
+    );
+}
 
     private ChannelProduct upsertChannelProduct(Channel channel,
                                                 Product product,
@@ -295,8 +300,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
 
     private ProductVariant upsertVariant(ChannelProduct channelProduct,
                                          Product product,
-                                         Map<String, Object> variantNode,
-                                         boolean initialCreate) {
+                                         Map<String, Object> variantNode) {
         String externalVariantId = numericId(stringValue(variantNode.get("id")));
         String externalSku = stringValue(variantNode.get("sku"));
         ProductVariant mappedVariant = channelProductVariantRepository
@@ -304,23 +308,16 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                 .map(ChannelProductVariant::getVariant)
                 .filter(existing -> shouldReuseMappedVariant(channelProduct, externalVariantId, existing))
                 .orElse(null);
-        if (!initialCreate) {
-            if (mappedVariant != null) {
-                return mappedVariant;
-            }
-            return externalSku != null && !externalSku.isBlank()
-                    ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), externalSku)
-                            .orElse(null)
-                    : null;
-        }
         String sku = resolveLocalVariantSku(channelProduct, externalSku, externalVariantId);
-        ProductVariant variant = mappedVariant == null ? new ProductVariant() : mappedVariant;
+        ProductVariant variant = mappedVariant == null
+                ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sku)
+                        .orElseGet(ProductVariant::new)
+                : mappedVariant;
         Map<String, Object> optionValues = selectedOptionValues(variantNode);
-        String optionName = joinedOptionValueName(optionValues);
         boolean preserveLocalPrice = shouldPreserveLocalPrice(channelProduct, externalVariantId);
         variant.setProduct(product);
         variant.setSku(sku);
-        variant.setName(firstNonBlank(optionName, stringValue(variantNode.get("title")), product.getName()));
+        variant.setName(product.getName());
         if (!preserveLocalPrice || variant.getPrice() == null) {
             variant.setPrice(decimalValue(variantNode.get("price")));
         }

@@ -21,4 +21,5 @@ public class PurchaseOrderItemResponse {
     private Integer quantity;
     private BigDecimal unitCost;
     private BigDecimal totalCost;
+    private BigDecimal salePrice;
 }
