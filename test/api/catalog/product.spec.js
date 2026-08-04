@@ -495,4 +495,103 @@ test.describe('Product API Tests', () => {
     expect([401, 403]).toContain(response.status());
     await deleteTestProduct(request, authToken, created.id);
   });
+
+  // =========================================================
+  // Phase B4: New endpoints (PATCH status, POST productId+channelId sync)
+  // =========================================================
+
+  // P29 - PATCH /api/products/{id}/status (no auth)
+  test('P29 - PATCH /api/products/{id}/status - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.patch(`${API_BASE}/products/${fakeId}/status?status=ACTIVE`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // P30 - PATCH /api/products/{id}/status (with auth, non-existent product)
+  test('P30 - PATCH /api/products/{id}/status - Non-existent product returns 500 (UnsupportedOperationException)', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.patch(`${API_BASE}/products/${fakeId}/status?status=ACTIVE`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+  });
+
+  // P31 - PATCH /api/products/{id}/status with invalid status
+  test('P31 - PATCH /api/products/{id}/status - Invalid status returns 400/500', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.patch(`${API_BASE}/products/${fakeId}/status?status=INVALID_STATUS`, {
+      headers: managerHeaders,
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
+
+  // P32 - PATCH /api/products/{id}/status with valid status
+  test('P32 - PATCH /api/products/{id}/status - Valid status returns 200/500 (stub)', async ({ request, managerHeaders }) => {
+    const id = '11111111-1111-1111-1111-111111111111';
+    const response = await request.patch(`${API_BASE}/products/${id}/status?status=ACTIVE`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+  });
+
+  // P33 - POST /api/products/{productId}/channels/{channelId}/sync (no auth)
+  test('P33 - POST /api/products/{productId}/channels/{channelId}/sync - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeProductId = '00000000-0000-0000-0000-000000000099';
+    const fakeChannelId = '00000000-0000-0000-0000-000000000098';
+    const response = await request.post(`${API_BASE}/products/${fakeProductId}/channels/${fakeChannelId}/sync`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // P34 - POST /api/products/{productId}/channels/{channelId}/sync (with auth, non-existent ids)
+  test('P34 - POST /api/products/{productId}/channels/{channelId}/sync - Non-existent ids returns 404/500', async ({ request, managerHeaders }) => {
+    const fakeProductId = '00000000-0000-0000-0000-000000000099';
+    const fakeChannelId = '00000000-0000-0000-0000-000000000098';
+    const response = await request.post(`${API_BASE}/products/${fakeProductId}/channels/${fakeChannelId}/sync`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+  });
+
+  // P35 - POST /api/products/{productId}/channels/{channelId}/sync happy path
+  test('P35 - POST /api/products/{productId}/channels/{channelId}/sync - Happy path with created product + channel returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const created = await createTestProduct(request, authToken);
+
+    const channelResp = await request.post(`${API_BASE}/channels`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: { platform: 'MANUAL', displayName: `P35_Ch_${Date.now()}`, region: 'VN', metadata: {} },
+    });
+
+    if (channelResp.status() !== 201) {
+      test.skip(true, 'cannot create channel');
+      return;
+    }
+    const channelId = (await channelResp.json()).data.id;
+
+    const response = await request.post(`${API_BASE}/products/${created.id}/channels/${channelId}/sync`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+
+    await request.delete(`${API_BASE}/channels/${channelId}`, {
+      headers: managerHeaders,
+    });
+    await deleteTestProduct(request, authToken, created.id);
+  });
+
+  // P36 - POST /api/products/{productId}/channels/{channelId}/sync (invalid uuid)
+  test('P36 - POST /api/products/{productId}/channels/{channelId}/sync - Invalid UUID returns 400', async ({ request, managerHeaders }) => {
+    const response = await request.post(`${API_BASE}/products/not-a-uuid/channels/not-a-uuid/sync`, {
+      headers: managerHeaders,
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
 });

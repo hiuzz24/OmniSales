@@ -1,11 +1,15 @@
 package fu.osms.sync.service.impl;
 
+import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
+import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
+import fu.osms.sync.service.InventoryAutoPushSyncLogService;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
@@ -15,7 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,18 +28,22 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MarketplaceInventoryPropagationServiceImplTest {
 
         @Mock
         private ChannelRepository channelRepository;
         @Mock
         private ChannelCredentialRepository credentialRepository;
+        @Mock
+        private ChannelProductVariantRepository channelProductVariantRepository;
         @Mock
         private MarketplaceWarehouseConsistencyService warehouseConsistencyService;
         @Mock
@@ -46,7 +55,7 @@ class MarketplaceInventoryPropagationServiceImplTest {
         @Mock
         private MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
         @Mock
-        private TransactionTemplate transactionTemplate;
+        private InventoryAutoPushSyncLogService inventoryAutoPushSyncLogService;
 
         private MarketplaceInventoryPropagationServiceImpl service;
 
@@ -55,12 +64,13 @@ class MarketplaceInventoryPropagationServiceImplTest {
                 service = new MarketplaceInventoryPropagationServiceImpl(
                                 channelRepository,
                                 credentialRepository,
+                                channelProductVariantRepository,
                                 warehouseConsistencyService,
                                 shopifyInventoryUpdateService,
                                 lazadaInventoryUpdateService,
                                 tikTokInventoryUpdateService,
                                 marketplaceStockQuantityResolver,
-                                transactionTemplate);
+                                inventoryAutoPushSyncLogService);
         }
 
         @Test
@@ -81,6 +91,18 @@ class MarketplaceInventoryPropagationServiceImplTest {
                                                 .accessToken("token")
                                                 .connectionState("CONNECTED")
                                                 .build()));
+                when(channelProductVariantRepository.findActiveByChannelIdAndVariantIdInWithVariant(
+                                any(UUID.class), anyList())).thenAnswer(invocation -> {
+                                        UUID chId = invocation.getArgument(0);
+                                        if (shopifyChannelId.equals(chId)) {
+                                                ChannelProductVariant mapping = new ChannelProductVariant();
+                                                mapping.setVariant(ProductVariant.builder().id(variantId).build());
+                                                return List.of(mapping);
+                                        }
+                                        return List.of();
+                                });
+                when(inventoryAutoPushSyncLogService.start(any(UUID.class), any(Integer.class)))
+                                .thenReturn(UUID.randomUUID());
 
                 service.pushAvailableStock(Set.of(variantId), sourceChannelId);
 

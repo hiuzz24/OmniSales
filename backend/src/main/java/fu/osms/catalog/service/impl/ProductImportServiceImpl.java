@@ -372,6 +372,8 @@ public class ProductImportServiceImpl implements ProductImportService {
             request.setStatus(ProductStatus.DRAFT);
         }
 
+        boolean hasVariants = !variants.isEmpty();
+        request.setHasVariants(hasVariants);
         request.setLowStockThreshold(5);
         request.setWeightGrams(firstPositiveWeightGrams(allRows));
         request.setAttributes(new HashMap<>());

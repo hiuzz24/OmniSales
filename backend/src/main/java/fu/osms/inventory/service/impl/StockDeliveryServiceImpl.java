@@ -24,6 +24,7 @@ import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.domain.Page;
@@ -667,18 +668,23 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
 
         // Use max-of-code (instead of count + 1) so two concurrent calls do
         // not generate the same suffix. Filter by prefix so other code
-        // schemes do not interfere.
-        Optional<InventoryIssue> latest =
-                inventoryIssueRepository.findTopByIssueCodeStartingWithOrderByIssueCodeDesc(prefix);
-        if (latest.isEmpty()) {
-            return prefix + "001";
+        // schemes do not interfere. Iterate through matching codes and pick
+        // the largest purely numeric suffix, since some legacy rows use
+        // non-numeric suffixes (e.g. `"PX-2026-3A25FCCB"`).
+        List<InventoryIssue> matches = inventoryIssueRepository
+                .findByIssueCodeStartingWithOrderByIssueCodeDesc(prefix);
+        int maxNumber = 0;
+        for (InventoryIssue issue : matches) {
+            String code = issue.getIssueCode();
+            if (code == null || code.length() <= prefix.length()) continue;
+            String suffix = code.substring(prefix.length());
+            try {
+                int n = Integer.parseInt(suffix);
+                if (n > maxNumber) maxNumber = n;
+            } catch (NumberFormatException ignore) {
+                // Skip non-numeric suffixes (e.g. UUID-tail legacy codes).
+            }
         }
-        String latestCode = latest.get().getIssueCode();
-        try {
-            int number = Integer.parseInt(latestCode.substring(prefix.length()));
-            return prefix + String.format("%03d", number + 1);
-        } catch (Exception e) {
-            return prefix + "001";
-        }
+        return prefix + String.format("%03d", maxNumber + 1);
     }
 }

@@ -10,6 +10,7 @@ import fu.osms.channel.mapper.ChannelMapper;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.service.ChannelConnectionService;
+import fu.osms.channel.service.ChannelMappingLifecycleService;
 import fu.osms.channel.service.ChannelProductQueryService;
 import fu.osms.channel.service.ChannelResponseService;
 import fu.osms.common.dto.PageResponse;
@@ -54,6 +55,8 @@ class ChannelServiceImplTest {
         @Mock
         private ChannelConnectionService connectionService;
         @Mock
+        private ChannelMappingLifecycleService mappingLifecycleService;
+        @Mock
         private ChannelProductQueryService productQueryService;
         @Mock
         private ChannelResponseService responseService;
@@ -67,6 +70,7 @@ class ChannelServiceImplTest {
                                 credentialRepository,
                                 channelMapper,
                                 connectionService,
+                                mappingLifecycleService,
                                 productQueryService,
                                 responseService);
         }
@@ -189,53 +193,72 @@ class ChannelServiceImplTest {
         @Test
         @DisplayName("create throws AppException(CHANNEL_ALREADY_EXISTS) when platform + displayName already exists")
         void create_alreadyExists() {
-                ChannelRequest req = ChannelRequest.builder()
-                                .platform(PlatformType.LAZADA)
-                                .displayName("Lazada-Existing")
-                                .build();
-                when(channelRepository.existsByPlatformAndDisplayName(PlatformType.LAZADA, "Lazada-Existing"))
-                                .thenReturn(true);
+            ChannelRequest req = ChannelRequest.builder()
+                    .platform(PlatformType.SHOPEE)
+                    .displayName("Shopee-Existing")
+                    .build();
+            when(channelRepository.findByPlatformAndDisplayName(PlatformType.SHOPEE, "Shopee-Existing"))
+                    .thenReturn(Optional.of(Channel.builder()
+                            .id(UUID.randomUUID())
+                            .platform(PlatformType.SHOPEE)
+                            .displayName("Shopee-Existing")
+                            .build()));
 
-                assertThatThrownBy(() -> service.create(req))
-                                .isInstanceOf(AppException.class)
-                                .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_ALREADY_EXISTS);
+            assertThatThrownBy(() -> service.create(req))
+                    .isInstanceOf(AppException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.CHANNEL_ALREADY_EXISTS);
 
-                verify(channelMapper, never()).toEntity(any());
-                verify(channelRepository, never()).save(any(Channel.class));
+            verify(channelMapper, never()).toEntity(any());
+            verify(channelRepository, never()).save(any(Channel.class));
+        }
+
+        @Test
+        @DisplayName("create rejects OAuth-only platforms with INVALID_REQUEST")
+        void create_oauthOnlyPlatformRejected() {
+            ChannelRequest req = ChannelRequest.builder()
+                    .platform(PlatformType.LAZADA)
+                    .displayName("Lazada-Via-Create")
+                    .build();
+
+            assertThatThrownBy(() -> service.create(req))
+                    .isInstanceOf(AppException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+
+            verify(channelRepository, never()).save(any(Channel.class));
         }
 
         @Test
         @DisplayName("create persists channel + initial CONNECTED credential and returns response")
         void create_persists() {
-                ChannelRequest req = ChannelRequest.builder()
-                                .platform(PlatformType.LAZADA)
-                                .displayName("Lazada-New")
-                                .metadata(Map.of("accountId", "acc-99"))
-                                .commissionRate(new BigDecimal("3.50"))
-                                .build();
-                Channel savedChannel = Channel.builder()
-                                .id(UUID.randomUUID())
-                                .platform(PlatformType.LAZADA)
-                                .displayName("Lazada-New")
-                                .metadata(Map.of("accountId", "acc-99"))
-                                .build();
-                ChannelResponse mappedResponse = ChannelResponse.builder().id(savedChannel.getId())
-                                .platform(PlatformType.LAZADA).build();
+            ChannelRequest req = ChannelRequest.builder()
+                    .platform(PlatformType.SHOPEE)
+                    .displayName("Shopee-New")
+                    .metadata(Map.of("accountId", "acc-99"))
+                    .commissionRate(new BigDecimal("3.50"))
+                    .build();
+            Channel savedChannel = Channel.builder()
+                    .id(UUID.randomUUID())
+                    .platform(PlatformType.SHOPEE)
+                    .displayName("Shopee-New")
+                    .metadata(Map.of("accountId", "acc-99"))
+                    .build();
+            ChannelResponse mappedResponse = ChannelResponse.builder().id(savedChannel.getId())
+                    .platform(PlatformType.SHOPEE).build();
 
-                when(channelRepository.existsByPlatformAndDisplayName(PlatformType.LAZADA, "Lazada-New"))
-                                .thenReturn(false);
-                when(channelMapper.toEntity(req)).thenReturn(Channel.builder().platform(PlatformType.LAZADA)
-                                .displayName("Lazada-New").metadata(new java.util.HashMap<>()).build());
-                when(channelRepository.save(any(Channel.class))).thenReturn(savedChannel);
-                when(responseService.toResponse(any(Channel.class))).thenReturn(mappedResponse);
+            when(channelRepository.findByPlatformAndDisplayName(PlatformType.SHOPEE, "Shopee-New"))
+                    .thenReturn(Optional.empty());
+            when(channelMapper.toEntity(req)).thenReturn(Channel.builder().platform(PlatformType.SHOPEE)
+                    .displayName("Shopee-New").metadata(new java.util.HashMap<>()).build());
+            when(channelRepository.save(any(Channel.class))).thenReturn(savedChannel);
+            when(responseService.toResponse(any(Channel.class))).thenReturn(mappedResponse);
 
-                ChannelResponse actual = service.create(req);
+            ChannelResponse actual = service.create(req);
 
-                assertThat(actual).isSameAs(mappedResponse);
-                ArgumentCaptor<ChannelCredential> credCap = ArgumentCaptor.forClass(ChannelCredential.class);
-                verify(credentialRepository).save(credCap.capture());
-                assertThat(credCap.getValue().getConnectionState()).isEqualTo("CONNECTED");
-                verify(responseService).toResponse(any(Channel.class));
+            assertThat(actual).isSameAs(mappedResponse);
+            ArgumentCaptor<ChannelCredential> credCap = ArgumentCaptor.forClass(ChannelCredential.class);
+            verify(credentialRepository).save(credCap.capture());
+            assertThat(credCap.getValue().getConnectionState()).isEqualTo("CONNECTED");
+            verify(responseService).toResponse(any(Channel.class));
         }
 
         @Test
