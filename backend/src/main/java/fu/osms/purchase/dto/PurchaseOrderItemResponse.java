@@ -19,6 +19,8 @@ public class PurchaseOrderItemResponse {
     private String variantName;
     private List<PlatformType> platforms;
     private Integer quantity;
+    private Integer actualQuantity;
+    private String surplusNote;
     private BigDecimal unitCost;
     private BigDecimal totalCost;
     private BigDecimal salePrice;

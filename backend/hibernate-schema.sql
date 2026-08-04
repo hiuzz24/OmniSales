@@ -473,7 +473,7 @@ CREATE TABLE purchase_orders (
     supplier_id           UUID NOT NULL REFERENCES suppliers(id),
     warehouse_id          UUID NOT NULL REFERENCES warehouses(id),
     status                VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
-        CHECK (status IN ('DRAFT','SENT_TO_SUPPLIER','RECEIVING','COMPLETED','CANCELLED')),
+        CHECK (status IN ('DRAFT','SENT_TO_SUPPLIER','RECEIVING','INSPECTING','INSPECTED','COMPLETED','CANCELLED')),
     order_date            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expected_receipt_date DATE NOT NULL,
     payment_method        VARCHAR(50),
@@ -482,6 +482,8 @@ CREATE TABLE purchase_orders (
     created_by            UUID REFERENCES users(id) ON DELETE SET NULL,
     sent_at               TIMESTAMPTZ,
     receiving_at          TIMESTAMPTZ,
+    inspecting_at         TIMESTAMPTZ,
+    inspected_at          TIMESTAMPTZ,
     completed_at          TIMESTAMPTZ,
     version               BIGINT NOT NULL DEFAULT 0,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -496,6 +498,8 @@ CREATE TABLE purchase_order_items (
     quantity          INT NOT NULL CHECK (quantity > 0),
     unit_cost         NUMERIC(12,2) NOT NULL CHECK (unit_cost >= 0),
     total_cost        NUMERIC(14,2) GENERATED ALWAYS AS (quantity * unit_cost) STORED,
+    actual_quantity   INTEGER DEFAULT NULL,
+    surplus_note      TEXT DEFAULT NULL,
     CONSTRAINT uq_purchase_order_variant UNIQUE (purchase_order_id, variant_id)
 );
 CREATE INDEX idx_purchase_order_items_variant ON purchase_order_items(variant_id);

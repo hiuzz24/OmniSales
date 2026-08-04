@@ -11,6 +11,7 @@ import fu.osms.common.enums.PlatformType;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
+import fu.osms.inventory.dto.request.ManualStockReceiveRequest;
 import fu.osms.inventory.dto.request.StockReceiveItemRequest;
 import fu.osms.inventory.dto.request.StockReceiveRequest;
 import fu.osms.inventory.dto.response.StockReceiveItemResponse;
@@ -84,9 +85,9 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         PurchaseOrder purchaseOrder = purchaseOrderRepository.findByIdWithDetails(request.getPurchaseOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn mua hàng."));
-        if (purchaseOrder.getStatus() != PurchaseOrderStatus.RECEIVING) {
+        if (purchaseOrder.getStatus() != PurchaseOrderStatus.INSPECTED) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
-                    "Chỉ đơn ở trạng thái Đang giao hàng mới được tạo phiếu nhập kho.");
+                    "Chỉ đơn ở trạng thái Đã kiểm tra mới được tạo phiếu nhập kho.");
         }
         if (stockReceiveRepository.existsByPurchaseOrderId(purchaseOrder.getId())) {
             throw new AppException(ErrorCode.CONFLICT, "Đơn mua hàng đã có phiếu nhập kho.");
@@ -301,6 +302,170 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     }
 
     @Override
+    @Transactional
+    public StockReceiveResponse createManualReceipt(ManualStockReceiveRequest request, UUID createdByUserId) {
+        if (request.getItems() == null || request.getItems().isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Phiếu nhập phải có ít nhất một sản phẩm.");
+        }
+
+        // Resolve warehouse from request (user explicitly picks it — no PO)
+        Warehouse warehouse = warehouseRepository.findById(request.getWarehouseId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho nhập."));
+
+        // Supplier is optional
+        Supplier supplier = request.getSupplierId() != null
+                ? supplierRepository.findById(request.getSupplierId()).orElse(null)
+                : null;
+
+        boolean isDraft = Boolean.TRUE.equals(request.getIsDraft());
+        if (!isDraft) {
+            for (StockReceiveItemRequest item : request.getItems()) {
+                if (item.getQuantity() == null || item.getQuantity() <= 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED,
+                            "Tất cả sản phẩm phải có số lượng lớn hơn 0 khi xác nhận phiếu nhập.");
+                }
+                if (item.getUnitCost() == null || item.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED,
+                            "Tất cả sản phẩm phải có đơn giá lớn hơn hoặc bằng 0 khi xác nhận phiếu nhập.");
+                }
+            }
+        } else {
+            for (StockReceiveItemRequest item : request.getItems()) {
+                if (item.getQuantity() == null) {
+                    item.setQuantity(0);
+                } else if (item.getQuantity() <= 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED, "Số lượng phải lớn hơn 0.");
+                }
+                if (item.getUnitCost() == null) {
+                    item.setUnitCost(BigDecimal.ZERO);
+                } else if (item.getUnitCost().compareTo(BigDecimal.ZERO) < 0) {
+                    throw new AppException(ErrorCode.VALIDATION_FAILED, "Đơn giá phải lớn hơn hoặc bằng 0.");
+                }
+            }
+        }
+
+        ResolvedReceiptLines resolvedLines = resolveLogicalReceiptLines(request.getItems());
+        List<StockReceiveItemRequest> itemRequests = resolvedLines.requests();
+        List<ProductVariant> variants = resolvedLines.variants();
+
+        BigDecimal totalCost = calculateGroupedReceiptTotal(itemRequests, variants);
+        String receiptCode = getNextReceiptCode();
+        var createdByUser = userRepository.findById(createdByUserId).orElse(null);
+        OffsetDateTime receivedAt = resolveDocumentTime(request.getReceivedAt());
+
+        String status = isDraft ? "DRAFT" : "CONFIRMED";
+        OffsetDateTime confirmedAt = isDraft ? null : OffsetDateTime.now();
+
+        InventoryReceipt receipt = InventoryReceipt.builder()
+                .warehouse(warehouse)
+                .supplier(supplier)
+                .purchaseOrder(null)          // manual receipt — no PO
+                .receiptCode(receiptCode)
+                .invoiceNumber(request.getInvoiceNumber() != null ? request.getInvoiceNumber() : receiptCode)
+                .status(status)
+                .confirmedAt(confirmedAt)
+                .receivedAt(receivedAt)
+                .notes(request.getNotes())
+                .createdBy(createdByUser)
+                .totalCost(totalCost)
+                .build();
+        receipt = stockReceiveRepository.save(receipt);
+
+        List<InventoryReceiptItem> savedItems = new ArrayList<>();
+        Set<UUID> changedVariantIds = new HashSet<>();
+        Set<String> appliedStockGroups = new HashSet<>();
+
+        for (int i = 0; i < itemRequests.size(); i++) {
+            StockReceiveItemRequest itemReq = itemRequests.get(i);
+            ProductVariant productVariant = variants.get(i);
+
+            InventoryReceiptItem receiptItem = InventoryReceiptItem.builder()
+                    .receipt(receipt)
+                    .variant(productVariant)
+                    .quantity(itemReq.getQuantity())
+                    .unitCost(itemReq.getUnitCost())
+                    .notes(itemReq.getNotes())
+                    .build();
+
+            if ("CONFIRMED".equals(status)) {
+                int quantity = itemReq.getQuantity();
+                BigDecimal unitCost = itemReq.getUnitCost();
+                List<ProductVariant> sharedVariants = resolveSharedStockVariants(productVariant);
+                if (appliedStockGroups.add(sharedStockGroupKey(sharedVariants))) {
+                    int sharedQtyBefore = 0;
+                    for (ProductVariant sv : sharedVariants) {
+                        sharedQtyBefore = Math.max(sharedQtyBefore,
+                                quantityOnHand(ensureInventoryItemWithLock(warehouse, sv)));
+                    }
+                    int sharedQtyAfter = sharedQtyBefore + quantity;
+                    BigDecimal avgCostBefore = resolveSharedCurrentCost(warehouse, sharedVariants, productVariant);
+                    BigDecimal avgCostAfter = calculateWeightedAverageCost(
+                            sharedQtyBefore, avgCostBefore, quantity, unitCost);
+
+                    for (ProductVariant sv : sharedVariants) {
+                        InventoryItem inventoryItem = ensureInventoryItemWithLock(warehouse, sv);
+                        int qtyBefore = quantityOnHand(inventoryItem);
+                        CostUpdateResult costUpdate = applyReceiptCostAndQuantityTarget(
+                                inventoryItem, sv, sharedQtyAfter,
+                                avgCostBefore, avgCostAfter, unitCost, createdByUser);
+                        if (sv.getId().equals(productVariant.getId())) {
+                            receiptItem.setAvgCostBefore(costUpdate.avgCostBefore());
+                            receiptItem.setAvgCostAfter(costUpdate.avgCostAfter());
+                        }
+                        changedVariantIds.add(sv.getId());
+                        inventoryTransactionRepository.save(InventoryTransaction.builder()
+                                .type(InvTxnType.IMPORT)
+                                .referenceType("RECEIPT")
+                                .referenceId(receipt.getId())
+                                .quantityChange(sharedQtyAfter - qtyBefore)
+                                .quantityBefore(qtyBefore)
+                                .quantityAfter(sharedQtyAfter)
+                                .unitCost(unitCost)
+                                .warehouse(warehouse)
+                                .variant(sv)
+                                .performedBy(createdByUser)
+                                .performedAt(OffsetDateTime.now())
+                                .note("Manual receipt")
+                                .build());
+                    }
+                }
+            }
+
+            receiptItem = stockReceiveItemRepository.save(receiptItem);
+            savedItems.add(receiptItem);
+
+            if (!"CONFIRMED".equals(status)) {
+                inventoryTransactionRepository.save(InventoryTransaction.builder()
+                        .type(InvTxnType.IMPORT)
+                        .referenceType("RECEIPT")
+                        .referenceId(receipt.getId())
+                        .quantityChange(itemReq.getQuantity())
+                        .quantityBefore(0)
+                        .quantityAfter(itemReq.getQuantity())
+                        .unitCost(itemReq.getUnitCost())
+                        .warehouse(warehouse)
+                        .variant(productVariant)
+                        .performedBy(createdByUser)
+                        .performedAt(OffsetDateTime.now())
+                        .note("DRAFT - Manual receipt - Not applied to inventory")
+                        .build());
+            }
+        }
+
+        StockReceiveResponse response = receiptMapper.toResponse(receipt);
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(savedItems);
+        response.setItems(itemResponses);
+        ReceiptGroupSummary summary = summarizeReceiptItems(savedItems);
+        response.setTotalSkuCount(summary.skuCount());
+        response.setTotalQuantity(summary.totalQuantity());
+
+        if ("CONFIRMED".equals(status)) {
+            notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
+        }
+        return enrichMarketplaceInfo(response);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public PageResponse<StockReceiveResponse> getReceipts(int page, int size) {
         Page<InventoryReceipt> receiptsPage = stockReceiveRepository
@@ -376,9 +541,10 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         PurchaseOrder purchaseOrder = purchaseOrderRepository.findByIdWithDetails(request.getPurchaseOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn mua hàng."));
-        if (purchaseOrder.getStatus() != PurchaseOrderStatus.RECEIVING) {
+        if (purchaseOrder.getStatus() != PurchaseOrderStatus.RECEIVING
+                && purchaseOrder.getStatus() != PurchaseOrderStatus.INSPECTED) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
-                    "Chỉ đơn ở trạng thái Đang giao hàng mới được dùng cho phiếu nhập kho.");
+                    "Chỉ đơn ở trạng thái Đang giao hàng hoặc Chờ nhập kho mới được dùng cho phiếu nhập kho.");
         }
         if (receipt.getPurchaseOrder() != null
                 && !receipt.getPurchaseOrder().getId().equals(purchaseOrder.getId())) {
@@ -678,11 +844,19 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     }
 
     private void validatePurchaseOrderItems(PurchaseOrder order, List<StockReceiveItemRequest> receiptItems) {
+        // Build expected quantities: use actualQuantity (inspection result) if set, else fall back to ordered quantity.
+        // When actualQuantity > quantity (surplus), the surplus is handled by a separate surplus order,
+        // so the receipt only needs to cover min(actualQuantity, quantity) = quantity for shortage,
+        // or actualQuantity capped at quantity for surplus (surplus order carries the rest).
         Map<String, Integer> ordered = new HashMap<>();
         for (PurchaseOrderItem item : order.getItems()) {
             String groupKey = sharedStockGroupKey(resolveSharedStockVariants(item.getVariant()));
-            Integer previous = ordered.putIfAbsent(groupKey, item.getQuantity());
-            if (previous != null && !Objects.equals(previous, item.getQuantity())) {
+            // Expected receipt qty = actualQuantity if inspected; if surplus use orderedQty (surplus goes to separate order)
+            int expectedQty = item.getActualQuantity() != null
+                    ? Math.min(item.getActualQuantity(), item.getQuantity())
+                    : item.getQuantity();
+            Integer previous = ordered.putIfAbsent(groupKey, expectedQty);
+            if (previous != null && !Objects.equals(previous, expectedQty)) {
                 throw new AppException(ErrorCode.VALIDATION_FAILED,
                         "Các dòng cùng SKU trong đơn mua hàng có số lượng không nhất quán.");
             }
@@ -731,7 +905,12 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                         || platform == PlatformType.LAZADA || platform == PlatformType.TIKTOK)
                 .map(Enum::name).distinct().toList();
         response.setMarketplacePlatforms(platforms);
-        response.setMarketplaceSyncAvailable(!platforms.isEmpty() && "CONFIRMED".equals(response.getStatus()));
+        // Only mark sync-available when the receipt is CONFIRMED AND has variants
+        // whose channel_product_variants.lastSyncedAt is still behind the receipt's confirmedAt/updatedAt.
+        boolean hasPendingSync = "CONFIRMED".equals(response.getStatus())
+                && !platforms.isEmpty()
+                && stockReceiveRepository.countPendingMarketplaceSyncVariantsByReceiptId(response.getId()) > 0;
+        response.setMarketplaceSyncAvailable(hasPendingSync);
         return response;
     }
 

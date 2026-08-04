@@ -16,7 +16,6 @@ import {
   Box,
   FileText,
   PackagePlus,
-  ArrowRightLeft,
   Warehouse,
   PackageMinus
 } from 'lucide-react';
@@ -660,14 +659,6 @@ const InventoryPage = () => {
       >
         <PackageMinus className={styles.exportIcon} />
         Xuất kho
-      </button>
-      <button
-        className={`${styles.actionBtn} ${styles.transferBtn}`}
-        id="btn-stock-transfer"
-        onClick={() => navigate(ROUTES.STOCK_TRANSFER)}
-      >
-        <ArrowRightLeft className={styles.transferIcon} />
-        Chuyển kho
       </button>
       <button
         className={`${styles.actionBtn} ${styles.primaryBtn}`}

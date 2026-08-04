@@ -23,6 +23,7 @@ import fu.osms.purchase.dto.*;
 import fu.osms.purchase.entity.PurchaseOrder;
 import fu.osms.purchase.entity.PurchaseOrderItem;
 import fu.osms.purchase.enums.PurchaseOrderStatus;
+import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.purchase.repository.PurchaseOrderRepository;
 import fu.osms.purchase.service.PurchaseOrderService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
@@ -50,6 +51,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
     private final SupplierRepository supplierRepository;
     private final ProductVariantRepository variantRepository;
     private final InventoryItemRepository inventoryItemRepository;
@@ -110,8 +112,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional
     public PurchaseOrderResponse cancel(UUID id) {
         PurchaseOrder order = requireOrder(id);
-        if (order.getStatus() == PurchaseOrderStatus.COMPLETED || order.getReceipt() != null) {
-            throw new AppException(ErrorCode.INVALID_REQUEST, "Không thể hủy đơn mua hàng đã có phiếu nhập kho.");
+        if (order.getStatus() == PurchaseOrderStatus.COMPLETED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Không thể hủy đơn mua hàng đã hoàn thành.");
+        }
+        if (order.getStatus() == PurchaseOrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Đơn mua hàng đã được hủy trước đó.");
         }
         order.setStatus(PurchaseOrderStatus.CANCELLED);
         return toResponse(purchaseOrderRepository.save(order));
@@ -195,31 +200,96 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     @Transactional
+    public PurchaseOrderResponse confirmReceiving(UUID id) {
+        PurchaseOrder order = requireOrder(id);
+        requireStatus(order, PurchaseOrderStatus.SENT_TO_SUPPLIER,
+                "Chỉ đơn ở trạng thái Đã gửi NCC mới có thể xác nhận nhận hàng.");
+        order.setStatus(PurchaseOrderStatus.RECEIVING);
+        order.setReceivingAt(OffsetDateTime.now());
+        PurchaseOrder saved = purchaseOrderRepository.save(order);
+        notifyOperations(saved);
+        return toResponse(saved);
+    }
+
+    @Transactional
     public int moveSentOrdersToReceiving() {
-        OffsetDateTime cutoff = OffsetDateTime.now().minusSeconds(SUPPLIER_SEND_DELAY_SECONDS);
-        List<PurchaseOrder> orders = purchaseOrderRepository
-                .findByStatusAndSentAtLessThanEqual(PurchaseOrderStatus.SENT_TO_SUPPLIER, cutoff);
-        OffsetDateTime now = OffsetDateTime.now();
-        for (PurchaseOrder order : orders) {
-            order.setStatus(PurchaseOrderStatus.RECEIVING);
-            order.setReceivingAt(now);
-        }
-        purchaseOrderRepository.saveAll(orders);
-        for (PurchaseOrder order : orders) {
-            notifyOperations(order);
-        }
-        return orders.size();
+        // Retained for interface compatibility — no longer called automatically.
+        return 0;
     }
 
     @Override
     @Transactional
     public void completeFromReceipt(UUID purchaseOrderId) {
         PurchaseOrder order = requireOrder(purchaseOrderId);
-        requireStatus(order, PurchaseOrderStatus.RECEIVING,
-                "Đơn mua hàng phải ở trạng thái Đang giao hàng trước khi hoàn thành phiếu nhập.");
+        // Accept both RECEIVING and INSPECTED → COMPLETED
+        if (order.getStatus() != PurchaseOrderStatus.RECEIVING
+                && order.getStatus() != PurchaseOrderStatus.INSPECTED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Đơn mua hàng phải ở trạng thái Đang giao hàng hoặc Đã kiểm tra trước khi hoàn thành phiếu nhập.");
+        }
+
+        // Auto-create surplus order BEFORE completing, while status is still INSPECTED
+        boolean hasPendingSurplus = order.getItems().stream()
+                .anyMatch(item -> item.getActualQuantity() != null
+                        && item.getActualQuantity() > item.getQuantity());
+        if (hasPendingSurplus) {
+            try {
+                createSurplusOrderInternal(order);
+            } catch (Exception ignored) {
+                // Surplus may already have been split — safe to ignore
+            }
+        }
+
         order.setStatus(PurchaseOrderStatus.COMPLETED);
         order.setCompletedAt(OffsetDateTime.now());
         purchaseOrderRepository.save(order);
+    }
+
+    // ── Inspection ────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public PurchaseOrderResponse saveInspection(UUID id, List<InspectionItemRequest> items) {
+        PurchaseOrder order = requireOrder(id);
+        if (order.getStatus() != PurchaseOrderStatus.RECEIVING
+                && order.getStatus() != PurchaseOrderStatus.INSPECTING) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ đơn ở trạng thái Đang giao hàng hoặc Đang kiểm tra mới có thể lưu kiểm tra.");
+        }
+        applyInspectionItems(order, items);
+        if (order.getStatus() == PurchaseOrderStatus.RECEIVING) {
+            order.setStatus(PurchaseOrderStatus.INSPECTING);
+            order.setInspectingAt(OffsetDateTime.now());
+        }
+        return toResponse(purchaseOrderRepository.save(order));
+    }
+
+    @Override
+    @Transactional
+    public PurchaseOrderResponse completeInspection(UUID id, List<InspectionItemRequest> items) {
+        PurchaseOrder order = requireOrder(id);
+        if (order.getStatus() != PurchaseOrderStatus.RECEIVING
+                && order.getStatus() != PurchaseOrderStatus.INSPECTING) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ đơn ở trạng thái Đang giao hàng hoặc Đang kiểm tra mới có thể hoàn thành kiểm tra.");
+        }
+        applyInspectionItems(order, items);
+        order.setStatus(PurchaseOrderStatus.INSPECTED);
+        order.setInspectedAt(OffsetDateTime.now());
+        return toResponse(purchaseOrderRepository.save(order));
+    }
+
+    private void applyInspectionItems(PurchaseOrder order, List<InspectionItemRequest> requests) {
+        if (requests == null || requests.isEmpty()) return;
+        Map<UUID, PurchaseOrderItem> itemsByVariantId = order.getItems().stream()
+                .collect(Collectors.toMap(i -> i.getVariant().getId(), Function.identity()));
+        for (InspectionItemRequest req : requests) {
+            PurchaseOrderItem item = itemsByVariantId.get(req.getVariantId());
+            if (item == null) continue;
+            item.setActualQuantity(req.getActualQuantity());
+            item.setSurplusNote(req.getSurplusNote());
+            purchaseOrderItemRepository.save(item);
+        }
     }
 
     private void replaceItems(PurchaseOrder order, List<PurchaseOrderItemRequest> requests) {
@@ -342,6 +412,69 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     .orElse(fallback);
         }
         return fallback;
+    }
+
+    @Override
+    @Transactional
+    public PurchaseOrderResponse createSurplusOrder(UUID originalOrderId) {
+        PurchaseOrder original = requireOrder(originalOrderId);
+        if (original.getStatus() != PurchaseOrderStatus.INSPECTED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ đơn ở trạng thái Chờ nhập kho mới có thể tạo đơn thặng dư.");
+        }
+        return toResponse(createSurplusOrderInternal(original));
+    }
+
+    private PurchaseOrder createSurplusOrderInternal(PurchaseOrder original) {
+        List<PurchaseOrderItem> surplusItems = original.getItems().stream()
+                .filter(item -> item.getActualQuantity() != null
+                        && item.getActualQuantity() > item.getQuantity())
+                .toList();
+        if (surplusItems.isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Không có sản phẩm thặng dư trong đơn này.");
+        }
+        PurchaseOrder surplus = PurchaseOrder.builder()
+                .orderCode(generateOrderCode())
+                .supplier(original.getSupplier())
+                .warehouse(original.getWarehouse())
+                .status(PurchaseOrderStatus.INSPECTED)
+                .orderDate(OffsetDateTime.now())
+                .expectedReceiptDate(LocalDate.now())
+                .paymentMethod(original.getPaymentMethod())
+                .notes("[Thặng dư] Tách từ đơn " + original.getOrderCode()
+                        + ". Số lượng thực nhận vượt số lượng đặt.")
+                .createdBy(original.getCreatedBy())
+                .sentAt(OffsetDateTime.now())
+                .receivingAt(OffsetDateTime.now())
+                .inspectingAt(OffsetDateTime.now())
+                .inspectedAt(OffsetDateTime.now())
+                .build();
+        BigDecimal total = BigDecimal.ZERO;
+        for (PurchaseOrderItem orig : surplusItems) {
+            int surplusQty = orig.getActualQuantity() - orig.getQuantity();
+            PurchaseOrderItem newItem = PurchaseOrderItem.builder()
+                    .variant(orig.getVariant())
+                    .quantity(surplusQty)
+                    .actualQuantity(surplusQty)
+                    .unitCost(orig.getUnitCost())
+                    .surplusNote("Thặng dư từ đơn " + original.getOrderCode())
+                    .build();
+            surplus.addItem(newItem);
+            total = total.add(orig.getUnitCost().multiply(BigDecimal.valueOf(surplusQty)));
+        }
+        surplus.setTotalAmount(total);
+        PurchaseOrder saved = purchaseOrderRepository.save(surplus);
+
+        // Cap actualQuantity on original order's surplus items to quantity
+        for (PurchaseOrderItem orig : surplusItems) {
+            orig.setActualQuantity(orig.getQuantity());
+            orig.setSurplusNote(orig.getSurplusNote() != null
+                    ? orig.getSurplusNote() + " — đã tách sang đơn thặng dư"
+                    : "Đã tách thặng dư sang đơn riêng");
+        }
+        purchaseOrderRepository.save(original);
+        return saved;
     }
 
     private Supplier resolveSupplier(UUID id) {
@@ -606,7 +739,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                             .sku(marketplaceSku).marketplaceSku(marketplaceSku)
                             .productName(item.getVariant().getProduct().getName())
                             .variantName(item.getVariant().getName()).platforms(platforms)
-                            .quantity(item.getQuantity()).unitCost(item.getUnitCost())
+                            .quantity(item.getQuantity())
+                            .actualQuantity(item.getActualQuantity())
+                            .surplusNote(item.getSurplusNote())
+                            .unitCost(item.getUnitCost())
                             .totalCost(item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity())))
                             .salePrice(item.getVariant().getPrice())
                             .build();
@@ -616,6 +752,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 .id(order.getId()).orderCode(order.getOrderCode())
                 .supplierId(order.getSupplier().getId()).supplierName(order.getSupplier().getName())
                 .warehouseId(order.getWarehouse().getId()).warehouseName(order.getWarehouse().getName())
+                .warehouseAddress(order.getWarehouse().getAddress())
                 .status(order.getStatus()).orderDate(order.getOrderDate())
                 .expectedReceiptDate(order.getExpectedReceiptDate()).paymentMethod(order.getPaymentMethod())
                 .totalAmount(order.getTotalAmount()).notes(order.getNotes())
@@ -623,8 +760,15 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 .createdByName(order.getCreatedBy() == null ? null : order.getCreatedBy().getFullName())
                 .receiptId(order.getReceipt() == null ? null : order.getReceipt().getId())
                 .receiptCode(order.getReceipt() == null ? null : order.getReceipt().getReceiptCode())
-                .sentAt(order.getSentAt()).receivingAt(order.getReceivingAt()).completedAt(order.getCompletedAt())
-                .createdAt(order.getCreatedAt()).updatedAt(order.getUpdatedAt()).items(items).build();
+                .sentAt(order.getSentAt()).receivingAt(order.getReceivingAt())
+                .inspectingAt(order.getInspectingAt()).inspectedAt(order.getInspectedAt())
+                .completedAt(order.getCompletedAt())
+                .createdAt(order.getCreatedAt()).updatedAt(order.getUpdatedAt()).items(items)
+                .hasSurplus(items.stream().anyMatch(item ->
+                        item.getActualQuantity() != null && item.getActualQuantity() > item.getQuantity()))
+                .hasNote(items.stream().anyMatch(item ->
+                        item.getSurplusNote() != null && !item.getSurplusNote().isBlank()))
+                .build();
     }
 
     private record PurchaseLineTerms(Integer quantity, BigDecimal unitCost) {

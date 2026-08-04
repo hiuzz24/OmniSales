@@ -18,6 +18,7 @@ public class SupplierResponse {
     private String name;
     private String contactName;
     private String phone;
+    private String taxCode;
     private String email;
     private String address;
     private Boolean isActive;

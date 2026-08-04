@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock3, PackageCheck, Plus, Search, ShoppingBag, Truck } from 'lucide-react';
+import { ClipboardCheck, Clock3, PackageCheck, Plus, Search, ShoppingBag, Truck, FileEdit, ClipboardList, XCircle } from 'lucide-react';
 import purchaseOrderApi from '../../api/purchaseOrderApi';
 import { ROUTES } from '../../app/router/routes';
 import { ROLES } from '../auth/constants/roles';
@@ -11,18 +11,22 @@ const STATUS = {
   DRAFT: { label: 'Nháp', className: styles.draft },
   SENT_TO_SUPPLIER: { label: 'Đã gửi NCC', className: styles.sent },
   RECEIVING: { label: 'Đang giao hàng', className: styles.receiving },
+  INSPECTING: { label: 'Đang kiểm tra', className: styles.inspecting },
+  INSPECTED: { label: 'Đã kiểm tra', className: styles.inspected },
   COMPLETED: { label: 'Hoàn thành', className: styles.completed },
   CANCELLED: { label: 'Đã hủy', className: styles.cancelled },
 };
 
-const money = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value ?? 0);
-const dateTime = (value) => value ? new Date(value).toLocaleString('vi-VN', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-}) : '—';
+const money = (value) =>
+  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value ?? 0);
+
+const dateTime = (value) =>
+  value
+    ? new Date(value).toLocaleString('vi-VN', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    : '—';
 
 export default function PurchaseOrderPage() {
   const navigate = useNavigate();
@@ -33,7 +37,7 @@ export default function PurchaseOrderPage() {
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const canCreate = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
-  const canReceive = [ROLES.OPERATIONS, ROLES.OWNER].includes(user?.role);
+  const canInspect = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
 
   const load = useCallback(async () => {
     try {
@@ -54,66 +58,228 @@ export default function PurchaseOrderPage() {
     return () => window.clearInterval(id);
   }, [load]);
 
-  const filtered = useMemo(() => orders.filter((order) => {
-    const q = keyword.trim().toLowerCase();
-    const matchesKeyword = !q || [order.orderCode, order.supplierName, order.warehouseName]
-      .some((value) => String(value ?? '').toLowerCase().includes(q));
-    return matchesKeyword && (!status || order.status === status);
-  }), [orders, keyword, status]);
+  const filtered = useMemo(
+    () =>
+      orders.filter((order) => {
+        const q = keyword.trim().toLowerCase();
+        const matchesKeyword =
+          !q ||
+          [order.orderCode, order.supplierName, order.warehouseName].some((v) =>
+            String(v ?? '').toLowerCase().includes(q),
+          );
+        return matchesKeyword && (!status || order.status === status);
+      }),
+    [orders, keyword, status],
+  );
 
   const cards = [
-    { label: 'Tổng đơn', value: statistics.totalCount ?? 0, icon: ShoppingBag },
-    { label: 'Đã gửi NCC', value: statistics.SENT_TO_SUPPLIER ?? 0, icon: Clock3 },
-    { label: 'Đang giao hàng', value: statistics.RECEIVING ?? 0, icon: Truck },
-    { label: 'Hoàn thành', value: statistics.COMPLETED ?? 0, icon: PackageCheck },
+    { label: 'Tổng đơn',       value: statistics.totalCount        ?? 0, icon: ShoppingBag,   key: '' },
+    { label: 'Nháp',           value: statistics.DRAFT              ?? 0, icon: FileEdit,       key: 'DRAFT' },
+    { label: 'Đã gửi NCC',     value: statistics.SENT_TO_SUPPLIER   ?? 0, icon: Clock3,         key: 'SENT_TO_SUPPLIER' },
+    { label: 'Đang giao hàng', value: statistics.RECEIVING          ?? 0, icon: Truck,          key: 'RECEIVING' },
+    { label: 'Đang kiểm tra',  value: statistics.INSPECTING         ?? 0, icon: ClipboardCheck, key: 'INSPECTING' },
+    { label: 'Đã kiểm tra',    value: statistics.INSPECTED          ?? 0, icon: ClipboardList,  key: 'INSPECTED' },
+    { label: 'Hoàn thành',     value: statistics.COMPLETED          ?? 0, icon: PackageCheck,   key: 'COMPLETED' },
+    { label: 'Đã hủy',         value: statistics.CANCELLED          ?? 0, icon: XCircle,        key: 'CANCELLED' },
   ];
+
+  const goToDetail = (id) =>
+    navigate(ROUTES.PURCHASE_ORDER_DETAIL.replace(':id', id));
+
+  const goToInspect = (id) =>
+    navigate(`${ROUTES.PURCHASE_ORDER_DETAIL.replace(':id', id)}?inspect=true`);
 
   return (
     <main className={`${styles.page} product-workspace`}>
       <div className={styles.header}>
         <div className={styles.titleGroup}>
           <div className={styles.iconBox}><ShoppingBag size={22} /></div>
-          <div><h1 className={styles.title}>Đơn mua hàng</h1><p className={styles.subtitle}>Quản lý đơn đặt hàng từ nhà cung cấp</p></div>
+          <div>
+            <h1 className={styles.title}>Đơn mua hàng</h1>
+            <p className={styles.subtitle}>Quản lý đơn đặt hàng từ nhà cung cấp</p>
+          </div>
         </div>
-        {canCreate && <button className={styles.primaryButton} onClick={() => navigate(ROUTES.PURCHASE_ORDER_CREATE)}><Plus size={18} /> Tạo đơn mua hàng</button>}
+        {canCreate && (
+          <button className={styles.primaryButton} onClick={() => navigate(ROUTES.PURCHASE_ORDER_CREATE)}>
+            <Plus size={18} /> Tạo đơn mua hàng
+          </button>
+        )}
       </div>
 
-      <section className={styles.stats} aria-label="Thống kê đơn mua hàng">
-        {cards.map(({ label, value, icon: Icon }) => <article className={styles.stat} key={label}><span className={styles.statLabel}>{label}</span><span className={styles.statValue}>{value}</span><Icon size={18} aria-hidden="true" /></article>)}
+      <section className={styles.stats} aria-label="Thống kê đơn mua hàng" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+        {cards.map(({ label, value, icon: Icon, key }) => {
+          const isActive = status === key;
+          return (
+            <article
+              key={label}
+              className={styles.stat}
+              onClick={() => setStatus(isActive ? '' : key)}
+              role="button"
+              tabIndex={0}
+              aria-pressed={isActive}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setStatus(isActive ? '' : key)}
+              style={{
+                cursor: 'pointer',
+                outline: isActive ? '2px solid #2563eb' : undefined,
+                outlineOffset: isActive ? '2px' : undefined,
+                background: isActive ? 'linear-gradient(135deg,#eff6ff,#f0fdfa)' : undefined,
+                transition: 'outline 120ms ease, background 120ms ease',
+              }}
+            >
+              <span className={styles.statLabel}>{label}</span>
+              <span className={styles.statValue}>{value}</span>
+              <Icon size={18} aria-hidden="true" />
+            </article>
+          );
+        })}
       </section>
 
-      <div className={styles.toolbar}>
-        <div className={styles.searchWrap}><Search size={18} /><input className={styles.input} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm theo mã đơn, nhà cung cấp..." aria-label="Tìm đơn mua hàng" /></div>
-        <select className={styles.select} value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Lọc trạng thái">
-          <option value="">Tất cả trạng thái</option>
-          {Object.entries(STATUS).map(([value, item]) => <option value={value} key={value}>{item.label}</option>)}
-        </select>
+      <div className={styles.toolbar} style={{ gridTemplateColumns: '1fr' }}>
+        <div className={styles.searchWrap}>
+          <Search size={18} />
+          <input
+            className={styles.input}
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="Tìm theo mã đơn, nhà cung cấp..."
+            aria-label="Tìm đơn mua hàng"
+          />
+        </div>
       </div>
 
       <section className={styles.tableCard}>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
-            <thead><tr><th>Mã đơn</th><th>Nhà cung cấp</th><th>Kho nhập</th><th>Thời gian mua</th><th>Thời gian nhập</th><th className={styles.money}>Tổng tiền</th><th>Phiếu nhập</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead>
+            <thead>
+              <tr>
+                <th>Mã đơn</th>
+                <th>Nhà cung cấp</th>
+                <th>Kho nhập</th>
+                <th>Thời gian mua</th>
+                <th>Thời gian nhập</th>
+                <th className={styles.money}>Tổng tiền</th>
+                <th>Phiếu nhập</th>
+                <th>Trạng thái</th>
+                <th>Ghi chú</th>
+                <th aria-label="Thao tác" />
+              </tr>
+            </thead>
             <tbody>
-              {!loading && filtered.map((order) => { console.log(order);
-                const config = STATUS[order.status] ?? STATUS.DRAFT;
-                return <tr key={order.id}>
-                  <td><span className={styles.code}>{order.orderCode}</span></td>
-                  <td>{order.supplierName}</td><td>{order.warehouseName}</td><td>{dateTime(order.orderDate)}</td><td>{dateTime(order.completedAt)}</td>
-                  <td className={styles.money}><strong>{money(order.totalAmount)}</strong></td>
-                  <td>{order.receiptCode ? <span className={styles.code}>{order.receiptCode}</span> : '—'}</td>
-                  <td><span className={`${styles.badge} ${config.className}`}>{config.label}</span></td>
-                  <td><div className={styles.actions}>
-                    {canReceive && order.status === 'RECEIVING' && !order.receiptId && <button className={styles.actionButton} onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}>Tạo phiếu nhập</button>}
-                    {canCreate && order.status === 'DRAFT' && <button className={styles.actionButton} onClick={async () => { await purchaseOrderApi.send(order.id); await load(); }}>Gửi NCC</button>}
-                  </div></td>
-                </tr>;
-              })}
+              {!loading &&
+                filtered.map((order) => {
+                  const config = STATUS[order.status] ?? STATUS.DRAFT;
+                  return (
+                    <tr key={order.id}>
+                      <td>
+                        <button
+                          className={styles.codeLink}
+                          onClick={() => goToDetail(order.id)}
+                        >
+                          {order.orderCode}
+                        </button>
+                      </td>
+                      <td>{order.supplierName}</td>
+                      <td>{order.warehouseName}</td>
+                      <td>{dateTime(order.orderDate)}</td>
+                      <td>{dateTime(order.completedAt)}</td>
+                      <td className={styles.money}>
+                        <strong>{money(order.totalAmount)}</strong>
+                      </td>
+                      <td>
+                        {order.receiptCode ? (
+                          <span className={styles.code}>{order.receiptCode}</span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td>
+                        <span className={`${styles.badge} ${config.className}`}>
+                          {config.label}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: 180 }}>
+                        {order.items?.some((item) => item?.surplusNote) ? (
+                          <span style={{ fontSize: 11, color: '#d97706' }} title={order.items.filter((i) => i?.surplusNote).map((i) => `${i.productName}: ${i.surplusNote}`).join('\n')}>
+                            ⚠ Có ghi chú thừa/thiếu
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, color: '#cbd5e1' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className={styles.actions}>
+                          {canCreate && order.status === 'DRAFT' && (
+                            <button className={styles.actionButton}
+                              onClick={async () => { await purchaseOrderApi.send(order.id); await load(); }}>
+                              Gửi NCC
+                            </button>
+                          )}
+                          {(canCreate || canInspect) && order.status === 'SENT_TO_SUPPLIER' && (
+                            <button className={styles.actionButton}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0369a1', borderColor: '#bae6fd' }}
+                              onClick={async () => { await purchaseOrderApi.confirmReceiving(order.id); await load(); }}>
+                              <Truck size={13} /> Xác nhận nhận hàng
+                            </button>
+                          )}
+                          {canInspect && (order.status === 'RECEIVING' || order.status === 'INSPECTING') && (
+                            <button className={styles.actionButton}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#7c3aed', borderColor: '#ddd6fe' }}
+                              onClick={() => goToInspect(order.id)}>
+                              <ClipboardCheck size={13} /> Kiểm tra
+                            </button>
+                          )}
+                          {(canInspect || canCreate) && order.status === 'INSPECTED' && !order.receiptId && (
+                            <>
+                              <button className={styles.actionButton}
+                                onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}>
+                                Tạo phiếu nhập
+                              </button>
+                              {order.hasSurplus && (
+                                <button className={styles.actionButton}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#7c3aed', borderColor: '#ddd6fe' }}
+                                  onClick={async () => {
+                                    try {
+                                      await purchaseOrderApi.createSurplusOrder(order.id);
+                                      await load();
+                                    } catch (e) {
+                                      alert(e?.response?.data?.message || 'Không thể tạo đơn thặng dư.');
+                                    }
+                                  }}>
+                                  Tạo đơn thặng dư
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {(canCreate || canInspect) && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
+                            <button className={styles.actionButton}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b91c1c', borderColor: '#fecaca' }}
+                              onClick={async () => {
+                                if (!window.confirm(`Hủy đơn ${order.orderCode}? Thao tác này không thể hoàn tác.`)) return;
+                                try {
+                                  await purchaseOrderApi.cancel(order.id);
+                                  await load();
+                                } catch (e) {
+                                  alert(e?.response?.data?.message || 'Không thể hủy đơn.');
+                                }
+                              }}>
+                              Hủy đơn
+                            </button>
+                          )}
+                          <button className={styles.actionButton} onClick={() => goToDetail(order.id)}>
+                            Xem
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
         {loading && <div className={styles.empty}>Đang tải đơn mua hàng...</div>}
-        {!loading && filtered.length === 0 && <div className={styles.empty}>Chưa có đơn mua hàng phù hợp.</div>}
+        {!loading && filtered.length === 0 && (
+          <div className={styles.empty}>Chưa có đơn mua hàng phù hợp.</div>
+        )}
       </section>
     </main>
   );

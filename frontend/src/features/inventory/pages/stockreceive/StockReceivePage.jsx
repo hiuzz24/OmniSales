@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Save,
   Undo2,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import stockReceiveService from '../../services/stockReceiveService';
@@ -312,22 +313,36 @@ export default function StockReceivePage() {
     { key: 'cancelled', label: 'Trả hàng', value: statistics.cancelledCount, icon: Undo2, color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
   ];
 
-  const rows = filteredReceipts.map((receipt) => (
-    <tr key={receipt.id ?? receipt.receiptCode}>
-      <td style={{ ...tableCellStyle, color: '#2563eb', fontFamily: 'monospace', fontWeight: 700 }}>{receipt.receiptCode ?? '-'}</td>
-      <td style={tableCellStyle}>{receipt.warehouseName ?? '-'}</td>
-      <td style={{ ...tableCellStyle, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{receipt.supplierName ?? '-'}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(receipt.totalSkuCount ?? 0)}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatNumber(receipt.totalQuantity ?? 0)}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatVND(receipt.totalCost)}</td>
-      <td style={tableCellStyle}><StatusBadge status={receipt.status} /></td>
-      <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
-      <td style={tableCellStyle}>{formatDateTime(receipt.createdAt)}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right' }}>
-        <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} onPrint={handlePrintReceipt} />
-      </td>
-    </tr>
-  ));
+  const rows = filteredReceipts.map((receipt) => {
+    const needsSync = receipt.status === 'CONFIRMED' && receipt.marketplaceSyncAvailable === true;
+    const rowStyle = needsSync ? { backgroundColor: '#fffbeb' } : {};
+    return (
+      <tr key={receipt.id ?? receipt.receiptCode} style={rowStyle}>
+        <td style={{ ...tableCellStyle, color: '#2563eb', fontFamily: 'monospace', fontWeight: 700 }}>
+          {receipt.receiptCode ?? '-'}
+          {needsSync && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
+              <AlertTriangle size={11} color="#d97706" />
+              <span style={{ fontSize: 10.5, color: '#d97706', fontWeight: 600, fontFamily: 'inherit' }}>
+                Chưa đồng bộ lên sàn
+              </span>
+            </div>
+          )}
+        </td>
+        <td style={tableCellStyle}>{receipt.warehouseName ?? '-'}</td>
+        <td style={{ ...tableCellStyle, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{receipt.supplierName ?? '-'}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(receipt.totalSkuCount ?? 0)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatNumber(receipt.totalQuantity ?? 0)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatVND(receipt.totalCost)}</td>
+        <td style={tableCellStyle}><StatusBadge status={receipt.status} /></td>
+        <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
+        <td style={tableCellStyle}>{formatDateTime(receipt.createdAt)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}>
+          <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} onPrint={handlePrintReceipt} />
+        </td>
+      </tr>
+    );
+  });
 
   const totalPages = Math.max(1, pagination.totalPages);
   const firstVisible = pagination.totalElements === 0 ? 0 : pagination.page * pagination.size + 1;
@@ -350,17 +365,11 @@ export default function StockReceivePage() {
             onClick={handleSyncMarketplaceInventory}
             disabled={syncingMarketplace}
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              height: 40,
-              padding: '0 14px',
-              border: '1px solid #bfdbfe',
-              borderRadius: 12,
+              display: 'inline-flex', alignItems: 'center', gap: 8, height: 40,
+              padding: '0 14px', border: '1px solid #bfdbfe', borderRadius: 12,
               background: syncingMarketplace ? '#eff6ff' : '#2563eb',
               color: syncingMarketplace ? '#1d4ed8' : '#ffffff',
-              fontSize: 13,
-              fontWeight: 700,
+              fontSize: 13, fontWeight: 700,
               cursor: syncingMarketplace ? 'not-allowed' : 'pointer',
               boxShadow: syncingMarketplace ? 'none' : '0 8px 18px rgba(37, 99, 235, 0.22)',
             }}

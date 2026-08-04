@@ -10,41 +10,29 @@ import warehouseService from '../../services/warehouseService';
 import supplierService from '../../services/supplierService';
 import stockReceiveService from '../../services/stockReceiveService';
 import inventoryApi from '../../../../api/inventoryApi';
-import purchaseOrderApi from '../../../../api/purchaseOrderApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
 import styles from '../CreatePage.module.css';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers (same as StockReceiveCreatePage) ──────────────────────────────────
 const formatVND = (v) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v ?? 0);
 const getResponseData = (response) => response?.data?.data ?? response?.data ?? response ?? {};
-const PLATFORM_LABELS = {
-  LAZADA: 'Lazada',
-  SHOPIFY: 'Shopify',
-  TIKTOK: 'TikTok Shop',
-};
+const PLATFORM_LABELS = { LAZADA: 'Lazada', SHOPIFY: 'Shopify', TIKTOK: 'TikTok Shop' };
 const PLATFORM_KEYS = Object.keys(PLATFORM_LABELS);
 const PLATFORM_BADGE_STYLES = {
   LAZADA: { backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe' },
   SHOPIFY: { backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' },
   TIKTOK: { backgroundColor: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1' },
-  LOCAL: { backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
+  LOCAL:   { backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
 };
 const platformBadgeBaseStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  minHeight: 20,
-  padding: '2px 7px',
-  borderRadius: 6,
-  border: '1px solid transparent',
-  fontSize: 11,
-  fontWeight: 700,
-  lineHeight: 1.2,
-  whiteSpace: 'nowrap',
+  display: 'inline-flex', alignItems: 'center', minHeight: 20, padding: '2px 7px',
+  borderRadius: 6, border: '1px solid transparent', fontSize: 11, fontWeight: 700,
+  lineHeight: 1.2, whiteSpace: 'nowrap',
 };
-
 const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
+const normalizeImportKey = (value) => String(value ?? '').trim().toLocaleLowerCase('vi-VN');
 
 const normalizePlatform = (value) => {
   const text = String(value ?? '').trim().toUpperCase();
@@ -54,7 +42,6 @@ const normalizePlatform = (value) => {
   if (text.includes('TIKTOK')) return 'TIKTOK';
   return PLATFORM_KEYS.includes(text) ? text : null;
 };
-
 const extractPlatforms = (value) => {
   if (Array.isArray(value)) return value.flatMap(extractPlatforms);
   const text = String(value ?? '').trim().toUpperCase();
@@ -66,35 +53,17 @@ const extractPlatforms = (value) => {
   const normalized = normalizePlatform(text);
   return matches.length > 0 ? matches : (normalized ? [normalized] : []);
 };
-
-const itemPlatforms = (item) => {
-  return uniqueValues([
-    ...extractPlatforms(item?.platforms),
-    ...extractPlatforms(item?.platform),
-    ...extractPlatforms(item?.channelPlatform),
-    ...extractPlatforms(item?.salesChannelPlatform),
-    ...extractPlatforms(item?.channel?.platform),
-    ...extractPlatforms(item?.channelName),
-    ...extractPlatforms(item?.channelNames),
-  ]);
-};
-
-const formatPlatforms = (item) => {
-  const platforms = itemPlatforms(item);
-  return platforms.length === 0 ? 'Ứng dụng' : platforms.map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
-};
-
+const itemPlatforms = (item) => uniqueValues([
+  ...extractPlatforms(item?.platforms), ...extractPlatforms(item?.platform),
+  ...extractPlatforms(item?.channelPlatform), ...extractPlatforms(item?.salesChannelPlatform),
+  ...extractPlatforms(item?.channel?.platform), ...extractPlatforms(item?.channelName),
+  ...extractPlatforms(item?.channelNames),
+]);
 const renderPlatformBadges = (item) => {
   const platforms = itemPlatforms(item);
   const displayPlatforms = platforms.length > 0 ? platforms : ['LOCAL'];
   return displayPlatforms.map((platform) => (
-    <span
-      key={platform}
-      style={{
-        ...platformBadgeBaseStyle,
-        ...(PLATFORM_BADGE_STYLES[platform] ?? PLATFORM_BADGE_STYLES.LOCAL),
-      }}
-    >
+    <span key={platform} style={{ ...platformBadgeBaseStyle, ...(PLATFORM_BADGE_STYLES[platform] ?? PLATFORM_BADGE_STYLES.LOCAL) }}>
       {platform === 'LOCAL' ? 'Ứng dụng' : PLATFORM_LABELS[platform] ?? platform}
     </span>
   ));
@@ -102,72 +71,47 @@ const renderPlatformBadges = (item) => {
 
 const normalizeWarehouseVariant = (item) => {
   const variantId = item.variantId ?? item.id;
-  // internalVariantSku = raw variant.sku from DB — ALWAYS the value used in the Excel template
-  // display name: "{productName} - {variantName} [{internalVariantSku}]"
-  // The backend now returns this as a separate field so it's never overridden by marketplaceSku.
   const internalVariantSku = item.internalVariantSku ?? item.variantSku ?? item.sku ?? '';
   const marketplaceSku = item.marketplaceSku ?? '';
-  // Primary SKU for dedup and grouping: use internalVariantSku so it matches the template.
   const sku = internalVariantSku || marketplaceSku;
   const salePrice = item.salePrice ?? item.currentSalePrice ?? item.price ?? item.unitPrice ?? 0;
   const unitPrice = item.unitPrice ?? item.price ?? 0;
-  // variantIds from the API covers ALL variants grouped under this SKU (both channels).
-  // This is essential for the dedup check — a purchase-order item may reference any of these variant IDs.
-  const variantIds = uniqueValues([
-    ...(item.variantIds ?? []),
-    variantId,
-  ]).filter(Boolean);
+  const variantIds = uniqueValues([...(item.variantIds ?? []), variantId]).filter(Boolean);
   return {
-    id: variantId,
-    variantId,
-    variantIds,
-    sku,                          // primary SKU = internalVariantSku (matches template display name)
-    variantSku: internalVariantSku, // always internal SKU for lookup key building
-    marketplaceSku,               // marketplace/external SKU (for secondary lookup)
+    id: variantId, variantId, variantIds,
+    sku, variantSku: internalVariantSku, marketplaceSku,
     productName: item.productName ?? item.product?.name ?? item.variantName ?? sku,
     name: item.variantName ?? item.name ?? '',
-    unitPrice,
-    salePrice,
-    currentSalePrice: item.currentSalePrice ?? salePrice,
+    unitPrice, salePrice, currentSalePrice: item.currentSalePrice ?? salePrice,
     availableQuantity: item.availableQuantity ?? item.quantityOnHand ?? 0,
-    channelId: item.channelId ?? null,
-    channelName: item.channelName ?? '',
+    channelId: item.channelId ?? null, channelName: item.channelName ?? '',
     platform: item.platform ?? null,
     channelIds: uniqueValues(item.channelIds ?? [item.channelId]),
     channelNames: uniqueValues(item.channelNames ?? [item.channelName]),
-    platforms: itemPlatforms(item),
-    mergedVariantCount: item.mergedVariantCount ?? 1,
+    platforms: itemPlatforms(item), mergedVariantCount: item.mergedVariantCount ?? 1,
   };
 };
 
 const aggregateWarehouseVariantsBySku = (variants) => {
   const groups = new Map();
   variants.forEach((item) => {
-    // Group by internal SKU (variantSku) — the primary stable identifier.
-    // item.sku is already set to variantSku by normalizeWarehouseVariant.
     const skuKey = String(item.variantSku ?? item.sku ?? '').trim().toLowerCase();
     const key = skuKey || `variant:${item.variantId ?? item.id}`;
     if (!groups.has(key)) {
-      groups.set(key, {
-        ...item,
-        id: item.id ?? item.variantId,
-        variantId: item.variantId ?? item.id,
+      groups.set(key, { ...item, id: item.id ?? item.variantId, variantId: item.variantId ?? item.id,
         variantIds: uniqueValues(item.variantIds ?? [item.variantId ?? item.id]),
         platforms: itemPlatforms(item),
         channelNames: uniqueValues(item.channelNames ?? [item.channelName]),
         channelIds: uniqueValues(item.channelIds ?? [item.channelId]),
-        availableQuantity: Number(item.availableQuantity ?? 0),
-        mergedVariantCount: Number(item.mergedVariantCount ?? 1),
+        availableQuantity: Number(item.availableQuantity ?? 0), mergedVariantCount: Number(item.mergedVariantCount ?? 1),
       });
       return;
     }
-
     const existing = groups.get(key);
     existing.productName = existing.productName || item.productName;
     existing.name = existing.name || item.name;
     existing.unitPrice = Number(existing.unitPrice ?? 0) > 0 ? existing.unitPrice : item.unitPrice;
     existing.salePrice = Number(existing.salePrice ?? 0) > 0 ? existing.salePrice : item.salePrice;
-    existing.currentSalePrice = Number(existing.currentSalePrice ?? 0) > 0 ? existing.currentSalePrice : item.currentSalePrice;
     existing.availableQuantity = Math.max(Number(existing.availableQuantity ?? 0), Number(item.availableQuantity ?? 0));
     existing.platforms = uniqueValues([...itemPlatforms(existing), ...itemPlatforms(item)]);
     existing.channelNames = uniqueValues([...(existing.channelNames ?? []), ...(item.channelNames ?? []), item.channelName]);
@@ -178,62 +122,18 @@ const aggregateWarehouseVariantsBySku = (variants) => {
   return [...groups.values()];
 };
 
-const groupPurchaseOrderItems = (orderItems = []) => {
-  const groups = new Map();
-  orderItems.forEach((item) => {
-    const sku = item.marketplaceSku || item.sku || '';
-    const groupKey = String(sku).trim().toLowerCase() || `variant:${item.variantId}`;
-    // Use actualQuantity (set during inspection) if available; for surplus cap at ordered qty
-    // (surplus items go to a separate surplus order, not this receipt)
-    const receiptQty = item.actualQuantity != null
-      ? Math.min(item.actualQuantity, item.quantity)
-      : item.quantity;
-    if (!groups.has(groupKey)) {
-      groups.set(groupKey, {
-        groupKey,
-        variantId: item.variantId,
-        variantIds: [item.variantId],
-        sku,
-        productName: item.productName,
-        variantName: item.variantName,
-        quantity: receiptQty,
-        unitPrice: item.unitCost ?? 0,
-        salePrice: item.salePrice ?? 0,
-        platforms: uniqueValues(item.platforms),
-        mergedVariantCount: 1,
-        fromPurchaseOrder: true,
-      });
-      return;
-    }
-    const existing = groups.get(groupKey);
-    existing.variantIds = uniqueValues([...existing.variantIds, item.variantId]);
-    existing.platforms = uniqueValues([...existing.platforms, ...(item.platforms ?? [])]);
-    existing.salePrice = existing.salePrice || item.salePrice || 0;
-    existing.mergedVariantCount += 1;
-  });
-  return [...groups.values()];
+const importProductKey = (item) => {
+  const sku = normalizeImportKey(item?.variantSku ?? item?.sku ?? item?.marketplaceSku ?? '');
+  if (sku) return `sku:${sku}`;
+  return uniqueValues(item?.variantIds ?? [item?.id ?? item?.variantId]).map(String).sort().join('|') || '';
 };
-
-const expandReceiptItems = (items) => items.map((item) => ({
-    variantId: item.variantId,
-    quantity: item.quantity === '' || item.quantity === null || item.quantity === undefined
-      ? null
-      : Number(item.quantity),
-    unitCost: item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined
-      ? null
-      : Number(item.unitPrice),
-  }));
-
-// ── Excel import helpers ──────────────────────────────────────────────────────
-const normalizeImportKey = (value) => String(value ?? '').trim().toLocaleLowerCase('vi-VN');
 
 const importLookupKeys = (item) => {
   const productName = String(item?.productName ?? '').trim();
   const variantName = String(item?.name ?? '').trim();
   const sku = String(item?.sku ?? item?.variantSku ?? '').trim();
   const marketplaceSku = String(item?.marketplaceSku ?? '').trim();
-  const displayNameInternal = sku
-    ? `${productName}${variantName ? ` - ${variantName}` : ''} [${sku}]` : '';
+  const displayNameInternal = sku ? `${productName}${variantName ? ` - ${variantName}` : ''} [${sku}]` : '';
   const displayNameMarketplace = marketplaceSku && marketplaceSku !== sku
     ? `${productName}${variantName ? ` - ${variantName}` : ''} [${marketplaceSku}]` : '';
   return uniqueValues([sku, marketplaceSku, productName, variantName,
@@ -242,24 +142,16 @@ const importLookupKeys = (item) => {
   ]).map(normalizeImportKey).filter(Boolean);
 };
 
-const importProductKey = (item) => {
-  const sku = normalizeImportKey(item?.variantSku ?? item?.sku ?? item?.marketplaceSku ?? '');
-  if (sku) return `sku:${sku}`;
-  return uniqueValues(item?.variantIds ?? [item?.id ?? item?.variantId]).map(String).sort().join('|') || '';
-};
-
 const downloadImportErrors = (errors) => {
-  const sheet = XLSX.utils.json_to_sheet(errors.map((error) => ({
-    'Dòng Excel': error.rowNumber,
-    'Giá trị cột A': error.input,
-    'Số lượng': error.quantity ?? '',
-    'Đơn giá': error.unitPrice ?? '',
-    'Lý do lỗi': error.reason,
+  const XLSX_mod = window.XLSX ?? null;
+  const sheet = (XLSX_mod ?? XLSX).utils.json_to_sheet(errors.map((e) => ({
+    'Dòng Excel': e.rowNumber, 'Giá trị cột A': e.input,
+    'Số lượng': e.quantity ?? '', 'Đơn giá': e.unitPrice ?? '', 'Lý do lỗi': e.reason,
   })));
   sheet['!cols'] = [{ wch: 12 }, { wch: 55 }, { wch: 14 }, { wch: 16 }, { wch: 55 }];
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, 'Lỗi import');
-  XLSX.writeFile(workbook, 'stock-in-import-errors.xlsx');
+  XLSX.writeFile(workbook, 'stock-in-manual-import-errors.xlsx');
 };
 
 const parseExcelImportRows = (rows, variants, existingItems) => {
@@ -297,9 +189,7 @@ const parseExcelImportRows = (rows, variants, existingItems) => {
     if (!input) reasons.push('Tên sản phẩm hoặc SKU không hợp lệ.');
     const variantId = rawVariantId ? String(rawVariantId).trim() : '';
     const inputSkuKey = `sku:${normalizeImportKey(input)}`;
-    const variant = variantsById.get(variantId)
-      ?? variantsBySkuKey.get(inputSkuKey)
-      ?? variantsByImportKey.get(normalizeImportKey(input));
+    const variant = variantsById.get(variantId) ?? variantsBySkuKey.get(inputSkuKey) ?? variantsByImportKey.get(normalizeImportKey(input));
     if (input && !variant) reasons.push('Không tìm thấy sản phẩm trong kho đã chọn.');
     const quantity = Number(rawQuantity);
     if (!rawQuantity || Number.isNaN(quantity) || quantity <= 0) reasons.push('Số lượng phải lớn hơn 0.');
@@ -323,6 +213,12 @@ const parseExcelImportRows = (rows, variants, existingItems) => {
   return { valid, errors };
 };
 
+const expandReceiptItems = (items) => items.map((item) => ({
+  variantId: item.variantId,
+  quantity: item.quantity === '' || item.quantity === null || item.quantity === undefined ? null : Number(item.quantity),
+  unitCost: item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined ? null : Number(item.unitPrice),
+}));
+
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
   warehouseId: z.string().min(1, 'Vui lòng chọn kho nhập.'),
@@ -339,39 +235,23 @@ const schema = z.object({
 function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], loading = false }) {
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState({});
-
   useEffect(() => {
     if (isOpen) return undefined;
-    const timer = window.setTimeout(() => {
-      setKeyword('');
-      setSelected({});
-    }, 0);
+    const timer = window.setTimeout(() => { setKeyword(''); setSelected({}); }, 0);
     return () => window.clearTimeout(timer);
   }, [isOpen]);
-
   const results = useMemo(() => {
-    const keywordText = keyword.trim().toLowerCase();
-    if (!keywordText) return products;
-    return products.filter((item) => [
-      item.productName,
-      item.name,
-      item.sku,
-      formatPlatforms(item),
-    ].some((value) => String(value ?? '').toLowerCase().includes(keywordText)));
+    const kw = keyword.trim().toLowerCase();
+    if (!kw) return products;
+    return products.filter((item) => [item.productName, item.name, item.sku]
+      .some((v) => String(v ?? '').toLowerCase().includes(kw)));
   }, [keyword, products]);
-
   const toggle = (item) => {
     const skuKey = String(item.sku ?? '').trim().toLowerCase();
     if (existingVariantIds.includes(item.id) || existingSkus.includes(skuKey)) return;
-    setSelected((prev) => {
-      const n = { ...prev };
-      n[item.id] ? delete n[item.id] : (n[item.id] = item);
-      return n;
-    });
+    setSelected((prev) => { const n = { ...prev }; n[item.id] ? delete n[item.id] : (n[item.id] = item); return n; });
   };
-
   const count = Object.keys(selected).length;
-
   if (!isOpen) return null;
   return (
     <div onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -382,38 +262,26 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
             <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Chọn sản phẩm</span>
             {results.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{results.length} sản phẩm</span>}
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-            <X size={18} />
-          </button>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}><X size={18} /></button>
         </div>
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input autoFocus value={keyword} onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Tìm theo tên sản phẩm hoặc SKU..."
+            <input autoFocus value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Tìm theo tên sản phẩm hoặc SKU..."
               style={{ width: '100%', padding: '8px 10px 8px 34px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} />
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          {loading && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
-              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải...
-            </div>
-          )}
-          {!loading && results.length === 0 && (
-            <p style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
-              {keyword.trim() ? 'Không tìm thấy sản phẩm nào phù hợp.' : 'Không có sản phẩm nào.'}
-            </p>
-          )}
+          {loading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8', fontSize: 13 }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải...</div>}
+          {!loading && results.length === 0 && <p style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>{keyword.trim() ? 'Không tìm thấy sản phẩm nào phù hợp.' : 'Không có sản phẩm nào.'}</p>}
           {!loading && results.map((item) => {
             const skuKey = String(item.sku ?? '').trim().toLowerCase();
             const isExisting = existingVariantIds.includes(item.id) || existingSkus.includes(skuKey);
             const isSelected = Boolean(selected[item.id]);
             return (
               <div key={item.id} onClick={() => toggle(item)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px', cursor: isExisting ? 'not-allowed' : 'pointer', backgroundColor: isExisting ? '#f8fafc' : isSelected ? '#eff6ff' : '#fff', borderBottom: '1px solid #f1f5f9', opacity: isExisting ? 0.55 : 1, transition: 'background 0.1s' }}>
-                <input type="checkbox" checked={isSelected} disabled={isExisting} onChange={() => toggle(item)} onClick={(e) => e.stopPropagation()}
-                  style={{ width: 16, height: 16, accentColor: '#2563eb', flexShrink: 0 }} />
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px', cursor: isExisting ? 'not-allowed' : 'pointer', backgroundColor: isExisting ? '#f8fafc' : isSelected ? '#eff6ff' : '#fff', borderBottom: '1px solid #f1f5f9', opacity: isExisting ? 0.55 : 1 }}>
+                <input type="checkbox" checked={isSelected} disabled={isExisting} onChange={() => toggle(item)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, accentColor: '#2563eb', flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{item.productName}</span>
@@ -424,11 +292,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
                     {renderPlatformBadges(item)}
                     {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
                   </div>
-                  {Number(item.salePrice) > 0 && (
-                    <div style={{ marginTop: 4, fontSize: 11, color: '#64748b' }}>
-                      Giá bán hiện tại: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.salePrice))}</strong>
-                    </div>
-                  )}
+                  {Number(item.salePrice) > 0 && <div style={{ marginTop: 4, fontSize: 11, color: '#64748b' }}>Giá bán: <strong style={{ color: '#0f172a' }}>{formatVND(Number(item.salePrice))}</strong></div>}
                 </div>
               </div>
             );
@@ -438,7 +302,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
           <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}>Hủy</button>
-            <button onClick={() => { onConfirm(Object.values(selected).map((i) => ({ variantId: i.id, variantIds: uniqueValues(i.variantIds ?? [i.id]), sku: i.sku, productName: i.productName, variantName: i.name, quantity: 1, unitPrice: i.unitPrice ?? 0, salePrice: i.salePrice ?? 0, platforms: itemPlatforms(i), channelNames: uniqueValues(i.channelNames ?? [i.channelName]), mergedVariantCount: i.mergedVariantCount ?? 1, fromPurchaseOrder: false }))); }} disabled={count === 0}
+            <button onClick={() => { onConfirm(Object.values(selected).map((i) => ({ variantId: i.id, variantIds: uniqueValues(i.variantIds ?? [i.id]), sku: i.sku, productName: i.productName, variantName: i.name, quantity: 1, unitPrice: i.unitPrice ?? 0, salePrice: i.salePrice ?? 0, platforms: itemPlatforms(i), channelNames: uniqueValues(i.channelNames ?? [i.channelName]), mergedVariantCount: i.mergedVariantCount ?? 1 }))); }} disabled={count === 0}
               style={{ padding: '7px 16px', borderRadius: 8, border: 'none', backgroundColor: count === 0 ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: 13, fontWeight: 500, cursor: count === 0 ? 'not-allowed' : 'pointer' }}>
               Thêm ({count})
             </button>
@@ -450,7 +314,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function StockReceiveCreatePage() {
+export default function StockReceiveManualCreatePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { confirm, ConfirmDialog } = useConfirmDialog();
@@ -463,9 +327,6 @@ export default function StockReceiveCreatePage() {
   const [nextReceiptCode, setNextReceiptCode] = useState('');
   const [warehouseVariants, setWarehouseVariants] = useState([]);
   const [loadingWarehouseVariants, setLoadingWarehouseVariants] = useState(false);
-  const [receivingPurchaseOrders, setReceivingPurchaseOrders] = useState([]);
-  const [purchaseOrderId, setPurchaseOrderId] = useState(searchParams.get('purchaseOrderId') || '');
-  const [purchaseOrderError, setPurchaseOrderError] = useState('');
   const previousWarehouseIdRef = useRef('');
 
   const { register, handleSubmit, setValue, control, formState: { errors, isSubmitting, isDirty } } = useForm({
@@ -478,181 +339,96 @@ export default function StockReceiveCreatePage() {
   const hasUnsavedChanges = isDirty || items.length > 0;
   const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
+  // Load warehouses, suppliers, next code
   useEffect(() => {
     Promise.all([
       warehouseService.getMaster(),
       supplierService.getAll(),
       stockReceiveService.getNextReceiptCode(),
-      purchaseOrderApi.getAll({ size: 100, status: 'INSPECTED' }),
-    ])
-      .then(([wRes, sRes, codeRes, purchasePage]) => {
-        const extract = (r) => { const d = r?.data?.data ?? r?.data; if (Array.isArray(d)) return d; if (d?.content && Array.isArray(d.content)) return d.content; return []; };
-        const masterWarehouse = getResponseData(wRes);
-        setWarehouses(masterWarehouse?.id ? [masterWarehouse] : extract(wRes));
-        if (masterWarehouse?.id) {
-          setValue('warehouseId', String(masterWarehouse.id), { shouldDirty: false, shouldValidate: true });
-        }
-        setSuppliers(extract(sRes));
-        setNextReceiptCode(codeRes?.data?.data ?? codeRes?.data ?? '');
-        setReceivingPurchaseOrders(
-          // Exclude orders that already have a linked receipt
-          (purchasePage?.content ?? []).filter((order) => !order.receiptId),
-        );
-      })
-      .catch(() => {});
+    ]).then(([wRes, sRes, codeRes]) => {
+      const extract = (r) => { const d = r?.data?.data ?? r?.data; if (Array.isArray(d)) return d; if (d?.content && Array.isArray(d.content)) return d.content; return []; };
+      const masterWarehouse = wRes?.data?.data ?? wRes?.data ?? {};
+      setWarehouses(masterWarehouse?.id ? [masterWarehouse] : extract(wRes));
+      if (masterWarehouse?.id) setValue('warehouseId', String(masterWarehouse.id), { shouldDirty: false, shouldValidate: true });
+      setSuppliers(extract(sRes));
+      setNextReceiptCode(codeRes?.data?.data ?? codeRes?.data ?? '');
+    }).catch(() => {});
   }, [setValue]);
 
-  useEffect(() => {
-    if (!purchaseOrderId) return;
-    let ignore = false;
-    purchaseOrderApi.getById(purchaseOrderId)
-      .then((order) => {
-        if (ignore) return;
-        if (order.status !== 'INSPECTED') {
-          toast.error('Đơn mua hàng chưa ở trạng thái Đã kiểm tra.');
-          setPurchaseOrderId('');
-          return;
-        }
-        if (order.receiptId) {
-          toast.error('Đơn mua hàng này đã có phiếu nhập kho liên kết.');
-          setPurchaseOrderId('');
-          return;
-        }
-        // Only add to dropdown if this order doesn't already have a receipt
-        if (!order.receiptId) {
-          setReceivingPurchaseOrders((current) => current.some((item) => item.id === order.id) ? current : [order, ...current]);
-        }
-        setValue('warehouseId', String(order.warehouseId), { shouldDirty: true, shouldValidate: true });
-        setValue('supplierId', order.supplierId ? String(order.supplierId) : '', { shouldDirty: true });
-        setItems(groupPurchaseOrderItems(order.items ?? []));
-        setPurchaseOrderError('');
-      })
-      .catch(() => {
-        if (!ignore) toast.error('Không thể tải thông tin đơn mua hàng.');
-      });
-    return () => { ignore = true; };
-  }, [purchaseOrderId, setValue]);
-
+  // Load variants when warehouse changes
   useEffect(() => {
     const warehouseId = selectedWarehouseId || '';
     if (previousWarehouseIdRef.current && previousWarehouseIdRef.current !== warehouseId) {
-      setItems([]);
-      setModalOpen(false);
+      setItems([]); setModalOpen(false);
     }
     previousWarehouseIdRef.current = warehouseId;
-
     if (!warehouseId) {
-      const timer = window.setTimeout(() => {
-        setWarehouseVariants([]);
-        setLoadingWarehouseVariants(false);
-      }, 0);
-      return () => window.clearTimeout(timer);
+      const t = window.setTimeout(() => { setWarehouseVariants([]); setLoadingWarehouseVariants(false); }, 0);
+      return () => window.clearTimeout(t);
     }
-
     let ignore = false;
-    const timer = window.setTimeout(() => {
+    const t = window.setTimeout(() => {
       setLoadingWarehouseVariants(true);
       inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false, { warehouseId })
         .then((response) => {
           if (ignore) return;
-          const data = getResponseData(response);
+          const data = response?.data?.data ?? response?.data ?? response ?? {};
           const variants = Array.isArray(data) ? data : (data.content ?? []);
-          const normalizedVariants = aggregateWarehouseVariantsBySku(variants
-            .map(normalizeWarehouseVariant)
-            .filter((item) => item.id)
-          );
-          setWarehouseVariants(normalizedVariants);
+          setWarehouseVariants(aggregateWarehouseVariantsBySku(variants.map(normalizeWarehouseVariant).filter((v) => v.id)));
         })
-        .catch(() => {
-          if (!ignore) {
-            setWarehouseVariants([]);
-            toast.error('Không thể tải sản phẩm thuộc kho đã chọn.');
-          }
-        })
+        .catch(() => { if (!ignore) { setWarehouseVariants([]); toast.error('Không thể tải sản phẩm thuộc kho đã chọn.'); } })
         .finally(() => { if (!ignore) setLoadingWarehouseVariants(false); });
     }, 0);
-
-    return () => {
-      ignore = true;
-      window.clearTimeout(timer);
-    };
+    return () => { ignore = true; window.clearTimeout(t); };
   }, [selectedWarehouseId]);
 
+  // Prefill from query params
   useEffect(() => {
     if (prefillAppliedRef.current) return;
-
     const warehouseId = searchParams.get('warehouseId');
     const variantId = searchParams.get('variantId');
     if (!warehouseId && !variantId) return;
-
     prefillAppliedRef.current = true;
-    if (warehouseId) {
-      setValue('warehouseId', warehouseId, { shouldDirty: true, shouldValidate: true });
-    }
-
+    if (warehouseId) setValue('warehouseId', warehouseId, { shouldDirty: true, shouldValidate: true });
     if (variantId) {
-      const timer = window.setTimeout(() => {
-        setItems([{
-          variantId,
-          sku: searchParams.get('sku') || '',
-          productName: searchParams.get('productName') || searchParams.get('sku') || 'Sản phẩm',
-          variantName: '',
-          quantity: 1,
-          unitPrice: searchParams.get('unitCost') || 0,
-          salePrice: searchParams.get('salePrice') || searchParams.get('price') || 0,
-        }]);
-      }, 0);
-      return () => window.clearTimeout(timer);
+      const t = window.setTimeout(() => setItems([{
+        variantId, sku: searchParams.get('sku') || '', productName: searchParams.get('productName') || searchParams.get('sku') || 'Sản phẩm',
+        variantName: '', quantity: 1, unitPrice: searchParams.get('unitCost') || 0, salePrice: searchParams.get('salePrice') || 0,
+      }]), 0);
+      return () => window.clearTimeout(t);
     }
     return undefined;
   }, [searchParams, setValue]);
 
   // ── Item handlers ─────────────────────────────────────────────────────────
   const openAddProducts = () => {
-    if (!purchaseOrderId) {
-      setPurchaseOrderError('Vui lòng chọn đơn mua hàng trước khi thêm sản phẩm.');
-      return;
-    }
-    if (!selectedWarehouseId) {
-      toast.error('Vui lòng chọn kho nhập trước khi thêm sản phẩm.');
-      return;
-    }
-    if (loadingWarehouseVariants) {
-      toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.');
-      return;
-    }
+    if (!selectedWarehouseId) { toast.error('Vui lòng chọn kho nhập trước khi thêm sản phẩm.'); return; }
+    if (loadingWarehouseVariants) { toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.'); return; }
     setModalOpen(true);
   };
-
   const onQtyChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
   const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
 
   const onDownloadExcelTemplate = async () => {
     try {
+      // Use the same template endpoint from StockReceiveExtraItemImportService
       const response = await stockReceiveService.downloadNewReceiptExtraItemsTemplate();
       const url = URL.createObjectURL(response.data);
       const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = 'stock-in-extra-items-template.xlsx';
-      anchor.click();
+      anchor.href = url; anchor.download = 'stock-in-extra-items-template.xlsx'; anchor.click();
       URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Không thể tải template Excel. Vui lòng thử lại.');
-    }
+    } catch { toast.error('Không thể tải template Excel. Vui lòng thử lại.'); }
   };
 
   const onAddProducts = (newItems) => {
     setItems((p) => {
       const skuKeys = new Set(p.map((it) => String(it.sku ?? '').trim().toLowerCase()).filter(Boolean));
       const ids = new Set(p.map((it) => it.variantId));
-      return [
-        ...p,
-        ...newItems.filter((it) => {
-          const skuKey = String(it.sku ?? '').trim().toLowerCase();
-          return skuKey ? !skuKeys.has(skuKey) : !ids.has(it.variantId);
-        }),
-      ];
+      return [...p, ...newItems.filter((it) => {
+        const skuKey = String(it.sku ?? '').trim().toLowerCase();
+        return skuKey ? !skuKeys.has(skuKey) : !ids.has(it.variantId);
+      })];
     });
     setModalOpen(false);
   };
@@ -661,49 +437,30 @@ export default function StockReceiveCreatePage() {
     const file = e.target.files?.[0];
     if (fileRef.current) fileRef.current.value = '';
     if (!file) return;
-    if (!selectedWarehouseId) {
-      toast.error('Vui lòng chọn kho nhập trước khi import Excel.');
-      return;
-    }
-    if (loadingWarehouseVariants) {
-      toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.');
-      return;
-    }
+    if (!selectedWarehouseId) { toast.error('Vui lòng chọn kho nhập trước khi import Excel.'); return; }
+    if (loadingWarehouseVariants) { toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.'); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        // cellFormula:false → dùng cached VLOOKUP value để lấy variantId từ hidden column D
         const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellFormula: false, cellNF: false });
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: undefined }).slice(1);
         const parsed = parseExcelImportRows(rows, warehouseVariants, items);
         if (parsed.valid.length === 0) {
           if (parsed.errors.length > 0) downloadImportErrors(parsed.errors);
-          toast.error('Không có dòng hợp lệ trong file. Đã tải file lỗi để kiểm tra.');
-          return;
+          toast.error('Không có dòng hợp lệ trong file. Đã tải file lỗi để kiểm tra.'); return;
         }
         if (parsed.errors.length > 0) {
           downloadImportErrors(parsed.errors);
           toast.warn(`Có ${parsed.errors.length} dòng lỗi. Đã tải file lỗi; chỉ nhập ${parsed.valid.length} dòng hợp lệ.`);
-        } else {
-          toast.success(`Đã nhập ${parsed.valid.length} sản phẩm từ Excel.`);
-        }
-        setItems((previous) => {
-          const updated = [...previous];
+        } else { toast.success(`Đã nhập ${parsed.valid.length} sản phẩm từ Excel.`); }
+        setItems((prev) => {
+          const updated = [...prev];
           parsed.valid.forEach((product) => {
-            updated.push({
-              variantId: product.id,
-              variantIds: uniqueValues(product.variantIds ?? [product.id]),
-              sku: product.sku,
-              productName: product.productName,
-              variantName: product.name,
-              quantity: product.quantity,
-              unitPrice: product.unitPrice,
-              salePrice: product.salePrice ?? 0,
-              platforms: itemPlatforms(product),
-              channelNames: uniqueValues(product.channelNames ?? [product.channelName]),
-              mergedVariantCount: product.mergedVariantCount ?? 1,
-              fromPurchaseOrder: false,
-            });
+            updated.push({ variantId: product.id, variantIds: uniqueValues(product.variantIds ?? [product.id]),
+              sku: product.sku, productName: product.productName, variantName: product.name,
+              quantity: product.quantity, unitPrice: product.unitPrice, salePrice: product.salePrice ?? 0,
+              platforms: itemPlatforms(product), channelNames: uniqueValues(product.channelNames ?? [product.channelName]),
+              mergedVariantCount: product.mergedVariantCount ?? 1 });
           });
           return updated;
         });
@@ -714,41 +471,25 @@ export default function StockReceiveCreatePage() {
   };
 
   const onSubmit = handleSubmit(async (data) => {
-    if (!purchaseOrderId) {
-      setPurchaseOrderError('Đơn mua hàng là bắt buộc.');
-      toast.error('Vui lòng chọn đơn mua hàng.');
-      return;
-    }
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
     const invalidQty = items.find((it) => !it.quantity || Number(it.quantity) <= 0);
     if (invalidQty) { toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`); return; }
-    const invalidPrice = items.find((it) => { const price = Number(it.unitPrice); return it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || isNaN(price) || price < 0; });
+    const invalidPrice = items.find((it) => { const p = Number(it.unitPrice); return it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || isNaN(p) || p < 0; });
     if (invalidPrice) { toast.error(`Đơn giá của sản phẩm "${invalidPrice.productName}" phải lớn hơn hoặc bằng 0.`); return; }
-
-    const confirmed = await confirm({
-      title: 'Hoàn thành nhập kho?',
-      message: `Xác nhận nhập ${items.length} sản phẩm (tổng SL: ${totalQty.toLocaleString()}) vào kho.\nTồn kho sẽ được cập nhật ngay sau khi hoàn thành.`,
-      confirmLabel: 'Hoàn thành nhập kho',
-      tone: 'warning',
-    });
-    if (!confirmed) return;
-
     try {
-      const response = await stockReceiveService.createReceipt({
-        purchaseOrderId: purchaseOrderId || null,
-        warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
-        receivedAt: data.receivedAt, notes: data.notes || null,
-        items: expandReceiptItems(items), isDraft: false,
+      const response = await stockReceiveService.createManualReceipt({
+        warehouseId: data.warehouseId, supplierId: data.supplierId || null,
+        invoiceNumber: data.invoiceNumber || null, receivedAt: data.receivedAt,
+        notes: data.notes || null, items: expandReceiptItems(items), isDraft: false,
       });
-      toast.success('Tạo phiếu nhập thành công.');
+      toast.success('Tạo phiếu nhập thủ công thành công.');
       const receipt = getResponseData(response);
       if (receipt.marketplaceSyncAvailable) {
-        const platforms = (receipt.marketplacePlatforms ?? []).map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
+        const platforms = (receipt.marketplacePlatforms ?? []).map((pl) => PLATFORM_LABELS[pl] ?? pl).join(', ');
         const shouldSync = await confirm({
           title: 'Đồng bộ tồn có thể bán và giá lên sàn?',
           message: `Tồn kho và giá bán đã được cập nhật. Đồng bộ số lượng có thể bán và giá mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
-          confirmLabel: 'Đồng bộ ngay',
-          cancelLabel: 'Để sau',
+          confirmLabel: 'Đồng bộ ngay', cancelLabel: 'Để sau',
         });
         if (shouldSync) {
           try {
@@ -770,20 +511,14 @@ export default function StockReceiveCreatePage() {
   });
 
   const onSaveDraft = handleSubmit(async (data) => {
-    if (!purchaseOrderId) {
-      setPurchaseOrderError('Đơn mua hàng là bắt buộc.');
-      toast.error('Vui lòng chọn đơn mua hàng.');
-      return;
-    }
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
     try {
-      await stockReceiveService.createReceipt({
-        purchaseOrderId: purchaseOrderId || null,
-        warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
-        receivedAt: data.receivedAt, notes: data.notes || null,
-        items: expandReceiptItems(items), isDraft: true,
+      await stockReceiveService.createManualReceipt({
+        warehouseId: data.warehouseId, supplierId: data.supplierId || null,
+        invoiceNumber: data.invoiceNumber || null, receivedAt: data.receivedAt,
+        notes: data.notes || null, items: expandReceiptItems(items), isDraft: true,
       });
-      toast.success('Lưu tạm phiếu nhập thành công.');
+      toast.success('Lưu tạm phiếu nhập thủ công thành công.');
       runWithoutGuard(() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS));
     } catch (error) {
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') {
@@ -798,18 +533,16 @@ export default function StockReceiveCreatePage() {
 
   return (
     <div className={`${styles.page} product-workspace`}>
-
-      {/* Page Header */}
       <div className={styles.pageHeader}>
         <button className={styles.backBtn} onClick={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS)}>
           <ArrowLeft size={15} /> Quay lại
         </button>
-        <div className={styles.headerIcon} style={{ background: '#eff6ff' }}>
-          <PackagePlus size={18} color="#2563eb" />
+        <div className={styles.headerIcon} style={{ background: '#f0fdf4' }}>
+          <PackagePlus size={18} color="#16a34a" />
         </div>
         <div>
           <h1 className={styles.headerTitle}>Tạo phiếu nhập kho</h1>
-          <p className={styles.headerSubtitle}>Nhập hàng hóa từ nhà cung cấp vào kho</p>
+          <p className={styles.headerSubtitle}>Nhập hàng hóa trực tiếp vào kho không cần đơn mua hàng</p>
         </div>
       </div>
 
@@ -817,70 +550,44 @@ export default function StockReceiveCreatePage() {
       <div style={{ display: 'flex', gap: 6 }}>
         <button
           type="button"
-          className={`${styles.actionBtn} ${styles.primaryBtn}`}
+          onClick={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE)}
+          className={`${styles.actionBtn} ${styles.secondaryBtn}`}
           style={{ padding: '7px 16px' }}
         >
           Theo đơn mua hàng
         </button>
         <button
           type="button"
-          onClick={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL)}
-          className={`${styles.actionBtn} ${styles.secondaryBtn}`}
-          style={{ padding: '7px 16px' }}
+          className={`${styles.actionBtn} ${styles.primaryBtn}`}
+          style={{ padding: '7px 16px', background: '#16a34a', boxShadow: '0 4px 12px rgba(22,163,74,0.2)' }}
         >
           Nhập thủ công
         </button>
       </div>
 
-      {/* Two-column layout */}
       <div className={styles.twoCol}>
-
         {/* LEFT */}
         <div className={styles.leftCol}>
-
-          {/* Card: Thông tin phiếu nhập */}
+          {/* Info card */}
           <div className={`${styles.card} ${styles.cardPad}`}>
             <div className={styles.sectionHeader}>
-              <div className={styles.sectionHeaderIcon} style={{ background: '#eff6ff' }}><Package size={16} color="#2563eb" /></div>
+              <div className={styles.sectionHeaderIcon} style={{ background: '#f0fdf4' }}><Package size={16} color="#16a34a" /></div>
               <div>
                 <div className={styles.sectionTitle}>Thông tin phiếu nhập</div>
               </div>
             </div>
-            <div style={{ marginBottom: 14 }}>
-              <label className={styles.fieldLabel}>Đơn mua hàng <span>*</span></label>
-              <select
-                value={purchaseOrderId}
-                onChange={(event) => {
-                  setPurchaseOrderId(event.target.value);
-                  setPurchaseOrderError(event.target.value ? '' : 'Đơn mua hàng là bắt buộc.');
-                  if (!event.target.value) setItems([]);
-                }}
-                className={`${styles.fieldSelect} ${purchaseOrderError ? styles.fieldError : ''}`}
-                aria-invalid={Boolean(purchaseOrderError)}
-                aria-describedby={purchaseOrderError ? 'purchase-order-error' : undefined}
-              >
-                <option value="">Chọn đơn mua hàng đã kiểm tra</option>
-                {receivingPurchaseOrders.map((order) => (
-                  <option key={order.id} value={order.id}>{order.orderCode} — {order.supplierName}</option>
-                ))}
-              </select>
-              {purchaseOrderError && <p id="purchase-order-error" className={styles.fieldErrorMsg} role="alert">{purchaseOrderError}</p>}
-              <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 11.5 }}>
-                Chỉ hiển thị đơn đang nhập hàng. Sản phẩm trong đơn được điền tự động và bạn vẫn có thể thêm sản phẩm khác.
-              </p>
-            </div>
             <div className={`${styles.formGrid} ${styles.formGrid2}`} style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
               <div>
                 <label className={styles.fieldLabel}>Kho nhập <span>*</span></label>
-                <select {...register('warehouseId')} aria-disabled={!!purchaseOrderId} style={purchaseOrderId ? { pointerEvents: 'none', background: '#f8fafc' } : undefined} className={`${styles.fieldSelect} ${errors.warehouseId ? styles.fieldError : ''}`}>
-                  {warehouses.length === 0 && <option value="">Chọn kho</option>}
+                <select {...register('warehouseId')} className={`${styles.fieldSelect} ${errors.warehouseId ? styles.fieldError : ''}`}>
+                  <option value="">Chọn kho</option>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}{w.address ? ` — ${w.address}` : ''}</option>)}
                 </select>
                 {errors.warehouseId && <p className={styles.fieldErrorMsg}>{errors.warehouseId.message}</p>}
               </div>
               <div>
                 <label className={styles.fieldLabel}>Nhà cung cấp</label>
-                <select {...register('supplierId')} aria-disabled={!!purchaseOrderId} style={purchaseOrderId ? { pointerEvents: 'none', background: '#f8fafc' } : undefined} className={styles.fieldSelect}>
+                <select {...register('supplierId')} className={styles.fieldSelect}>
                   <option value="">Chọn nhà cung cấp</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
@@ -896,53 +603,49 @@ export default function StockReceiveCreatePage() {
               </div>
             </div>
             <div style={{ marginTop: 14 }}>
+              <label className={styles.fieldLabel}>Số hóa đơn / tham chiếu</label>
+              <input {...register('invoiceNumber')} placeholder="Nhập số hóa đơn (tuỳ chọn)..." className={styles.fieldInput} />
+            </div>
+            <div style={{ marginTop: 14 }}>
               <label className={styles.fieldLabel}>Ghi chú</label>
               <textarea {...register('notes')} rows={2} placeholder="Ghi chú về phiếu nhập..." className={styles.fieldTextarea} />
             </div>
           </div>
 
-          {/* Card: Danh sách sản phẩm */}
+          {/* Products table card */}
           <div className={`${styles.card} ${styles.tableCard}`}>
             <div className={styles.tableCardHeader}>
               <div>
                 <div className={styles.tableCardTitle}>Danh sách sản phẩm nhập</div>
-                <div className={styles.tableCardSubtitle}>
-                  Chọn kho trước, sau đó thêm sản phẩm đã gộp theo SKU từ Lazada, Shopify, TikTok và điền số lượng, đơn giá
-                </div>
+                <div className={styles.tableCardSubtitle}>Chọn kho trước, sau đó thêm sản phẩm và điền số lượng, đơn giá</div>
               </div>
               <div className={styles.tableCardActions}>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={onDownloadExcelTemplate} disabled={!purchaseOrderId}>
+                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={onDownloadExcelTemplate} disabled={!selectedWarehouseId}>
                   <FileSpreadsheet className={styles.importIcon} /> Tải template
                 </button>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
+                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!selectedWarehouseId || loadingWarehouseVariants}>
                   <FileSpreadsheet className={styles.importIcon} /> Import Excel
                 </button>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcel} />
-                <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
+                <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!selectedWarehouseId || loadingWarehouseVariants}
+                  style={{ background: '#16a34a', boxShadow: '0 8px 18px rgba(22,163,74,0.22)' }}>
                   {loadingWarehouseVariants ? <Loader2 className={styles.primaryIcon} /> : <Plus className={styles.primaryIcon} />} Thêm sản phẩm
                 </button>
               </div>
             </div>
-
             {items.length === 0 ? (
               <div className={styles.emptyState}>
                 <div className={styles.emptyIcon}><Package size={22} /></div>
                 <p className={styles.emptyTitle}>Chưa có sản phẩm nào</p>
-                <p className={styles.emptySubtitle}>
-                  {selectedWarehouseId
-                    ? 'Nhấn "Thêm sản phẩm" hoặc Import từ Excel'
-                    : 'Vui lòng chọn kho nhập trước khi thêm sản phẩm'}
-                </p>
+                <p className={styles.emptySubtitle}>{selectedWarehouseId ? 'Nhấn "Thêm sản phẩm" hoặc Import từ Excel' : 'Vui lòng chọn kho nhập trước khi thêm sản phẩm'}</p>
               </div>
             ) : (
               <div className={styles.tableWrapper}>
                 <table className={styles.table}>
                   <thead>
-                    <tr>
-                      {['Tên sản phẩm', 'SKU', 'Số lượng', 'Đơn giá (₫)', 'Thành tiền', ''].map((h, i) => (
-                        <th key={h} className={i === 4 ? styles.thRight : ''}>{h}</th>
-                      ))}
-                    </tr>
+                    <tr>{['Tên sản phẩm', 'SKU', 'Số lượng', 'Đơn giá (₫)', 'Thành tiền', ''].map((h, i) => (
+                      <th key={h} className={i === 4 ? styles.thRight : ''}>{h}</th>
+                    ))}</tr>
                   </thead>
                   <tbody>
                     {items.map((item, idx) => {
@@ -955,31 +658,24 @@ export default function StockReceiveCreatePage() {
                           <td>
                             <div style={{ fontWeight: 600, fontSize: 12 }}>{item.productName}</div>
                             {item.variantName && <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.variantName}</div>}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-                              {renderPlatformBadges(item)}
-                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>{renderPlatformBadges(item)}</div>
                           </td>
                           <td><span className={styles.skuTag} style={{ background: '#e0f2fe', color: '#0369a1' }}>{item.sku}</span></td>
                           <td>
-                            <input type="number" min="1" step="1" value={item.quantity} disabled={item.fromPurchaseOrder} onChange={(e) => onQtyChange(idx, e.target.value)}
+                            <input type="number" min="1" step="1" value={item.quantity} onChange={(e) => onQtyChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${qtyBad ? styles.inputError : ''}`} />
                           </td>
                           <td>
-                            <input type="number" min="0" step="1000" value={item.unitPrice} disabled={item.fromPurchaseOrder} onChange={(e) => onPriceChange(idx, e.target.value)}
+                            <input type="number" min="0" step="1000" value={item.unitPrice} onChange={(e) => onPriceChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${priceBad ? styles.inputError : ''}`} />
-                            {Number(item.salePrice) > 0 && (
-                              <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
-                                Giá bán: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.salePrice))}</strong>
-                              </div>
-                            )}
+                            {Number(item.salePrice) > 0 && <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
+                              Giá bán: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.salePrice))}</strong></div>}
                           </td>
-                          <td className={styles.tdRight} style={{ fontWeight: 700, color: line > 0 ? '#2563eb' : '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
+                          <td className={styles.tdRight} style={{ fontWeight: 700, color: line > 0 ? '#16a34a' : '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
                             {line > 0 ? formatVND(line) : '—'}
                           </td>
                           <td>
-                            {!item.fromPurchaseOrder && <button className={styles.removeBtn} onClick={() => onRemove(idx)} aria-label={`Xóa ${item.productName}`}>
-                              <Trash2 size={13} />
-                            </button>}
+                            <button className={styles.removeBtn} onClick={() => onRemove(idx)} aria-label={`Xóa ${item.productName}`}><Trash2 size={13} /></button>
                           </td>
                         </tr>
                       );
@@ -988,7 +684,6 @@ export default function StockReceiveCreatePage() {
                 </table>
               </div>
             )}
-
             {items.length > 0 && (
               <div className={styles.tableFooter}>
                 <div className={styles.tableFooterLeft}>
@@ -1006,8 +701,6 @@ export default function StockReceiveCreatePage() {
 
         {/* RIGHT */}
         <div className={styles.rightCol}>
-
-          {/* Actions */}
           <div className={`${styles.card} ${styles.sidebarCard}`}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button className={`${styles.actionBtn} ${styles.backBtn}`} onClick={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS)}>
@@ -1017,14 +710,14 @@ export default function StockReceiveCreatePage() {
                 <PackagePlus className={styles.tealIcon} />
                 {isSubmitting ? 'Đang xử lý...' : 'Lưu tạm'}
               </button>
-              <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={onSubmit} disabled={isSubmitting}>
+              <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={onSubmit} disabled={isSubmitting}
+                style={{ background: '#16a34a', boxShadow: '0 8px 18px rgba(22,163,74,0.22)' }}>
                 <PackagePlus className={styles.primaryIcon} />
                 {isSubmitting ? 'Đang xử lý...' : 'Hoàn thành nhập kho'}
               </button>
             </div>
           </div>
 
-          {/* Summary */}
           <div className={`${styles.card} ${styles.sidebarCard}`}>
             <div className={styles.sidebarCardTitle}>Tổng quan</div>
             <div className={styles.sidebarRow}>
@@ -1037,24 +730,24 @@ export default function StockReceiveCreatePage() {
             </div>
             <div className={styles.sidebarRow}>
               <span className={styles.sidebarLabel}>Tổng giá trị</span>
-              <span className={styles.sidebarValue} style={{ color: totalAmount > 0 ? '#2563eb' : '#475569' }}>{totalAmount > 0 ? formatVND(totalAmount) : '—'}</span>
+              <span className={styles.sidebarValue} style={{ color: totalAmount > 0 ? '#16a34a' : '#475569' }}>
+                {totalAmount > 0 ? formatVND(totalAmount) : '—'}
+              </span>
             </div>
           </div>
 
-          {/* Notes */}
-          <div className={`${styles.card} ${styles.noteCard}`} style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+          <div className={`${styles.card} ${styles.noteCard}`} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
             <div className={styles.noteHeader}>
-              <AlertCircle size={14} color="#2563eb" />
-              <span className={styles.noteTitle} style={{ color: '#1e40af' }}>Lưu ý khi nhập kho</span>
+              <AlertCircle size={14} color="#16a34a" />
+              <span className={styles.noteTitle} style={{ color: '#15803d' }}>Lưu ý khi nhập thủ công</span>
             </div>
             <ul className={styles.noteList}>
-              {['Kiểm tra số lượng và đơn giá trước khi hoàn thành.', 'Tồn kho sẽ cập nhật sau khi hoàn thành nhập kho.', 'Lưu tạm để tiếp tục chỉnh sửa sau.', 'Import Excel để nhập nhanh nhiều sản phẩm.'].map((note) => (
-                <li key={note} className={styles.noteItem} style={{ color: '#1e40af' }}>{note}</li>
+              {['Nhập thủ công không cần đơn mua hàng.', 'Kiểm tra số lượng và đơn giá trước khi hoàn thành.', 'Tồn kho sẽ cập nhật sau khi hoàn thành nhập kho.', 'Lưu tạm để tiếp tục chỉnh sửa sau.'].map((note) => (
+                <li key={note} className={styles.noteItem} style={{ color: '#15803d' }}>{note}</li>
               ))}
             </ul>
           </div>
 
-          {/* Excel guide */}
           <div className={`${styles.card} ${styles.sidebarCard}`}>
             <div className={styles.sidebarCardTitle}>Định dạng file Excel</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 11, color: '#475569', lineHeight: 1.5 }}>
