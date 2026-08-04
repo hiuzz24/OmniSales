@@ -71,6 +71,12 @@ public class PurchaseOrder {
     @Column(name = "receiving_at")
     private OffsetDateTime receivingAt;
 
+    @Column(name = "inspecting_at")
+    private OffsetDateTime inspectingAt;
+
+    @Column(name = "inspected_at")
+    private OffsetDateTime inspectedAt;
+
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
 

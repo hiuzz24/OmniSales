@@ -41,8 +41,24 @@ const purchaseOrderApi = {
     const response = await axiosClient.patch(`/purchase-orders/${id}/send`);
     return response.data?.data ?? response.data;
   },
+  confirmReceiving: async (id) => {
+    const response = await axiosClient.patch(`/purchase-orders/${id}/confirm-receiving`);
+    return response.data?.data ?? response.data;
+  },
+  createSurplusOrder: async (id) => {
+    const response = await axiosClient.post(`/purchase-orders/${id}/surplus`);
+    return response.data?.data ?? response.data;
+  },
   cancel: async (id) => {
     const response = await axiosClient.patch(`/purchase-orders/${id}/cancel`);
+    return response.data?.data ?? response.data;
+  },
+  saveInspection: async (id, items) => {
+    const response = await axiosClient.patch(`/purchase-orders/${id}/inspect/save`, items);
+    return response.data?.data ?? response.data;
+  },
+  completeInspection: async (id, items) => {
+    const response = await axiosClient.patch(`/purchase-orders/${id}/inspect/complete`, items);
     return response.data?.data ?? response.data;
   },
 };

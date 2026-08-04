@@ -34,8 +34,6 @@ import InventoryPage from '../../features/inventory/pages/inventory/InventoryPag
 import InventoryDetailPage from '../../features/inventory/pages/inventory/InventoryDetailPage';
 import InventoryLogPage from '../../features/inventory/pages/inventory/InventoryLogPage';
 import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
-import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
-import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
 import OrderListPage from '../../features/order/pages/OrderListPage';
 import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
 import OrderLogPage from '../../features/order/pages/OrderLogPage';
@@ -45,6 +43,7 @@ import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
 import StockReceiveCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveCreatePage';
+import StockReceiveManualCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveManualCreatePage';
 import StockReceiveDetailPage from '../../features/inventory/pages/stockreceive/StockReceiveDetailPage';
 import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/StockReceiveEditPage';
 import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
@@ -64,6 +63,7 @@ import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswo
 import NotificationListPage from '../../features/user/pages/NotificationListPage';
 import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
 import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
+import PurchaseOrderDetailPage from '../../features/purchase/PurchaseOrderDetailPage';
 
 const AppRouter = () => {
   return (
@@ -109,6 +109,7 @@ const AppRouter = () => {
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL} element={<StockReceiveManualCreatePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
               <Route path={ROUTES.STOCK_DELIVERIES} element={<StockDeliveryPage />} />
@@ -125,6 +126,7 @@ const AppRouter = () => {
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.PURCHASE_ORDERS} element={<PurchaseOrderPage />} />
+              <Route path={ROUTES.PURCHASE_ORDER_DETAIL} element={<PurchaseOrderDetailPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN]} />}>
@@ -153,9 +155,6 @@ const AppRouter = () => {
               <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
               <Route path={ROUTES.INVENTORY_LOGS} element={<InventoryLogPage />} />
               <Route path={ROUTES.SUPPLIERS} element={<SupplierPage />} />
-              {/* <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} /> */}
-              <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
-              <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
               <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
               <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
               <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />

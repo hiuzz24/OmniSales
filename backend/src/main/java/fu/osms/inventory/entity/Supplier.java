@@ -30,6 +30,9 @@ public class Supplier {
     @Column(length = 50)
     private String phone;
 
+    @Column(length = 50)
+    private String taxCode;
+
     @Column(length = 255)
     private String email;
 

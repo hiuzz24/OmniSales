@@ -24,8 +24,13 @@ public class SupplierRequest {
     @Size(max = 255)
     private String contactName;
 
+    @NotBlank(message = "Số điện thoại nhà cung cấp là bắt buộc")
     @Size(max = 50)
     private String phone;
+
+    @NotBlank(message = "Mã số thuế (MST) là bắt buộc")
+    @Size(max = 50)
+    private String taxCode;
 
     @Email(message = "Email is not valid")
     @Size(max = 255)

@@ -36,4 +36,12 @@ public class PurchaseOrderItem {
 
     @Column(name = "total_cost", insertable = false, updatable = false, precision = 14, scale = 2)
     private BigDecimal totalCost;
+
+    /** Actual received quantity entered by sales/owner during inspection. Null = not yet inspected. */
+    @Column(name = "actual_quantity")
+    private Integer actualQuantity;
+
+    /** Note when actual quantity differs from ordered (e.g., surplus/shortage explanation). */
+    @Column(name = "surplus_note", columnDefinition = "TEXT")
+    private String surplusNote;
 }

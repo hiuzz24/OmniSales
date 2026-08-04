@@ -98,6 +98,15 @@
   border-radius: 13px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 5px 16px rgba(15, 23, 42, 0.035);
+  transition: box-shadow 150ms ease, background 120ms ease, outline 120ms ease;
+}
+
+.stat:hover {
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.09);
+}
+
+.stat[role="button"]:hover {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.82), rgba(240, 253, 250, 0.72));
 }
 
 .stat::before {
@@ -111,12 +120,30 @@
 .statLabel { color: #64748b; font-size: 12px; font-weight: 650; }
 .statValue { display: block; grid-column: 1; margin-top: 7px; color: #0f172a; font-size: 23px; font-weight: 760; font-variant-numeric: tabular-nums; }
 .stat > svg { grid-column: 2; grid-row: 1 / span 2; width: 36px; height: 36px; padding: 9px; border-radius: 10px; color: #2563eb; background: #eff6ff; }
-.stat:nth-child(2)::before { background: #f59e0b; }
-.stat:nth-child(2) > svg { color: #b45309; background: #fffbeb; }
-.stat:nth-child(3)::before { background: #0ea5e9; }
-.stat:nth-child(3) > svg { color: #0369a1; background: #f0f9ff; }
-.stat:nth-child(4)::before { background: #10b981; }
-.stat:nth-child(4) > svg { color: #047857; background: #ecfdf5; }
+/* Tổng đơn */
+.stat:nth-child(1)::before { background: #3b82f6; }
+.stat:nth-child(1) > svg   { color: #1d4ed8; background: #eff6ff; }
+/* Nháp */
+.stat:nth-child(2)::before { background: #94a3b8; }
+.stat:nth-child(2) > svg   { color: #475569; background: #f1f5f9; }
+/* Đã gửi NCC */
+.stat:nth-child(3)::before { background: #f59e0b; }
+.stat:nth-child(3) > svg   { color: #b45309; background: #fffbeb; }
+/* Đang giao hàng */
+.stat:nth-child(4)::before { background: #0ea5e9; }
+.stat:nth-child(4) > svg   { color: #0369a1; background: #f0f9ff; }
+/* Đang kiểm tra */
+.stat:nth-child(5)::before { background: #8b5cf6; }
+.stat:nth-child(5) > svg   { color: #7c3aed; background: #f5f3ff; }
+/* Đã kiểm tra */
+.stat:nth-child(6)::before { background: #f97316; }
+.stat:nth-child(6) > svg   { color: #c2410c; background: #fff7ed; }
+/* Hoàn thành */
+.stat:nth-child(7)::before { background: #10b981; }
+.stat:nth-child(7) > svg   { color: #047857; background: #ecfdf5; }
+/* Đã hủy */
+.stat:nth-child(8)::before { background: #ef4444; }
+.stat:nth-child(8) > svg   { color: #b91c1c; background: #fef2f2; }
 
 .toolbar {
   display: grid;
@@ -167,12 +194,16 @@
 .table tbody tr:hover { background: linear-gradient(90deg, rgba(239, 246, 255, 0.7), rgba(240, 253, 250, 0.42)); box-shadow: inset 3px 0 #60a5fa; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .code { color: #2563eb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
+.codeLink { color: #2563eb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
+.codeLink:hover { color: #1d4ed8; }
 .money, .number { text-align: right !important; font-variant-numeric: tabular-nums; }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 999px; padding: 4px 9px; white-space: nowrap; font-size: 11px; font-weight: 700; }
 .draft { color: #475569; background: #f1f5f9; border-color: #cbd5e1; }
 .sent { color: #1d4ed8; background: #eff6ff; border-color: #bfdbfe; }
 .receiving { color: #a16207; background: #fffbeb; border-color: #fde68a; }
+.inspecting { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; }
+.inspected { color: #c2410c; background: #fff7ed; border-color: #fed7aa; }
 .completed { color: #047857; background: #ecfdf5; border-color: #a7f3d0; }
 .cancelled { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
 .actionButton { min-height: 34px; padding-inline: 10px; font-size: 12px; }
@@ -978,9 +1009,13 @@
 }
 
 @media (max-width: 1000px) {
-  .stats { grid-template-columns: repeat(2, 1fr); }
+  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .formLayout { grid-template-columns: 1fr; }
   .sticky { position: static; }
+}
+
+@media (max-width: 720px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 640px) {
