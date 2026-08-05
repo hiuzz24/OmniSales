@@ -20,8 +20,7 @@ import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.SupplierRepository;
 import fu.osms.notification.service.NotificationService;
 import fu.osms.purchase.dto.*;
-import fu.osms.purchase.entity.PurchaseOrder;
-import fu.osms.purchase.entity.PurchaseOrderItem;
+import fu.osms.purchase.entity.PurchaseOrder;import fu.osms.purchase.entity.PurchaseOrderItem;
 import fu.osms.purchase.enums.PurchaseOrderStatus;
 import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.purchase.repository.PurchaseOrderRepository;
@@ -40,7 +39,6 @@ import java.security.SecureRandom;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
 @Service
 @RequiredArgsConstructor
 public class PurchaseOrderServiceImpl implements PurchaseOrderService {
@@ -211,15 +209,15 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return toResponse(saved);
     }
 
+    @Override
     @Transactional
-    public int moveSentOrdersToReceiving() {
-        // Retained for interface compatibility — no longer called automatically.
-        return 0;
+    public void completeFromReceipt(UUID purchaseOrderId) {
+        completeFromReceiptWithResult(purchaseOrderId);
     }
 
     @Override
     @Transactional
-    public void completeFromReceipt(UUID purchaseOrderId) {
+    public Optional<AutoCreatedOrderResult> completeFromReceiptWithResult(UUID purchaseOrderId) {
         PurchaseOrder order = requireOrder(purchaseOrderId);
         // Accept both RECEIVING and INSPECTED → COMPLETED
         if (order.getStatus() != PurchaseOrderStatus.RECEIVING
@@ -228,21 +226,96 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     "Đơn mua hàng phải ở trạng thái Đang giao hàng hoặc Đã kiểm tra trước khi hoàn thành phiếu nhập.");
         }
 
+        // Detect shortage items (actualQty < orderedQty) BEFORE completing
+        List<PurchaseOrderItem> shortageItems = order.getItems().stream()
+                .filter(item -> item.getActualQuantity() != null
+                        && item.getActualQuantity() < item.getQuantity())
+                .toList();
+
         // Auto-create surplus order BEFORE completing, while status is still INSPECTED
         boolean hasPendingSurplus = order.getItems().stream()
                 .anyMatch(item -> item.getActualQuantity() != null
                         && item.getActualQuantity() > item.getQuantity());
+
+        AutoCreatedOrderResult result = null;
+
         if (hasPendingSurplus) {
             try {
-                createSurplusOrderInternal(order);
+                PurchaseOrder surplusOrder = createSurplusOrderInternal(order);
+                String summary = buildItemSummary(surplusOrder.getItems(), "thừa");
+                result = AutoCreatedOrderResult.builder()
+                        .type("SURPLUS")
+                        .orderId(surplusOrder.getId())
+                        .orderCode(surplusOrder.getOrderCode())
+                        .summary(summary)
+                        .build();
             } catch (Exception ignored) {
                 // Surplus may already have been split — safe to ignore
+            }
+        } else if (!shortageItems.isEmpty()) {
+            // Auto-create shortage supplementary order
+            try {
+                PurchaseOrder shortageOrder = createShortageOrderInternalFromItems(order, shortageItems);
+                String summary = buildItemSummary(shortageOrder.getItems(), "thiếu");
+                result = AutoCreatedOrderResult.builder()
+                        .type("SHORTAGE")
+                        .orderId(shortageOrder.getId())
+                        .orderCode(shortageOrder.getOrderCode())
+                        .summary(summary)
+                        .build();
+            } catch (Exception ignored) {
+                // Shortage order may already exist — safe to ignore
             }
         }
 
         order.setStatus(PurchaseOrderStatus.COMPLETED);
         order.setCompletedAt(OffsetDateTime.now());
         purchaseOrderRepository.save(order);
+
+        return Optional.ofNullable(result);
+    }
+
+    private String buildItemSummary(List<PurchaseOrderItem> items, String kind) {
+        return items.stream()
+                .map(item -> item.getVariant().getProduct().getName()
+                        + (item.getVariant().getName() != null ? " (" + item.getVariant().getName() + ")" : "")
+                        + ": " + item.getQuantity() + " sp " + kind)
+                .collect(Collectors.joining(", "));
+    }
+
+    private PurchaseOrder createShortageOrderInternalFromItems(
+            PurchaseOrder original, List<PurchaseOrderItem> shortageItems) {
+        PurchaseOrder shortage = PurchaseOrder.builder()
+                .orderCode(generateOrderCode())
+                .supplier(original.getSupplier())
+                .warehouse(original.getWarehouse())
+                .status(PurchaseOrderStatus.INSPECTED)
+                .orderDate(OffsetDateTime.now())
+                .expectedReceiptDate(LocalDate.now())
+                .paymentMethod(original.getPaymentMethod())
+                .notes("[Bổ sung] Tách từ đơn " + original.getOrderCode()
+                        + ". Số lượng thực nhận thiếu so với số lượng đặt.")
+                .createdBy(original.getCreatedBy())
+                .sentAt(OffsetDateTime.now())
+                .receivingAt(OffsetDateTime.now())
+                .inspectingAt(OffsetDateTime.now())
+                .inspectedAt(OffsetDateTime.now())
+                .build();
+        BigDecimal total = BigDecimal.ZERO;
+        for (PurchaseOrderItem orig : shortageItems) {
+            int shortageQty = orig.getQuantity() - orig.getActualQuantity();
+            PurchaseOrderItem newItem = PurchaseOrderItem.builder()
+                    .variant(orig.getVariant())
+                    .quantity(shortageQty)
+                    .actualQuantity(shortageQty)
+                    .unitCost(orig.getUnitCost())
+                    .surplusNote("Bổ sung " + shortageQty + " thiếu từ đơn " + original.getOrderCode())
+                    .build();
+            shortage.addItem(newItem);
+            total = total.add(orig.getUnitCost().multiply(BigDecimal.valueOf(shortageQty)));
+        }
+        shortage.setTotalAmount(total);
+        return purchaseOrderRepository.save(shortage);
     }
 
     // ── Inspection ────────────────────────────────────────────────────────────
@@ -423,6 +496,55 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     "Chỉ đơn ở trạng thái Chờ nhập kho mới có thể tạo đơn thặng dư.");
         }
         return toResponse(createSurplusOrderInternal(original));
+    }
+
+    @Override
+    @Transactional
+    public PurchaseOrderResponse createShortageOrder(UUID originalOrderId) {
+        PurchaseOrder original = requireOrder(originalOrderId);
+        if (original.getStatus() != PurchaseOrderStatus.INSPECTED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ đơn ở trạng thái Đã kiểm tra mới có thể tạo đơn bổ sung hàng thiếu.");
+        }
+        List<PurchaseOrderItem> shortageItems = original.getItems().stream()
+                .filter(item -> item.getActualQuantity() != null
+                        && item.getActualQuantity() < item.getQuantity())
+                .toList();
+        if (shortageItems.isEmpty()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Không có sản phẩm thiếu hụt trong đơn này.");
+        }
+        PurchaseOrder shortage = PurchaseOrder.builder()
+                .orderCode(generateOrderCode())
+                .supplier(original.getSupplier())
+                .warehouse(original.getWarehouse())
+                .status(PurchaseOrderStatus.INSPECTED)
+                .orderDate(OffsetDateTime.now())
+                .expectedReceiptDate(LocalDate.now())
+                .paymentMethod(original.getPaymentMethod())
+                .notes("[Bổ sung] Tách từ đơn " + original.getOrderCode()
+                        + ". Số lượng thực nhận thiếu so với số lượng đặt.")
+                .createdBy(original.getCreatedBy())
+                .sentAt(OffsetDateTime.now())
+                .receivingAt(OffsetDateTime.now())
+                .inspectingAt(OffsetDateTime.now())
+                .inspectedAt(OffsetDateTime.now())
+                .build();
+        BigDecimal total = BigDecimal.ZERO;
+        for (PurchaseOrderItem orig : shortageItems) {
+            int shortageQty = orig.getQuantity() - orig.getActualQuantity();
+            PurchaseOrderItem newItem = PurchaseOrderItem.builder()
+                    .variant(orig.getVariant())
+                    .quantity(shortageQty)
+                    .actualQuantity(shortageQty)
+                    .unitCost(orig.getUnitCost())
+                    .surplusNote("Bổ sung " + shortageQty + " thiếu từ đơn " + original.getOrderCode())
+                    .build();
+            shortage.addItem(newItem);
+            total = total.add(orig.getUnitCost().multiply(BigDecimal.valueOf(shortageQty)));
+        }
+        shortage.setTotalAmount(total);
+        return toResponse(purchaseOrderRepository.save(shortage));
     }
 
     private PurchaseOrder createSurplusOrderInternal(PurchaseOrder original) {
@@ -766,6 +888,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 .createdAt(order.getCreatedAt()).updatedAt(order.getUpdatedAt()).items(items)
                 .hasSurplus(items.stream().anyMatch(item ->
                         item.getActualQuantity() != null && item.getActualQuantity() > item.getQuantity()))
+                .hasShortage(items.stream().anyMatch(item ->
+                        item.getActualQuantity() != null && item.getActualQuantity() < item.getQuantity()))
                 .hasNote(items.stream().anyMatch(item ->
                         item.getSurplusNote() != null && !item.getSurplusNote().isBlank()))
                 .build();

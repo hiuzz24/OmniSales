@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCheck, Loader2, Plus, Printer, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, Loader2, Plus, Printer, ShoppingBag, Send, Truck, PackagePlus, TrendingUp, TrendingDown, XCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import purchaseOrderApi from '../../api/purchaseOrderApi';
 import { ROUTES } from '../../app/router/routes';
@@ -80,6 +80,7 @@ export default function PurchaseOrderDetailPage() {
   const [notes, setNotes] = useState({});
 
   const canInspect = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
+  const canAct = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
   const { confirm, ConfirmDialog } = useConfirmDialog();
   // Show inspection UI only when explicitly in inspect mode AND order is in an inspectable state
   const isInspectable = inspectMode && canInspect && order &&
@@ -126,8 +127,8 @@ export default function PurchaseOrderDetailPage() {
       // Auto-generate note if user hasn't typed one
       let autoNote = notes[item.variantId] ?? '';
       if (!autoNote) {
-        if (diff > 0) autoNote = `Thừa ${diff} sản phẩm so với số lượng đặt (${item.quantity})`;
-        else if (diff < 0) autoNote = `Thiếu ${Math.abs(diff)} sản phẩm so với số lượng đặt (${item.quantity})`;
+        if (diff > 0) autoNote = `[THỪA] Thực nhận ${actual}, đặt ${item.quantity} — thừa ${diff} sản phẩm`;
+        else if (diff < 0) autoNote = `[THIẾU] Thực nhận ${actual}, đặt ${item.quantity} — thiếu ${Math.abs(diff)} sản phẩm`;
       }
       return {
         variantId: item.variantId,
@@ -165,6 +166,113 @@ export default function PurchaseOrderDetailPage() {
       reload();
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Không thể hoàn thành kiểm tra.');
+    } finally { setSaving(false); }
+  };
+
+  // Gửi NCC
+  const handleSend = async () => {
+    const confirmed = await confirm({
+      title: 'Gửi đơn cho nhà cung cấp?',
+      message: 'Đơn hàng sẽ chuyển sang trạng thái "Đã gửi NCC". Bạn sẽ không thể chỉnh sửa sau khi gửi.',
+      confirmLabel: 'Gửi NCC',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      await purchaseOrderApi.send(id);
+      toast.success('Đã gửi đơn cho nhà cung cấp.');
+      reload();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Không thể gửi đơn.');
+    } finally { setSaving(false); }
+  };
+
+  // Xác nhận nhận hàng
+  const handleConfirmReceiving = async () => {
+    const confirmed = await confirm({
+      title: 'Xác nhận đang nhận hàng?',
+      message: 'Đơn sẽ chuyển sang trạng thái "Đang giao hàng". Thao tác này cho phép bắt đầu quá trình kiểm tra hàng hóa.',
+      confirmLabel: 'Xác nhận nhận hàng',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      await purchaseOrderApi.confirmReceiving(id);
+      toast.success('Đã xác nhận nhận hàng.');
+      reload();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Không thể xác nhận nhận hàng.');
+    } finally { setSaving(false); }
+  };
+
+  // Hủy đơn
+  const handleCancel = async () => {
+    const confirmed = await confirm({
+      title: 'Hủy đơn mua hàng?',
+      message: `Bạn chắc chắn muốn hủy đơn ${order?.orderCode}?\nThao tác này không thể hoàn tác.`,
+      confirmLabel: 'Hủy đơn',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      await purchaseOrderApi.cancel(id);
+      toast.success('Đã hủy đơn mua hàng.');
+      navigate(ROUTES.PURCHASE_ORDERS);
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Không thể hủy đơn.');
+    } finally { setSaving(false); }
+  };
+
+  // Tạo đơn thặng dư (thừa)
+  const handleCreateSurplus = async () => {
+    const surplusItems = (order?.items ?? []).filter(
+      (item) => item.actualQuantity != null && item.actualQuantity > item.quantity
+    );
+    const itemDesc = surplusItems.map((item) =>
+      `• ${item.productName}${item.variantName ? ` (${item.variantName})` : ''}: thừa ${item.actualQuantity - item.quantity} sản phẩm`
+    ).join('\n');
+    const confirmed = await confirm({
+      title: 'Tạo đơn thặng dư?',
+      message: `Sẽ tạo đơn mua hàng mới ở trạng thái Đã kiểm tra cho số lượng thừa:\n\n${itemDesc}\n\nGhi chú sẽ được tự động điền.`,
+      confirmLabel: 'Tạo đơn thặng dư',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      const newOrder = await purchaseOrderApi.createSurplusOrder(id);
+      toast.success(`Đã tạo đơn thặng dư ${newOrder.orderCode}.`);
+      reload();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Không thể tạo đơn thặng dư.');
+    } finally { setSaving(false); }
+  };
+
+  // Tạo đơn bổ sung (thiếu)
+  const handleCreateShortage = async () => {
+    const shortageItems = (order?.items ?? []).filter(
+      (item) => item.actualQuantity != null && item.actualQuantity < item.quantity
+    );
+    const itemDesc = shortageItems.map((item) =>
+      `• ${item.productName}${item.variantName ? ` (${item.variantName})` : ''}: thiếu ${item.quantity - item.actualQuantity} sản phẩm`
+    ).join('\n');
+    const confirmed = await confirm({
+      title: 'Tạo đơn bổ sung hàng thiếu?',
+      message: `Sẽ tạo đơn mua hàng mới ở trạng thái Đã kiểm tra cho số lượng còn thiếu:\n\n${itemDesc}\n\nGhi chú bổ sung sẽ được tự động điền.`,
+      confirmLabel: 'Tạo đơn bổ sung',
+      tone: 'warning',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      const newOrder = await purchaseOrderApi.createShortageOrder(id);
+      toast.success(`Đã tạo đơn bổ sung ${newOrder.orderCode}.`);
+      reload();
+    } catch (e) {
+      toast.error(e?.response?.data?.message || 'Không thể tạo đơn bổ sung.');
     } finally { setSaving(false); }
   };
 
@@ -206,12 +314,47 @@ export default function PurchaseOrderDetailPage() {
             style={{ minHeight: 36, paddingInline: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Printer size={15} /> In phiếu
           </button>
-          {/* Create receipt only when INSPECTED */}
+          {/* Gửi NCC — DRAFT */}
+          {canAct && order.status === 'DRAFT' && (
+            <button className={styles.actionButton} disabled={saving} onClick={handleSend}
+              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0369a1', borderColor: '#bae6fd' }}>
+              <Send size={15} /> Gửi NCC
+            </button>
+          )}
+          {/* Xác nhận nhận hàng — SENT_TO_SUPPLIER */}
+          {canAct && order.status === 'SENT_TO_SUPPLIER' && (
+            <button className={styles.actionButton} disabled={saving} onClick={handleConfirmReceiving}
+              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0369a1', borderColor: '#bae6fd' }}>
+              <Truck size={15} /> Xác nhận nhận hàng
+            </button>
+          )}
+          {/* Tạo phiếu nhập kho — INSPECTED */}
           {order.status === 'INSPECTED' && !order.receiptId && (
             <button className={styles.primaryButton}
               onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}
               style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Plus size={15} /> Tạo phiếu nhập kho
+            </button>
+          )}
+          {/* Tạo đơn bổ sung (thiếu) — INSPECTED với hasShortage */}
+          {canAct && order.status === 'INSPECTED' && order.hasShortage && (
+            <button className={styles.actionButton} disabled={saving} onClick={handleCreateShortage}
+              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#c2410c', borderColor: '#fed7aa', background: '#fff7ed' }}>
+              <TrendingDown size={15} /> Tạo đơn bổ sung
+            </button>
+          )}
+          {/* Tạo đơn thặng dư (thừa) — INSPECTED với hasSurplus */}
+          {canAct && order.status === 'INSPECTED' && order.hasSurplus && (
+            <button className={styles.actionButton} disabled={saving} onClick={handleCreateSurplus}
+              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#7c3aed', borderColor: '#ddd6fe', background: '#fdf4ff' }}>
+              <TrendingUp size={15} /> Tạo đơn thặng dư
+            </button>
+          )}
+          {/* Hủy đơn */}
+          {canAct && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
+            <button className={styles.actionButton} disabled={saving} onClick={handleCancel}
+              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#b91c1c', borderColor: '#fecaca' }}>
+              <XCircle size={15} /> Hủy đơn
             </button>
           )}
         </div>
@@ -297,14 +440,28 @@ export default function PurchaseOrderDetailPage() {
                           style={{ width: 80, padding: '4px 8px', borderRadius: 6, textAlign: 'right', fontSize: 13, fontWeight: 700,
                             border: `1px solid ${isSurplus ? '#a855f7' : isShort ? '#f97316' : '#cbd5e1'}` }} />
                       ) : (
-                        <span style={{ fontWeight: 700, color: isSurplus ? '#7c3aed' : isShort ? '#f97316' : '#059669' }}>
-                          {displayActual != null ? num(displayActual) : '—'}
-                          {isSurplus && <span style={{ fontSize: 10, marginLeft: 4, color: '#7c3aed' }}>▲+{Number(displayActual) - item.quantity}</span>}
-                          {isShort && <span style={{ fontSize: 10, marginLeft: 4, color: '#f97316' }}>▼-{item.quantity - Number(displayActual)}</span>}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                          <span style={{ fontWeight: 700, color: isSurplus ? '#7c3aed' : isShort ? '#dc2626' : '#059669' }}>
+                            {displayActual != null ? num(displayActual) : '—'}
+                          </span>
+                          {displayActual != null && (
+                            isSurplus ? (
+                              <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: '#f3e8ff', color: '#7c3aed', border: '1px solid #ddd6fe', whiteSpace: 'nowrap' }}>
+                                ▲ THỪA +{Number(displayActual) - item.quantity}
+                              </span>
+                            ) : isShort ? (
+                              <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca', whiteSpace: 'nowrap' }}>
+                                ▼ THIẾU -{item.quantity - Number(displayActual)}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#dcfce7', color: '#16a34a', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
+                                ✓ ĐỦ
+                              </span>
+                            )
+                          )}
+                        </div>
                       )}
                     </td>
-                    {/* Note column */}
                     <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', minWidth: 180 }}>
                       {isInspectable ? (
                         <input
@@ -312,8 +469,8 @@ export default function PurchaseOrderDetailPage() {
                           value={notes[item.variantId] ?? ''}
                           onChange={(e) => setNotes((prev) => ({ ...prev, [item.variantId]: e.target.value }))}
                           placeholder={
-                            isSurplus ? `Thừa ${Number(actualQty[item.variantId] ?? item.quantity) - item.quantity} sp...` :
-                            isShort  ? `Thiếu ${item.quantity - Number(actualQty[item.variantId] ?? item.quantity)} sp...` :
+                            isSurplus ? `[THỪA] thừa ${Number(actualQty[item.variantId] ?? item.quantity) - item.quantity} sp...` :
+                            isShort  ? `[THIẾU] thiếu ${item.quantity - Number(actualQty[item.variantId] ?? item.quantity)} sp...` :
                             'Ghi chú...'
                           }
                           style={{ width: '100%', padding: '4px 8px', borderRadius: 6, fontSize: 12,
