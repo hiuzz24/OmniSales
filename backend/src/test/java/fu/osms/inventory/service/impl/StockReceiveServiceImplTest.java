@@ -171,7 +171,7 @@ class StockReceiveServiceImplTest {
                 .id(purchaseOrderId)
                 .warehouse(warehouse)
                 .supplier(supplier)
-                .status(PurchaseOrderStatus.RECEIVING)
+                .status(PurchaseOrderStatus.INSPECTED)
                 .build();
 
         purchaseOrderItem = PurchaseOrderItem.builder()
