@@ -1,10 +1,3 @@
-/**
- * API tests for TikTokOAuthController (/api/channels/tiktok).
- *
- * Covers:
- *   - GET /api/channels/tiktok/callback
- */
-
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
 
