@@ -4,8 +4,8 @@ spring:
   application:
     name: OSMS
   datasource:
-    url: jdbc:postgresql://localhost:5432/OSMS
-    username: postgres
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:OSMS}
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
