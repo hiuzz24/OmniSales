@@ -100,7 +100,12 @@ public class SecurityConfig {
                 "http://localhost:517*",
                 "http://localhost:300*",
                 "http://127.0.0.1:517*",
-                "http://127.0.0.1:300*"
+                "http://127.0.0.1:300*",
+                // Render.com (production frontend on HTTPS).
+                // App-osms is the primary frontend service; the wildcard covers
+                // any preview / branch URLs Render may spin up for PRs.
+                "https://app-osms.onrender.com",
+                "https://*.onrender.com"
         ));
         corsConfiguration.addExposedHeader("Authorization");
 

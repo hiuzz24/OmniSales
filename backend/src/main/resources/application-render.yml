@@ -1,0 +1,42 @@
+# =============================================================================
+# Render.com production profile
+#
+# Kích hoạt bằng env: SPRING_PROFILES_ACTIVE=render (xem render.yaml)
+# File này merge đè lên application.yaml — chỉ override những gì cần thay đổi
+# cho môi trường Render (free tier, ephemeral, no local DB).
+#
+# Khác biệt chính so với application.yaml:
+#   * server.port  : dùng ${PORT} (Render inject, mặc định 10000) thay vì hardcode 8080
+#   * ddl-auto     : 'update' thay vì 'validate' (DB Render trống, không thể validate)
+#                    Sau lần deploy đầu tiên tạo xong tables, có thể đổi lại 'validate'
+#                    hoặc dùng Flyway/Liquibase nếu cần schema migration bài bản.
+#   * banner-mode  : tắt banner cho log gọn (Render logs dễ đọc hơn)
+#   * sql.init.mode: KHÔNG bật — schema/data sẽ được seed qua Render Shell (1 lần)
+#                    tránh Spring Boot tự load schema.sql gây conflict.
+#   * multipart    : giữ nguyên 20MB từ application.yaml (đủ cho catalog import)
+# =============================================================================
+
+server:
+  # Render set PORT env (thường là 10000 cho web service). Bind theo env.
+  port: ${PORT:8080}
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+  main:
+    banner-mode: off
+
+  # Tắt SQL init — schema/data sẽ seed qua Render Shell sau khi DB tạo xong.
+  sql:
+    init:
+      mode: never
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+    org.hibernate.SQL: WARN
+    fu.osms: INFO
