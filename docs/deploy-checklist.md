@@ -13,6 +13,7 @@
 - [D. Build & Deploy (P0)](#d-build--deploy-p0)
 - [E. Post-deploy Verify (P1)](#e-post-deploy-verify-p1)
 - [F. Rollback Plan](#f-rollback-plan)
+- [H. Render.com (Free Tier Blueprint)](#h-rendercom-free-tier-blueprint)
 - [G. RabbitMQ (Deferred)](#g-rabbitmq-deferred)
 - [Phụ lục: Lệnh nhanh](#phụ-lục-lệnh-nhanh)
 
@@ -330,6 +331,105 @@ docker compose down --remove-orphans
 ```bash
 docker compose down -v  # ⚠️ MẤT TOÀN BỘ DATA
 ```
+
+---
+
+## H. Render.com (Free Tier Blueprint)
+
+> Phương án thay thế cho VPS — deploy cả stack lên Render.com với **$0/tháng** (Postgres 90 ngày, Web + Static free vĩnh viễn). Phù hợp cho đồ án 1 tháng, demo trước hội đồng.
+>
+> Hướng dẫn đầy đủ: [docs/deploy-render.md](deploy-render.md).
+
+### H.1. Tại sao chọn Render?
+
+- 1 cú click deploy cả Postgres + Backend + Frontend qua `render.yaml` Blueprint.
+- HTTPS auto (cần cho OAuth Shopify/Lazada/TikTok).
+- Không cần config Caddy / Let's Encrypt.
+- Sleep sau 15 phút idle → warm up bằng `scripts/render-warmup.sh`.
+
+### H.2. Pre-flight check
+
+```bash
+bash scripts/render-deploy.sh
+```
+
+Script verify:
+
+- Branch = `main`
+- `render.yaml` parse OK
+- `backend/Dockerfile` có `JAVA_TOOL_OPTIONS`
+- Không có `.env` bị git track
+
+### H.3. Tạo Blueprint
+
+1. Push code lên GitLab/GitHub (branch `main`).
+2. Vào https://dashboard.render.com/blueprints → **New Blueprint Instance**.
+3. Chọn repo + branch `main`.
+4. Render tạo 3 resource:
+   - `omnisales-db` (Postgres free, 90 ngày)
+   - `api-osms` (Web service, Docker)
+   - `app-osms` (Static site, Vite)
+5. Vào `api-osms` → **Environment** → điền các biến `sync: false` (Gmail, Shopify, Lazada, TikTok, Cloudinary upload preset).
+
+### H.4. Seed dữ liệu
+
+Render free tier **không tự chạy** `hibernate-schema.sql`. Cách nhanh nhất:
+
+```bash
+# Lấy External Connection String từ Render DB dashboard
+export PGPASSWORD='<password>'
+
+# Connect & seed
+psql -h <host>.oregon-postgres.render.com -U postgres -d OSMS \
+  -f backend/hibernate-schema.sql
+
+# Apply migrations
+psql -h <host>.oregon-postgres.render.com -U postgres -d OSMS \
+  -f backend/database-migrations/20260806_stocktake_detail_page_fields.sql
+```
+
+### H.5. Verify
+
+```bash
+# Backend health
+curl -fsS https://api-osms.onrender.com/api/address/countries
+
+# Frontend health
+curl -fsS https://app-osms.onrender.com/
+
+# OAuth / CORS check
+bash scripts/render-oauth-test.sh
+```
+
+### H.6. Warm up trước demo
+
+```bash
+bash scripts/render-warmup.sh
+```
+
+### H.7. CORS — backend SecurityConfig
+
+Free tier dùng **cross-origin** (frontend & backend ở 2 subdomain khác nhau). Cần thêm origin Render vào `backend/src/main/java/fu/osms/config/SecurityConfig.java`:
+
+```java
+corsConfiguration.setAllowedOriginPatterns(List.of(
+    "http://localhost:517*",
+    "http://localhost:300*",
+    "http://127.0.0.1:517*",
+    "http://127.0.0.1:300*",
+    "https://app-osms.onrender.com"   // <-- thêm
+));
+```
+
+### H.8. Free tier limits & workarounds
+
+| Limit | Workaround |
+|---|---|
+| Web service sleep sau 15 phút idle | `scripts/render-warmup.sh` trước demo |
+| Postgres free chỉ 90 ngày | OK cho 1 tháng demo. Backup trước khi hết hạn. |
+| Build 10-15 phút | Lần đầu chậm. Cache cho lần sau. |
+| 0.5 CPU / 512MB RAM | `JAVA_TOOL_OPTIONS="-Xmx384m -Xms192m"` |
+| Không persistent volume | Backup Postgres qua external connection string |
 
 ---
 
