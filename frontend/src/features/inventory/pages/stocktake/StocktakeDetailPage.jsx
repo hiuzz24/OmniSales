@@ -339,6 +339,5 @@ export default function StocktakeDetailPage() {
       </div>
       {ConfirmDialog}
     </div>
-    </div>
   );
 }
