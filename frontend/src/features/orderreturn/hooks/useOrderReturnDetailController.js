@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import orderReturnApi from '../../../api/orderReturnApi';
 import { ROLES } from '../../auth/constants/roles';
 import useAuth from '../../auth/hooks/useAuth';
+import { groupOrderReturnItems } from '../utils/orderReturnDisplay';
 
 const useOrderReturnDetailController = () => {
   const { id } = useParams();
@@ -20,6 +21,7 @@ const useOrderReturnDetailController = () => {
   const [rejectOptionsError, setRejectOptionsError] = useState('');
   const [rejectReasonCode, setRejectReasonCode] = useState('');
   const [rejectComment, setRejectComment] = useState('');
+  const pollingRequestRef = useRef(false);
 
   const isSale = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
   const isWarehouse = user?.role === ROLES.OWNER || user?.role === ROLES.OPERATIONS;
@@ -32,11 +34,12 @@ const useOrderReturnDetailController = () => {
     (isTikTok && data?.status === 'RETURN_IN_TRANSIT')
     || (!isTikTok && ['AWAITING_RETURN', 'RETURN_IN_TRANSIT'].includes(data?.status))
   );
-  const canRefresh = isTikTokWaitingForBuyer
-    || (isShopify && (
-      data?.status === 'PLATFORM_PROCESSING'
-      || (data?.status === 'INSPECTED' && isPartialReceipt)
-    ));
+  const canRefresh = isTikTokWaitingForBuyer;
+  const shouldAutoSyncShopify = isShopify && (
+    data?.status === 'PLATFORM_PROCESSING'
+    || (data?.status === 'INSPECTED' && isPartialReceipt)
+    || data?.actionState === 'UNKNOWN'
+  );
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -60,17 +63,36 @@ const useOrderReturnDetailController = () => {
     if (!returnStatus || ['COMPLETED', 'REJECTED', 'FAILED'].includes(returnStatus)) {
       return undefined;
     }
-    const pollingId = window.setInterval(() => load(true), 5000);
+    const poll = async () => {
+      if (pollingRequestRef.current) return;
+      pollingRequestRef.current = true;
+      try {
+        if (shouldAutoSyncShopify) {
+          const updated = data?.actionState === 'UNKNOWN'
+            ? await orderReturnApi.checkAction(id)
+            : await orderReturnApi.refresh(id);
+          setData(updated);
+        } else {
+          await load(true);
+        }
+      } catch {
+        // Polling is best effort; the next cycle or a webhook can still converge the state.
+      } finally {
+        pollingRequestRef.current = false;
+      }
+    };
+    const pollingId = window.setInterval(poll, 5000);
     return () => window.clearInterval(pollingId);
-  }, [returnStatus, load]);
+  }, [data?.actionState, id, load, returnStatus, shouldAutoSyncShopify]);
 
   const actionRoleAllowed = data?.lastAction
     ? (data.lastAction === 'PROCESS' ? isWarehouse : isSale)
     : false;
   const shouldCheckUnknownAction = data?.actionState === 'UNKNOWN' && actionRoleAllowed;
-  const canCheckPlatform = canRefresh || shouldCheckUnknownAction;
+  const canCheckPlatform = !isShopify && (canRefresh || shouldCheckUnknownAction);
+  const displayItems = groupOrderReturnItems(data?.items ?? []);
 
-  const totals = (data?.items ?? []).reduce((result, item) => ({
+  const totals = displayItems.reduce((result, item) => ({
     approved: result.approved + (item.approvedQuantity ?? 0),
     received: result.received + (item.receivedQuantity ?? 0),
     restockable: result.restockable + (item.restockableQuantity ?? 0),
@@ -155,8 +177,12 @@ const useOrderReturnDetailController = () => {
   );
 
   const openInspection = () => {
-    setInspection((data.items ?? []).map((item) => ({
-      returnItemId: item.id,
+    setInspection(displayItems.map((item) => ({
+      groupId: item.id,
+      sourceItems: item.sourceItems.map((source) => ({
+        returnItemId: source.id,
+        approvedQuantity: source.approvedQuantity,
+      })),
       name: item.name,
       sku: item.sku,
       approvedQuantity: item.approvedQuantity,
@@ -187,13 +213,24 @@ const useOrderReturnDetailController = () => {
     try {
       const updated = await orderReturnApi.inspect(
         id,
-        inspection.map((item) => ({
-          returnItemId: item.returnItemId,
-          receivedQuantity: item.receivedQuantity,
-          restockableQuantity: item.restockableQuantity,
-          damagedQuantity: item.damagedQuantity,
-          missingQuantity: item.missingQuantity,
-        })),
+        inspection.flatMap((item) => {
+          let receivedRemaining = item.receivedQuantity;
+          let restockableRemaining = item.restockableQuantity;
+          return item.sourceItems.map((source) => {
+            const receivedQuantity = Math.min(receivedRemaining, source.approvedQuantity);
+            const restockableQuantity = Math.min(restockableRemaining, receivedQuantity);
+            const damagedQuantity = receivedQuantity - restockableQuantity;
+            receivedRemaining -= receivedQuantity;
+            restockableRemaining -= restockableQuantity;
+            return {
+              returnItemId: source.returnItemId,
+              receivedQuantity,
+              restockableQuantity,
+              damagedQuantity,
+              missingQuantity: source.approvedQuantity - receivedQuantity,
+            };
+          });
+        }),
       );
       setData(updated);
       const partial = updated.items?.some((item) => (item.missingQuantity ?? 0) > 0);
@@ -238,6 +275,7 @@ const useOrderReturnDetailController = () => {
     canInspect,
     canCheckPlatform,
     actionRoleAllowed,
+    displayItems,
     totals,
     run,
     openRejectModal,
@@ -250,4 +288,3 @@ const useOrderReturnDetailController = () => {
 };
 
 export default useOrderReturnDetailController;
-

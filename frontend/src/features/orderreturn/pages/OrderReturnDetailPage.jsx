@@ -23,6 +23,10 @@ import {
   ORDER_RETURN_STATUS_LABELS,
   RETURN_ACTION_LABELS,
   RETURN_ACTION_STATE_LABELS,
+  DATA_VALIDATION_LABELS,
+  formatPlatformLabel,
+  formatReturnErrorMessage,
+  formatReturnPlatformStatus,
 } from '../utils/orderReturnDisplay';
 import styles from './OrderReturnDetailPage.module.css';
 import useOrderReturnDetailController from '../hooks/useOrderReturnDetailController';
@@ -55,7 +59,7 @@ const OrderReturnDetailPage = () => {
     rejectOpen, setRejectOpen, rejectOptions, rejectOptionsLoading, rejectOptionsError,
     rejectReasonCode, setRejectReasonCode, rejectComment, setRejectComment,
     isSale, isWarehouse, isShopify, isPartialReceipt, isTikTokWaitingForBuyer,
-    canInspect, canCheckPlatform, actionRoleAllowed, totals, run,
+    canInspect, canCheckPlatform, actionRoleAllowed, displayItems, totals, run,
     openRejectModal, submitReject, checkPlatform, openInspection, updateInspection, submitInspection,
   } = useOrderReturnDetailController();
 
@@ -119,7 +123,7 @@ const OrderReturnDetailPage = () => {
             <p>
               Đơn <strong>{data.externalOrderId || '-'}</strong>
               <span aria-hidden="true">•</span>
-              {data.platform || '-'}
+              {formatPlatformLabel(data.platform)}
               <span aria-hidden="true">•</span>
               {data.channelName || '-'}
             </p>
@@ -159,7 +163,7 @@ const OrderReturnDetailPage = () => {
               onClick={() => run(() => orderReturnApi.retryAction(id), 'Đã thử lại thao tác')}
               disabled={working}
             >
-              <RefreshCw size={17} /> Thử lại API
+              <RefreshCw size={17} /> Thử lại thao tác
             </button>
           )}
           {isWarehouse && data.status === 'PENDING_STOCK' && (
@@ -202,14 +206,14 @@ const OrderReturnDetailPage = () => {
         {isTikTokWaitingForBuyer && (
           <div className={`${styles.notice} ${styles.noticeWarning}`}>
             <AlertCircle size={18} />
-            <div><strong>Đang chờ khách gửi hàng</strong><p>Chỉ có thể nhận và kiểm hàng sau khi TikTok chuyển sang BUYER_SHIPPED_ITEM.</p></div>
+            <div><strong>Đang chờ khách gửi hàng</strong><p>Chỉ có thể nhận và kiểm hàng sau khi TikTok xác nhận khách đã gửi hàng.</p></div>
           </div>
         )}
 
         {isShopify && data.status === 'INSPECTED' && isPartialReceipt && (
           <div className={`${styles.notice} ${styles.noticeWarning}`}>
             <AlertTriangle size={18} />
-            <div><strong>Đơn trả hàng nhận thiếu</strong><p>Xử lý thủ công trên Shopify, chỉ restock hàng thực tế đã nhận rồi đồng bộ lại trạng thái sàn.</p></div>
+            <div><strong>Đơn trả hàng nhận thiếu</strong><p>Xử lý thủ công trên Shopify, chỉ nhập lại kho số hàng thực tế đã nhận rồi đồng bộ trạng thái sàn.</p></div>
           </div>
         )}
 
@@ -220,10 +224,11 @@ const OrderReturnDetailPage = () => {
           </div>
         )}
 
-        {(data.actionError || data.lastSyncError) && (
+        {(data.actionError || data.lastSyncError)
+          && !(isShopify && data.actionState === 'UNKNOWN') && (
           <div className={`${styles.notice} ${styles.noticeDanger}`}>
             <AlertCircle size={18} />
-            <div><strong>Cần xử lý</strong><p>{data.actionError || data.lastSyncError}</p></div>
+            <div><strong>Cần xử lý</strong><p>{formatReturnErrorMessage(data.actionError || data.lastSyncError)}</p></div>
           </div>
         )}
       </div>
@@ -233,7 +238,7 @@ const OrderReturnDetailPage = () => {
           <header className={styles.itemsHeader}>
             <div>
               <h2 id="return-items-title">Sản phẩm trả về</h2>
-              <p>{data.items?.length ?? 0} dòng sản phẩm</p>
+              <p>{displayItems.length} sản phẩm • Tổng số lượng {totals.approved}</p>
             </div>
             <div className={styles.quantitySummary} aria-label="Tổng số lượng kiểm hàng">
               <span>Duyệt <strong>{totals.approved}</strong></span>
@@ -257,7 +262,7 @@ const OrderReturnDetailPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {(data.items ?? []).map((item) => (
+                {displayItems.map((item) => (
                   <tr key={item.id}>
                     <td>
                       <strong className={styles.productName}>{item.name}</strong>
@@ -282,10 +287,10 @@ const OrderReturnDetailPage = () => {
             <header className={styles.infoPanelHeader}><Store size={17} /><h2>Thông tin sàn</h2></header>
             <dl className={styles.factList}>
               <div><dt>Mã đơn hàng</dt><dd>{data.externalOrderId || '-'}</dd></div>
-              <div><dt>Mã return</dt><dd title={data.externalReturnId}>{formatExternalReturnId(data.externalReturnId)}</dd></div>
-              <div><dt>Sàn</dt><dd><span className={`${styles.platformBadge} ${styles[data.platform?.toLowerCase()]}`}>{data.platform || '-'}</span></dd></div>
+              <div><dt>Mã trả hàng</dt><dd title={data.externalReturnId}>{formatExternalReturnId(data.externalReturnId)}</dd></div>
+              <div><dt>Sàn</dt><dd><span className={`${styles.platformBadge} ${styles[data.platform?.toLowerCase()]}`}>{formatPlatformLabel(data.platform)}</span></dd></div>
               <div><dt>Kênh bán</dt><dd>{data.channelName || '-'}</dd></div>
-              <div><dt>Trạng thái sàn</dt><dd className={styles.platformStatus}>{data.platformStatus || '-'}</dd></div>
+              <div><dt>Trạng thái sàn</dt><dd>{formatReturnPlatformStatus(data.platformStatus)}</dd></div>
             </dl>
           </section>
 
@@ -293,12 +298,12 @@ const OrderReturnDetailPage = () => {
             <header className={styles.infoPanelHeader}><Warehouse size={17} /><h2>Kho và xử lý</h2></header>
             <dl className={styles.factList}>
               <div><dt>Kho nhận</dt><dd>{data.warehouseName || 'Chưa xác định'}</dd></div>
-              <div><dt>Kiểm tra dữ liệu</dt><dd>{data.dataValidationState === 'VALID' ? 'Hợp lệ' : data.dataValidationState || '-'}</dd></div>
-              <div><dt>Action gần nhất</dt><dd>{RETURN_ACTION_LABELS[data.lastAction] ?? data.lastAction ?? '-'}</dd></div>
+              <div><dt>Kiểm tra dữ liệu</dt><dd>{DATA_VALIDATION_LABELS[data.dataValidationState] ?? '-'}</dd></div>
+              <div><dt>Thao tác gần nhất</dt><dd>{RETURN_ACTION_LABELS[data.lastAction] ?? '-'}</dd></div>
               <div>
-                <dt>Kết quả API</dt>
+                <dt>Trạng thái xử lý</dt>
                 <dd><span className={`${styles.actionBadge} ${styles[`action_${data.actionState?.toLowerCase()}`]}`}>
-                  {RETURN_ACTION_STATE_LABELS[data.actionState] ?? data.actionState ?? '-'}
+                  {RETURN_ACTION_STATE_LABELS[data.actionState] ?? '-'}
                 </span></dd>
               </div>
             </dl>

@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import orderApi from '../../../../api/orderApi';
+import { groupStockDeliveryOrderItems } from './stockDeliveryOrderItemDisplay';
 import styles from './OrderDetailPreviewModal.module.css';
 
 const STATUS_LABELS = {
@@ -105,6 +106,7 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const displayItems = useMemo(() => groupStockDeliveryOrderItems(order?.items), [order]);
 
   const loadOrder = useCallback(async () => {
     setLoading(true);
@@ -244,7 +246,7 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
               <div className={styles.sectionHeader}>
                 <h3><Package size={16} /> Sản phẩm trong phiếu xuất</h3>
                 <span>
-                  {order.items?.length || 0} sản phẩm đặt
+                  {displayItems.length} sản phẩm đặt
                   {giftItems.length > 0 ? ` · ${giftItems.length} quà tặng` : ''}
                 </span>
               </div>
@@ -260,7 +262,7 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
                     </tr>
                   </thead>
                   <tbody>
-                    {(order.items || []).map((item) => (
+                    {displayItems.map((item) => (
                       <tr key={item.id || `${item.sku}-${item.name}`}>
                         <td>
                           <strong>{item.name || 'Sản phẩm chưa đặt tên'}</strong>
@@ -287,7 +289,7 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
                         <td className={styles.numberCell}>-</td>
                       </tr>
                     ))}
-                    {(order.items || []).length === 0 && giftItems.length === 0 && (
+                    {displayItems.length === 0 && giftItems.length === 0 && (
                       <tr><td colSpan={5} className={styles.emptyItems}>Đơn hàng chưa có sản phẩm.</td></tr>
                     )}
                   </tbody>

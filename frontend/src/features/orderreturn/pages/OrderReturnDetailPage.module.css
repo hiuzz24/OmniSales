@@ -355,16 +355,14 @@
   font-size: 13px;
 }
 
-.quantitySummary,
-.inspectionTotals {
+.quantitySummary {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-.quantitySummary span,
-.inspectionTotals span {
+.quantitySummary span {
   min-width: 82px;
   padding: 7px 10px;
   border: 1px solid #dce6ef;
@@ -375,8 +373,7 @@
   text-align: center;
 }
 
-.quantitySummary strong,
-.inspectionTotals strong {
+.quantitySummary strong {
   margin-left: 4px;
   color: #163d62;
   font-size: 15px;
@@ -819,11 +816,4 @@
     grid-column: 1 / -1;
   }
 
-  .inspectionTotals {
-    justify-content: stretch;
-  }
-
-  .inspectionTotals span {
-    flex: 1 1 90px;
-  }
 }

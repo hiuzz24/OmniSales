@@ -188,13 +188,6 @@
   background: #fff1f0;
 }
 
-.inspectionTotals {
-  padding: 12px 18px;
-  border-top: 1px solid #dce5ed;
-  justify-content: flex-end;
-  background: #fff;
-}
-
 .modalFooter {
   min-height: 68px;
   padding: 13px 18px;
@@ -298,7 +291,4 @@
   .inspectionRules { align-items: flex-start; flex-direction: column; gap: 6px; }
   .inspectionRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .inspectionProduct, .rowValidation { grid-column: 1 / -1; }
-  .inspectionTotals { justify-content: stretch; }
-  .inspectionTotals span { flex: 1 1 90px; }
 }
-
