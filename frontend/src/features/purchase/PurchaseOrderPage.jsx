@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Clock3, PackageCheck, Plus, Search, ShoppingBag, Truck, FileEdit, ClipboardList, XCircle } from 'lucide-react';
+import { ClipboardCheck, Clock3, PackageCheck, Plus, Search, ShoppingBag, Truck, FileEdit, ClipboardList, XCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { toast } from 'react-toastify';
 import purchaseOrderApi from '../../api/purchaseOrderApi';
 import { ROUTES } from '../../app/router/routes';
 import { ROLES } from '../auth/constants/roles';
 import useAuth from '../auth/hooks/useAuth';
+import useConfirmDialog from '../inventory/hooks/useConfirmDialog';
 import styles from './PurchaseOrderPage.module.css';
 
 const STATUS = {
@@ -38,6 +40,7 @@ export default function PurchaseOrderPage() {
   const [loading, setLoading] = useState(true);
   const canCreate = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
   const canInspect = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
+  const { confirm, ConfirmDialog } = useConfirmDialog();
 
   const load = useCallback(async () => {
     try {
@@ -210,14 +213,34 @@ export default function PurchaseOrderPage() {
                         <div className={styles.actions}>
                           {canCreate && order.status === 'DRAFT' && (
                             <button className={styles.actionButton}
-                              onClick={async () => { await purchaseOrderApi.send(order.id); await load(); }}>
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: 'Gửi đơn cho nhà cung cấp?',
+                                  message: `Đơn ${order.orderCode} sẽ chuyển sang trạng thái "Đã gửi NCC". Bạn sẽ không thể chỉnh sửa sau khi gửi.`,
+                                  confirmLabel: 'Gửi NCC',
+                                  tone: 'warning',
+                                });
+                                if (!ok) return;
+                                try { await purchaseOrderApi.send(order.id); await load(); }
+                                catch (e) { toast.error(e?.response?.data?.message || 'Không thể gửi đơn.'); }
+                              }}>
                               Gửi NCC
                             </button>
                           )}
                           {(canCreate || canInspect) && order.status === 'SENT_TO_SUPPLIER' && (
                             <button className={styles.actionButton}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0369a1', borderColor: '#bae6fd' }}
-                              onClick={async () => { await purchaseOrderApi.confirmReceiving(order.id); await load(); }}>
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: 'Xác nhận đang nhận hàng?',
+                                  message: `Đơn ${order.orderCode} sẽ chuyển sang "Đang giao hàng". Bắt đầu quá trình kiểm tra hàng hóa.`,
+                                  confirmLabel: 'Xác nhận nhận hàng',
+                                  tone: 'warning',
+                                });
+                                if (!ok) return;
+                                try { await purchaseOrderApi.confirmReceiving(order.id); await load(); }
+                                catch (e) { toast.error(e?.response?.data?.message || 'Không thể xác nhận.'); }
+                              }}>
                               <Truck size={13} /> Xác nhận nhận hàng
                             </button>
                           )}
@@ -234,18 +257,60 @@ export default function PurchaseOrderPage() {
                                 onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}>
                                 Tạo phiếu nhập
                               </button>
+                              {order.hasShortage && (
+                                <button className={styles.actionButton}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#c2410c', borderColor: '#fed7aa', background: '#fff7ed' }}
+                                  onClick={async () => {
+                                    const shortageItems = (order.items ?? []).filter(
+                                      (item) => item.actualQuantity != null && item.actualQuantity < item.quantity
+                                    );
+                                    const itemDesc = shortageItems.map((item) =>
+                                      `• ${item.productName}: thiếu ${item.quantity - item.actualQuantity} sản phẩm`
+                                    ).join('\n');
+                                    const ok = await confirm({
+                                      title: 'Tạo đơn bổ sung hàng thiếu?',
+                                      message: `Sẽ tạo đơn mới ở trạng thái Đã kiểm tra cho số lượng còn thiếu:\n\n${itemDesc || 'Xem chi tiết đơn để biết thêm.'}\n\nGhi chú bổ sung sẽ được tự động điền.`,
+                                      confirmLabel: 'Tạo đơn bổ sung',
+                                      tone: 'warning',
+                                    });
+                                    if (!ok) return;
+                                    try {
+                                      const newOrder = await purchaseOrderApi.createShortageOrder(order.id);
+                                      toast.success(`Đã tạo đơn bổ sung ${newOrder.orderCode}.`);
+                                      await load();
+                                    } catch (e) {
+                                      toast.error(e?.response?.data?.message || 'Không thể tạo đơn bổ sung.');
+                                    }
+                                  }}>
+                                  <TrendingDown size={13} /> Tạo đơn bổ sung
+                                </button>
+                              )}
                               {order.hasSurplus && (
                                 <button className={styles.actionButton}
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#7c3aed', borderColor: '#ddd6fe' }}
                                   onClick={async () => {
+                                    const surplusItems = (order.items ?? []).filter(
+                                      (item) => item.actualQuantity != null && item.actualQuantity > item.quantity
+                                    );
+                                    const itemDesc = surplusItems.map((item) =>
+                                      `• ${item.productName}: thừa ${item.actualQuantity - item.quantity} sản phẩm`
+                                    ).join('\n');
+                                    const ok = await confirm({
+                                      title: 'Tạo đơn thặng dư?',
+                                      message: `Sẽ tạo đơn mới ở trạng thái Đã kiểm tra cho số lượng thừa:\n\n${itemDesc || 'Xem chi tiết đơn để biết thêm.'}\n\nGhi chú thặng dư sẽ được tự động điền.`,
+                                      confirmLabel: 'Tạo đơn thặng dư',
+                                      tone: 'warning',
+                                    });
+                                    if (!ok) return;
                                     try {
-                                      await purchaseOrderApi.createSurplusOrder(order.id);
+                                      const newOrder = await purchaseOrderApi.createSurplusOrder(order.id);
+                                      toast.success(`Đã tạo đơn thặng dư ${newOrder.orderCode}.`);
                                       await load();
                                     } catch (e) {
-                                      alert(e?.response?.data?.message || 'Không thể tạo đơn thặng dư.');
+                                      toast.error(e?.response?.data?.message || 'Không thể tạo đơn thặng dư.');
                                     }
                                   }}>
-                                  Tạo đơn thặng dư
+                                  <TrendingUp size={13} /> Tạo đơn thặng dư
                                 </button>
                               )}
                             </>
@@ -254,12 +319,18 @@ export default function PurchaseOrderPage() {
                             <button className={styles.actionButton}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b91c1c', borderColor: '#fecaca' }}
                               onClick={async () => {
-                                if (!window.confirm(`Hủy đơn ${order.orderCode}? Thao tác này không thể hoàn tác.`)) return;
+                                const ok = await confirm({
+                                  title: 'Hủy đơn mua hàng?',
+                                  message: `Bạn chắc chắn muốn hủy đơn ${order.orderCode}?\nThao tác này không thể hoàn tác.`,
+                                  confirmLabel: 'Hủy đơn',
+                                  tone: 'danger',
+                                });
+                                if (!ok) return;
                                 try {
                                   await purchaseOrderApi.cancel(order.id);
                                   await load();
                                 } catch (e) {
-                                  alert(e?.response?.data?.message || 'Không thể hủy đơn.');
+                                  toast.error(e?.response?.data?.message || 'Không thể hủy đơn.');
                                 }
                               }}>
                               Hủy đơn
@@ -281,6 +352,7 @@ export default function PurchaseOrderPage() {
           <div className={styles.empty}>Chưa có đơn mua hàng phù hợp.</div>
         )}
       </section>
+      {ConfirmDialog}
     </main>
   );
 }

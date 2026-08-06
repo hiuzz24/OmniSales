@@ -620,12 +620,6 @@ export default function StockReceiveManualCreatePage() {
                 <div className={styles.tableCardSubtitle}>Chọn kho trước, sau đó thêm sản phẩm và điền số lượng, đơn giá</div>
               </div>
               <div className={styles.tableCardActions}>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={onDownloadExcelTemplate} disabled={!selectedWarehouseId}>
-                  <FileSpreadsheet className={styles.importIcon} /> Tải template
-                </button>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!selectedWarehouseId || loadingWarehouseVariants}>
-                  <FileSpreadsheet className={styles.importIcon} /> Import Excel
-                </button>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcel} />
                 <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!selectedWarehouseId || loadingWarehouseVariants}
                   style={{ background: '#16a34a', boxShadow: '0 8px 18px rgba(22,163,74,0.22)' }}>

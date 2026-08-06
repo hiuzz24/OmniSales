@@ -294,7 +294,12 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         response.setTotalSkuCount(summary.skuCount());
         response.setTotalQuantity(summary.totalQuantity());
         if ("CONFIRMED".equals(status) && purchaseOrder != null) {
-            purchaseOrderService.completeFromReceipt(purchaseOrder.getId());
+            var autoCreated = purchaseOrderService.completeFromReceiptWithResult(purchaseOrder.getId());
+            autoCreated.ifPresent(result -> {
+                response.setAutoCreatedOrderCode(result.getOrderCode());
+                response.setAutoCreatedOrderType(result.getType());
+                response.setAutoCreatedOrderSummary(result.getSummary());
+            });
             notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
         }
 

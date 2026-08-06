@@ -18,7 +18,6 @@ public class StocktakeItemRequest {
     @NotNull(message = "System quantity must not be null")
     private Integer systemQuantity;
 
-    @NotNull(message = "Actual quantity must not be null")
     private Integer actualQuantity;
 
     private String notes;

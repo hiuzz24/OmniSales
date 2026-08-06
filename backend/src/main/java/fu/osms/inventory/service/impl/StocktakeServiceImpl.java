@@ -37,7 +37,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -71,12 +73,16 @@ public class StocktakeServiceImpl implements StocktakeService {
                 .sessionCode(hasText(request.getSessionCode()) ? request.getSessionCode() : generateSessionCode())
                 .scheduledDate(request.getScheduledDate())
                 .status(complete ? "COMPLETED" : "DRAFT")
+                .notes(request.getNotes())
                 .createdBy(user)
                 .build();
         session = sessionRepository.save(session);
         replaceItems(session, request.getItems());
 
         if (complete) {
+            session.setCompletedBy(user);
+            session.setCompletedAt(OffsetDateTime.now());
+            sessionRepository.save(session);
             applyStocktakeAdjustments(session, user);
             notifyStocktakeStatusChange(session, "DRAFT", "COMPLETED");
         } else {
@@ -127,6 +133,7 @@ public class StocktakeServiceImpl implements StocktakeService {
 
         session.setWarehouse(getActiveWarehouse(request.getWarehouseId()));
         session.setScheduledDate(request.getScheduledDate());
+        session.setNotes(request.getNotes());
         if (hasText(request.getSessionCode())) {
             session.setSessionCode(request.getSessionCode());
         }
@@ -148,6 +155,14 @@ public class StocktakeServiceImpl implements StocktakeService {
         String oldStatus = session.getStatus();
         if ("COMPLETED".equals(nextStatus)) {
             applyStocktakeAdjustments(session, user);
+            session.setCompletedBy(user);
+            session.setCompletedAt(OffsetDateTime.now());
+        } else if ("IN_PROGRESS".equals(nextStatus)) {
+            session.setStartedBy(user);
+            session.setStartedAt(OffsetDateTime.now());
+        } else if ("CANCELLED".equals(nextStatus)) {
+            session.setCancelledBy(user);
+            session.setCancelledAt(OffsetDateTime.now());
         }
         session.setStatus(nextStatus);
         StocktakeSession savedSession = sessionRepository.save(session);
@@ -181,6 +196,9 @@ public class StocktakeServiceImpl implements StocktakeService {
                     .variant(variant)
                     .systemQuantity(request.getSystemQuantity())
                     .actualQuantity(request.getActualQuantity())
+                    .difference(request.getActualQuantity() == null
+                            ? null
+                            : request.getActualQuantity() - request.getSystemQuantity())
                     .notes(request.getNotes())
                     .build();
             itemRepository.save(item);
@@ -238,7 +256,50 @@ public class StocktakeServiceImpl implements StocktakeService {
         List<StocktakeItemResponse> items = itemRepository.findBySession_Id(session.getId()).stream()
                 .map(mapper::toItemResponse)
                 .toList();
+        int totalSystem = 0;
+        int totalActual = 0;
+        int totalDiff = 0;
+        BigDecimal totalDiffValue = BigDecimal.ZERO;
+        int checked = 0;
+        int matched = 0;
+        int surplus = 0;
+        int shortage = 0;
+        for (StocktakeItemResponse item : items) {
+            totalSystem += item.getSystemQuantity() == null ? 0 : item.getSystemQuantity();
+            boolean isChecked = item.getActualQuantity() != null;
+            item.setChecked(isChecked);
+            Integer diff = isChecked
+                    ? item.getActualQuantity() - item.getSystemQuantity()
+                    : null;
+            item.setDifference(diff);
+            if (!isChecked) {
+                continue;
+            }
+            checked++;
+            totalActual += item.getActualQuantity();
+            totalDiff += diff;
+            BigDecimal cost = item.getCostPrice() == null ? BigDecimal.ZERO : item.getCostPrice();
+            BigDecimal diffValue = BigDecimal.valueOf(diff).multiply(cost);
+            item.setDifferenceValue(diffValue);
+            totalDiffValue = totalDiffValue.add(diffValue);
+            if (diff == 0) {
+                matched++;
+            } else if (diff > 0) {
+                surplus++;
+            } else {
+                shortage++;
+            }
+        }
         response.setItems(items);
+        response.setTotalItems(items.size());
+        response.setCheckedCount(checked);
+        response.setMatchedCount(matched);
+        response.setSurplusCount(surplus);
+        response.setShortageCount(shortage);
+        response.setTotalSystemQuantity(totalSystem);
+        response.setTotalActualQuantity(totalActual);
+        response.setTotalDifference(totalDiff);
+        response.setTotalDifferenceValue(totalDiffValue);
         return response;
     }
 

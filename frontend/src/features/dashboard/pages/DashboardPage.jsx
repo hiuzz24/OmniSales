@@ -893,11 +893,11 @@ export default function DashboardPage() {
           tone="slateTone"
         />
         <SummaryCard
-          label="Cảnh báo tồn kho"
-          value={dashboard.lowStockCount.toLocaleString('vi-VN')}
-          helper={`Tồn âm: ${dashboard.negativeStockCount.toLocaleString('vi-VN')} SKU`}
-          icon={AlertTriangle}
-          tone={dashboard.negativeStockCount > 0 ? 'redTone' : 'amberTone'}
+          label="Tồn kho"
+          value={data.inventory.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0).toLocaleString('vi-VN')}
+          helper={`${data.inventoryTotal.toLocaleString('vi-VN')} sản phẩm con (SKU)`}
+          icon={Warehouse}
+          tone="slateTone"
         />
       </div>
 
@@ -905,13 +905,6 @@ export default function DashboardPage() {
         <div className={`${styles.alert} ${styles.alertError}`} role="alert">
           <AlertCircle size={16} className={styles.alertIcon} />
           <span>{error}</span>
-        </div>
-      )}
-
-      {!loading && dashboard.lowStockCount > 0 && (
-        <div className={`${styles.alert} ${styles.alertWarn}`}>
-          <AlertTriangle size={16} className={styles.alertIcon} />
-          <span>Có {dashboard.lowStockCount} SKU dưới mức tồn tối thiểu. Cần kiểm tra kế hoạch nhập hàng.</span>
         </div>
       )}
 

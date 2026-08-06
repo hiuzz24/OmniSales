@@ -524,6 +524,63 @@ export default function StockReceiveCreatePage() {
         }
         setValue('warehouseId', String(order.warehouseId), { shouldDirty: true, shouldValidate: true });
         setValue('supplierId', order.supplierId ? String(order.supplierId) : '', { shouldDirty: true });
+
+        // Auto-generate notes from inspection surplus/shortage annotations
+        const noteLines = [];
+        if (order.notes) noteLines.push(order.notes);
+
+        const allItems = order.items ?? [];
+        const shortageItems = allItems.filter(
+          (item) => item.actualQuantity != null && item.actualQuantity < item.quantity
+        );
+        const surplusItems = allItems.filter(
+          (item) => item.actualQuantity != null && item.actualQuantity > item.quantity
+        );
+
+        if (shortageItems.length > 0) {
+          if (noteLines.length > 0) noteLines.push('');
+          noteLines.push('--- Hàng THIẾU ---');
+          shortageItems.forEach((item) => {
+            const name = item.variantName
+              ? `${item.productName} (${item.variantName})`
+              : item.productName;
+            const diff = item.quantity - item.actualQuantity;
+            noteLines.push(`• [THIẾU] ${name}: thiếu ${diff} sản phẩm (đặt ${item.quantity}, thực nhận ${item.actualQuantity})`);
+          });
+        }
+
+        if (surplusItems.length > 0) {
+          if (noteLines.length > 0) noteLines.push('');
+          noteLines.push('--- Hàng THỪA ---');
+          surplusItems.forEach((item) => {
+            const name = item.variantName
+              ? `${item.productName} (${item.variantName})`
+              : item.productName;
+            const diff = item.actualQuantity - item.quantity;
+            noteLines.push(`• [THỪA] ${name}: thừa ${diff} sản phẩm (đặt ${item.quantity}, thực nhận ${item.actualQuantity})`);
+          });
+        }
+
+        // If this is a shortage/surplus supplementary order (all items have actualQty === qty),
+        // fall back to listing every item from the order's own notes context
+        if (shortageItems.length === 0 && surplusItems.length === 0) {
+          const itemsWithNote = allItems.filter((item) => item.surplusNote?.trim());
+          if (itemsWithNote.length > 0) {
+            if (noteLines.length > 0) noteLines.push('');
+            noteLines.push('--- Chi tiết sản phẩm ---');
+            itemsWithNote.forEach((item) => {
+              const name = item.variantName
+                ? `${item.productName} (${item.variantName})`
+                : item.productName;
+              noteLines.push(`• ${name} (SL: ${item.quantity}): ${item.surplusNote.trim()}`);
+            });
+          }
+        }
+
+        if (noteLines.length > 0) {
+          setValue('notes', noteLines.join('\n'), { shouldDirty: true });
+        }
+
         setItems(groupPurchaseOrderItems(order.items ?? []));
         setPurchaseOrderError('');
       })
@@ -742,6 +799,16 @@ export default function StockReceiveCreatePage() {
       });
       toast.success('Tạo phiếu nhập thành công.');
       const receipt = getResponseData(response);
+
+      // Notify user if a shortage/surplus order was auto-created
+      if (receipt.autoCreatedOrderCode) {
+        const typeLabel = receipt.autoCreatedOrderType === 'SHORTAGE' ? 'bổ sung (hàng thiếu)' : 'thặng dư (hàng thừa)';
+        const toastId = `auto-order-${receipt.autoCreatedOrderCode}`;
+        toast.info(
+          `🔔 Đã tự động tạo đơn ${typeLabel}: ${receipt.autoCreatedOrderCode}\n${receipt.autoCreatedOrderSummary || ''}`,
+          { autoClose: 8000, toastId }
+        );
+      }
       if (receipt.marketplaceSyncAvailable) {
         const platforms = (receipt.marketplacePlatforms ?? []).map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
         const shouldSync = await confirm({
@@ -866,7 +933,6 @@ export default function StockReceiveCreatePage() {
               </select>
               {purchaseOrderError && <p id="purchase-order-error" className={styles.fieldErrorMsg} role="alert">{purchaseOrderError}</p>}
               <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 11.5 }}>
-                Chỉ hiển thị đơn đang nhập hàng. Sản phẩm trong đơn được điền tự động và bạn vẫn có thể thêm sản phẩm khác.
               </p>
             </div>
             <div className={`${styles.formGrid} ${styles.formGrid2}`} style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
@@ -906,17 +972,8 @@ export default function StockReceiveCreatePage() {
             <div className={styles.tableCardHeader}>
               <div>
                 <div className={styles.tableCardTitle}>Danh sách sản phẩm nhập</div>
-                <div className={styles.tableCardSubtitle}>
-                  Chọn kho trước, sau đó thêm sản phẩm đã gộp theo SKU từ Lazada, Shopify, TikTok và điền số lượng, đơn giá
-                </div>
               </div>
               <div className={styles.tableCardActions}>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={onDownloadExcelTemplate} disabled={!purchaseOrderId}>
-                  <FileSpreadsheet className={styles.importIcon} /> Tải template
-                </button>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
-                  <FileSpreadsheet className={styles.importIcon} /> Import Excel
-                </button>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcel} />
                 <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
                   {loadingWarehouseVariants ? <Loader2 className={styles.primaryIcon} /> : <Plus className={styles.primaryIcon} />} Thêm sản phẩm

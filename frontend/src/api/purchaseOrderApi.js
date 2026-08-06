@@ -49,6 +49,10 @@ const purchaseOrderApi = {
     const response = await axiosClient.post(`/purchase-orders/${id}/surplus`);
     return response.data?.data ?? response.data;
   },
+  createShortageOrder: async (id) => {
+    const response = await axiosClient.post(`/purchase-orders/${id}/shortage`);
+    return response.data?.data ?? response.data;
+  },
   cancel: async (id) => {
     const response = await axiosClient.patch(`/purchase-orders/${id}/cancel`);
     return response.data?.data ?? response.data;

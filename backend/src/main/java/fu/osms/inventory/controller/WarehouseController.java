@@ -1,9 +1,12 @@
 package fu.osms.inventory.controller;
 
 import fu.osms.common.dto.ApiResponse;
+import fu.osms.inventory.dto.request.WarehouseMarketplaceSyncRequest;
 import fu.osms.inventory.dto.request.WarehouseRequest;
+import fu.osms.inventory.dto.response.WarehouseMarketplaceSyncResult;
 import fu.osms.inventory.dto.response.WarehouseResponse;
 import fu.osms.inventory.service.WarehouseService;
+import fu.osms.inventory.service.WarehouseSyncService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,6 +23,7 @@ import java.util.UUID;
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
+    private final WarehouseSyncService warehouseSyncService;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
@@ -74,5 +78,22 @@ public class WarehouseController {
     @GetMapping("/userWarehouse/{id}")
     public ResponseEntity<ApiResponse<WarehouseResponse>> getUserWarehouseById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(warehouseService.getWarehouseByUserId(id)));
+    }
+
+    /**
+     * Sync warehouse name, address, and contact info to all connected marketplace channels.
+     * Each channel (Shopify, Lazada, TikTok) is attempted independently so a failure on one
+     * does not block the others. The response contains per-channel results.
+     */
+    @PostMapping("/{id}/sync-to-marketplaces")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<WarehouseMarketplaceSyncResult>> syncToMarketplaces(
+            @PathVariable UUID id,
+            @Valid @RequestBody WarehouseMarketplaceSyncRequest request) {
+        WarehouseMarketplaceSyncResult result = warehouseSyncService.syncToMarketplaces(id, request);
+        String message = result.isAllSucceeded()
+                ? "Đã cập nhật kho hàng lên tất cả các sàn thành công."
+                : "Cập nhật kho hàng hoàn tất — một số sàn gặp lỗi, vui lòng kiểm tra chi tiết.";
+        return ResponseEntity.ok(ApiResponse.success(message, result));
     }
 }
