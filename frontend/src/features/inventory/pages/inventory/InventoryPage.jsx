@@ -638,6 +638,7 @@ const InventoryPage = () => {
       <button
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         id="btn-inventory-logs"
+        onClick={() => {navigate(ROUTES.INVENTORY_LOGS)}}
       >
         <ClipboardList className={styles.secondaryIcon} />
         Nhật ký kho
@@ -970,25 +971,25 @@ const InventoryPage = () => {
                       {nameSort === 'desc' && <ArrowDownAZ size={12} style={{ marginLeft: 4 }} />}
                       {nameSort === 'none' && <ArrowUpAZ size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
                     </th>
-                    <th className={styles.th}>Kho hàng</th>
-                    <th className={styles.th}>Kênh bán</th>
+                    <th className={styles.th}>Kho</th>
+                    <th className={styles.th}>Kênh</th>
                     <th
                       className={`${styles.th} ${styles.thRight} ${styles.thSortable}`}
                       onClick={() => { setQtySort(nextSort(qtySort)); setNameSort('none'); setCurrentPage(0); }}
-                      title="Click để sắp xếp theo số lượng"
+                      title="Trong kho — Click để sắp xếp"
                     >
                       Trong kho
                       {qtySort === 'asc' && <ArrowUp01 size={12} style={{ marginLeft: 4 }} />}
                       {qtySort === 'desc' && <ArrowDown10 size={12} style={{ marginLeft: 4 }} />}
                       {qtySort === 'none' && <ArrowUp01 size={12} style={{ marginLeft: 4, opacity: 0.3 }} />}
                     </th>
-                    <th className={`${styles.th} ${styles.thRight}`}>Hàng đang nhập</th>
-                    <th className={`${styles.th} ${styles.thRight}`}>Hàng đang xuất</th>
-                    <th className={`${styles.th} ${styles.thRight}`}>Giữ hàng</th>
-                    <th className={`${styles.th} ${styles.thRight}`}>Có thể bán</th>
-                    <th className={`${styles.th} ${styles.thRight}`}>Tồn tối thiểu</th>
+                    <th className={`${styles.th} ${styles.thRight}`} title="Hàng đang nhập kho (phiếu nhập chưa hoàn thành)">Đang nhập</th>
+                    <th className={`${styles.th} ${styles.thRight}`} title="Hàng đang xuất kho (phiếu xuất chưa hoàn thành)">Đang xuất</th>
+                    <th className={`${styles.th} ${styles.thRight}`} title="Hàng đang được giữ cho đơn hàng">Giữ hàng</th>
+                    <th className={`${styles.th} ${styles.thRight}`} title="Số lượng có thể bán = Trong kho - Giữ hàng">Có thể bán</th>
+                    <th className={`${styles.th} ${styles.thRight}`} title="Ngưỡng cảnh báo sắp hết hàng">Tồn min</th>
                     <th className={styles.th}>Trạng thái</th>
-                    <th className={styles.th}>Thao tác</th>
+                    <th className={styles.th}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1034,28 +1035,28 @@ const InventoryPage = () => {
                           <ChannelBadge item={row} />
                         </td>
                         <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.quantityOnHand)}`}>
-                          {row.quantityOnHand}
+                          {row.quantityOnHand != null ? Number(row.quantityOnHand).toLocaleString('vi-VN') : '0'}
                         </td>
                         <td className={`${styles.td} ${styles.tdRight} ${Number(row.incomingQuantity ?? 0) > 0 ? styles.qtyPositive : styles.cellMuted}`}>
-                          {row.incomingQuantity ?? 0}
+                          {Number(row.incomingQuantity ?? 0).toLocaleString('vi-VN')}
                         </td>
                         <td className={`${styles.td} ${styles.tdRight} ${Number(row.outgoingQuantity ?? 0) > 0 ? styles.qtyWarning : styles.cellMuted}`}>
-                          {row.outgoingQuantity ?? 0}
+                          {Number(row.outgoingQuantity ?? 0).toLocaleString('vi-VN')}
                         </td>
                         <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
-                          {row.reservedQuantity}
+                          {Number(row.reservedQuantity ?? 0).toLocaleString('vi-VN')}
                         </td>
-                        <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.availableQuantity)}`}>
-                          {row.availableQuantity < 0 ? (
-                            <span className={styles.negativeCell}>{row.availableQuantity}</span>
-                          ) : row.availableQuantity === 0 ? (
-                            <span className={styles.zeroCell}>{row.availableQuantity}</span>
+                        <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.availableQuantity ?? 0)}`}>
+                          {(row.availableQuantity ?? 0) < 0 ? (
+                            <span className={styles.negativeCell}>{Number(row.availableQuantity).toLocaleString('vi-VN')}</span>
+                          ) : (row.availableQuantity ?? 0) === 0 ? (
+                            <span className={styles.zeroCell}>0</span>
                           ) : (
-                            row.availableQuantity
+                            Number(row.availableQuantity).toLocaleString('vi-VN')
                           )}
                         </td>
                         <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
-                          {row.lowStockThreshold}
+                          {Number(row.lowStockThreshold ?? 0).toLocaleString('vi-VN')}
                         </td>
                         <td className={styles.td}>
                           <div className={styles.statusCell}>
@@ -1064,15 +1065,15 @@ const InventoryPage = () => {
                         </td>
                         <td className={styles.td}>
                           {isProductRow ? (
-                            <span className={styles.productActionHint}>Nhóm sản phẩm</span>
+                            <span className={styles.productActionHint}>—</span>
                           ) : (
                             <button
                               id={`btn-view-${row.variantSku}`}
                               className={styles.viewBtn}
+                              title={`Xem chi tiết ${row.variantSku}`}
                               onClick={() => navigate(`${ROUTES.INVENTORY_DETAIL.replace(':id', row.inventoryItemId)}?variantId=${row.variantId}`)}
                             >
                               <Eye size={14} />
-                              View
                             </button>
                           )}
                         </td>

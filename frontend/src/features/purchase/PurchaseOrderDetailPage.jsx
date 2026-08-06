@@ -151,6 +151,15 @@ export default function PurchaseOrderDetailPage() {
 
   // "Hoàn thành kiểm tra" — confirm → finalize → INSPECTED
   const handleComplete = async () => {
+    const items = order?.items ?? [];
+    const empty = items.find((item) => {
+      const value = actualQty[item.variantId] ?? item.actualQuantity ?? item.quantity;
+      return value === '' || value === null || value === undefined;
+    });
+    if (empty) {
+      toast.error(`Phải nhập số lượng thực tế cho "${empty.productName}" trước khi hoàn thành kiểm tra.`);
+      return;
+    }
     const confirmed = await confirm({
       title: 'Hoàn thành kiểm tra?',
       message: 'Sau khi hoàn thành kiểm tra, đơn sẽ chuyển sang trạng thái Chờ nhập kho. Thông tin thừa/thiếu đã ghi chú sẽ được lưu lại.',

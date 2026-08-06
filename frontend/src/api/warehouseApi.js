@@ -34,7 +34,14 @@ const warehouseApi = {
     delete: async (id) => {
         const response = await axiosClient.delete(`/warehouses/${id}`);
         return response;
-    }
+    },
+
+    // Sync warehouse name/address/contact to all connected marketplace channels
+    // payload: { name, address, contactName, phone, email?, city?, province?, zip?, countryCode? }
+    syncToMarketplaces: async (id, payload) => {
+        const response = await axiosClient.post(`/warehouses/${id}/sync-to-marketplaces`, payload);
+        return response;
+    },
 };
 
 export default warehouseApi;

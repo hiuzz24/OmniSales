@@ -347,9 +347,25 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     "Chỉ đơn ở trạng thái Đang giao hàng hoặc Đang kiểm tra mới có thể hoàn thành kiểm tra.");
         }
         applyInspectionItems(order, items);
+        requireActualQuantitiesBeforeFinalize(order);
         order.setStatus(PurchaseOrderStatus.INSPECTED);
         order.setInspectedAt(OffsetDateTime.now());
         return toResponse(purchaseOrderRepository.save(order));
+    }
+
+    private void requireActualQuantitiesBeforeFinalize(PurchaseOrder order) {
+        boolean missingActual = order.getItems().stream()
+                .anyMatch(item -> item.getActualQuantity() == null);
+        if (missingActual) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "Phải nhập số lượng thực tế cho tất cả sản phẩm trước khi hoàn thành kiểm tra.");
+        }
+        boolean negativeActual = order.getItems().stream()
+                .anyMatch(item -> item.getActualQuantity() < 0);
+        if (negativeActual) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "Số lượng thực tế không được âm.");
+        }
     }
 
     private void applyInspectionItems(PurchaseOrder order, List<InspectionItemRequest> requests) {

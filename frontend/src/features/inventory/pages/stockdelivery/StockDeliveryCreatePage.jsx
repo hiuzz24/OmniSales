@@ -623,7 +623,6 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
                 <div className={styles.tableCardSubtitle}>Thêm sản phẩm và điền số lượng xuất</div>
               </div>
               <div className={styles.tableCardActions}>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!selectedWarehouseId || loadingWarehouseVariants}><FileSpreadsheet className={styles.importIcon} /> Import Excel</button>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcelMerged} />
                 <button className={`${styles.actionBtn} ${styles.dangerBtn}`} onClick={() => setModalOpen(true)} disabled={!selectedWarehouseId || loadingWarehouseVariants}>{loadingWarehouseVariants ? <Loader2 className={styles.dangerIcon} /> : <Plus className={styles.dangerIcon} />} Thêm sản phẩm</button>
               </div>

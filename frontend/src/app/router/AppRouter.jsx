@@ -54,6 +54,7 @@ import ChannelConnectionHistoryPage from '../../features/channel/pages/ChannelCo
 import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/StockDeliveryEditPage';
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
+import StocktakeDetailPage from '../../features/inventory/pages/stocktake/StocktakeDetailPage';
 import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 import WarehousePage from '../../features/inventory/pages/WarehousePage';
@@ -118,6 +119,7 @@ const AppRouter = () => {
               <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
               <Route path={ROUTES.STOCKTAKES} element={<StocktakePage />} />
               <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
+              <Route path={ROUTES.STOCKTAKE_DETAIL} element={<StocktakeDetailPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>

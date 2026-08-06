@@ -649,12 +649,10 @@ export default function PurchaseOrderCreatePage() {
               <div className={styles.field}>
                 <label htmlFor="orderCode">Mã đơn</label>
                 <input id="orderCode" className={styles.input} value={orderCode || 'Đang tạo mã...'} readOnly aria-readonly="true" />
-                <p className={styles.helper}>Tự động theo định dạng MĐH-năm-6 chữ số.</p>
               </div>
               <div className={styles.field}>
                 <label htmlFor="purchaseTime">Thời gian mua</label>
                 <input id="purchaseTime" className={styles.input} value={purchaseTime} readOnly aria-readonly="true" />
-                <p className={styles.helper}>Hệ thống lưu đầy đủ ngày, giờ và phút khi tạo đơn.</p>
               </div>
               <div className={`${styles.field} ${styles.supplierField}`}>
                 <label htmlFor="supplier">Nhà cung cấp *</label>
@@ -663,7 +661,6 @@ export default function PurchaseOrderCreatePage() {
               <div className={styles.field}>
                 <label htmlFor="warehouse">Kho nhập mặc định</label>
               <input id="warehouse" className={styles.input} value={warehouse ? `${warehouse.name} - ${warehouse.address ?? ''}` : 'Đang tải...'} readOnly aria-readonly="true" />
-                <p className={styles.helper}>Đã gắn {warehousePlatformCount}/3 ID kho Shopify, Lazada và TikTok Shop.</p>
               </div>
               <div className={styles.field}>
                 <label htmlFor="expectedDate">Dự kiến nhận *</label>
@@ -688,7 +685,6 @@ export default function PurchaseOrderCreatePage() {
             <div className={styles.productHeader}>
               <div>
                 <h2 className={styles.cardTitle}>Danh sách sản phẩm</h2>
-                <p className={styles.helper}>Mỗi sản phẩm con được lưu bằng variant ID riêng để cập nhật đúng sàn.</p>
               </div>
               <button type="button" className={styles.secondaryButton} disabled={loadingOptions} onClick={() => setPickerOpen(true)}>
                 {loadingOptions ? <Loader2 size={17} className={styles.spin} /> : <Plus size={17} />} Thêm sản phẩm
@@ -729,7 +725,6 @@ export default function PurchaseOrderCreatePage() {
                             </td>
                             <td>
                               <span className={styles.skuTag}>{item.sku || '—'}</span>
-                              {item.localSkus?.length > 0 && <small className={styles.localSku}>{item.linkedVariantIds.length} liên kết sàn · lưu 1 dòng SKU</small>}
                             </td>
                             <td>
                               <input

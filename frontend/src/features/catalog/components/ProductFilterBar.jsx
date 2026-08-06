@@ -76,7 +76,6 @@ const ProductFilterBar = ({
           <option value="">Tất cả trạng thái</option>
           <option value="ACTIVE">Hoạt động</option>
           <option value="INACTIVE">Ngừng bán</option>
-          <option value="DRAFT">Nháp</option>
         </select>
         <div className={styles.selectIconWrapper}>
           <svg className={styles.selectIcon} fill="none" stroke="currentColor" viewBox="0 0 24 24">

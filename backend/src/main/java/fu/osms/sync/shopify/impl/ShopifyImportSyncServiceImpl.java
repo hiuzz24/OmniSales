@@ -1,9 +1,12 @@
 package fu.osms.sync.shopify.impl;
 
 import fu.osms.catalog.entity.Product;
+import fu.osms.catalog.entity.Category;
 import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.enums.CategoryStatus;
 import fu.osms.catalog.enums.ProductStatus;
+import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
@@ -66,6 +69,7 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
     private final ProductRepository productRepository;
     private final ProductImageRepository productImageRepository;
     private final ProductVariantRepository productVariantRepository;
+    private final CategoryRepository categoryRepository;
     private final WarehouseRepository warehouseRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
@@ -263,6 +267,25 @@ private ImportedCatalogProduct upsertProduct(Channel channel,
         product.setName(productName);
         product.setDescription(stringValue(productNode.get("descriptionHtml")));
         product.setBrand(stringValue(productNode.get("vendor")));
+        // Map Shopify productType → local Category (upsert by slug)
+        try {
+            String productType = stringValue(productNode.get("productType"));
+            if (productType != null && !productType.isBlank()) {
+                String slug = "shopify-" + productType.trim().toLowerCase()
+                        .replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+                Category category = categoryRepository.findBySlug(slug)
+                        .or(() -> categoryRepository.findFirstByNameIgnoreCase(productType.trim()))
+                        .orElseGet(Category::new);
+                category.setName(productType.trim());
+                category.setSlug(slug);
+                if (category.getSortOrder() == null) category.setSortOrder(0);
+                if (category.getStatus() == null) category.setStatus(CategoryStatus.ACTIVE);
+                product.setCategory(categoryRepository.save(category));
+            }
+        } catch (Exception e) {
+            log.warn("[ShopifyImportSync] Could not resolve category for product {}: {}",
+                    externalProductId, e.getMessage());
+        }
     }
     if (initialCreate) {
         product.setStatus(resolveStatus(stringValue(productNode.get("status"))));

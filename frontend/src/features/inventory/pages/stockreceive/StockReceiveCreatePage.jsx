@@ -933,7 +933,6 @@ export default function StockReceiveCreatePage() {
               </select>
               {purchaseOrderError && <p id="purchase-order-error" className={styles.fieldErrorMsg} role="alert">{purchaseOrderError}</p>}
               <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 11.5 }}>
-                Chỉ hiển thị đơn đang nhập hàng. Sản phẩm trong đơn được điền tự động và bạn vẫn có thể thêm sản phẩm khác.
               </p>
             </div>
             <div className={`${styles.formGrid} ${styles.formGrid2}`} style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
@@ -973,17 +972,8 @@ export default function StockReceiveCreatePage() {
             <div className={styles.tableCardHeader}>
               <div>
                 <div className={styles.tableCardTitle}>Danh sách sản phẩm nhập</div>
-                <div className={styles.tableCardSubtitle}>
-                  Chọn kho trước, sau đó thêm sản phẩm đã gộp theo SKU từ Lazada, Shopify, TikTok và điền số lượng, đơn giá
-                </div>
               </div>
               <div className={styles.tableCardActions}>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={onDownloadExcelTemplate} disabled={!purchaseOrderId}>
-                  <FileSpreadsheet className={styles.importIcon} /> Tải template
-                </button>
-                <button className={`${styles.actionBtn} ${styles.importBtn}`} onClick={() => fileRef.current?.click()} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
-                  <FileSpreadsheet className={styles.importIcon} /> Import Excel
-                </button>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcel} />
                 <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openAddProducts} disabled={!purchaseOrderId || !selectedWarehouseId || loadingWarehouseVariants}>
                   {loadingWarehouseVariants ? <Loader2 className={styles.primaryIcon} /> : <Plus className={styles.primaryIcon} />} Thêm sản phẩm
