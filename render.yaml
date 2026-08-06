@@ -125,11 +125,16 @@ services:
       - key: JAVA_TOOL_OPTIONS
         value: "-Xmx384m -Xms192m -XX:+UseG1GC -XX:MaxRAMPercentage=75.0"
 
-  # ---------------------------------------------------------------------------
-  # Frontend (React + Vite SPA) — static site
-  # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Frontend (React + Vite SPA) — static site
+#
+# Phải khai báo trong block `staticSites:` riêng, không nằm trong `services:`.
+# Xem: https://render.com/docs/blueprint-spec#static-sites
+# ---------------------------------------------------------------------------
+staticSites:
   - type: static
     name: app-osms
+    rootDir: ./frontend
     buildCommand: npm ci && npm run build
     publishPath: dist
     plan: free
