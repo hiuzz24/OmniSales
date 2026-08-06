@@ -66,6 +66,13 @@ public class PurchaseOrderController {
                 .body(ApiResponse.success("Đã tạo đơn thặng dư", service.createSurplusOrder(id)));
     }
 
+    @PostMapping("/{id}/shortage")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> createShortageOrder(@PathVariable UUID id) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Đã tạo đơn bổ sung hàng thiếu", service.createShortageOrder(id)));
+    }
+
     @PatchMapping("/{id}/cancel")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<PurchaseOrderResponse>> cancel(@PathVariable UUID id) {

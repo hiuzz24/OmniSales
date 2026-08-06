@@ -18,6 +18,7 @@ public class StocktakeSessionResponse {
 
     private UUID warehouseId;
     private String warehouseName;
+    private String warehouseAddress;
     private String sessionCode;
     private LocalDate scheduledDate;
     private String status;
@@ -25,6 +26,28 @@ public class StocktakeSessionResponse {
     private String createdByName;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+
+    private UUID startedById;
+    private String startedByName;
+    private OffsetDateTime startedAt;
+    private UUID completedById;
+    private String completedByName;
+    private OffsetDateTime completedAt;
+    private UUID cancelledById;
+    private String cancelledByName;
+    private OffsetDateTime cancelledAt;
+
+    private String notes;
+
+    private Integer totalItems;
+    private Integer checkedCount;
+    private Integer matchedCount;
+    private Integer surplusCount;
+    private Integer shortageCount;
+    private Integer totalSystemQuantity;
+    private Integer totalActualQuantity;
+    private Integer totalDifference;
+    private java.math.BigDecimal totalDifferenceValue;
 
     private List<StocktakeItemResponse> items;
 }

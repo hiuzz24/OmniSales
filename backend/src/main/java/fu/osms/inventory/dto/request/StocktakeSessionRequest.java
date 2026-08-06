@@ -28,6 +28,8 @@ public class StocktakeSessionRequest {
 
     private LocalDate scheduledDate;
 
+    private String notes;
+
     @Valid
     private List<StocktakeItemRequest> items;
 }

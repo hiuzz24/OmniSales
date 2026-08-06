@@ -34,6 +34,7 @@ export const ROUTES = {
   SYNC_HISTORY: '/sync/history',
   STOCKTAKES: '/warehouse/stocktakes',
   STOCKTAKE_CREATE: '/warehouse/stocktakes/create',
+  STOCKTAKE_DETAIL: '/warehouse/stocktakes/:id',
 
   // Inventory
   INVENTORY: '/inventory',

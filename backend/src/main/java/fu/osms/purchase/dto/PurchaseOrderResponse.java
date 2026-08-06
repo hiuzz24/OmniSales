@@ -40,6 +40,8 @@ public class PurchaseOrderResponse {
     private List<PurchaseOrderItemResponse> items;
     /** True if any item has actualQuantity > quantity (surplus from inspection). */
     private boolean hasSurplus;
+    /** True if any item has actualQuantity < quantity (shortage from inspection). */
+    private boolean hasShortage;
     /** True if any item has a surplusNote set (shortage or surplus annotation). */
     private boolean hasNote;
 }

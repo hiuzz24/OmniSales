@@ -1,479 +1,369 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  SlidersHorizontal,
-  Clock,
-  Search,
-  Warehouse,
-  User,
-  Calendar,
-  ArrowRightLeft,
-  TrendingUp,
-  TrendingDown,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Sliders,
-  RotateCcw
+  RefreshCw, Search, Calendar, ArrowRightLeft,
+  TrendingUp, TrendingDown, Sliders, RotateCcw, Loader2,
+  Download, SlidersHorizontal, ClipboardList,
+  ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import styles from './InventoryLogPage.module.css';
-import { ROUTES } from '../../../../app/router/routes';
 import Pagination from '../../../../shared/components/Pagination';
 import inventoryService from '../../services/inventoryService';
 import warehouseService from '../../services/warehouseService';
-import userApi from '../../../../api/userApi';
-import { getResponseData, formatDateTime } from '../components/inventoryDocumentListUtils';
+import { formatDateTime } from '../components/inventoryDocumentListUtils';
 
-// Constants for Page Size
 const PAGE_SIZE = 15;
 
-// InvTxnType labels and badges mappings
 const TXN_TYPE_CONFIG = {
-  IMPORT: { label: 'Nhập kho', color: '#16a34a', bg: '#dcfce7', icon: TrendingUp },
-  INBOUND: { label: 'Nhập kho', color: '#16a34a', bg: '#dcfce7', icon: TrendingUp },
-  EXPORT: { label: 'Xuất kho', color: '#2563eb', bg: '#eff6ff', icon: TrendingDown },
-  OUTBOUND: { label: 'Xuất kho', color: '#2563eb', bg: '#eff6ff', icon: TrendingDown },
-  ADJUSTMENT: { label: 'Điều chỉnh', color: '#d97706', bg: '#fff7ed', icon: Sliders },
-  TRANSFER_OUT: { label: 'Chuyển đi', color: '#7c3aed', bg: '#f5f3ff', icon: ArrowRightLeft },
-  TRANSFER_IN: { label: 'Chuyển đến', color: '#7c3aed', bg: '#f5f3ff', icon: ArrowRightLeft },
-  ORDER_DEDUCT: { label: 'Xuất kho', color: '#2563eb', bg: '#eff6ff', icon: TrendingDown },
-  ORDER_CANCEL: { label: 'Nhập kho', color: '#16a34a', bg: '#dcfce7', icon: TrendingUp },
+  IMPORT:       { label: 'Nhập kho',    color: '#16a34a', bg: '#dcfce7', icon: TrendingUp,      refPrefix: 'PN' },
+  OUTBOUND:     { label: 'Xuất kho',    color: '#dc2626', bg: '#fee2e2', icon: TrendingDown,    refPrefix: 'PX' },
+  EXPORT:       { label: 'Xuất kho',    color: '#dc2626', bg: '#fee2e2', icon: TrendingDown,    refPrefix: 'PX' },
+  ADJUSTMENT:   { label: 'Kiểm kho',   color: '#d97706', bg: '#fef3c7', icon: Sliders,         refPrefix: 'PKK' },
+  TRANSFER_OUT: { label: 'Chuyển đi',  color: '#7c3aed', bg: '#f5f3ff', icon: ArrowRightLeft,  refPrefix: 'PCT' },
+  TRANSFER_IN:  { label: 'Chuyển đến', color: '#7c3aed', bg: '#f5f3ff', icon: ArrowRightLeft,  refPrefix: 'PCT' },
+  ORDER_DEDUCT: { label: 'Xuất đơn',   color: '#dc2626', bg: '#fee2e2', icon: TrendingDown,    refPrefix: 'DH' },
+  ORDER_CANCEL: { label: 'Trả hàng',   color: '#0891b2', bg: '#e0f2fe', icon: TrendingUp,      refPrefix: 'TH' },
 };
 
-export default function InventoryLogPage() {
-  const navigate = useNavigate();
+const TYPE_OPTIONS = [
+  { value: 'all', label: 'Tất cả loại' },
+  { value: 'IMPORT',       label: '→ Nhập kho' },
+  { value: 'EXPORT',       label: '← Xuất kho' },
+  { value: 'ADJUSTMENT',   label: '⚖ Kiểm kho' },
+  { value: 'TRANSFER_OUT', label: '↑ Chuyển đi' },
+  { value: 'TRANSFER_IN',  label: '↓ Chuyển đến' },
+  { value: 'ORDER_DEDUCT', label: '← Xuất đơn hàng' },
+  { value: 'ORDER_CANCEL', label: '→ Trả hàng' },
+];
 
-  // State
+// Format a reference ID into a short code
+function buildRefCode(log) {
+  const cfg = TXN_TYPE_CONFIG[log.type];
+  const prefix = cfg?.refPrefix ?? (log.referenceType ?? 'TXN').slice(0, 3).toUpperCase();
+  if (!log.referenceId) return prefix;
+  const shortId = String(log.referenceId).replace(/-/g, '').slice(0, 8).toUpperCase();
+  return `${prefix}-${shortId}`;
+}
+
+// Build auto-description when note is missing
+function buildDesc(log) {
+  if (log.note) return log.note;
+  switch (log.type) {
+    case 'IMPORT': case 'INBOUND': return 'Nhập hàng từ nhà cung cấp';
+    case 'EXPORT': case 'OUTBOUND': return 'Xuất kho';
+    case 'ADJUSTMENT': return 'Điều chỉnh do kiểm kê';
+    case 'TRANSFER_IN': return 'Nhận chuyển kho';
+    case 'TRANSFER_OUT': return 'Chuyển kho';
+    case 'ORDER_DEDUCT': return 'Xuất kho cho đơn hàng';
+    case 'ORDER_CANCEL': return 'Hoàn trả đơn hàng';
+    default: return 'Biến động kho hàng';
+  }
+}
+
+const fmtMoney = (v) => v != null
+  ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v)
+  : '—';
+
+export default function InventoryLogPage() {
   const [logs, setLogs] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
-  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Filters State
-  const [sku, setSku] = useState('');
-  const [productName, setProductName] = useState('');
+  // filters
+  const [search, setSearch] = useState('');
   const [warehouseId, setWarehouseId] = useState('all');
-  const [performedById, setPerformedById] = useState('all');
   const [type, setType] = useState('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  // Pagination State
+  // pagination
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
 
-  // Fetch initial option lists (warehouses and users)
   useEffect(() => {
-    const fetchOptions = async () => {
-      try {
-        // Fetch warehouses
-        const whResponse = await warehouseService.getAll();
-        const whData = getResponseData(whResponse);
-        setWarehouses(Array.isArray(whData) ? whData : whData.content ?? []);
-
-        // Fetch users
-        const userRes = await userApi.getAllUsers(0, 100);
-        const userData = userRes.content ?? [];
-        setUsers(userData);
-      } catch (error) {
-        console.error('Lỗi khi tải danh sách bộ lọc:', error);
-      }
-    };
-    fetchOptions();
+    warehouseService.getAll()
+      .then((res) => {
+        const d = res?.data?.data ?? res?.data ?? res ?? [];
+        setWarehouses(Array.isArray(d) ? d : d.content ?? []);
+      })
+      .catch(() => {});
   }, []);
 
-  // Fetch Inventory Logs based on active filters and page
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const params = {
-        page,
-        size: PAGE_SIZE,
-      };
-
-      // Map local filter variables to API query parameters
-      const searchStr = sku.trim() || productName.trim();
-      if (searchStr) {
-        params.productSearch = searchStr;
-      }
-      if (warehouseId && warehouseId !== 'all') {
-        params.warehouseId = warehouseId;
-      }
-      if (performedById && performedById !== 'all') {
-        params.performedById = performedById;
-      }
-      if (type && type !== 'all') {
-        params.type = type;
-      }
-
-      // Handle ISO timestamp for from/to dates
-      if (fromDate) {
-        params.startDate = new Date(fromDate).toISOString(); // e.g. 2026-06-24T00:00:00.000Z
-      }
-      if (toDate) {
-        const end = new Date(toDate);
-        end.setHours(23, 59, 59, 999);
-        params.endDate = end.toISOString();
-      }
-
+      const params = { page, size: PAGE_SIZE };
+      if (search.trim()) params.productSearch = search.trim();
+      if (warehouseId !== 'all') params.warehouseId = warehouseId;
+      if (type !== 'all') params.type = type;
+      if (fromDate) params.startDate = new Date(fromDate).toISOString();
+      if (toDate) { const d = new Date(toDate); d.setHours(23, 59, 59, 999); params.endDate = d.toISOString(); }
       const data = await inventoryService.getInventoryLogs(params);
       setLogs(data?.content ?? []);
       setTotalPages(data?.totalPages ?? 1);
       setTotalElements(data?.totalElements ?? 0);
-    } catch (error) {
-      toast.error('Không thể tải lịch sử thay đổi kho.');
+    } catch {
+      toast.error('Không thể tải nhật ký kho.');
       setLogs([]);
-      setTotalPages(1);
-      setTotalElements(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [sku, productName, warehouseId, performedById, type, fromDate, toDate, page]);
+    } finally { setLoading(false); }
+  }, [search, warehouseId, type, fromDate, toDate, page]);
 
-  // Trigger logs fetch on filter changes or page changes
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
-  // Reset all filters to default
-  const handleResetFilters = () => {
-    setSku('');
-    setProductName('');
-    setWarehouseId('all');
-    setPerformedById('all');
-    setType('all');
-    setFromDate('');
-    setToDate('');
-    setPage(0);
+  const reset = () => {
+    setSearch(''); setWarehouseId('all'); setType('all');
+    setFromDate(''); setToDate(''); setPage(0);
   };
 
-  // Debounced input change triggers page reset
-  const handleFilterChange = () => {
-    setPage(0);
-  };
-
-  // Helper: Format reason/note and reference type/code
-  const renderReason = (log) => {
-    // Generate description based on backend type if note is null
-    let desc = log.note;
-    if (!desc) {
-      switch (log.type) {
-        case 'IMPORT':
-        case 'INBOUND':
-          desc = 'Nhập hàng từ nhà cung cấp';
-          break;
-        case 'EXPORT':
-        case 'OUTBOUND':
-          desc = 'Xuất kho';
-          break;
-        case 'ADJUSTMENT':
-          desc = 'Điều chỉnh do kiểm kê';
-          break;
-        case 'TRANSFER_IN':
-          desc = 'Nhận chuyển kho';
-          break;
-        case 'TRANSFER_OUT':
-          desc = 'Chuyển kho';
-          break;
-        case 'ORDER_DEDUCT':
-          desc = `Xuất kho cho đơn hàng`;
-          break;
-        case 'ORDER_CANCEL':
-          desc = 'Hoàn trả đơn hàng';
-          break;
-        default:
-          desc = 'Biến động kho hàng';
-      }
-    }
-
-    // Generate readable code pattern (e.g. TRF-2026-008 or IMP-A21F53B2)
-    let code = 'TXN';
-    const refId = log.referenceId ? log.referenceId.toString().slice(0, 8).toUpperCase() : '';
-    switch (log.referenceType) {
-      case 'TRANSFER':
-        code = `TRF-${refId}`;
-        break;
-      case 'RECEIPT':
-        code = `IMP-${refId}`;
-        break;
-      case 'DELIVERY':
-        code = `EXP-${refId}`;
-        break;
-      case 'STOCKTAKE':
-        code = `ADJ-${refId}`;
-        break;
-      case 'ORDER':
-        code = `ORD-${refId}`;
-        break;
-      default:
-        code = log.referenceType ? `${log.referenceType.toUpperCase().slice(0, 3)}-${refId}` : `REF-${refId}`;
-    }
-
-    return (
-      <div className={styles.reasonCell}>
-        <div className={styles.reasonText}>{desc}</div>
-        <div className={styles.refCode}>{code}</div>
-      </div>
-    );
-  };
-
-  // Helper: Type badges
-  const renderTypeBadge = (logType) => {
-    const config = TXN_TYPE_CONFIG[logType] ?? {
-      label: logType,
-      color: '#64748b',
-      bg: '#f1f5f9',
-      icon: Clock,
+  // ── Stats derived from current page ──────────────────────────────────────
+  const stats = useMemo(() => {
+    const totalIn  = logs.filter((l) => (l.quantityChange ?? 0) > 0).reduce((s, l) => s + (l.quantityChange ?? 0), 0);
+    const totalOut = logs.filter((l) => (l.quantityChange ?? 0) < 0).reduce((s, l) => s + (l.quantityChange ?? 0), 0);
+    // Use backend-computed transactionValue when available, fallback to local calc
+    const getVal = (l) => {
+      if (l.transactionValue != null) return Number(l.transactionValue);
+      const cost = l.unitCost != null ? Number(l.unitCost) : (l.avgCostAfter != null ? Number(l.avgCostAfter) : 0);
+      return cost * Math.abs(l.quantityChange ?? 0);
     };
-    const Icon = config.icon;
+    const valueIn  = logs.filter((l) => (l.quantityChange ?? 0) > 0).reduce((s, l) => s + getVal(l), 0);
+    const valueOut = logs.filter((l) => (l.quantityChange ?? 0) < 0).reduce((s, l) => s + getVal(l), 0);
+    return { totalIn, totalOut: Math.abs(totalOut), net: totalIn + totalOut, valueIn, valueOut };
+  }, [logs]);
 
-    return (
-      <span
-        className={styles.typeBadge}
-        style={{ color: config.color, backgroundColor: config.bg, border: `1px solid ${config.color}25` }}
-      >
-        <Icon size={13} className={styles.badgeIcon} />
-        {config.label}
-      </span>
-    );
+  const activeFilterCount = [
+    search, warehouseId !== 'all' && warehouseId,
+    type !== 'all' && type, fromDate, toDate,
+  ].filter(Boolean).length;
+
+  // ── Time formatter: 2 lines ───────────────────────────────────────────────
+  const fmtTime = (v) => {
+    if (!v) return '—';
+    const d = new Date(v);
+    const date = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return { date, time };
   };
-
-  // Page index helpers
-  const handlePageChange = (newPage) => {
-    if (newPage >= 0 && newPage < totalPages) {
-      setPage(newPage);
-    }
-  };
-
-  const startItem = page * PAGE_SIZE + 1;
-  const endItem = Math.min((page + 1) * PAGE_SIZE, totalElements);
 
   return (
-    <div className={`${styles.pageContainer} product-workspace`}>
-      {/* Filters Card */}
-      <div className={styles.filterCard}>
-        <div className={styles.cardHeader}>
-          <div className={styles.headerTitle}>
-            <SlidersHorizontal size={18} className={styles.headerIcon} />
-            <span>Bộ lọc</span>
+    <div className={`${styles.pageContainer} product-workspace`} style={{ gap: 16 }}>
+
+      {/* ── Page Header ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <ClipboardList size={20} color="#2563eb" />
           </div>
-          <button onClick={handleResetFilters} className={styles.resetBtn} title="Thiết lập lại bộ lọc">
-            <RotateCcw size={14} />
-            Làm mới
-          </button>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0f172a' }}>Nhật ký kho</h1>
+            <p style={{ margin: 0, fontSize: 12.5, color: '#64748b' }}>Lịch sử thay đổi tồn kho theo từng sản phẩm</p>
+          </div>
         </div>
-
-        <div className={styles.filtersGrid}>
-          {/* SKU */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>SKU</label>
-            <div className={styles.inputWrapper}>
-              <Search size={15} className={styles.inputIcon} />
-              <input
-                type="text"
-                className={styles.input}
-                placeholder="Tìm theo SKU..."
-                value={sku}
-                onChange={(e) => {
-                  setSku(e.target.value);
-                  handleFilterChange();
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Product Name */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>Tên sản phẩm</label>
-            <div className={styles.inputWrapper}>
-              <Search size={15} className={styles.inputIcon} />
-              <input
-                type="text"
-                className={styles.input}
-                placeholder="Tìm theo tên sản phẩm..."
-                value={productName}
-                onChange={(e) => {
-                  setProductName(e.target.value);
-                  handleFilterChange();
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Warehouse */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>Kho hàng</label>
-            <div className={styles.selectWrapper}>
-              <select
-                className={styles.select}
-                value={warehouseId}
-                onChange={(e) => {
-                  setWarehouseId(e.target.value);
-                  handleFilterChange();
-                }}
-              >
-                <option value="all">Tất cả kho</option>
-                {warehouses.map((wh) => (
-                  <option key={wh.id} value={wh.id}>
-                    {wh.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className={styles.selectArrow} />
-            </div>
-          </div>
-
-          {/* Performer */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>Người thực hiện</label>
-            <div className={styles.selectWrapper}>
-              <select
-                className={styles.select}
-                value={performedById}
-                onChange={(e) => {
-                  setPerformedById(e.target.value);
-                  handleFilterChange();
-                }}
-              >
-                <option value="all">Tất cả người dùng</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.fullName || u.email}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className={styles.selectArrow} />
-            </div>
-          </div>
-
-          {/* Type */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>Loại giao dịch</label>
-            <div className={styles.selectWrapper}>
-              <select
-                className={styles.select}
-                value={type}
-                onChange={(e) => {
-                  setType(e.target.value);
-                  handleFilterChange();
-                }}
-              >
-                <option value="all">Tất cả loại</option>
-                <option value="IMPORT">Nhập kho</option>
-                <option value="EXPORT">Xuất kho</option>
-                <option value="ADJUSTMENT">Điều chỉnh</option>
-                <option value="TRANSFER_OUT">Chuyển đi</option>
-                <option value="TRANSFER_IN">Chuyển đến</option>
-              </select>
-              <ChevronDown size={14} className={styles.selectArrow} />
-            </div>
-          </div>
-
-          {/* From Date */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>Từ ngày</label>
-            <div className={styles.inputWrapper}>
-              <Calendar size={15} className={styles.inputIcon} />
-              <input
-                type="date"
-                className={styles.input}
-                value={fromDate}
-                onChange={(e) => {
-                  setFromDate(e.target.value);
-                  handleFilterChange();
-                }}
-              />
-            </div>
-          </div>
-
-          {/* To Date */}
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>Đến ngày</label>
-            <div className={styles.inputWrapper}>
-              <Calendar size={15} className={styles.inputIcon} />
-              <input
-                type="date"
-                className={styles.input}
-                value={toDate}
-                onChange={(e) => {
-                  setToDate(e.target.value);
-                  handleFilterChange();
-                }}
-              />
-            </div>
-          </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: `1px solid ${activeFilterCount > 0 ? '#2563eb' : '#e2e8f0'}`, background: activeFilterCount > 0 ? '#eff6ff' : '#fff', fontSize: 13, fontWeight: 600, color: activeFilterCount > 0 ? '#2563eb' : '#475569', cursor: 'pointer' }}
+          >
+            <SlidersHorizontal size={14} />
+            Bộ lọc {activeFilterCount > 0 && <span style={{ background: '#2563eb', color: '#fff', borderRadius: '50%', width: 18, height: 18, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{activeFilterCount}</span>}
+          </button>
+          <button
+            onClick={fetchLogs}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, color: '#475569', cursor: 'pointer' }}
+          >
+            <RefreshCw size={14} />
+          </button>
         </div>
       </div>
 
-      {/* Log List Card */}
+      {/* ── Stats Cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        {[
+          { label: 'Tổng giao dịch', value: totalElements, sub: `Trong khoảng đã lọc`, icon: ClipboardList, color: '#2563eb', bg: '#eff6ff', valueStr: totalElements.toLocaleString('vi-VN') },
+          { label: 'Tổng nhập', value: stats.totalIn, sub: fmtMoney(stats.valueIn), icon: TrendingUp, color: '#16a34a', bg: '#dcfce7', valueStr: `+${stats.totalIn.toLocaleString('vi-VN')}`, positive: true },
+          { label: 'Tổng xuất', value: stats.totalOut, sub: fmtMoney(stats.valueOut), icon: TrendingDown, color: '#dc2626', bg: '#fee2e2', valueStr: `-${stats.totalOut.toLocaleString('vi-VN')}`, negative: true },
+          { label: 'Biến động ròng', value: stats.net, sub: fmtMoney(Math.abs(stats.valueIn - stats.valueOut)), icon: ArrowRightLeft, color: stats.net >= 0 ? '#7c3aed' : '#dc2626', bg: stats.net >= 0 ? '#f5f3ff' : '#fee2e2', valueStr: `${stats.net >= 0 ? '+' : ''}${stats.net.toLocaleString('vi-VN')}` },
+        ].map(({ label, sub, icon: Icon, color, bg, valueStr }) => (
+          <div key={label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14, boxShadow: '0 1px 4px rgba(0,0,0,.04)' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color }}>
+              <Icon size={20} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color, lineHeight: 1.1 }}>{valueStr}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filter Bar (collapsible) ── */}
+      {showFilters && (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(0,0,0,.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {/* Search */}
+            <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 160 }}>
+              <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+              <input
+                value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+                placeholder="Tìm theo mã SP, tên SP, mã phiếu..."
+                style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px 7px 28px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 12.5, color: '#0f172a', outline: 'none' }}
+              />
+            </div>
+
+            {/* Type */}
+            <select value={type} onChange={(e) => { setType(e.target.value); setPage(0); }}
+              style={{ padding: '7px 28px 7px 10px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 12.5, color: '#0f172a', outline: 'none', cursor: 'pointer', minWidth: 140 }}>
+              {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+
+            {/* Warehouse */}
+            <select value={warehouseId} onChange={(e) => { setWarehouseId(e.target.value); setPage(0); }}
+              style={{ padding: '7px 28px 7px 10px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 12.5, color: '#0f172a', outline: 'none', cursor: 'pointer', minWidth: 140 }}>
+              <option value="all">Tất cả kho</option>
+              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+
+            {/* Date range */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Calendar size={13} style={{ color: '#94a3b8', flexShrink: 0 }} />
+              <input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setPage(0); }}
+                style={{ padding: '7px 8px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 12.5, outline: 'none', width: 130 }} />
+              <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>
+              <input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setPage(0); }}
+                style={{ padding: '7px 8px', borderRadius: 7, border: '1px solid #e2e8f0', fontSize: 12.5, outline: 'none', width: 130 }} />
+            </div>
+
+            {/* Reset */}
+            <button onClick={reset}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 7, border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: 12.5, color: '#64748b', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <RotateCcw size={12} /> Xóa bộ lọc
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Table Card ── */}
       <div className={styles.logsCard}>
+        {/* Table header */}
         <div className={styles.cardHeader}>
           <div className={styles.headerTitle}>
-            <Clock size={18} className={styles.headerIcon} />
-            <span>Lịch sử thay đổi</span>
+            <ClipboardList size={16} className={styles.headerIcon} />
+            <span>{totalElements.toLocaleString('vi-VN')} giao dịch</span>
           </div>
-          <span className={styles.elementsCount}>
-            {loading ? 'Đang tải...' : `Hiển thị ${logs.length} giao dịch`}
+          <span style={{ fontSize: 12.5, color: '#94a3b8' }}>
+            {loading ? 'Đang tải...' : `Trang ${page + 1} / ${totalPages}`}
           </span>
         </div>
 
         {loading ? (
           <div className={styles.loadingContainer}>
             <Loader2 className={styles.spinner} size={28} />
-            <p>Đang tải lịch sử thay đổi...</p>
+            <p>Đang tải nhật ký kho...</p>
           </div>
         ) : logs.length === 0 ? (
           <div className={styles.emptyContainer}>
-            <Clock size={40} className={styles.emptyIcon} />
-            <p>Không có dữ liệu giao dịch nào khớp với bộ lọc.</p>
+            <ClipboardList size={40} className={styles.emptyIcon} />
+            <p>Không có giao dịch nào phù hợp với bộ lọc.</p>
           </div>
         ) : (
           <>
             <div className={styles.tableWrapper}>
-              <table className={styles.table}>
+              <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
                 <thead>
                   <tr>
-                    <th style={{ width: 120 }}>Thời gian</th>
-                    <th style={{ width: 130 }}>Người thực hiện</th>
-                    <th style={{ width: 110 }}>Loại</th>
-                    <th style={{ width: 120 }}>SKU</th>
-                    <th style={{ width: 240 }}>Sản phẩm</th>
-                    <th style={{ width: 130 }}>Kho</th>
-                    <th style={{ width: 80, textAlign: 'center' }}>Số lượng</th>
-                    <th style={{ width: 220 }}>Lý do</th>
+                    <th style={{ width: 90, minWidth: 90 }}>Thời gian</th>
+                    <th style={{ width: 110, minWidth: 110 }}>Mã SP</th>
+                    <th style={{ minWidth: 180 }}>Tên sản phẩm</th>
+                    <th style={{ width: 110, minWidth: 110 }}>Loại</th>
+                    <th style={{ width: 130, minWidth: 130 }}>Mã phiếu</th>
+                    <th style={{ width: 75, minWidth: 75, textAlign: 'right' }}>Số lượng</th>
+                    <th style={{ width: 130, minWidth: 130, textAlign: 'right' }}>Giá trị</th>
+                    <th style={{ width: 70, minWidth: 70, textAlign: 'right' }}>Tồn sau</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logs.map((log) => {
-                    const isQtyPositive = log.quantityChange > 0;
+                    const cfg = TXN_TYPE_CONFIG[log.type] ?? { label: log.type, color: '#64748b', bg: '#f1f5f9', icon: ArrowRightLeft };
+                    const Icon = cfg.icon;
+                    const isPos = (log.quantityChange ?? 0) > 0;
+                    const time = fmtTime(log.performedAt);
                     return (
                       <tr key={log.id} className={styles.row}>
-                        <td className={styles.timeCell}>{formatDateTime(log.performedAt)}</td>
+                        {/* Thời gian */}
                         <td>
-                          <div className={styles.userCell}>
-                            <User size={13} className={styles.cellIcon} />
-                            <span>{log.performedByName}</span>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>{time.date}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>{time.time}</div>
+                        </td>
+                        {/* Mã SP */}
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontSize: 11.5, fontWeight: 700, color: '#4f46e5', background: '#eef2ff', padding: '2px 6px', borderRadius: 5 }}>
+                            {log.variantSku || '—'}
+                          </span>
+                          {log.warehouseName && (
+                            <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 2 }}>{log.warehouseName}</div>
+                          )}
+                        </td>
+                        {/* Tên sản phẩm */}
+                        <td style={{ maxWidth: 220 }}>
+                          <div
+                            title={log.variantName || ''}
+                            style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 210 }}
+                          >
+                            {log.variantName || '—'}
+                          </div>
+                          <div
+                            title={buildDesc(log)}
+                            style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 210 }}
+                          >
+                            {buildDesc(log)}
                           </div>
                         </td>
-                        <td>{renderTypeBadge(log.type)}</td>
-                        <td className={styles.skuCell}>{log.variantSku}</td>
-                        <td className={styles.productCell}>{log.variantName}</td>
+                        {/* Loại */}
                         <td>
-                          <div className={styles.warehouseCell}>
-                            <Warehouse size={13} className={styles.cellIcon} />
-                            <span>{log.warehouseName}</span>
-                          </div>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, fontSize: 11.5, fontWeight: 700, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.color}28` }}>
+                            <Icon size={11} />
+                            {cfg.label}
+                          </span>
                         </td>
-                        <td
-                          className={styles.quantityCell}
-                          style={{ color: isQtyPositive ? '#16a34a' : '#dc2626' }}
-                        >
-                          {isQtyPositive ? `+${log.quantityChange}` : log.quantityChange}
+                        {/* Mã phiếu */}
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: '#2563eb', background: '#eff6ff', padding: '2px 6px', borderRadius: 5 }}>
+                            {buildRefCode(log)}
+                          </span>
                         </td>
-                        <td>{renderReason(log)}</td>
+                        {/* Số lượng */}
+                        <td style={{ textAlign: 'right', width: 75 }}>
+                          <span style={{ fontWeight: 800, fontSize: 14, color: isPos ? '#16a34a' : '#dc2626' }}>
+                            {isPos ? `+${log.quantityChange}` : log.quantityChange}
+                          </span>
+                        </td>
+                        {/* Giá trị = |quantityChange| × unitCost */}
+                        <td style={{ textAlign: 'right', width: 130 }}>
+                          {(() => {
+                            // Prefer backend-computed transactionValue, fallback to frontend calc
+                            const val = log.transactionValue != null
+                              ? Number(log.transactionValue)
+                              : (() => {
+                                  const cost = log.unitCost != null ? Number(log.unitCost)
+                                    : log.avgCostAfter != null ? Number(log.avgCostAfter) : 0;
+                                  return cost * Math.abs(log.quantityChange ?? 0);
+                                })();
+                            if (!val || val === 0) return <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>;
+                            return (
+                              <span style={{ fontSize: 12.5, fontWeight: 600, color: isPos ? '#16a34a' : '#dc2626' }}>
+                                {(isPos ? '+' : '-') + fmtMoney(val)}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        {/* Tồn sau */}
+                        <td style={{ textAlign: 'right', width: 70 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: (log.quantityAfter ?? 0) < 0 ? '#dc2626' : (log.quantityAfter ?? 0) === 0 ? '#f59e0b' : '#0f172a' }}>
+                            {log.quantityAfter ?? '—'}
+                          </span>
+                        </td>
                       </tr>
                     );
                   })}
@@ -481,56 +371,15 @@ export default function InventoryLogPage() {
               </table>
             </div>
 
-            {/* Pagination Panel */}
             <Pagination
               currentPage={page}
               totalPages={totalPages}
               totalElements={totalElements}
               pageSize={PAGE_SIZE}
               currentCount={logs.length}
-              itemLabel="mục"
-              onPageChange={handlePageChange}
+              itemLabel="giao dịch"
+              onPageChange={(p) => setPage(p)}
             />
-            {totalPages < 0 && (
-              <div className={styles.pagination}>
-                <span className={styles.paginationInfo}>
-                  Hiển thị {startItem}–{endItem} / {totalElements} mục
-                </span>
-                <div className={styles.paginationControls}>
-                  <button
-                    className={`${styles.pageBtn} ${page === 0 ? styles.pageBtnDisabled : ''}`}
-                    onClick={() => handlePageChange(page - 1)}
-                    disabled={page === 0}
-                    aria-label="Trang trước"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-
-                  {Array.from({ length: totalPages }, (_, i) => i).map((pageNum) => {
-                    // Show dots or logic if there are too many pages (simple helper for display)
-                    const isCurrent = pageNum === page;
-                    return (
-                      <button
-                        key={pageNum}
-                        className={`${styles.pageBtn} ${isCurrent ? styles.pageBtnActive : ''}`}
-                        onClick={() => handlePageChange(pageNum)}
-                      >
-                        {pageNum + 1}
-                      </button>
-                    );
-                  })}
-
-                  <button
-                    className={`${styles.pageBtn} ${page === totalPages - 1 ? styles.pageBtnDisabled : ''}`}
-                    onClick={() => handlePageChange(page + 1)}
-                    disabled={page === totalPages - 1}
-                    aria-label="Trang sau"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>
