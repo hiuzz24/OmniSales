@@ -599,32 +599,6 @@ class PurchaseOrderServiceImplTest {
     }
 
     // =========================================================
-    // moveSentOrdersToReceiving() Tests
-    // =========================================================
-    @Nested
-    @DisplayName("moveSentOrdersToReceiving() Tests")
-    class MoveSentOrdersToReceivingTests {
-
-        @Test
-        void shouldMoveSentOrdersToReceivingStatus() {
-            // This method is retained for interface compatibility but no longer moves orders automatically
-            // It now returns 0 as the automatic movement is deprecated
-            int result = purchaseOrderService.moveSentOrdersToReceiving();
-
-            assertThat(result).isEqualTo(0);
-        }
-
-        @Test
-        @DisplayName("Should return zero - method deprecated")
-        void shouldReturnZeroWhenNoOrdersToMove() {
-            // This method is retained for interface compatibility but no longer moves orders automatically
-            int result = purchaseOrderService.moveSentOrdersToReceiving();
-
-            assertThat(result).isEqualTo(0);
-        }
-    }
-
-    // =========================================================
     // completeFromReceipt() Tests
     // =========================================================
     @Nested

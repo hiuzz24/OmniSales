@@ -595,7 +595,8 @@ CREATE TABLE inventory_issue_items (
                                        quantity   INT           NOT NULL CHECK (quantity > 0),
                                        unit_cost  NUMERIC(12,2) NOT NULL CHECK (unit_cost >= 0),
                                        total_cost NUMERIC(14,2) GENERATED ALWAYS AS (quantity * unit_cost) STORED,
-                                       notes      TEXT
+                                       notes      TEXT,
+                                       is_gift    BOOLEAN       NOT NULL DEFAULT false
 );
 
 CREATE TABLE stock_transfers (
@@ -629,6 +630,7 @@ CREATE TABLE stocktake_sessions (
                                         CHECK (status IN ('DRAFT','IN_PROGRESS','COMPLETED','CANCELLED')),
                                     created_by     UUID         REFERENCES users(id) ON DELETE SET NULL,
                                     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                                    cancelled_at   TIMESTAMPTZ,
                                     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 

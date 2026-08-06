@@ -3,6 +3,7 @@ package fu.osms.sync.tiktok.impl;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.repository.InventoryItemRepository;
@@ -32,6 +33,7 @@ class TikTokImportSyncServiceImplTest {
     @Mock private ChannelProductRepository channelProductRepository;
     @Mock private ChannelProductVariantRepository channelProductVariantRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private CategoryRepository categoryRepository;
     @Mock private ProductVariantRepository productVariantRepository;
     @Mock private WarehouseRepository warehouseRepository;
     @Mock private InventoryItemRepository inventoryItemRepository;
@@ -50,7 +52,7 @@ class TikTokImportSyncServiceImplTest {
     void setUp() {
         service = new TikTokImportSyncServiceImpl(
                 channelRepository, channelProductRepository, channelProductVariantRepository,
-                productRepository, productVariantRepository, warehouseRepository,
+                productRepository, categoryRepository, productVariantRepository, warehouseRepository,
                 inventoryItemRepository, syncLogRepository, tikTokApiClient,
                 marketplaceInventoryPropagationService, marketplaceWarehouseConsistencyService,
                 channelProductAggregationService, syncJobProgressTracker,

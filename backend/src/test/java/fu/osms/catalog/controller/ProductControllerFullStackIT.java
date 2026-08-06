@@ -32,14 +32,34 @@ class ProductControllerFullStackIT extends BaseFullStackIT {
         variant.put("sku",       "VAR-IT-" + TestDataFactory.uniqueSuffix());
         variant.put("name",      "Variant IT " + TestDataFactory.uniqueSuffix());
         variant.put("isActive",  true);
+        variant.put("costPrice", 100000);
+        variant.put("price",     150000);
+        variant.put("optionValues", Map.of(
+                "Size", "M",
+                "Màu",  "Đen"));
+
+        java.util.Map<String, Object> image = new java.util.HashMap<>();
+        image.put("url",         "https://example.com/it-" + TestDataFactory.uniqueSuffix() + ".png");
+        image.put("isPrimary",   true);
+        image.put("sortOrder",   1);
 
         java.util.Map<String, Object> m = new java.util.HashMap<>();
-        m.put("categoryId", categoryId);
-        m.put("sku",         "SKU-IT-" + TestDataFactory.uniqueSuffix());
-        m.put("name",        "Product IT " + TestDataFactory.uniqueSuffix());
-        m.put("status",      "ACTIVE");
-        m.put("unit",        "pcs");
-        m.put("variants",    List.of(variant));
+        m.put("categoryId",        categoryId);
+        m.put("sku",               "SKU-IT-" + TestDataFactory.uniqueSuffix());
+        m.put("name",              "Product IT " + TestDataFactory.uniqueSuffix());
+        m.put("description",       "Mô tả sản phẩm IT " + TestDataFactory.uniqueSuffix());
+        m.put("brand",             "Brand IT");
+        m.put("unit",              "pcs");
+        m.put("hasVariants",       false);
+        m.put("weightGrams",       500);
+        m.put("lowStockThreshold", 5);
+        m.put("status",            "ACTIVE");
+        m.put("attributes",        Map.of(
+                "packageWidthCm",  10,
+                "packageHeightCm", 10,
+                "packageLengthCm", 10));
+        m.put("variants",          List.of(variant));
+        m.put("images",            List.of(image));
         return m;
     }
 

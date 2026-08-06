@@ -202,6 +202,7 @@ export default function StocktakeDetailPage() {
   };
 
   return (
+    <div style={{ width: 'calc(100% + 48px)', margin: '-24px', padding: '24px' }}>
     <div style={{ padding: '20px 24px', maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button type="button" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 9, fontSize: 13, fontWeight: 600, color: '#475569', background: '#f1f5f9', border: '1px solid #e2e8f0', cursor: 'pointer' }} onClick={() => navigate(ROUTES.STOCKTAKES)}>
@@ -338,6 +339,7 @@ export default function StocktakeDetailPage() {
         )}
       </div>
       {ConfirmDialog}
+    </div>
     </div>
   );
 }

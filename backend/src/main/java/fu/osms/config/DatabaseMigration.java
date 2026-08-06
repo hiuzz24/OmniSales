@@ -155,8 +155,28 @@ public class DatabaseMigration {
 
         try {
             jdbcTemplate.execute("""
+                        ALTER TABLE stocktake_sessions
+                        ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ
+                    """);
+            log.info("Migration: added cancelled_at column to stocktake_sessions table");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for stocktake_sessions.cancelled_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE inventory_issue_items
+                        ADD COLUMN IF NOT EXISTS is_gift BOOLEAN NOT NULL DEFAULT false
+                    """);
+            log.info("Migration: added is_gift column to inventory_issue_items table");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for inventory_issue_items.is_gift: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
                         INSERT INTO system_settings (key, value, description, category, updated_at)
-                        VALUES 
+                        VALUES
                         ('store.name', 'OmniSales Store', 'Tên thương hiệu / Cửa hàng', 'STORE', NOW()),
                         ('store.phone', '0987654321', 'Hotline liên hệ', 'STORE', NOW()),
                         ('store.email', 'contact@omnisales.vn', 'Email liên hệ', 'STORE', NOW()),

@@ -3,6 +3,7 @@ package fu.osms.sync.tiktok.impl;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.sync.service.PlatformCatalogOwnershipPolicy;
 import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
@@ -24,6 +25,7 @@ class TikTokProductDetailEnrichmentServiceImplTest {
     @Mock private ChannelProductRepository channelProductRepository;
     @Mock private ChannelProductVariantRepository channelProductVariantRepository;
     @Mock private ProductRepository productRepository;
+    @Mock private CategoryRepository categoryRepository;
     @Mock private TikTokAuthorizedApiClient tikTokApiClient;
     @Mock private TransactionTemplate transactionTemplate;
     @Mock private PlatformCatalogOwnershipPolicy catalogOwnershipPolicy;
@@ -34,7 +36,7 @@ class TikTokProductDetailEnrichmentServiceImplTest {
     void setUp() {
         service = new TikTokProductDetailEnrichmentServiceImpl(
                 channelRepository, channelProductRepository, channelProductVariantRepository,
-                productRepository, tikTokApiClient, transactionTemplate, catalogOwnershipPolicy);
+                productRepository, categoryRepository, tikTokApiClient, transactionTemplate, catalogOwnershipPolicy);
     }
 
     @Test
