@@ -425,7 +425,7 @@ const UserListPage = () => {
       'Quản lý cấu hình toàn hệ thống'
     ],
     OPERATIONS: [
-      'Xem và tạo đơn hàng',
+      'Xem đơn hàng',
       'Xem danh sách sản phẩm',
       'Quản lý kho hàng',
       'Không có quyền xem báo cáo doanh số'
