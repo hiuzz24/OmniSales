@@ -290,7 +290,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
     resolver: zodResolver(z.object({
       warehouseId: z.string().min(1, 'Vui lòng chọn kho xuất.'),
       issuedDate: z.string().min(1, 'Vui lòng chọn ngày xuất.'),
-      recipient: z.string().min(1, 'Vui lòng nhập người nhận.').max(255),
+      recipient: z.string().max(255).optional(),
       notes: z.string().optional(),
     })),
     defaultValues: { warehouseId: '', issuedDate: today, recipient: '', notes: '' },
@@ -513,7 +513,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
     const invalidQty = items.find((it) => !it.quantity || Number(it.quantity) <= 0);
     if (invalidQty) { toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`); return; }
     if (overAvailableItem) { toast.error('Số lượng xuất vượt quá tồn kho khả dụng. Vui lòng kiểm tra lại.'); return; }
-    const payload = { warehouseId: data.warehouseId, issuedDate: data.issuedDate, recipient: data.recipient.trim(), notes: data.notes || null, deliveryType: 'ADJUSTMENT', items: items.map((it) => ({ productVariantId: it.variantId, quantity: Number(it.quantity), note: null })) };
+    const payload = { warehouseId: data.warehouseId, issuedDate: data.issuedDate, recipient: data.recipient?.trim() ? data.recipient.trim() : null, notes: data.notes || null, deliveryType: 'ADJUSTMENT', items: items.map((it) => ({ productVariantId: it.variantId, quantity: Number(it.quantity), note: null })) };
     try {
       const savedResponse = isEdit ? await stockDeliveryService.updateStockDelivery(id, payload) : await stockDeliveryService.createStockDelivery(payload);
       const savedDelivery = getResponseData(savedResponse);
@@ -604,7 +604,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
                 {errors.issuedDate && <p className={styles.fieldErrorMsg}>{errors.issuedDate.message}</p>}
               </div>
               <div>
-                <label className={styles.fieldLabel}>Người nhận <span>*</span></label>
+                <label className={styles.fieldLabel}>Người nhận</label>
                 <input {...register('recipient')} placeholder="Nhập tên người nhận" className={`${styles.fieldInput} ${errors.recipient ? styles.fieldError : ''}`} />
                 {errors.recipient && <p className={styles.fieldErrorMsg}>{errors.recipient.message}</p>}
               </div>
