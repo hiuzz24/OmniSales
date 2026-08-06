@@ -1,7 +1,6 @@
 package fu.osms.purchase.dto;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -22,7 +21,6 @@ public class PurchaseOrderRequest {
     private UUID supplierId;
 
     @NotNull
-    @FutureOrPresent
     private LocalDate expectedReceiptDate;
 
     @Size(max = 50)

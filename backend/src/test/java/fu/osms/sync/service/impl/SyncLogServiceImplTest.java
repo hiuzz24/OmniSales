@@ -180,7 +180,7 @@ class SyncLogServiceImplTest {
     void toResponseWithInventoryChanges_mapsCorrectly() {
         InventoryTransactionDTO txnDto = InventoryTransactionDTO.builder()
                 .id(UUID.randomUUID())
-                .type(InvTxnType.INBOUND)
+                .type(InvTxnType.IMPORT)
                 .build();
 
         SyncLogResponse response = SyncLogResponse.builder()

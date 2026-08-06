@@ -3,6 +3,7 @@ package fu.osms.purchase.controller;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.purchase.dto.InspectionItemRequest;
 import fu.osms.purchase.dto.PurchaseOrderRequest;
 import fu.osms.purchase.dto.PurchaseOrderResponse;
 import fu.osms.purchase.dto.PurchaseOrderFormOptionsResponse;
@@ -17,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -51,10 +53,46 @@ public class PurchaseOrderController {
         return ResponseEntity.ok(ApiResponse.success("Đã gửi nhà cung cấp", service.sendToSupplier(id)));
     }
 
+    @PatchMapping("/{id}/confirm-receiving")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> confirmReceiving(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success("Đã xác nhận nhận hàng", service.confirmReceiving(id)));
+    }
+
+    @PostMapping("/{id}/surplus")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> createSurplusOrder(@PathVariable UUID id) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Đã tạo đơn thặng dư", service.createSurplusOrder(id)));
+    }
+
+    @PostMapping("/{id}/shortage")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> createShortageOrder(@PathVariable UUID id) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Đã tạo đơn bổ sung hàng thiếu", service.createShortageOrder(id)));
+    }
+
     @PatchMapping("/{id}/cancel")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<PurchaseOrderResponse>> cancel(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.cancel(id)));
+    }
+
+    @PatchMapping("/{id}/inspect/save")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> saveInspection(
+            @PathVariable UUID id,
+            @RequestBody @Valid List<InspectionItemRequest> items) {
+        return ResponseEntity.ok(ApiResponse.success("Đã lưu kết quả kiểm tra", service.saveInspection(id, items)));
+    }
+
+    @PatchMapping("/{id}/inspect/complete")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<PurchaseOrderResponse>> completeInspection(
+            @PathVariable UUID id,
+            @RequestBody @Valid List<InspectionItemRequest> items) {
+        return ResponseEntity.ok(ApiResponse.success("Hoàn thành kiểm tra", service.completeInspection(id, items)));
     }
 
     @GetMapping

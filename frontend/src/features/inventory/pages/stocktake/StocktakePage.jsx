@@ -176,7 +176,7 @@ const ResultCell = ({ surplus, shortage }) => {
   );
 };
 
-const ActionMenu = ({ stocktake, onStatus }) => {
+const ActionMenu = ({ stocktake, onStatus, onView }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -193,7 +193,7 @@ const ActionMenu = ({ stocktake, onStatus }) => {
 
   return (
     <ActionMenuShell menuRef={menuRef} open={open} buttonIcon={MoreHorizontal} onToggle={() => setOpen((current) => !current)}>
-      <ActionMenuItem onClick={() => { setOpen(false); toast.info('Chi tiết phiếu kiểm đang được phát triển.'); }}>
+      <ActionMenuItem onClick={() => { setOpen(false); onView(stocktake); }}>
         <Eye size={14} /> Xem chi tiết
       </ActionMenuItem>
       {!isClosed && stocktake.status !== 'IN_PROGRESS' && (
@@ -292,6 +292,10 @@ export default function StocktakePage() {
     return Array.isArray(data.content) ? data.content : [];
   };
 
+  const handleView = (stocktake) => {
+    navigate(ROUTES.STOCKTAKE_DETAIL.replace(':id', stocktake.id));
+  };
+
   const handleStatus = async (stocktake, nextStatus) => {
     if (nextStatus === 'COMPLETED') {
       const hasMissingActual = (stocktake.items ?? []).some((item) => item.actualQuantity === null || item.actualQuantity === undefined || item.actualQuantity < 0);
@@ -334,7 +338,7 @@ export default function StocktakePage() {
         <td style={tableCellStyle}>{stocktake.createdByName ?? '-'}</td>
         <td style={tableCellStyle}>{formatDateTime(stocktake.createdAt) || formatDate(stocktake.scheduledDate)}</td>
         <td style={{ ...tableCellStyle, textAlign: 'right' }}>
-          <ActionMenu stocktake={stocktake} onStatus={handleStatus} />
+          <ActionMenu stocktake={stocktake} onStatus={handleStatus} onView={handleView} />
         </td>
       </tr>
     );

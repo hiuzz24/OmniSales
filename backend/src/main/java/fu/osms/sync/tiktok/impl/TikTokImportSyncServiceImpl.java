@@ -1,8 +1,11 @@
 package fu.osms.sync.tiktok.impl;
 
 import fu.osms.catalog.entity.Product;
+import fu.osms.catalog.entity.Category;
 import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.catalog.enums.CategoryStatus;
 import fu.osms.catalog.enums.ProductStatus;
+import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.catalog.util.ProductCostPolicy;
@@ -40,6 +43,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -66,6 +70,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ProductRepository productRepository;
+    private final CategoryRepository categoryRepository;
     private final ProductVariantRepository productVariantRepository;
     private final WarehouseRepository warehouseRepository;
     private final InventoryItemRepository inventoryItemRepository;
@@ -315,6 +320,15 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                     stringValue(productNode.get("description_html"))
             ));
             product.setBrand(firstNonBlank(stringValue(productNode.get("brand_name")), product.getBrand()));
+            try {
+                Category resolvedCategory = resolveCategory(productNode);
+                if (resolvedCategory != null) {
+                    product.setCategory(resolvedCategory);
+                }
+            } catch (Exception e) {
+                log.warn("[TikTokImportSync] Could not resolve category for product {}: {}",
+                        externalProductId, e.getMessage());
+            }
         }
         if (initialCreate) {
             product.setStatus(resolveStatus(stringValue(productNode.get("status"))));
@@ -755,6 +769,69 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 stringValue(node.get("name")),
                 stringValue(node.get("product_name"))
         );
+    }
+
+    private Category resolveCategory(Map<String, Object> productNode) {
+        String externalCategoryId = firstNonBlank(
+                stringValue(productNode.get("category_id")),
+                stringValue(productNode.get("categoryId"))
+        );
+        String categoryName = firstNonBlank(
+                stringValue(productNode.get("category_name")),
+                stringValue(productNode.get("categoryName"))
+        );
+        if (!hasText(externalCategoryId) || !hasText(categoryName)) {
+            for (Map<String, Object> categoryNode : listOfMaps(productNode.get("category_list"))) {
+                String id = firstNonBlank(
+                        stringValue(categoryNode.get("id")),
+                        stringValue(categoryNode.get("category_id"))
+                );
+                String name = firstNonBlank(
+                        stringValue(categoryNode.get("name")),
+                        stringValue(categoryNode.get("category_name"))
+                );
+                if (!hasText(id) || !hasText(name)) {
+                    continue;
+                }
+                externalCategoryId = id;
+                categoryName = name;
+            }
+        }
+        if (!hasText(externalCategoryId) && !hasText(categoryName)) {
+            return null;
+        }
+
+        String slug = hasText(externalCategoryId)
+                ? "tiktok-" + slugify(externalCategoryId)
+                : "tiktok-" + slugify(categoryName);
+        String resolvedName = firstNonBlank(categoryName, "TikTok " + externalCategoryId);
+
+        Category category = categoryRepository.findBySlug(slug)
+                .or(() -> categoryRepository.findFirstByNameIgnoreCase(resolvedName))
+                .orElseGet(Category::new);
+        category.setName(resolvedName);
+        category.setSlug(slug);
+        if (category.getSortOrder() == null) {
+            category.setSortOrder(0);
+        }
+        if (category.getStatus() == null) {
+            category.setStatus(CategoryStatus.ACTIVE);
+        }
+        return categoryRepository.save(category);
+    }
+
+    private String slugify(String value) {
+        if (value == null || value.isBlank()) {
+            return "unknown";
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D')
+                .toLowerCase();
+        normalized = normalized.replaceAll("[^a-z0-9]+", "-")
+                .replaceAll("^-+|-+$", "");
+        return normalized.isBlank() ? "unknown" : normalized;
     }
 
     private ProductStatus resolveStatus(String status) {

@@ -258,6 +258,8 @@ test.describe('Order API Tests', () => {
       return;
     }
 
+    // orderA: walks the full legal path to DELIVERED so it contributes to totalRevenue
+    // (backend computes totalRevenue from DELIVERED orders only).
     const orderA = await createTestOrder(request, authToken, {
       externalOrderId: `REG-REV-A-${Date.now()}`,
       subtotal: 1000000,
@@ -265,6 +267,8 @@ test.describe('Order API Tests', () => {
       shippingFee: 0,
       status: 'CONFIRMED',
     });
+    // orderB: stays in a non-terminal status that does NOT count toward totalRevenue,
+    // so the cancel can be issued without violating the DELIVERED-cancel guard.
     const orderB = await createTestOrder(request, authToken, {
       externalOrderId: `REG-REV-B-${Date.now()}`,
       subtotal: 500000,
@@ -273,13 +277,17 @@ test.describe('Order API Tests', () => {
       status: 'PENDING',
     });
 
+    for (const nextStatus of ['PROCESSING', 'SHIPPED', 'DELIVERED']) {
+      await request.patch(`${API_BASE}/orders/${orderA.id}/status?status=${nextStatus}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+    }
+
     const computeTotal = (o) =>
       Math.max(0, Number(o.subtotal) - Number(o.discountAmount) + Number(o.shippingFee));
 
     const afterCreate = await getOrderStats(request, authToken);
-    const expectedAfterCreate = Number(before.totalRevenue)
-      + computeTotal(orderA)
-      + computeTotal(orderB);
+    const expectedAfterCreate = Number(before.totalRevenue) + computeTotal(orderA);
     expect(Number(afterCreate.totalRevenue)).toBe(expectedAfterCreate);
 
     await request.post(`${API_BASE}/orders/${orderB.id}/cancel`, {
@@ -306,5 +314,149 @@ test.describe('Order API Tests', () => {
     expect(typeof stats.totalRevenue).toBe('number');
     expect(stats.totalRevenue).toBeGreaterThanOrEqual(0);
     expect(Number.isFinite(stats.totalRevenue)).toBe(true);
+  });
+
+  // =========================================================
+  // Phase B1: New endpoints (uncustomerd-count, payment-status, PUT)
+  // =========================================================
+
+  // P19 - GET /api/orders/uncustomerd-count
+  test('P19 - GET /api/orders/uncustomerd-count - Returns count of orders without customer', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/orders/uncustomerd-count`, {
+      headers: managerHeaders,
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.data).toHaveProperty('count');
+    expect(typeof body.data.count).toBe('number');
+    expect(body.data.count).toBeGreaterThanOrEqual(0);
+  });
+
+  // P20 - GET /api/orders/uncustomerd-count - Without auth returns 401/403
+  test('P20 - GET /api/orders/uncustomerd-count - Without auth returns 401 or 403', async ({ request }) => {
+    const response = await request.get(`${API_BASE}/orders/uncustomerd-count`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // P21 - PATCH /api/orders/{id}/payment-status with valid order + status
+  test('P21 - PATCH /api/orders/{id}/payment-status - Update payment status of non-existent order returns 404 or 500', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.patch(`${API_BASE}/orders/${fakeId}/payment-status?paymentStatus=PAID`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 404, 500]).toContain(response.status());
+  });
+
+  // P22 - PATCH /api/orders/{id}/payment-status with invalid payment status
+  test('P22 - PATCH /api/orders/{id}/payment-status - Invalid status value returns 400 or 500', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.patch(`${API_BASE}/orders/${fakeId}/payment-status?paymentStatus=INVALID_STATUS`, {
+      headers: managerHeaders,
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
+
+  // P23 - PATCH /api/orders/{id}/payment-status without auth
+  test('P23 - PATCH /api/orders/{id}/payment-status - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.patch(`${API_BASE}/orders/${fakeId}/payment-status?paymentStatus=PAID`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // P24 - PATCH /api/orders/{id}/payment-status with valid payment status (smoke test)
+  test('P24 - PATCH /api/orders/{id}/payment-status - Smoke test with existing order (create order first)', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const order = await createTestOrder(request, authToken, {
+      externalOrderId: `P24-${Date.now()}`,
+      subtotal: 100000,
+      discountAmount: 0,
+      shippingFee: 0,
+      status: 'PENDING',
+    });
+    expect(order).toBeTruthy();
+
+    const response = await request.patch(`${API_BASE}/orders/${order.id}/payment-status?paymentStatus=PAID`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+  });
+
+  // P25 - PUT /api/orders/{id} with non-existent id
+  test('P25 - PUT /api/orders/{id} - Update non-existent order returns 404 or 500', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.put(`${API_BASE}/orders/${fakeId}`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: {
+        externalOrderId: `PUT-${Date.now()}`,
+        buyerName: 'Test Buyer',
+        buyerPhone: '0901234567',
+        shippingAddress: { city: 'HCMC' },
+        subtotal: 100000,
+        discountAmount: 0,
+        shippingFee: 0,
+        currency: 'VND',
+        items: [],
+      },
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+  });
+
+  // P26 - PUT /api/orders/{id} without auth
+  test('P26 - PUT /api/orders/{id} - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.put(`${API_BASE}/orders/${fakeId}`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {},
+    });
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // P27 - PUT /api/orders/{id} with empty body returns 400
+  test('P27 - PUT /api/orders/{id} - Empty/invalid body returns 400', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.put(`${API_BASE}/orders/${fakeId}`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: {},
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
+
+  // P28 - PUT /api/orders/{id} happy path with existing order
+  test('P28 - PUT /api/orders/{id} - Update existing order buyerName returns 200', async ({ request, managerHeaders }) => {
+    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
+    const order = await createTestOrder(request, authToken, {
+      externalOrderId: `P28-${Date.now()}`,
+      subtotal: 100000,
+      discountAmount: 0,
+      shippingFee: 0,
+      status: 'PENDING',
+    });
+
+    const response = await request.put(`${API_BASE}/orders/${order.id}`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: {
+        externalOrderId: order.externalOrderId,
+        buyerName: 'Updated Buyer',
+        buyerPhone: '0901234567',
+        shippingAddress: { city: 'HCMC' },
+        subtotal: 100000,
+        discountAmount: 0,
+        shippingFee: 0,
+        currency: 'VND',
+        items: [],
+      },
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
   });
 });

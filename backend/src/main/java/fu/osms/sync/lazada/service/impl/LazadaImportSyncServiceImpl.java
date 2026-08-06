@@ -134,6 +134,8 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             Warehouse masterWarehouse = marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(channel);
             String primaryWarehouseCode = optionalText(channel.getMetadata(), "lazadaWarehouseCode");
             List<JsonNode> warehouses = fetchWarehouses(credential);
+            // Fetch category tree from Lazada for name resolution during sync
+            Map<String, String> lazadaCategoryNames = fetchCategoryNames(credential);
             Map<String, Warehouse> warehouseByCode = new HashMap<>();
             for (JsonNode warehouseNode : warehouses) {
                 if (isDefaultLazadaWarehouse(warehouseNode, primaryWarehouseCode)) {
@@ -167,6 +169,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                             warehouseByCode,
                             masterWarehouse,
                             primaryWarehouseCode,
+                            lazadaCategoryNames,
                             importSyncLog
                     );
                     if (externalProductKey == null) {
@@ -451,6 +454,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                                           Map<String, Warehouse> warehouseByCode,
                                           Warehouse masterWarehouse,
                                           String primaryWarehouseCode,
+                                          Map<String, String> lazadaCategoryNames,
                                           SyncLog syncLog) {
         String externalProductId = resolveExternalProductId(productNode);
         if (externalProductId == null || externalProductId.isBlank()) {
@@ -483,6 +487,16 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                     productNode.path("attributes").path("description").asText(null)
             ));
             product.setBrand(resolveBrand(productNode));
+            // Resolve and save category from Lazada category tree
+            try {
+                Category resolvedCategory = resolveCategory(productNode, lazadaCategoryNames);
+                if (resolvedCategory != null) {
+                    product.setCategory(resolvedCategory);
+                }
+            } catch (Exception e) {
+                log.warn("[LazadaImportSync] Could not resolve category for product {}: {}",
+                        externalProductId, e.getMessage());
+            }
         }
         if (initialCreate) {
             product.setStatus(resolveProductStatus(firstText(productNode, "status", "seller_status")));

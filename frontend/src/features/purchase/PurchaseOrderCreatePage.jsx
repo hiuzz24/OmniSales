@@ -23,6 +23,7 @@ import {
 import { toast } from 'react-toastify';
 import purchaseOrderApi from '../../api/purchaseOrderApi';
 import { ROUTES } from '../../app/router/routes';
+import useConfirmDialog from '../inventory/hooks/useConfirmDialog';
 import styles from './PurchaseOrderPage.module.css';
 
 const SUPPLIER_PAGE_SIZE = 20;
@@ -66,11 +67,14 @@ function SupplierCreateModal({ open, onClose, onCreated }) {
     name: '',
     contactName: '',
     phone: '',
+    taxCode: '',
     email: '',
     address: '',
   });
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [taxCodeError, setTaxCodeError] = useState('');
 
   useEffect(() => {
     if (!open) return undefined;
@@ -86,21 +90,25 @@ function SupplierCreateModal({ open, onClose, onCreated }) {
   const update = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }));
     if (field === 'name') setNameError('');
+    if (field === 'phone') setPhoneError('');
+    if (field === 'taxCode') setTaxCodeError('');
   };
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!form.name.trim()) {
-      setNameError('Vui lòng nhập tên nhà cung cấp.');
-      return;
-    }
+    let valid = true;
+    if (!form.name.trim()) { setNameError('Vui lòng nhập tên nhà cung cấp.'); valid = false; }
+    if (!form.phone.trim()) { setPhoneError('Số điện thoại là bắt buộc.'); valid = false; }
+    if (!form.taxCode.trim()) { setTaxCodeError('Mã số thuế (MST) là bắt buộc.'); valid = false; }
+    if (!valid) return;
     setSaving(true);
     try {
       const created = await purchaseOrderApi.createSupplier({
         ...form,
         name: form.name.trim(),
         contactName: form.contactName.trim() || null,
-        phone: form.phone.trim() || null,
+        phone: form.phone.trim(),
+        taxCode: form.taxCode.trim(),
         email: form.email.trim() || null,
         address: form.address.trim() || null,
         isActive: true,
@@ -147,12 +155,36 @@ function SupplierCreateModal({ open, onClose, onCreated }) {
               {nameError && <p id="supplier-name-error" className={styles.fieldError} role="alert">{nameError}</p>}
             </div>
             <div className={styles.field}>
+              <label htmlFor="new-supplier-taxcode">Mã số thuế (MST) *</label>
+              <input
+                id="new-supplier-taxcode"
+                className={`${styles.input} ${taxCodeError ? styles.inputInvalid : ''}`}
+                value={form.taxCode}
+                onChange={update('taxCode')}
+                aria-invalid={Boolean(taxCodeError)}
+                aria-describedby={taxCodeError ? 'supplier-taxcode-error' : undefined}
+                placeholder="Ví dụ: 0123456789"
+              />
+              {taxCodeError && <p id="supplier-taxcode-error" className={styles.fieldError} role="alert">{taxCodeError}</p>}
+            </div>
+            <div className={styles.field}>
               <label htmlFor="new-supplier-contact">Người liên hệ</label>
               <input id="new-supplier-contact" className={styles.input} value={form.contactName} onChange={update('contactName')} placeholder="Nguyễn Văn A" />
             </div>
             <div className={styles.field}>
-              <label htmlFor="new-supplier-phone">Số điện thoại</label>
-              <input id="new-supplier-phone" type="tel" autoComplete="tel" className={styles.input} value={form.phone} onChange={update('phone')} placeholder="0901 234 567" />
+              <label htmlFor="new-supplier-phone">Số điện thoại *</label>
+              <input
+                id="new-supplier-phone"
+                type="tel"
+                autoComplete="tel"
+                className={`${styles.input} ${phoneError ? styles.inputInvalid : ''}`}
+                value={form.phone}
+                onChange={update('phone')}
+                aria-invalid={Boolean(phoneError)}
+                aria-describedby={phoneError ? 'supplier-phone-error' : undefined}
+                placeholder="0901 234 567"
+              />
+              {phoneError && <p id="supplier-phone-error" className={styles.fieldError} role="alert">{phoneError}</p>}
             </div>
             <div className={styles.field}>
               <label htmlFor="new-supplier-email">Email</label>
@@ -456,6 +488,7 @@ function ProductPickerModal({ onClose, onConfirm, catalog, existingGroupKeys }) 
 
 export default function PurchaseOrderCreatePage() {
   const navigate = useNavigate();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
   const today = new Date().toISOString().slice(0, 10);
   const [orderCode, setOrderCode] = useState('');
   const [supplier, setSupplier] = useState(null);
@@ -549,6 +582,17 @@ export default function PurchaseOrderCreatePage() {
       return toast.error('Số lượng và đơn giá sản phẩm không hợp lệ.');
     }
 
+    // Confirm only when sending to supplier (not draft)
+    if (!isDraft) {
+      const confirmed = await confirm({
+        title: 'Gửi đơn cho nhà cung cấp?',
+        message: `Đơn mua hàng ${orderCode} sẽ được gửi đến "${supplier.name}".\nSau khi gửi, đơn sẽ chuyển sang trạng thái Đã gửi NCC.`,
+        confirmLabel: 'Gửi NCC',
+        tone: 'warning',
+      });
+      if (!confirmed) return undefined;
+    }
+
     setSubmitting(true);
     try {
       await purchaseOrderApi.create({
@@ -605,12 +649,10 @@ export default function PurchaseOrderCreatePage() {
               <div className={styles.field}>
                 <label htmlFor="orderCode">Mã đơn</label>
                 <input id="orderCode" className={styles.input} value={orderCode || 'Đang tạo mã...'} readOnly aria-readonly="true" />
-                <p className={styles.helper}>Tự động theo định dạng MĐH-năm-6 chữ số.</p>
               </div>
               <div className={styles.field}>
                 <label htmlFor="purchaseTime">Thời gian mua</label>
                 <input id="purchaseTime" className={styles.input} value={purchaseTime} readOnly aria-readonly="true" />
-                <p className={styles.helper}>Hệ thống lưu đầy đủ ngày, giờ và phút khi tạo đơn.</p>
               </div>
               <div className={`${styles.field} ${styles.supplierField}`}>
                 <label htmlFor="supplier">Nhà cung cấp *</label>
@@ -619,7 +661,6 @@ export default function PurchaseOrderCreatePage() {
               <div className={styles.field}>
                 <label htmlFor="warehouse">Kho nhập mặc định</label>
               <input id="warehouse" className={styles.input} value={warehouse ? `${warehouse.name} - ${warehouse.address ?? ''}` : 'Đang tải...'} readOnly aria-readonly="true" />
-                <p className={styles.helper}>Đã gắn {warehousePlatformCount}/3 ID kho Shopify, Lazada và TikTok Shop.</p>
               </div>
               <div className={styles.field}>
                 <label htmlFor="expectedDate">Dự kiến nhận *</label>
@@ -644,7 +685,6 @@ export default function PurchaseOrderCreatePage() {
             <div className={styles.productHeader}>
               <div>
                 <h2 className={styles.cardTitle}>Danh sách sản phẩm</h2>
-                <p className={styles.helper}>Mỗi sản phẩm con được lưu bằng variant ID riêng để cập nhật đúng sàn.</p>
               </div>
               <button type="button" className={styles.secondaryButton} disabled={loadingOptions} onClick={() => setPickerOpen(true)}>
                 {loadingOptions ? <Loader2 size={17} className={styles.spin} /> : <Plus size={17} />} Thêm sản phẩm
@@ -685,7 +725,6 @@ export default function PurchaseOrderCreatePage() {
                             </td>
                             <td>
                               <span className={styles.skuTag}>{item.sku || '—'}</span>
-                              {item.localSkus?.length > 0 && <small className={styles.localSku}>{item.linkedVariantIds.length} liên kết sàn · lưu 1 dòng SKU</small>}
                             </td>
                             <td>
                               <input
@@ -750,6 +789,7 @@ export default function PurchaseOrderCreatePage() {
           existingGroupKeys={items.map((item) => item.groupKey)}
         />
       )}
+      {ConfirmDialog}
     </main>
   );
 }

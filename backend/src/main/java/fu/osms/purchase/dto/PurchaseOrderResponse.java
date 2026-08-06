@@ -19,6 +19,7 @@ public class PurchaseOrderResponse {
     private String supplierName;
     private UUID warehouseId;
     private String warehouseName;
+    private String warehouseAddress;
     private PurchaseOrderStatus status;
     private OffsetDateTime orderDate;
     private LocalDate expectedReceiptDate;
@@ -31,8 +32,16 @@ public class PurchaseOrderResponse {
     private String receiptCode;
     private OffsetDateTime sentAt;
     private OffsetDateTime receivingAt;
+    private OffsetDateTime inspectingAt;
+    private OffsetDateTime inspectedAt;
     private OffsetDateTime completedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
     private List<PurchaseOrderItemResponse> items;
+    /** True if any item has actualQuantity > quantity (surplus from inspection). */
+    private boolean hasSurplus;
+    /** True if any item has actualQuantity < quantity (shortage from inspection). */
+    private boolean hasShortage;
+    /** True if any item has a surplusNote set (shortage or surplus annotation). */
+    private boolean hasNote;
 }

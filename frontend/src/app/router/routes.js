@@ -20,6 +20,7 @@ export const ROUTES = {
   CUSTOMER_DETAIL: '/customers/:id',
   WAREHOUSE_IMPORT_RECEIPTS: '/warehouse/receipts',
   WAREHOUSE_IMPORT_RECEIPT_CREATE: '/warehouse/receipts/create',
+  WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL: '/warehouse/receipts/create-manual',
   WAREHOUSE_IMPORT_RECEIPT_EDIT: '/warehouse/receipts/:id/edit',
   WAREHOUSE_IMPORT_RECEIPT_DETAIL: '/warehouse/receipts/:id',
   WAREHOUSE: '/warehouse/manage',
@@ -33,6 +34,7 @@ export const ROUTES = {
   SYNC_HISTORY: '/sync/history',
   STOCKTAKES: '/warehouse/stocktakes',
   STOCKTAKE_CREATE: '/warehouse/stocktakes/create',
+  STOCKTAKE_DETAIL: '/warehouse/stocktakes/:id',
 
   // Inventory
   INVENTORY: '/inventory',
@@ -52,6 +54,7 @@ export const ROUTES = {
   SUPPLIERS: '/inventory/suppliers',
   PURCHASE_ORDERS: '/purchases',
   PURCHASE_ORDER_CREATE: '/purchases/create',
+  PURCHASE_ORDER_DETAIL: '/purchases/:id',
   USERS: '/users',
   USER_INVITATIONS: '/users/invitations',
   USER_DETAIL: '/users/:id',

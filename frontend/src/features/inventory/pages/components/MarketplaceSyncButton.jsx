@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, DownloadCloud, Link2, Loader2, RefreshCw, UploadCloud } from 'lucide-react';
+import { ArrowLeft, ChevronDown, DownloadCloud, Link2, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { ROUTES } from '../../../../app/router/routes';
 import channelSyncService from '../../services/channelSyncService';
@@ -25,13 +25,6 @@ const DIRECTION_OPTIONS = {
     color: '#1d4ed8',
     background: '#eff6ff',
     channelTitle: 'Chọn sàn để kéo dữ liệu về',
-  },
-  'from-app': {
-    title: 'Đồng bộ từ ứng dụng',
-    description: 'Chỉ cập nhật tồn kho và giá từ các phiếu nhập/xuất kho chưa đồng bộ',
-    icon: UploadCloud,
-    color: '#0f766e',
-    background: '#ecfdf5',
   },
 };
 
@@ -201,26 +194,6 @@ const getChannelLabel = (channel) => {
   return `${platformLabel} - ${channel.displayName ?? 'Chưa đặt tên'}`;
 };
 const toCount = (value) => Number(value ?? 0).toLocaleString('vi-VN');
-const formatApplicationSyncTime = (value) => {
-  if (!value) return 'lần đồng bộ đầu tiên';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'lần đồng bộ ứng dụng gần nhất'
-    : date.toLocaleString('vi-VN');
-};
-
-const showApplicationSyncStarted = (syncableChannels) => {
-  const cursors = syncableChannels
-    .map((channel) => channel.lastSyncedApplicationAt)
-    .filter(Boolean)
-    .sort();
-  const cursor = cursors.length === 0 ? null : cursors[0];
-  toast.info(
-    cursor
-      ? `Đang đồng bộ các phiếu nhập/xuất kho thay đổi sau ${formatApplicationSyncTime(cursor)}.`
-      : 'Đang kiểm tra các phiếu nhập/xuất kho chưa từng đồng bộ lên sàn.',
-  );
-};
 
 const hasNoApplicationChanges = (result) => Number(result?.pushedVariantCount || 0) === 0;
 const syncIdentity = (detail) => detail?.sellerId || detail?.shopId || detail?.shopDomain || 'chưa có seller/shop id';
@@ -252,7 +225,7 @@ export default function MarketplaceSyncButton({
   buttonClassName,
   buttonStyle,
   iconClassName,
-  allowedDirections = ['from-marketplace', 'from-app'],
+  allowedDirections = ['from-marketplace'],
   getSuccessMessage,
 }) {
   const navigate = useNavigate();
@@ -261,7 +234,6 @@ export default function MarketplaceSyncButton({
   const [direction, setDirection] = useState(null);
   const [channels, setChannels] = useState([]);
   const [loadingChannels, setLoadingChannels] = useState(false);
-  const [syncingChannelId, setSyncingChannelId] = useState(null);
   const [activeJobs, setActiveJobs] = useState([]);
   const [buttonHovered, setButtonHovered] = useState(false);
 
@@ -339,43 +311,6 @@ export default function MarketplaceSyncButton({
   };
 
   const selectDirection = async (nextDirection) => {
-    if (nextDirection === 'from-app') {
-      const syncableChannels = channels.length > 0 ? channels : await loadChannels();
-      if (syncableChannels.length === 0) {
-        setOpen(false);
-        setDirection(null);
-        showNoChannelToast();
-        return;
-      }
-
-      setOpen(false);
-      setDirection(null);
-      setSyncingChannelId('all-connected-channels');
-      try {
-        showApplicationSyncStarted(syncableChannels);
-        const result = await channelSyncService.syncAllFromApp();
-        const summaryMessage = formatSyncResultMessage(
-          'Đã cập nhật tồn kho và giá từ các phiếu kho lên tất cả sàn đã liên kết.',
-          result,
-        );
-        if (String(result?.status || '').toUpperCase() === 'FAILED') toast.warn(summaryMessage);
-        else if (hasNoApplicationChanges(result)) toast.info(summaryMessage);
-        else toast.success(summaryMessage);
-        await onSynced?.({ channel: null, direction: nextDirection, result });
-      } catch (error) {
-        const message = error?.response?.data?.message || error?.message || 'Không thể đồng bộ thay đổi lên các sàn đã liên kết.';
-        const normalizedMessage = message.toLowerCase();
-        if (normalizedMessage.includes('chưa') || normalizedMessage.includes('chua') || normalizedMessage.includes('no channel')) {
-          showNoChannelToast();
-        } else {
-          toast.error(message);
-        }
-      } finally {
-        setSyncingChannelId(null);
-      }
-      return;
-    }
-
     setDirection(nextDirection);
     if (channels.length === 0) await loadChannels();
   };
@@ -383,48 +318,30 @@ export default function MarketplaceSyncButton({
   const syncChannel = async (channel) => {
     if (!direction) return;
     const channelLabel = getChannelLabel(channel);
-    const isFromMarketplace = direction === 'from-marketplace';
     try {
-      if (isFromMarketplace) {
-        if (activeJobChannelIds.has(channel.id)) {
-          toast.info(`${channelLabel} đang đồng bộ.`);
-          return;
-        }
-
-        let job = await channelSyncService.enqueueSyncFromMarketplace(channel.id);
-        upsertRemoteSyncJob(job);
-        setOpen(false);
-
-        while (!terminalJobStatuses.has(String(job?.status || '').toUpperCase())) {
-          await wait(1200);
-          job = await channelSyncService.getSyncJob(job.jobId);
-          upsertRemoteSyncJob(job);
-        }
-
-        if (String(job.status).toUpperCase() === 'FAILED') {
-          toast.error(job.message || `Đồng bộ ${channelLabel} thất bại.`);
-        } else {
-          toast.success(`Đã đồng bộ ${channelLabel}: ${toCount(job.successCount)} sản phẩm con thành công.`);
-          await onSynced?.({ channel, direction, result: job });
-        }
+      if (activeJobChannelIds.has(channel.id)) {
+        toast.info(`${channelLabel} đang đồng bộ.`);
         return;
       }
 
-      if (syncingChannelId) return;
-      setSyncingChannelId(channel.id);
-      showApplicationSyncStarted([channel]);
-      const result = await channelSyncService.syncChannelFromApp(channel.id);
-      const message = getSuccessMessage?.({ channel, direction, result })
-        || defaultSuccessMessage({ channel, direction, result });
-      const summaryMessage = formatSyncResultMessage(message, result);
-      if (String(result?.status || '').toUpperCase() === 'FAILED') toast.warn(summaryMessage);
-      else if (hasNoApplicationChanges(result)) toast.info(summaryMessage);
-      else toast.success(summaryMessage);
-      await onSynced?.({ channel, direction, result });
+      let job = await channelSyncService.enqueueSyncFromMarketplace(channel.id);
+      upsertRemoteSyncJob(job);
+      setOpen(false);
+
+      while (!terminalJobStatuses.has(String(job?.status || '').toUpperCase())) {
+        await wait(1200);
+        job = await channelSyncService.getSyncJob(job.jobId);
+        upsertRemoteSyncJob(job);
+      }
+
+      if (String(job.status).toUpperCase() === 'FAILED') {
+        toast.error(job.message || `Đồng bộ ${channelLabel} thất bại.`);
+      } else {
+        toast.success(`Đã đồng bộ ${channelLabel}: ${toCount(job.successCount)} sản phẩm con thành công.`);
+        await onSynced?.({ channel, direction, result: job });
+      }
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || `Không thể đồng bộ ${channelLabel}.`);
-    } finally {
-      if (!isFromMarketplace) setSyncingChannelId(null);
     }
   };
 
@@ -478,8 +395,8 @@ export default function MarketplaceSyncButton({
           <div style={{ display: 'grid', gap: 8 }}>
             {channels.map((channel) => {
               const platformStyle = PLATFORM_COLORS[channel.platform] ?? { color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
-              const syncing = syncingChannelId === channel.id || activeJobChannelIds.has(channel.id);
-              const disabled = direction === 'from-app' ? Boolean(syncingChannelId) : activeJobChannelIds.has(channel.id);
+              const syncing = activeJobChannelIds.has(channel.id);
+              const disabled = activeJobChannelIds.has(channel.id);
               return (
                 <button
                   key={channel.id}
@@ -531,30 +448,20 @@ export default function MarketplaceSyncButton({
         className={buttonClassName}
         style={{
           ...(buttonClassName ? {} : mainButtonStyle),
-          ...(!buttonClassName && buttonHovered && !syncingChannelId ? mainButtonHoverStyle : {}),
+          ...(!buttonClassName && buttonHovered ? mainButtonHoverStyle : {}),
           ...buttonStyle,
-          opacity: syncingChannelId === 'all-connected-channels' ? 0.72 : 1,
         }}
-        disabled={syncingChannelId === 'all-connected-channels'}
         onClick={openMenu}
         onMouseEnter={() => setButtonHovered(true)}
         onMouseLeave={() => setButtonHovered(false)}
-        onMouseDown={() => {
-          if (!buttonClassName && !syncingChannelId) setButtonHovered(false);
-        }}
-        onMouseUp={() => {
-          if (!buttonClassName && !syncingChannelId) setButtonHovered(true);
-        }}
+        onMouseDown={() => { if (!buttonClassName) setButtonHovered(false); }}
+        onMouseUp={() => { if (!buttonClassName) setButtonHovered(true); }}
         title="Chọn chiều đồng bộ dữ liệu"
       >
-        {syncingChannelId === 'all-connected-channels'
-          ? <Loader2 className={`${iconClassName || ''} osms-sync-spin`} size={16} />
-          : <RefreshCw className={iconClassName} size={16} />}
-        {syncingChannelId === 'all-connected-channels'
-          ? 'Đang đẩy thay đổi...'
-          : runningRemoteJobs.length > 0
-            ? `Đồng bộ (${runningRemoteJobs.length})`
-            : 'Đồng bộ'}
+        <RefreshCw className={iconClassName} size={16} />
+        {runningRemoteJobs.length > 0
+          ? `Đồng bộ (${runningRemoteJobs.length})`
+          : 'Đồng bộ'}
         <ChevronDown size={15} />
       </button>
       {runningRemoteJobs.length > 0 && (

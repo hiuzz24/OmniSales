@@ -3,6 +3,7 @@ package fu.osms.inventory.controller;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.inventory.dto.request.ManualStockReceiveRequest;
 import fu.osms.inventory.dto.request.StockReceiveRequest;
 import fu.osms.inventory.dto.request.ConfirmExtraItemsRequest;
 import fu.osms.inventory.dto.response.PreviewRowDTO;
@@ -48,6 +49,18 @@ public class StockReceiveController {
         StockReceiveResponse response = stockReceiveService.createReceipt(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Tạo phiếu nhập thành công", response));
+    }
+
+    @PostMapping("/manual")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<StockReceiveResponse>> createManualReceipt(
+            @Valid @RequestBody ManualStockReceiveRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        UUID userId = resolveUserId(userDetails);
+        StockReceiveResponse response = stockReceiveService.createManualReceipt(request, userId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Tạo phiếu nhập thủ công thành công", response));
     }
 
     @GetMapping
