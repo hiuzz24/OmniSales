@@ -45,8 +45,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# --- Step 2: Get full SHA (GitLab image tag dùng full SHA, không phải short) ---
-$sha = git rev-parse HEAD
+# --- Step 2: Get short SHA (GitLab CI dùng $CI_COMMIT_SHORT_SHA để tag image) ---
+$sha = git rev-parse --short=7 HEAD
 Write-Host "New commit SHA: $sha" -ForegroundColor Cyan
 
 # --- Step 3: Update image tag in render.yaml ---
@@ -69,7 +69,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$finalSha = git rev-parse HEAD
+$finalSha = git rev-parse --short=7 HEAD
 Write-Host "Final SHA (after amend): $finalSha" -ForegroundColor Cyan
 
 # --- Step 5: Push ---

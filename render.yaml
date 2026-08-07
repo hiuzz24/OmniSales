@@ -41,7 +41,7 @@ services:
     # Tag cố định SHA (không dùng :latest) để Render KHÔNG cache image cũ.
     # Mỗi deploy sẽ set tag mới qua Render API hoặc manual deploy trên Dashboard.
     image:
-      url: registry.gitlab.com/summer20241/26summer/ep490-g63/omnisales/backend:bb52cf52
+      url: registry.gitlab.com/summer20241/26summer/ep490-g63/omnisales/backend:fc814b24
     plan: free
     region: oregon
     autoDeploy: false  # GitLab CI sẽ trigger deploy qua Deploy Hook
@@ -141,9 +141,11 @@ services:
       # ----- Backup -----
       - key: APP_BACKUP_DIRECTORY
         value: /app/backups
-      # ----- JVM tuning cho 512MB RAM -----
+      # JVM heap 256m + metaspace 96m cho Render 512MB tier
+      # Dockerfile.ci cũng set JAVA_TOOL_OPTIONS=256m nhưng envVars ghi đè sau
+      # → Render vẫn dùng giá trị này nếu ENV trong image không được export đúng.
       - key: JAVA_TOOL_OPTIONS
-        value: "-Xmx384m -Xms192m -XX:+UseG1GC -XX:MaxRAMPercentage=75.0"
+        value: "-Xmx256m -Xms128m -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
 
   # ---------------------------------------------------------------------------
   # Frontend (React + Vite SPA) — static site
