@@ -60,9 +60,12 @@ build-backend:
 # -----------------------------------------------------------------------------
 package-backend:
   stage: package
-  # Dùng Kaniko :debug image (đã verify pull OK từ runner saas-linux).
-  # Image có shell /busybox/sh → GitLab Runner exec script bằng `sh -c`.
-  image: gcr.io/kaniko-project/executor:debug
+  # Override entrypoint → /shell -c, vì image Kaniko:debug KHÔNG có /bin/sh.
+  # Kaniko debug image chứa /shell (debug bash) do distroless:debug cung cấp.
+  # Nếu không override, Runner exec thẳng /kaniko/executor với args[1]="sh" → fail.
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: ["/shell", "-c"]
   needs:
     # artifacts: true → download JAR từ build-backend vào workspace
     - job: build-backend
@@ -74,14 +77,8 @@ package-backend:
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
   script:
-    # Dòng đầu script là command shell (sh -c) → args truyền qua wrapper script.
-    # Wrapper exec thẳng /kaniko/executor, tránh direct exec mode của GitLab Runner.
-    - sh backend/kaniko-build.sh
-        --context=.
-        --dockerfile=backend/Dockerfile.ci
-        --build-arg=JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar
-        --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG
-        --destination=$BACKEND_IMAGE:latest
+    # Gộp 1 dòng: Runner exec "/shell -c '/kaniko/executor ...'" → args chính xác.
+    - /kaniko/executor --context=. --dockerfile=backend/Dockerfile.ci --build-arg=JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG --destination=$BACKEND_IMAGE:latest
 
 # -----------------------------------------------------------------------------
 # Stage 3: Trigger Render redeploy bằng Deploy Hook.
