@@ -37,10 +37,12 @@ services:
     # Image path đầy đủ: registry.gitlab.com/<group>/<project>/<image>:<tag>
     # <project> ở đây là "omnisales" (lowercase GitLab convention).
     # Nếu repo của bạn tên khác (vd "OmniSales"), đổi cho khớp.
-    # Lưu ý: Render KHÔNG chấp nhận `image:` dạng string. Phải split thành 3 field.
-    imageOwner: registry.gitlab.com/summer20241/26summer/ep490-g63/omnisales/backend
-    imageName: backend
-    imageTag: latest
+    # Render yêu cầu `image:` dạng OBJECT { owner, image, tag } — không phải string
+    # và không phải split fields (imageOwner/imageName/imageTag).
+    image:
+      owner: registry.gitlab.com/summer20241/26summer/ep490-g63/omnisales/backend
+      image: backend
+      tag: latest
     plan: free
     region: oregon
     branch: main
