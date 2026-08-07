@@ -33,13 +33,11 @@ RUN chown -R osms:osms /app
 USER osms
 
 # JVM tuning cho Render free tier 512MB
-# -Xmx256m: heap tối đa 256MB (Spring Boot 3.5 + 747 files vẫn boot được)
-# MaxMetaspaceSize=80m: chặn metaspace grow quá lớn (thường chiếm 150-200MB)
-# MaxDirectMemorySize=32m: chặn NIO direct memory
-# UseContainerSupport: tự detect container memory limit
-# UseG1GC: GC tối ưu cho memory thấp
-# ExitOnOutOfMemoryError: crash nhanh để Render restart thay vì treo
-ENV JAVA_TOOL_OPTIONS="-Xmx256m -Xms128m -XX:MaxMetaspaceSize=80m -XX:MaxDirectMemorySize=32m -XX:+UseContainerSupport -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
+# Heap 200m + metaspace 80m = 280MB cho JVM. Còn ~230MB cho Hikari pool,
+# native memory, threads, file descriptors. Đủ để boot Spring Boot 3.5 + 747 files.
+# JAVA_TOOL_OPTIONS env var sẽ bị Render envVars GHI ĐÈ nếu set.
+# Đặt -Xmx200m ở đây là default, Render Dashboard có thể override nếu cần.
+ENV JAVA_TOOL_OPTIONS="-Xmx200m -Xms128m -XX:MaxMetaspaceSize=80m -XX:MaxDirectMemorySize=32m -XX:+UseContainerSupport -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
 
 EXPOSE 8080
 

@@ -55,7 +55,7 @@ services:
       # Native + metaspace + Spring Boot 3.5 vượt 512MB nếu để mặc định → OOM boot.
       # JAVA_TOOL_OPTIONS được JVM tự đọc, ghi đè lên Dockerfile.ci.
       - key: JAVA_TOOL_OPTIONS
-        value: "-Xmx300m -Xms128m -XX:+UseG1GC -XX:MaxRAMPercentage=60.0 -XX:MaxMetaspaceSize=96m -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
+        value: "-Xmx200m -Xms128m -XX:MaxRAMPercentage=40.0 -XX:MaxMetaspaceSize=80m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
       # ----- Database (auto-fill từ database resource phía trên) -----
       - key: DB_HOST
         fromDatabase:
@@ -141,11 +141,8 @@ services:
       # ----- Backup -----
       - key: APP_BACKUP_DIRECTORY
         value: /app/backups
-      # JVM heap 256m + metaspace 96m cho Render 512MB tier
-      # Dockerfile.ci cũng set JAVA_TOOL_OPTIONS=256m nhưng envVars ghi đè sau
-      # → Render vẫn dùng giá trị này nếu ENV trong image không được export đúng.
-      - key: JAVA_TOOL_OPTIONS
-        value: "-Xmx256m -Xms128m -XX:MaxMetaspaceSize=96m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+      # JVM heap được set ở JAVA_TOOL_OPTIONS trên cùng (200m + 80m metaspace).
+      # Dockerfile.ci không override vì Render envVars ghi đè cuối cùng.
 
   # ---------------------------------------------------------------------------
   # Frontend (React + Vite SPA) — static site
