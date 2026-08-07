@@ -62,27 +62,22 @@ package-backend:
   stage: package
   # Dùng Kaniko (Google) thay docker:dind — không cần daemon Docker,
   # build context = workspace hiện tại → thấy artifact JAR ngay.
-  # Kaniko được GitLab.com shared runner hỗ trợ tốt.
+  # Kaniko được GitLab.com shared runner hỗ trợ chính thức:
+  # GitLab Runner tự động mount /kaniko/.docker/config.json từ CI_REGISTRY creds.
   image: gcr.io/kaniko-project/executor:v1.22.0
+  # Kaniko image KHÔNG có shell → GitLab Runner phải chạy binary trực tiếp.
+  # Dùng ["/kaniko/executor"] như Entrypoint, truyền args qua SCRIPT.
+  # Cú pháp: script = ["flag1", "flag2"] sẽ exec thẳng vào entrypoint.
   needs:
     # artifacts: true → download JAR từ build-backend vào workspace
     - job: build-backend
       artifacts: true
-  before_script:
-    # Verify artifact có thật trước khi build
-    - ls -lh backend/target/*.jar
-    # Tạo Docker config để login registry (Kaniko đọc từ /kaniko/.docker)
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
   script:
-    # Kaniko build từ context = /workspace (build context tự động là workspace hiện tại)
-    # destination = image tag trên GitLab Container Registry
-    - /kaniko/executor
-        --context .
-        --dockerfile backend/Dockerfile.ci
-        --build-arg JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar
-        --destination $BACKEND_IMAGE:$BACKEND_IMAGE_TAG
-        --destination $BACKEND_IMAGE:latest
+    - --context=.
+      --dockerfile=backend/Dockerfile.ci
+      --build-arg=JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar
+      --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG
+      --destination=$BACKEND_IMAGE:latest
 
 # -----------------------------------------------------------------------------
 # Stage 3: Trigger Render redeploy bằng Deploy Hook.
