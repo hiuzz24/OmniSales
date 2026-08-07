@@ -60,34 +60,28 @@ build-backend:
 # -----------------------------------------------------------------------------
 package-backend:
   stage: package
-  # Dùng Alpine (image nhỏ, có shell) + download Kaniko binary lúc build.
-  # Cách này đảm bảo:
-  #   1. Không phụ thuộc registry bên ngoài (gcr.io có thể bị block)
-  #   2. Có shell để chạy script đúng cách (sh -c)
-  #   3. Build context = workspace hiện tại → thấy artifact JAR
-  image: alpine:3.19
+  # Dùng Kaniko :debug image (đã verify pull OK từ runner saas-linux).
+  # Image có shell /busybox/sh → GitLab Runner exec script bằng `sh -c`.
+  image: gcr.io/kaniko-project/executor:debug
   needs:
     # artifacts: true → download JAR từ build-backend vào workspace
     - job: build-backend
       artifacts: true
   before_script:
-    # Install wget để download Kaniko binary
-    - apk add --no-cache wget bash
-    # Tạo thư mục /kaniko TRƯỚC khi download (Alpine không có sẵn)
-    - mkdir -p /kaniko
-    # Download Kaniko binary từ GitHub release chính thức của Google
-    - wget -q "https://github.com/GoogleContainerTools/kaniko/releases/download/v1.22.0/executor" -O /kaniko/executor
-    - chmod +x /kaniko/executor
-    # Verify artifact JAR có thật trước khi build
+    # Verify artifact có thật trước khi build
     - ls -lh backend/target/*.jar
-    # Tạo Docker config để push lên GitLab Container Registry
+    # Tạo Docker config cho GitLab Container Registry (auth để push)
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
   script:
-    # Gộp thành 1 dòng để chắc chắn run mode (shell vs direct exec) đều work.
-    # Nếu chạy shell mode: sh -c "<long command>" → OK.
-    # Nếu chạy direct exec mode: exec /kaniko/executor --context=... --dockerfile=... → OK (vì image alpine có shell).
-    - /kaniko/executor --context=. --dockerfile=backend/Dockerfile.ci --build-arg=JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG --destination=$BACKEND_IMAGE:latest
+    # Dòng đầu script là command shell (sh -c) → args truyền qua wrapper script.
+    # Wrapper exec thẳng /kaniko/executor, tránh direct exec mode của GitLab Runner.
+    - sh backend/kaniko-build.sh
+        --context=.
+        --dockerfile=backend/Dockerfile.ci
+        --build-arg=JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar
+        --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG
+        --destination=$BACKEND_IMAGE:latest
 
 # -----------------------------------------------------------------------------
 # Stage 3: Trigger Render redeploy bằng Deploy Hook.
