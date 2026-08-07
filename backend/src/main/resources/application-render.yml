@@ -25,14 +25,20 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+    defer-datasource-initialization: false  # Hibernate chạy SAU schema init
 
   main:
     banner-mode: off
 
-  # Tắt SQL init — schema/data sẽ seed qua Render Shell sau khi DB tạo xong.
+  # Init PostgreSQL enum types TRƯỚC khi Hibernate ddl-auto tạo tables.
+  # Vì entity dùng @JdbcTypeCode(SqlTypes.NAMED_ENUM) cần type đã tồn tại.
+  # File schema-postgresql.sql dùng DO $$ ... duplicate_object → idempotent.
   sql:
     init:
-      mode: never
+      mode: always
+      platform: postgresql
+      continue-on-error: true   # type đã tồn tại → skip, không crash app
+      # schema-locations mặc định: classpath:schema-${platform}.sql
 
 logging:
   level:
