@@ -35,6 +35,7 @@ const NAV_ITEMS = [
       { name: 'Tổng quan kho', href: '/inventory', icon: Warehouse, exact: true, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
       { name: 'Phiếu nhập kho', href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS, icon: PackagePlus, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
       { name: 'Phiếu xuất kho', href: ROUTES.STOCK_DELIVERIES, icon: PackageMinus, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
+      { name: 'Phiếu chuyển kho', href: ROUTES.STOCK_TRANSFER, icon: ArrowRightLeft, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN] },
       { name: 'Phiếu kiểm kho', href: '/warehouse/stocktakes', icon: ClipboardList, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
       { name: 'Nhà cung cấp', href: ROUTES.SUPPLIERS, icon: Users, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
       // { name: 'Kho hàng', href: ROUTES.WAREHOUSE, icon: Store, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN] },
