@@ -95,11 +95,8 @@ deploy-render:
     RENDER_IMAGE_TAG: $BACKEND_IMAGE_TAG
   script:
     - echo "Triggering Render redeploy with image tag $RENDER_IMAGE_TAG"
-    # Gửi POST request tới Render Deploy Hook URL
-    # Hook URL được lưu trong GitLab CI/CD Variables (masked + protected)
-    - |
-      curl -fsS -X POST "$RENDER_DEPLOY_HOOK"
-      || { echo "WARNING: Render deploy hook failed (non-blocking)"; exit 0; }
+    # Gửi POST request tới Render Deploy Hook URL (dùng || để không fail job nếu hook lỗi)
+    - 'curl -fsS -X POST "$RENDER_DEPLOY_HOOK" || { echo "WARNING: Render hook failed (non-blocking)"; exit 0; }'
   environment:
     name: production
     url: https://api-osms.onrender.com
