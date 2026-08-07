@@ -21,7 +21,7 @@ WORKDIR /app
 
 # JAR file được truyền qua --build-arg JAR_FILE
 # (đường dẫn tương đối từ docker build context, mặc định ./)
-ARG JAR_FILE=backend/target/OSMS-0.0.1-SNAPSHOT.jar
+ARG JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar
 COPY ${JAR_FILE} /app/backend.jar
 
 # JAR name chuẩn hoá — đỡ phải sửa mỗi lần đổi version
