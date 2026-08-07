@@ -4,6 +4,7 @@ import fu.osms.order.enums.OrderStatus;
 import fu.osms.sync.lazada.order.LazadaOrderMapper;
 import fu.osms.sync.lazada.order.LazadaOrderStatusContext;
 import fu.osms.sync.lazada.order.LazadaOrderWriteModel;
+import fu.osms.sync.order.importing.PlatformOrderTimestampParser;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +30,10 @@ public class LazadaOrderMapperImpl implements LazadaOrderMapper {
         }
         Map<String, Object> address = shippingAddress(orderData);
         return new LazadaOrderWriteModel(
-                externalOrderId, status(context, items), paymentStatus(context, orderData, items),
+                externalOrderId,
+                PlatformOrderTimestampParser.parse(WebhookPayloadUtils.firstPresent(
+                        orderData, "created_at", "createdAt", "order_created_at")),
+                status(context, items), paymentStatus(context, orderData, items),
                 compact(text(orderData, "customer_first_name"), text(orderData, "customer_last_name")),
                 firstNonBlank(text(address, "phone", "phone2"),
                         text(WebhookPayloadUtils.copyMap(orderData.get("address_billing")), "phone", "phone2")),
