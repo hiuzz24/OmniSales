@@ -38,7 +38,7 @@ services:
     region: oregon
     branch: main
     autoDeploy: true
-    healthCheckPath: /api/address/countries
+    healthCheckPath: /api/auth/login
     # Resource limits cho free tier — Render default 0.5 CPU / 512MB RAM.
     # Cần khởi động nhỏ để khỏi OOM lúc Maven build (build chạy trong Dockerfile, OK).
     dockerCommand: ""
@@ -72,11 +72,18 @@ services:
         value: 86400000
       - key: JWT_REFRESH_EXPIRATION_MS
         value: 604800000
+      # ----- Admin user seed (RenderDataSeeder sẽ đọc) -----
+      - key: ADMIN_EMAIL
+        value: admin@osms.local
+      - key: ADMIN_PASSWORD
+        value: ChangeMe123!
+      - key: OWNER_EMAIL
+        value: owner1@osms.local
+      - key: OWNER_PASSWORD
+        value: nguyentheduy2004
       # ----- Frontend / CORS -----
       - key: FRONTEND_URL
         value: https://app-osms.onrender.com
-      - key: VITE_API_BASE_URL
-        value: https://api-osms.onrender.com/api
       # ----- Email (tắt mặc định, bật sau khi nhập Gmail App Password) -----
       - key: NOTIFICATION_EMAIL_ENABLED
         value: false
