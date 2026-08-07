@@ -17,7 +17,8 @@ class ChannelControllerFullStackIT extends BaseFullStackIT {
 
     private Map<String, Object> channelRequest() {
         java.util.Map<String, Object> m = new java.util.HashMap<>();
-        m.put("platform",    "SHOPIFY");
+        // SHOPEE does not require OAuth, unlike SHOPIFY/LAZADA/TIKTOK.
+        m.put("platform",    "SHOPEE");
         m.put("displayName", "Channel IT " + TestDataFactory.uniqueSuffix());
         m.put("status",      "PENDING");
         m.put("region",      "VN");

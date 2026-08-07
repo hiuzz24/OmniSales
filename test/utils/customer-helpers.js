@@ -45,9 +45,13 @@ async function createTestCustomer(request, token, overrides = {}) {
     email: `test${timestamp}@example.com`,
     phone: `09${String(timestamp).slice(-8)}`,
     gender: overrides.gender || 'Nam',
-    dateOfBirth: '1990-01-01',
-    address: `Address ${timestamp}`,
-    city: 'Ho Chi Minh City',
+    birth: '1990-01-01',
+    address: {
+      fullAddress: `Address ${timestamp}`,
+      city: 'Ho Chi Minh City',
+      district: 'District 1',
+      ward: 'Ward 1',
+    },
     isActive: true,
   };
 

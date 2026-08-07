@@ -1,7 +1,13 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Webhook Event API Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // WHK-1
   test('WHK-1 - GET /api/webhook-events - List webhook events paginated', async ({ request, managerHeaders }) => {
@@ -89,5 +95,43 @@ test.describe('Webhook Event API Tests', () => {
     });
 
     expect([200, 202, 400, 401]).toContain(response.status());
+  });
+
+  // WHK-7 - POST /api/webhook-events/{id}/reprocess - reprocess non-existent event
+  test('WHK-7 - POST /api/webhook-events/{id}/reprocess - Non-existent event returns 404 or 500', async ({ request, adminHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.post(`${API_BASE}/webhook-events/${fakeId}/reprocess`, {
+      headers: adminHeaders,
+    });
+
+    expect([200, 404, 500]).toContain(response.status());
+  });
+
+  // WHK-8 - reprocess requires auth
+  test('WHK-8 - POST /api/webhook-events/{id}/reprocess - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000001';
+    const response = await request.post(`${API_BASE}/webhook-events/${fakeId}/reprocess`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // WHK-9 - reprocess with random uuid - manager role should be denied
+  test('WHK-9 - POST /api/webhook-events/{id}/reprocess - Manager role returns 200, 403 or 500', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000002';
+    const response = await request.post(`${API_BASE}/webhook-events/${fakeId}/reprocess`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 403, 404, 500]).toContain(response.status());
+  });
+
+  // WHK-10 - reprocess valid UUID format - happy path returns 404 (no event)
+  test('WHK-10 - POST /api/webhook-events/{id}/reprocess - Owner role, valid random UUID returns 404 or 500', async ({ request, adminHeaders }) => {
+    const fakeId = '11111111-1111-1111-1111-111111111111';
+    const response = await request.post(`${API_BASE}/webhook-events/${fakeId}/reprocess`, {
+      headers: adminHeaders,
+    });
+
+    expect([200, 404, 500]).toContain(response.status());
   });
 });

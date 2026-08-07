@@ -1,76 +1,79 @@
 .card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.72)),
-    #ffffff;
-  border-radius: 16px;
-  border: 1px solid var(--catalog-line, #d8deea);
-  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.06);
-  padding: 24px;
+  padding: 20px;
+  border: 1px solid #eee3c9;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #faf5e9 0, #fcfaf4 60px, #ffffff 60px);
+  box-shadow: 0 5px 15px rgba(122, 92, 45, 0.05), 0 1px 3px rgba(15, 23, 42, 0.045), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .cardTitle {
+  margin-bottom: 16px;
+  color: var(--editor-text, #111827);
   font-size: 16px;
   font-weight: 700;
-  color: var(--catalog-ink, #101828);
-  margin-bottom: 20px;
 }
 
 .row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
 }
 
 .field {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 .label {
+  color: #334155;
   font-size: 13px;
-  font-weight: 650;
-  color: #344054;
+  font-weight: 600;
 }
 
 .input {
   width: 100%;
-  min-height: 42px;
-  padding: 10px 13px;
-  border: 1px solid #d0d5dd;
-  border-radius: 10px;
-  font-size: 14px;
-  color: var(--catalog-ink, #101828);
-  outline: none;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid #b9c5d3;
+  border-radius: 6px;
+  color: var(--editor-text, #111827);
   background: #ffffff;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  font: inherit;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
+  outline: none;
+  box-shadow: inset 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
 .input:focus {
-  border-color: rgba(7, 86, 199, 0.52);
-  box-shadow: 0 0 0 4px rgba(7, 86, 199, 0.1);
+  border-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.11), 0 3px 9px rgba(217, 119, 6, 0.05);
 }
 
 .inputError {
-  border-color: #ef4444;
-}
-
-.inputError:focus {
-  border-color: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
-}
-
-.input::placeholder {
-  color: #9ca3af;
+  border-color: #dc2626;
 }
 
 .errorText {
+  color: #dc2626;
   font-size: 12px;
-  color: #ef4444;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .card {
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(217, 119, 6, 0.08), 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+
   .row {
     grid-template-columns: 1fr;
   }

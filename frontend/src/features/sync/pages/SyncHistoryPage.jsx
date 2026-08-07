@@ -14,6 +14,8 @@ const JOB_TYPE_LABELS = {
   LAZADA_IMPORT: 'Đồng bộ từ Lazada về ứng dụng',
   SHOPIFY_LOCAL_CHANGES_SYNC: 'Đồng bộ từ ứng dụng lên Shopify',
   LAZADA_LOCAL_CHANGES_SYNC: 'Đồng bộ từ ứng dụng lên Lazada',
+  MARKETPLACE_INVENTORY_AUTO_PUSH: 'Tự động đồng bộ tồn kho lên sàn',
+  MARKETPLACE_INVENTORY_RECONCILE: 'Đối soát tồn kho với sàn',
   PRODUCT_SYNC: 'Đồng bộ sản phẩm',
 };
 

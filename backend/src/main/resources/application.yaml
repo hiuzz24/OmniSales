@@ -4,8 +4,8 @@ spring:
   application:
     name: OSMS
   datasource:
-    url: jdbc:postgresql://localhost:5432/OSMS
-    username: postgres
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:OSMS}
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
@@ -14,6 +14,11 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        jdbc:
+          batch_size: 1000
+        order_inserts: true
+        order_updates: true
+        batch_versioned_data: true
     show-sql: false
   servlet:
     multipart:
@@ -39,6 +44,17 @@ spring:
           write timeout: 5000
 
 app:
+  inventory-extra-import:
+    fuzzy-threshold: ${INVENTORY_EXTRA_IMPORT_FUZZY_THRESHOLD:0.4}
+    error-directory: ${INVENTORY_EXTRA_IMPORT_ERROR_DIRECTORY:${java.io.tmpdir}/osms/inventory-extra-import-errors}
+  inventory-reconciliation:
+    enabled: ${INVENTORY_RECONCILIATION_ENABLED:true}
+    fixed-delay-ms: ${INVENTORY_RECONCILIATION_FIXED_DELAY_MS:5000}
+    debounce-ms: ${INVENTORY_RECONCILIATION_DEBOUNCE_MS:10000}
+    verification-delay-ms: ${INVENTORY_RECONCILIATION_VERIFY_DELAY_MS:10000}
+    processing-timeout-ms: ${INVENTORY_RECONCILIATION_PROCESSING_TIMEOUT_MS:120000}
+    batch-size: ${INVENTORY_RECONCILIATION_BATCH_SIZE:100}
+    max-api-attempts: ${INVENTORY_RECONCILIATION_MAX_API_ATTEMPTS:3}
   channel-token-refresh:
     enabled: ${CHANNEL_TOKEN_REFRESH_ENABLED:true}
     fixed-delay-ms: ${CHANNEL_TOKEN_REFRESH_FIXED_DELAY_MS:600000}

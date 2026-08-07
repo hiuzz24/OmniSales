@@ -69,6 +69,46 @@ async function deleteTestChannel(request, token, channelId) {
   }
 }
 
+/**
+ * Trigger one of the sync endpoints on a channel.
+ * variant: 'sync' | 'sync-from-app' | 'sync-from-marketplace' | 'sync-from-marketplace-jobs' | 'sync-all-from-app'
+ * Returns the raw response or null on failure/timeout.
+ */
+async function triggerChannelSync(request, token, channelId, variant) {
+  if (!channelId && variant !== 'sync-all-from-app') return null;
+  let url;
+  let method = 'POST';
+  if (variant === 'sync') {
+    url = `${API_BASE}/channels/${channelId}/sync`;
+  } else if (variant === 'sync-from-app') {
+    url = `${API_BASE}/channels/${channelId}/sync/from-app`;
+  } else if (variant === 'sync-from-marketplace') {
+    url = `${API_BASE}/channels/${channelId}/sync/from-marketplace`;
+  } else if (variant === 'sync-from-marketplace-jobs') {
+    url = `${API_BASE}/channels/${channelId}/sync/from-marketplace/jobs`;
+  } else if (variant === 'sync-all-from-app') {
+    url = `${API_BASE}/channels/sync/from-app`;
+  } else if (variant === 'get-sync-job') {
+    method = 'GET';
+    url = `${API_BASE}/channels/sync-jobs/${channelId}`;
+  } else {
+    return null;
+  }
+  try {
+    const opts = {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    };
+    const resp = await (method === 'GET' ? request.get(url, opts) : request.post(url, opts));
+    return {
+      status: resp.status(),
+      body: (await resp.json().catch(() => null)) || null,
+    };
+  } catch (_) {
+    // ignore
+  }
+  return null;
+}
+
 module.exports = {
   API_BASE,
   TEST_EMAIL,
@@ -76,4 +116,5 @@ module.exports = {
   getAuthToken,
   createTestChannel,
   deleteTestChannel,
+  triggerChannelSync,
 };

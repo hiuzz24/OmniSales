@@ -39,4 +39,8 @@ public class InventoryIssueItem {
 
     @Column(columnDefinition = "TEXT")
     private String notes;
+
+    @Builder.Default
+    @Column(name = "is_gift", nullable = false)
+    private Boolean isGift = false;
 }

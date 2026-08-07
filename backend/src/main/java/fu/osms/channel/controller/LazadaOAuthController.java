@@ -5,12 +5,15 @@ import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.enums.ChannelConnectionAction;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 import fu.osms.sync.lazada.service.LazadaOAuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -35,6 +38,7 @@ public class LazadaOAuthController {
     private String frontendUrl;
 
     @GetMapping("/authorize")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<Map<String, String>>> authorize() {
         try {
             String authUrl = lazadaOAuthService.buildAuthorizationUrl();
@@ -96,6 +100,14 @@ public class LazadaOAuthController {
                     refreshExpiresIn, accountId, accountName);
 
             response.sendRedirect(frontendUrl + "/channels?success=lazada_connected");
+        } catch (AppException e) {
+            log.error("[LazadaOAuthController] Failed to connect channel", e);
+            channelConnectionLogService.logFailure(
+                    PlatformType.LAZADA, ChannelConnectionAction.CONNECT,
+                    "Failed to connect Lazada channel", e.getMessage(), Map.of("reason", "connection_failed"));
+            String errorCode = e.getErrorCode() == ErrorCode.CHANNEL_IDENTITY_CONFLICT
+                    ? "channel_identity_conflict" : "connection_failed";
+            response.sendRedirect(frontendUrl + "/channels?error=" + errorCode);
         } catch (Exception e) {
             log.error("[LazadaOAuthController] Failed to exchange token and connect channel", e);
             channelConnectionLogService.logFailure(

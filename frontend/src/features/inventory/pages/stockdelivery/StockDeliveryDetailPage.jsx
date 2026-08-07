@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   DollarSign,
   FileText,
+  Gift,
   Hash,
   Loader2,
   Package,
@@ -30,7 +31,7 @@ const ISSUE_TYPES = {
 };
 
 const STATUS_CFG = {
-  DRAFT: { label: 'Lưu tạm', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  DRAFT: { label: 'Đang xử lý', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
   CONFIRMED: { label: 'Hoàn thành', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
   CANCELLED: { label: 'Đã hủy', color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
 };
@@ -62,8 +63,11 @@ const formatDateOnly = (value) => {
 
 const getResponseData = (response) => response?.data?.data ?? response?.data ?? response ?? {};
 
-const StatusBadge = ({ status }) => {
-  const config = STATUS_CFG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
+const StatusBadge = ({ status, issueType }) => {
+  const base = STATUS_CFG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
+  const config = issueType === 'ORDER' && status === 'DRAFT'
+    ? { ...base, label: 'Chờ xuất kho' }
+    : base;
   return (
     <span style={{
       display: 'inline-flex',
@@ -138,9 +142,12 @@ export default function StockDeliveryDetailPage() {
 
   const handleCancel = async () => {
     if (!delivery || delivery.status === 'CANCELLED' || !isOwner) return;
+    const isOrderDraft = delivery.issueType === 'ORDER' && delivery.status === 'DRAFT';
     const ok = await confirm({
       title: 'Hủy phiếu xuất?',
-      message: `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
+      message: isOrderDraft
+        ? `Phiếu "${delivery.issueCode}" sẽ bị hủy. Hàng đã giữ của đơn không được giải phóng và bạn có thể tạo lại phiếu khi đơn vẫn đang xử lý.`
+        : `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
       confirmText: 'Hủy phiếu',
       tone: 'danger',
     });
@@ -152,7 +159,9 @@ export default function StockDeliveryDetailPage() {
     try {
       const response = await stockDeliveryService.cancelStockDelivery(delivery.id);
       setDelivery(getResponseData(response));
-      toast.success('Hủy phiếu xuất thành công. Tồn kho đã được khôi phục.');
+      toast.success(isOrderDraft
+        ? 'Đã hủy phiếu xuất. Reservation của đơn hàng vẫn được giữ.'
+        : 'Hủy phiếu xuất thành công. Tồn kho đã được khôi phục.');
     } catch (error) {
       toast.error(error?.message || 'Không thể hủy phiếu xuất. Vui lòng thử lại.');
     } finally {
@@ -164,7 +173,7 @@ export default function StockDeliveryDetailPage() {
     if (!delivery || delivery.status !== 'DRAFT' || !canComplete) return;
     const ok = await confirm({
       title: 'Hoàn thành phiếu xuất?',
-      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`,
+      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Đang xử lý.`,
       confirmText: 'Hoàn thành',
     });
     if (!ok) {
@@ -203,7 +212,7 @@ export default function StockDeliveryDetailPage() {
 
   return (
     <>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="product-workspace product-workspace--flow" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button type="button" onClick={() => navigate(ROUTES.STOCK_DELIVERIES)} style={secondaryButtonStyle}>
@@ -225,13 +234,14 @@ export default function StockDeliveryDetailPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
-          {canComplete && delivery.status === 'DRAFT' && (
+          {canComplete && delivery.status === 'DRAFT' && delivery.issueType !== 'ORDER' && (
             <button type="button" onClick={handleComplete} disabled={completing} style={{ ...successButtonStyle, opacity: completing ? 0.7 : 1 }}>
               {completing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle2 size={14} />}
               {completing ? 'Đang hoàn thành...' : 'Hoàn thành xuất kho'}
             </button>
           )}
-          {isOwner && delivery.status !== 'CANCELLED' && (
+          {isOwner && delivery.status !== 'CANCELLED'
+            && !(delivery.issueType === 'ORDER' && delivery.status === 'CONFIRMED') && (
             <button type="button" onClick={handleCancel} disabled={cancelling} style={{ ...dangerButtonStyle, opacity: cancelling ? 0.7 : 1 }}>
               {cancelling ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Ban size={14} />}
               {cancelling ? 'Đang hủy...' : 'Hủy phiếu xuất'}
@@ -274,7 +284,14 @@ export default function StockDeliveryDetailPage() {
                     return (
                       <tr key={item.id ?? index} style={{ borderBottom: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '12px 14px' }}>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{item.productName ?? '-'}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600, color: '#0f172a' }}>
+                            {item.productName ?? '-'}
+                            {item.isGift && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 5px', borderRadius: 4, background: '#fff3e8', color: '#9a5a22', fontSize: 9, fontWeight: 700 }}>
+                                <Gift size={10} /> Quà tặng
+                              </span>
+                            )}
+                          </div>
                           {item.productVariantName && <div style={{ fontSize: 10, color: '#94a3b8' }}>{item.productVariantName}</div>}
                         </td>
                         <td style={{ padding: '12px 14px' }}>
@@ -297,7 +314,7 @@ export default function StockDeliveryDetailPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
             <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>Trạng thái</div>
-            <StatusBadge status={delivery.status} />
+            <StatusBadge status={delivery.status} issueType={delivery.issueType} />
           </div>
 
           <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>

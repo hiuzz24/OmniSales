@@ -79,6 +79,33 @@ const stockDeliveryService = {
       throw error.response?.data || error.message;
     }
   },
+
+  getOrderCandidates: async (params = {}) => {
+    try {
+      const response = await stockDeliveryApi.getOrderCandidates(params);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  getOrderReadiness: async (orderId) => {
+    try {
+      const response = await stockDeliveryApi.getOrderReadiness(orderId);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createFromOrders: async (request) => {
+    try {
+      const response = await stockDeliveryApi.createFromOrders(request);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
 };
 
 export default stockDeliveryService;

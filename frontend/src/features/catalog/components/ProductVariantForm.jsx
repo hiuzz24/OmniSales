@@ -132,14 +132,14 @@ const ProductVariantForm = ({
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.imgCell}></th>
-                <th>Size</th>
-                <th>Màu</th>
-                <th>SKU</th>
+                <th className={styles.imgCell}>Ảnh *</th>
+                <th>Size *</th>
+                <th>Màu *</th>
+                <th>SKU *</th>
                 <th>Barcode</th>
-                <th>Giá</th>
+                <th>Giá *</th>
                 <th style={{ width: '130px' }}>Giá đề xuất</th>
-                <th>Giá vốn</th>
+                <th>Giá vốn *</th>
                 <th className={styles.removeCell}></th>
               </tr>
             </thead>
@@ -176,26 +176,29 @@ const ProductVariantForm = ({
                           <ImageIcon className={styles.imgIcon} />
                         )}
                       </div>
+                      {variantErrors.images && <div className={styles.errorText}>{variantErrors.images.message}</div>}
                     </td>
                     <td>
                       <input
                         type="text"
-                        className={styles.variantInput}
+                        className={`${styles.variantInput} ${variantErrors.optionValues?.Size ? styles.inputError : ''}`}
                         placeholder="S"
                         value={variant.optionValues?.Size || ''}
                         onChange={(e) => handleOptionChange(index, 'Size', e.target.value)}
                         disabled={variant.isActive === false}
                       />
+                      {variantErrors.optionValues?.Size && <div className={styles.errorText}>{variantErrors.optionValues.Size.message}</div>}
                     </td>
                     <td>
                       <input
                         type="text"
-                        className={styles.variantInput}
+                        className={`${styles.variantInput} ${variantErrors.optionValues?.['Màu'] ? styles.inputError : ''}`}
                         placeholder="Trắng"
                         value={variant.optionValues?.['Màu'] || ''}
                         onChange={(e) => handleOptionChange(index, 'Màu', e.target.value)}
                         disabled={variant.isActive === false}
                       />
+                      {variantErrors.optionValues?.['Màu'] && <div className={styles.errorText}>{variantErrors.optionValues['Màu'].message}</div>}
                     </td>
                     <td>
                       <input
@@ -240,13 +243,14 @@ const ProductVariantForm = ({
                     <td>
                       <input
                         type="number"
-                        className={styles.variantInput}
+                        className={`${styles.variantInput} ${variantErrors.costPrice ? styles.inputError : ''}`}
                         placeholder="0"
                         value={disableCostPrice ? (variant.costPrice ?? '0') : variant.costPrice}
                         onChange={(e) => handleFieldChange(index, 'costPrice', disableCostPrice ? (variant.costPrice ?? '0') : e.target.value)}
                         min="0"
                         disabled={disableCostPrice || variant.isActive === false}
                       />
+                      {variantErrors.costPrice && <div className={styles.errorText}>{variantErrors.costPrice.message}</div>}
                     </td>
                     <td className={styles.removeCell}>
                       {variant.isActive === false ? (

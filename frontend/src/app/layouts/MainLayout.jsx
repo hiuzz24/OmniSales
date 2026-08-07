@@ -2,15 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Warehouse, ShoppingCart, Share2,
-  BarChart3, Settings, Menu, Bell, Users, ChevronDown,
+  Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User, Tag, Database,
+  ChevronRight, User, Tag, Database, ShoppingBag, RotateCcw,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
 import useAuth from '../../features/auth/hooks/useAuth';
 import notificationApi from '../../api/notificationApi';
+import { toast } from 'react-toastify';
 
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -34,18 +35,18 @@ const NAV_ITEMS = [
       { name: 'Tổng quan kho', href: '/inventory', icon: Warehouse, exact: true, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
       { name: 'Phiếu nhập kho', href: ROUTES.WAREHOUSE_IMPORT_RECEIPTS, icon: PackagePlus, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
       { name: 'Phiếu xuất kho', href: ROUTES.STOCK_DELIVERIES, icon: PackageMinus, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
-      { name: 'Phiếu chuyển kho', href: '/warehouse/transfers', icon: ArrowRightLeft, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
+      { name: 'Phiếu chuyển kho', href: ROUTES.STOCK_TRANSFER, icon: ArrowRightLeft, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN] },
       { name: 'Phiếu kiểm kho', href: '/warehouse/stocktakes', icon: ClipboardList, roles: [ROLES.OWNER, ROLES.OPERATIONS] },
       { name: 'Nhà cung cấp', href: ROUTES.SUPPLIERS, icon: Users, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
-      { name: 'Kho hàng', href: ROUTES.WAREHOUSE, icon: Store, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
-      { name: 'Lịch sử thay đổi', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
+      // { name: 'Kho hàng', href: ROUTES.WAREHOUSE, icon: Store, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN] },
+      { name: 'Nhật ký kho', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
     ],
   },
+  { name: 'Đơn mua hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
-  { name: 'Bán hàng (POS)', href: '/pos',      icon: Store,    roles: [] },
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
+  { name: 'Trả hàng', href: ROUTES.ORDER_RETURNS, icon: RotateCcw, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
   { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
-  { name: 'Phân tích',      href: '/analytics',icon: BarChart3,roles: [] },
   {
     name: 'Nhân sự',
     href: '/users',
@@ -60,14 +61,13 @@ const NAV_ITEMS = [
   { name: 'Sao lưu dữ liệu', href: ROUTES.BACKUP,      icon: Database,      roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Giám sát API',    href: ROUTES.API_MONITOR, icon: Shield,        roles: [ROLES.SYSTEM_ADMIN] },
   { name: 'Cấu hình hệ thống', href: ROUTES.SYSTEM_SETTINGS, icon: Settings,  roles: [ROLES.SYSTEM_ADMIN] },
-  { name: 'Cài đặt',        href: '/settings', icon: Settings, roles: [] },
 ];
 
 const ROLE_HIDDEN = {
-  [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Phân tích', 'Nhân sự', 'Cài đặt'],
-  [ROLES.OPERATIONS]: ['Phân tích', 'Nhân sự'],
+  [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Nhân sự'],
+  [ROLES.OPERATIONS]: ['Nhân sự'],
   [ROLES.OWNER]: [],
-  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Bán hàng (POS)', 'Đơn hàng', 'Kênh bán hàng', 'Phân tích', 'Cài đặt'],
+  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Đơn hàng', 'Kênh bán hàng'],
 };
 
 const isVisible = (item, role) => {
@@ -82,6 +82,8 @@ const NOTIF_META = {
   ORDER: { icon: ShoppingCart, color: '#2563eb', bg: '#eff6ff' },
   ORDER_NEW: { icon: ShoppingCart, color: '#2563eb', bg: '#eff6ff' },
   ORDER_CANCELLED: { icon: ShoppingCart, color: '#dc2626', bg: '#fef2f2' },
+  ORDER_PICK_REQUIRED: { icon: PackageMinus, color: '#d97706', bg: '#fffbeb' },
+  ORDER_READY_SHIP: { icon: ShoppingCart, color: '#0f766e', bg: '#f0fdfa' },
   SYNC: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
   SYNC_FAILED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
   INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
@@ -137,6 +139,8 @@ export default function MainLayout() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const notifRef = useRef(null);
+  const seenNotificationIdsRef = useRef(new Set());
+  const notificationBaselineReadyRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -167,6 +171,37 @@ export default function MainLayout() {
     return pathMatches(location.pathname, href, exact);
   };
 
+  const navigateFromNotification = (notification) => {
+    if (notification.type === 'ORDER_PICK_REQUIRED' && notification.entityId) {
+      navigate(`${ROUTES.STOCK_DELIVERY_CREATE}?tab=BY_ORDER&orderId=${notification.entityId}`);
+    } else if (notification.entityType === 'ORDER' && notification.entityId) {
+      navigate(ROUTES.ORDER_DETAIL.replace(':id', notification.entityId));
+    } else if (notification.entityType === 'INVENTORY' && notification.entityId) {
+      if (notification.type === 'STOCK_TRANSFER') {
+        navigate(ROUTES.STOCK_TRANSFER, { state: { openTransferId: notification.entityId } });
+      } else if (notification.type === 'STOCKTAKE') {
+        navigate(ROUTES.STOCKTAKES);
+      } else {
+        navigate(ROUTES.INVENTORY_DETAIL.replace(':id', notification.entityId));
+      }
+    } else if (notification.entityType === 'PURCHASE') {
+      navigate(ROUTES.PURCHASE_ORDERS);
+    } else if (notification.entityType === 'RECEIPT' && notification.entityId) {
+      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL.replace(':id', notification.entityId));
+    } else if (notification.entityType === 'SYNC') {
+      navigate(ROUTES.SYNC_HISTORY);
+    }
+    setNotifOpen(false);
+  };
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification.readAt) {
+      await notificationApi.markAsRead(notification.id);
+      await loadNotifications();
+    }
+    navigateFromNotification(notification);
+  };
+
   const loadNotifications = async () => {
     if (!user?.id) {
       setNotifications([]);
@@ -178,8 +213,56 @@ export default function MainLayout() {
         notificationApi.getNotifications({ userId: user.id, page: 0, size: 10 }),
         notificationApi.countUnread(user.id),
       ]);
-      setNotifications(list?.content ?? []);
+      const loadedNotifications = list?.content ?? [];
+      setNotifications(loadedNotifications);
       setUnreadCount(Number(count ?? 0));
+
+      if (!notificationBaselineReadyRef.current) {
+        loadedNotifications.forEach((notification) => {
+          if (notification.id) seenNotificationIdsRef.current.add(notification.id);
+        });
+        notificationBaselineReadyRef.current = true;
+      } else {
+        loadedNotifications.forEach((notification) => {
+          if (!notification.id || seenNotificationIdsRef.current.has(notification.id)) return;
+          const isWorkflowNotification = [
+            'ORDER_READY_SHIP',
+          ].includes(notification.type);
+          if (!isWorkflowNotification || notification.readAt) {
+            seenNotificationIdsRef.current.add(notification.id);
+            return;
+          }
+          if (document.hidden) return;
+
+          seenNotificationIdsRef.current.add(notification.id);
+          const actionLabel = 'Mở chi tiết đơn hàng';
+          toast.info(
+            <div style={{ display: 'grid', gap: 5, cursor: 'pointer' }}>
+              <strong style={{ color: '#0f172a' }}>{notification.title}</strong>
+              {notification.body && (
+                <div style={{ color: '#475569', lineHeight: 1.4 }}>{notification.body}</div>
+              )}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                color: '#2563eb',
+                fontSize: 12,
+                fontWeight: 700,
+              }}>
+                {actionLabel}
+                <ChevronRight size={13} />
+              </div>
+            </div>,
+            {
+              autoClose: 10000,
+              closeOnClick: true,
+              style: { cursor: 'pointer' },
+              onClick: () => handleNotificationClick(notification),
+            },
+          );
+        });
+      }
     } catch (err) {
       console.error('Lỗi tải thông báo:', err);
       setNotifications([]);
@@ -188,11 +271,23 @@ export default function MainLayout() {
   };
 
   useEffect(() => {
+    seenNotificationIdsRef.current = new Set();
+    notificationBaselineReadyRef.current = false;
     loadNotifications();
     const interval = setInterval(() => {
       loadNotifications();
     }, 10000);
     return () => clearInterval(interval);
+  }, [user?.id]);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (!document.hidden) {
+        loadNotifications();
+      }
+    };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => document.removeEventListener('visibilitychange', refreshWhenVisible);
   }, [user?.id]);
 
   useEffect(() => {
@@ -409,30 +504,7 @@ export default function MainLayout() {
                       const isUnread = !n.readAt;
                       return (
                         <div key={notificationKey(n, index)}
-                          onClick={async () => {
-                            if (isUnread) {
-                              await notificationApi.markAsRead(n.id);
-                              await loadNotifications();
-                            }
-                            if (n.entityType === 'ORDER' && n.entityId) {
-                              navigate(ROUTES.ORDER_DETAIL.replace(':id', n.entityId));
-                              setNotifOpen(false);
-                            }
-                            if (n.entityType === 'INVENTORY' && n.entityId) {
-                              if (n.type === 'STOCK_TRANSFER') {
-                                navigate(ROUTES.STOCK_TRANSFER, { state: { openTransferId: n.entityId } });
-                              } else if (n.type === 'STOCKTAKE') {
-                                navigate(ROUTES.STOCKTAKES);
-                              } else {
-                                navigate(ROUTES.INVENTORY_DETAIL.replace(':id', n.entityId));
-                              }
-                              setNotifOpen(false);
-                            }
-                            if (n.entityType === 'SYNC') {
-                              navigate(ROUTES.SYNC_HISTORY);
-                              setNotifOpen(false);
-                            }
-                          }}
+                          onClick={() => handleNotificationClick(n)}
                           style={{
                             display: 'flex', gap: 12, padding: '14px 20px', cursor: 'pointer',
                             backgroundColor: isUnread ? 'rgba(239,246,255,0.5)' : 'transparent',

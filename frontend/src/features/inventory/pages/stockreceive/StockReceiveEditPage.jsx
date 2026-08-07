@@ -1,24 +1,247 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
+import * as XLSX from 'xlsx';
 import {
-  ArrowLeft, Save, Loader2, AlertCircle, Edit3, Trash2, Plus, Search, X,
+  ArrowLeft, Save, Loader2, AlertCircle, Edit3, Trash2, Plus, Search, X, FileSpreadsheet, Download,
 } from 'lucide-react';
 
 import warehouseService from '../../services/warehouseService';
 import supplierService from '../../services/supplierService';
 import stockReceiveService from '../../services/stockReceiveService';
+import inventoryApi from '../../../../api/inventoryApi';
 import { ROUTES } from '../../../../app/router/routes';
-import axiosClient from '../../../../api/axiosClient';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
   new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v ?? 0);
+
+const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
+
+const PLATFORM_LABELS = { LAZADA: 'Lazada', SHOPIFY: 'Shopify', TIKTOK: 'TikTok Shop' };
+const PLATFORM_BADGE_STYLES = {
+  LAZADA: { backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe' },
+  SHOPIFY: { backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' },
+  TIKTOK: { backgroundColor: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1' },
+  LOCAL:   { backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
+};
+const platformBadgeBaseStyle = {
+  display: 'inline-flex', alignItems: 'center', minHeight: 20, padding: '2px 7px',
+  borderRadius: 6, border: '1px solid transparent', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+};
+
+const normalizePlatform = (v) => {
+  const t = String(v ?? '').trim().toUpperCase();
+  if (t.includes('LAZADA')) return 'LAZADA';
+  if (t.includes('SHOPIFY')) return 'SHOPIFY';
+  if (t.includes('TIKTOK')) return 'TIKTOK';
+  return null;
+};
+const extractPlatforms = (value) => {
+  if (Array.isArray(value)) return value.flatMap(extractPlatforms);
+  const text = String(value ?? '').trim().toUpperCase();
+  const matches = [];
+  if (text.includes('LAZADA')) matches.push('LAZADA');
+  if (text.includes('SHOPIFY')) matches.push('SHOPIFY');
+  if (text.includes('TIKTOK')) matches.push('TIKTOK');
+  if (matches.length) return matches;
+  const p = normalizePlatform(text);
+  return p ? [p] : [];
+};
+const itemPlatforms = (item) => uniqueValues([
+  ...extractPlatforms(item?.platforms), ...extractPlatforms(item?.platform),
+  ...extractPlatforms(item?.channelName), ...extractPlatforms(item?.channelNames),
+]);
+const renderPlatformBadges = (item) => {
+  const platforms = itemPlatforms(item);
+  const display = platforms.length > 0 ? platforms : ['LOCAL'];
+  return display.map((p) => (
+    <span key={p} style={{ ...platformBadgeBaseStyle, ...(PLATFORM_BADGE_STYLES[p] ?? PLATFORM_BADGE_STYLES.LOCAL) }}>
+      {p === 'LOCAL' ? 'Ứng dụng' : PLATFORM_LABELS[p] ?? p}
+    </span>
+  ));
+};
+
+const normalizeWarehouseVariant = (item) => {
+  const variantId = item.variantId ?? item.id;
+  const internalSku = item.internalVariantSku ?? item.variantSku ?? item.sku ?? '';
+  const marketplaceSku = item.marketplaceSku ?? '';
+  const sku = internalSku || marketplaceSku;
+  return {
+    id: variantId, variantId,
+    variantIds: uniqueValues([...(item.variantIds ?? []), variantId]),
+    sku, variantSku: internalSku, marketplaceSku,
+    productName: item.productName ?? item.product?.name ?? sku,
+    name: item.variantName ?? item.name ?? '',
+    unitPrice: item.unitPrice ?? item.price ?? 0,
+    salePrice: item.salePrice ?? item.currentSalePrice ?? item.price ?? 0,
+    availableQuantity: item.availableQuantity ?? 0,
+    platforms: itemPlatforms(item),
+    channelNames: uniqueValues(item.channelNames ?? [item.channelName]),
+    mergedVariantCount: item.mergedVariantCount ?? 1,
+  };
+};
+
+const aggregateVariantsBySku = (variants) => {
+  const groups = new Map();
+  variants.forEach((item) => {
+    const key = String(item.variantSku ?? item.sku ?? '').trim().toLowerCase() || `variant:${item.variantId}`;
+    if (!groups.has(key)) { groups.set(key, { ...item, variantIds: uniqueValues(item.variantIds ?? [item.variantId]) }); return; }
+    const g = groups.get(key);
+    g.variantIds = uniqueValues([...g.variantIds, ...(item.variantIds ?? []), item.variantId]);
+    g.platforms = uniqueValues([...itemPlatforms(g), ...itemPlatforms(item)]);
+    g.channelNames = uniqueValues([...(g.channelNames ?? []), ...(item.channelNames ?? [])]);
+    g.availableQuantity = Math.max(Number(g.availableQuantity ?? 0), Number(item.availableQuantity ?? 0));
+    g.mergedVariantCount = (g.mergedVariantCount ?? 1) + (item.mergedVariantCount ?? 1);
+  });
+  return [...groups.values()];
+};
+
+const groupReceiptItems = (receiptItems = [], fromPurchaseOrder = false) => {
+  const groups = new Map();
+  receiptItems.forEach((item) => {
+    const groupKey = String(item.marketplaceSku || item.sku || item.variantSku || item.variantId)
+      .trim().toLowerCase();
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        groupKey, variantId: item.variantId, variantIds: [item.variantId],
+        sku: item.marketplaceSku || item.sku || item.variantSku,
+        productName: item.productName, variantName: item.variantName || '',
+        quantity: item.quantity || 0, unitPrice: item.unitCost ?? item.unitPrice ?? 0,
+        platforms: uniqueValues(item.platforms), fromPurchaseOrder,
+      });
+      return;
+    }
+    const existing = groups.get(groupKey);
+    existing.variantIds = uniqueValues([...existing.variantIds, item.variantId]);
+    existing.platforms = uniqueValues([...existing.platforms, ...(item.platforms ?? [])]);
+  });
+  return [...groups.values()];
+};
+
+const expandReceiptItems = (items) => items.flatMap((item) =>
+  uniqueValues(item.variantIds?.length ? item.variantIds : [item.variantId]).map((variantId) => ({
+    variantId,
+    quantity: item.quantity ? Number(item.quantity) : null,
+    unitCost: item.unitPrice !== '' && item.unitPrice !== null && item.unitPrice !== undefined
+      ? Number(item.unitPrice) : null,
+  })));
+
+// ── Excel import helpers (client-side, same as CreatePage) ───────────────────
+const normalizeImportKey = (value) => String(value ?? '').trim().toLocaleLowerCase('vi-VN');
+
+const importLookupKeys = (item) => {
+  const productName = String(item?.productName ?? '').trim();
+  const variantName = String(item?.name ?? '').trim();
+  const sku = String(item?.sku ?? item?.variantSku ?? '').trim();
+  const marketplaceSku = String(item?.marketplaceSku ?? '').trim();
+  const displayNameInternal = sku ? `${productName}${variantName ? ` - ${variantName}` : ''} [${sku}]` : '';
+  const displayNameMarketplace = marketplaceSku && marketplaceSku !== sku
+    ? `${productName}${variantName ? ` - ${variantName}` : ''} [${marketplaceSku}]` : '';
+  return uniqueValues([sku, marketplaceSku, productName, variantName,
+    variantName ? `${productName} - ${variantName}` : '',
+    displayNameInternal, displayNameMarketplace,
+  ]).map(normalizeImportKey).filter(Boolean);
+};
+
+const importProductKey = (item) => {
+  const sku = normalizeImportKey(item?.variantSku ?? item?.sku ?? item?.marketplaceSku ?? '');
+  if (sku) return `sku:${sku}`;
+  return uniqueValues(item?.variantIds ?? [item?.id ?? item?.variantId]).map(String).sort().join('|') || '';
+};
+
+const parseExcelImportRows = (rows, variants, existingItems) => {
+  const variantsByImportKey = new Map();
+  const variantsBySkuKey = new Map();
+  const variantsById = new Map();
+  variants.forEach((item) => {
+    importLookupKeys(item).forEach((key) => variantsByImportKey.set(key, item));
+    const internalSku = normalizeImportKey(item?.variantSku ?? item?.sku ?? '');
+    if (internalSku) variantsBySkuKey.set(`sku:${internalSku}`, item);
+    const mktSku = normalizeImportKey(item?.marketplaceSku ?? '');
+    if (mktSku && mktSku !== internalSku) variantsBySkuKey.set(`sku:${mktSku}`, item);
+    uniqueValues([...(item.variantIds ?? []), item.id ?? item.variantId])
+      .forEach((id) => variantsById.set(String(id), item));
+  });
+  const valid = [];
+  const errors = [];
+  const usedProductKeys = new Set();
+  (existingItems ?? []).forEach((item) => {
+    const pk = importProductKey(item);
+    if (pk) usedProductKeys.add(pk);
+    const internalSku = normalizeImportKey(item?.variantSku ?? item?.sku ?? '');
+    if (internalSku) usedProductKeys.add(`sku:${internalSku}`);
+    const mktSku = normalizeImportKey(item?.marketplaceSku ?? '');
+    if (mktSku && mktSku !== internalSku) usedProductKeys.add(`sku:${mktSku}`);
+    uniqueValues([...(item.variantIds ?? []), item.variantId, item.id])
+      .forEach((id) => { if (id) usedProductKeys.add(`id:${String(id)}`); });
+  });
+  rows.forEach((row, index) => {
+    const rowNumber = index + 2;
+    const [rawProduct, rawQuantity, rawUnitPrice, rawVariantId] = row;
+    if (!rawProduct && !rawQuantity && !rawUnitPrice && !rawVariantId) return;
+    const input = rawProduct ? String(rawProduct).trim() : '';
+    const reasons = [];
+    if (!input) reasons.push('Tên sản phẩm hoặc SKU không hợp lệ.');
+    const variantId = rawVariantId ? String(rawVariantId).trim() : '';
+    const inputSkuKey = `sku:${normalizeImportKey(input)}`;
+    const variant = variantsById.get(variantId)
+      ?? variantsBySkuKey.get(inputSkuKey)
+      ?? variantsByImportKey.get(normalizeImportKey(input));
+    if (input && !variant) reasons.push('Không tìm thấy sản phẩm trong kho.');
+    const quantity = Number(rawQuantity);
+    if (!rawQuantity || Number.isNaN(quantity) || quantity <= 0) reasons.push('Số lượng phải lớn hơn 0.');
+    const unitPrice = rawUnitPrice === undefined || rawUnitPrice === null || rawUnitPrice === ''
+      ? Number(variant?.unitPrice ?? 0) : Number(rawUnitPrice);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) reasons.push('Đơn giá không hợp lệ.');
+    const productKey = variant ? importProductKey(variant) : null;
+    const isDuplicate = (productKey && usedProductKeys.has(productKey))
+      || (variant && uniqueValues([...(variant.variantIds ?? []), variant.variantId, variant.id])
+          .some((id) => id && usedProductKeys.has(`id:${String(id)}`)));
+    if (isDuplicate) reasons.push('Sản phẩm đã có trong phiếu hoặc bị trùng trong file.');
+    if (reasons.length > 0) {
+      errors.push({ rowNumber, input, quantity: rawQuantity, unitPrice: rawUnitPrice, reason: reasons.join(' ') });
+      return;
+    }
+    valid.push({ ...variant, quantity, unitPrice });
+    if (productKey) usedProductKeys.add(productKey);
+    uniqueValues([...(variant?.variantIds ?? []), variant?.variantId, variant?.id])
+      .forEach((id) => { if (id) usedProductKeys.add(`id:${String(id)}`); });
+  });
+  return { valid, errors };
+};
+
+const downloadImportErrors = (errors) => {
+  const sheet = XLSX.utils.json_to_sheet(errors.map((e) => ({
+    'Dòng Excel': e.rowNumber, 'Giá trị cột A': e.input,
+    'Số lượng': e.quantity ?? '', 'Đơn giá': e.unitPrice ?? '', 'Lý do lỗi': e.reason,
+  })));
+  sheet['!cols'] = [{ wch: 12 }, { wch: 55 }, { wch: 14 }, { wch: 16 }, { wch: 55 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet, 'Lỗi import');
+  XLSX.writeFile(wb, 'stock-in-import-errors.xlsx');
+};
+
+// ── Import preview modal style constants ─────────────────────────────────────
+const modalBackdropStyle = {
+  position: 'fixed', inset: 0, zIndex: 1000,
+  background: 'rgba(15, 23, 42, 0.48)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+};
+const modalStyle = {
+  width: 'min(520px, 100%)', maxHeight: '76vh', background: '#fff',
+  borderRadius: 10, boxShadow: '0 22px 60px rgba(15, 23, 42, 0.28)',
+  border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 14,
+};
+const modalHeaderStyle = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 };
+const modalTitleStyle = { margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' };
+const modalSubtitleStyle = { margin: '5px 0 0', fontSize: 13, color: '#64748b' };
+const modalCloseButtonStyle = { width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
@@ -32,112 +255,116 @@ const schema = z.object({
   notes: z.string().optional(),
 });
 
-function AddProductModal({ open, onClose, onAdd, existingVariantIds }) {
+// ── Add Product Modal (same as CreatePage) ────────────────────────────────────
+function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], loading = false }) {
   const [keyword, setKeyword] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState({});
 
   useEffect(() => {
-    if (!open) return undefined;
-    let ignore = false;
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const params = { page: 0, size: 50 };
-        if (keyword.trim()) params.search = keyword.trim();
-        const response = await axiosClient.get('/catalog/variants', { params });
-        if (ignore) return;
-        const data = response.data?.data ?? response.data ?? {};
-        setResults(data.content ?? (Array.isArray(data) ? data : []));
-      } catch {
-        if (!ignore) setResults([]);
-      } finally {
-        if (!ignore) setLoading(false);
-      }
-    }, keyword.trim() ? 250 : 0);
-    return () => {
-      ignore = true;
-      clearTimeout(timer);
-    };
-  }, [keyword, open]);
+    if (isOpen) return undefined;
+    const timer = window.setTimeout(() => { setKeyword(''); setSelected({}); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [isOpen]);
 
-  if (!open) return null;
+  const results = useMemo(() => {
+    const q = keyword.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((item) =>
+      [item.productName, item.name, item.sku, ...itemPlatforms(item).map((p) => PLATFORM_LABELS[p] ?? p)]
+        .some((v) => String(v ?? '').toLowerCase().includes(q)));
+  }, [keyword, products]);
 
+  const toggle = (item) => {
+    const skuKey = String(item.sku ?? '').trim().toLowerCase();
+    if (existingVariantIds.includes(item.id) || existingSkus.includes(skuKey)) return;
+    setSelected((prev) => { const n = { ...prev }; n[item.id] ? delete n[item.id] : (n[item.id] = item); return n; });
+  };
+  const count = Object.keys(selected).length;
+
+  if (!isOpen) return null;
   return (
-    <div style={modalBackdropStyle} onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <div style={modalStyle}>
-        <div style={modalHeaderStyle}>
+    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+      style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(2px)' }}>
+      <div style={{ width: '100%', maxWidth: 580, background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', maxHeight: '85vh', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div>
-            <h2 style={modalTitleStyle}>Thêm sản phẩm nhập</h2>
-            <p style={modalSubtitleStyle}>Tìm và chọn sản phẩm cần thêm vào phiếu lưu tạm</p>
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Chọn sản phẩm bổ sung</span>
+            {results.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{results.length} sản phẩm trong kho</span>}
           </div>
-          <button type="button" onClick={onClose} style={modalCloseButtonStyle}><X size={18} /></button>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+            <X size={18} />
+          </button>
         </div>
-        <div style={modalSearchWrapStyle}>
-          <Search size={16} color="#8aa0bd" />
-          <input autoFocus value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Tìm theo tên sản phẩm hoặc SKU..." style={modalSearchInputStyle} />
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input autoFocus value={keyword} onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Tìm theo tên sản phẩm hoặc SKU..."
+              style={{ width: '100%', padding: '8px 10px 8px 34px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
         </div>
-        <div style={modalListStyle}>
-          {loading ? (
-            <div style={modalEmptyStyle}>Đang tải...</div>
-          ) : results.length ? results.map((item, index) => {
-            const exists = existingVariantIds.includes(item.id);
-            return (
-              <button key={item.id} type="button" disabled={exists} onClick={() => onAdd(item)} style={{ ...modalRowStyle, opacity: exists ? 0.45 : 1, cursor: exists ? 'default' : 'pointer' }}>
-                <span style={modalOrdinalStyle}>{String(index + 1).padStart(3, '0')}</span>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={modalProductNameStyle}>{item.productName}{item.name ? ` - ${item.name}` : ''}</span>
-                  <span style={modalProductMetaStyle}>{item.sku}</span>
-                </span>
-                {exists ? <span style={modalAddedStyle}>Đã thêm</span> : <Plus size={18} color="#2563eb" />}
-              </button>
-            );
-          }) : (
-            <div style={modalEmptyStyle}>Không tìm thấy sản phẩm phù hợp.</div>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {loading && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
+              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải sản phẩm kho...
+            </div>
           )}
+          {!loading && results.length === 0 && (
+            <p style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
+              {keyword.trim() ? 'Không tìm thấy sản phẩm phù hợp.' : 'Không có sản phẩm nào trong kho.'}
+            </p>
+          )}
+          {!loading && results.map((item) => {
+            const skuKey = String(item.sku ?? '').trim().toLowerCase();
+            const isExisting = existingVariantIds.includes(item.id) || existingSkus.includes(skuKey);
+            const isSelected = Boolean(selected[item.id]);
+            return (
+              <div key={item.id} onClick={() => toggle(item)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px', cursor: isExisting ? 'not-allowed' : 'pointer', backgroundColor: isExisting ? '#f8fafc' : isSelected ? '#eff6ff' : '#fff', borderBottom: '1px solid #f1f5f9', opacity: isExisting ? 0.55 : 1 }}>
+                <input type="checkbox" checked={isSelected} disabled={isExisting} onChange={() => toggle(item)} onClick={(e) => e.stopPropagation()}
+                  style={{ width: 16, height: 16, accentColor: '#2563eb', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{item.productName}</span>
+                    {item.name && <span style={{ fontSize: 11, color: '#475569', backgroundColor: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{item.name}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontFamily: 'monospace', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 4 }}>{item.sku}</span>
+                    {renderPlatformBadges(item)}
+                    {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
+                  </div>
+                  {Number(item.availableQuantity) > 0 && (
+                    <div style={{ marginTop: 3, fontSize: 11, color: '#64748b' }}>
+                      Tồn kho: <strong style={{ color: '#0f172a' }}>{Number(item.availableQuantity).toLocaleString('vi-VN')}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}>Hủy</button>
+            <button
+              onClick={() => onConfirm(Object.values(selected).map((i) => ({
+                variantId: i.id, variantIds: uniqueValues(i.variantIds ?? [i.id]),
+                sku: i.sku, productName: i.productName, variantName: i.name,
+                quantity: 1, unitPrice: i.unitPrice ?? 0, salePrice: i.salePrice ?? 0,
+                platforms: itemPlatforms(i), mergedVariantCount: i.mergedVariantCount ?? 1,
+                fromPurchaseOrder: false,
+              })))}
+              disabled={count === 0}
+              style={{ padding: '7px 16px', borderRadius: 8, border: 'none', backgroundColor: count === 0 ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: 13, fontWeight: 500, cursor: count === 0 ? 'not-allowed' : 'pointer' }}>
+              Thêm ({count})
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
-const modalBackdropStyle = {
-  position: 'fixed',
-  inset: 0,
-  zIndex: 1000,
-  background: 'rgba(15, 23, 42, 0.48)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 20,
-};
-
-const modalStyle = {
-  width: 'min(520px, 100%)',
-  maxHeight: '76vh',
-  background: '#fff',
-  borderRadius: 10,
-  boxShadow: '0 22px 60px rgba(15, 23, 42, 0.28)',
-  border: '1px solid #e2e8f0',
-  padding: 20,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 14,
-};
-
-const modalHeaderStyle = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 };
-const modalTitleStyle = { margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' };
-const modalSubtitleStyle = { margin: '5px 0 0', fontSize: 13, color: '#64748b' };
-const modalCloseButtonStyle = { width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
-const modalSearchWrapStyle = { display: 'flex', alignItems: 'center', gap: 9, border: '1px solid #cbd5e1', borderRadius: 8, padding: '0 12px', height: 40, background: '#f8fafc' };
-const modalSearchInputStyle = { flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#0f172a' };
-const modalListStyle = { border: '1px solid #e2e8f0', borderRadius: 8, overflowY: 'auto', maxHeight: 320, background: '#fff' };
-const modalRowStyle = { width: '100%', border: 'none', borderBottom: '1px solid #f1f5f9', background: '#fff', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' };
-const modalOrdinalStyle = { width: 40, height: 34, borderRadius: 8, background: '#ecfdf5', color: '#009688', fontFamily: 'monospace', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' };
-const modalProductNameStyle = { display: 'block', fontSize: 13, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-const modalProductMetaStyle = { display: 'block', marginTop: 2, fontSize: 12, color: '#8aa0bd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-const modalAddedStyle = { fontSize: 12, color: '#94a3b8', fontWeight: 600 };
-const modalEmptyStyle = { padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13 };
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function StockReceiveEditPage() {
@@ -150,6 +377,9 @@ export default function StockReceiveEditPage() {
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [warehouseVariants, setWarehouseVariants] = useState([]);
+  const [loadingVariants, setLoadingVariants] = useState(false);
+  const importFileRef = useRef(null);
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, setValue } = useForm({
     resolver: zodResolver(schema),
@@ -162,17 +392,7 @@ export default function StockReceiveEditPage() {
   const hasUnsavedChanges = Boolean(receipt);
   const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
-  useEffect(() => {
-    if (!id) {
-      toast.error('ID phiếu nhập không hợp lệ');
-      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
-      return;
-    }
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  const fetchData = async () => {
+  async function fetchData() {
     setLoading(true);
     try {
       const [receiptRes, wRes, sRes] = await Promise.all([
@@ -200,15 +420,22 @@ export default function StockReceiveEditPage() {
       setValue('receivedAt', receiptData.receivedAt ? new Date(receiptData.receivedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
       setValue('notes', receiptData.notes || '');
       
-      // Set items
-      setItems((receiptData.items || []).map(item => ({
-        variantId: item.variantId,
-        sku: item.sku ?? item.variantSku,
-        productName: item.productName,
-        variantName: item.variantName || '',
-        quantity: item.quantity || 0,
-        unitPrice: item.unitCost ?? item.unitPrice ?? 0,
-      })));
+      // Set items — mark PO-sourced items so qty is locked
+      const hasPO = Boolean(receiptData.purchaseOrderId);
+      setItems(groupReceiptItems(receiptData.items || [], hasPO));
+
+      // Load warehouse variants for the Add Product modal
+      const warehouseId = masterWarehouse?.id ?? receiptData.warehouseId;
+      if (warehouseId) {
+        setLoadingVariants(true);
+        inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false, { warehouseId })
+          .then((response) => {
+            const data = response?.content ?? (Array.isArray(response) ? response : []);
+            setWarehouseVariants(aggregateVariantsBySku(data.map(normalizeWarehouseVariant).filter((v) => v.id)));
+          })
+          .catch(() => setWarehouseVariants([]))
+          .finally(() => setLoadingVariants(false));
+      }
       
       // Extract data from responses
       const extractData = (r) => {
@@ -230,27 +457,89 @@ export default function StockReceiveEditPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (!id) {
+      toast.error('ID phiếu nhập không hợp lệ');
+      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
+      return;
+    }
+    // Loading data is the external synchronization performed by this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // ── Item handlers ─────────────────────────────────────────────────────────
   const onQtyChange   = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
   const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
-  const onAddProduct = (item) => {
+  const onAddProducts = (newItems) => {
     setItems((current) => {
-      if (current.some((entry) => entry.variantId === item.id)) return current;
+      const skuKeys = new Set(current.map((it) => String(it.sku ?? '').trim().toLowerCase()).filter(Boolean));
+      const ids = new Set(current.map((it) => it.variantId));
       return [
         ...current,
-        {
-          variantId: item.id,
-          sku: item.sku,
-          productName: item.productName,
-          variantName: item.name || '',
-          quantity: 1,
-          unitPrice: item.costPrice ?? item.price ?? 0,
-        },
+        ...newItems.filter((it) => {
+          const skuKey = String(it.sku ?? '').trim().toLowerCase();
+          return skuKey ? !skuKeys.has(skuKey) : !ids.has(it.variantId);
+        }),
       ];
     });
+    setModalOpen(false);
+  };
+
+  const downloadBlob = (blob, name) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const onDownloadTemplate = async () => {
+    try { const result = await stockReceiveService.downloadExtraItemsTemplate(id); downloadBlob(result.data, 'stock-in-extra-items-template.xlsx'); }
+    catch { toast.error('Không thể tải template Excel.'); }
+  };
+  const onImportFile = (event) => {
+    const file = event.target.files?.[0];
+    if (importFileRef.current) importFileRef.current.value = '';
+    if (!file) return;
+    if (loadingVariants) { toast.info('Đang tải sản phẩm kho, vui lòng thử lại.'); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellFormula: false, cellNF: false });
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: undefined }).slice(1);
+        const parsed = parseExcelImportRows(rows, warehouseVariants, items);
+        if (parsed.valid.length === 0) {
+          if (parsed.errors.length > 0) downloadImportErrors(parsed.errors);
+          toast.error('Không có dòng hợp lệ. Đã tải file lỗi để kiểm tra.');
+          return;
+        }
+        if (parsed.errors.length > 0) {
+          downloadImportErrors(parsed.errors);
+          toast.warn(`Có ${parsed.errors.length} dòng lỗi; đã nhập ${parsed.valid.length} dòng hợp lệ.`);
+        } else {
+          toast.success(`Đã thêm ${parsed.valid.length} sản phẩm từ Excel.`);
+        }
+        setItems((prev) => {
+          const skuKeys = new Set(prev.map((it) => String(it.sku ?? '').trim().toLowerCase()).filter(Boolean));
+          const ids = new Set(prev.map((it) => it.variantId));
+          const toAdd = parsed.valid.filter((p) => {
+            const skuKey = String(p.sku ?? '').trim().toLowerCase();
+            return skuKey ? !skuKeys.has(skuKey) : !ids.has(p.id ?? p.variantId);
+          }).map((p) => ({
+            variantId: p.id ?? p.variantId,
+            variantIds: uniqueValues(p.variantIds ?? [p.id ?? p.variantId]),
+            sku: p.sku, productName: p.productName, variantName: p.name ?? '',
+            quantity: p.quantity, unitPrice: p.unitPrice,
+            platforms: itemPlatforms(p), fromPurchaseOrder: false,
+          }));
+          return [...prev, ...toAdd];
+        });
+      } catch { toast.error('Không thể đọc file Excel.'); }
+    };
+    reader.onerror = () => toast.error('Không thể đọc file Excel.');
+    reader.readAsArrayBuffer(file);
   };
 
   // ── Submit - Save Draft ────────────────────────────────────────────────────
@@ -264,14 +553,11 @@ export default function StockReceiveEditPage() {
       await stockReceiveService.updateReceipt(id, {
         warehouseId: data.warehouseId,
         supplierId: data.supplierId || null,
+        purchaseOrderId: receipt.purchaseOrderId,
         invoiceNumber: receipt.receiptCode || null,
         receivedAt: data.receivedAt,
         notes: data.notes || null,
-        items: items.map((it) => ({ 
-          variantId: it.variantId, 
-          quantity: it.quantity ? Number(it.quantity) : null, 
-          unitCost: it.unitPrice !== '' && it.unitPrice !== null && it.unitPrice !== undefined ? Number(it.unitPrice) : null 
-        })),
+        items: expandReceiptItems(items),
         isDraft: true,
       });
       toast.success('Cập nhật phiếu nhập thành công.');
@@ -308,7 +594,7 @@ export default function StockReceiveEditPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="product-workspace product-workspace--flow" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -339,13 +625,24 @@ export default function StockReceiveEditPage() {
           <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div>
               <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: 0 }}>Danh sách sản phẩm</h3>
-              <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Cập nhật số lượng và đơn giá</p>
+              <p style={{ fontSize: 11, color: receipt?.purchaseOrderId ? '#f97316' : '#94a3b8', margin: '2px 0 0' }}>
+                {receipt?.purchaseOrderId
+                  ? '⚠ Phiếu từ đơn mua hàng — số lượng cố định, chỉ chỉnh sửa được đơn giá'
+                  : 'Cập nhật số lượng và đơn giá'}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={onDownloadTemplate} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><Download size={14} /> Template</button>
+              <button type="button" onClick={() => importFileRef.current?.click()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><FileSpreadsheet size={14} /> Import Excel</button>
+              <input ref={importFileRef} type="file" accept=".xlsx,.xls" onChange={onImportFile} style={{ display: 'none' }} />
             </div>
             <button type="button" onClick={() => setModalOpen(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none', background: '#009688', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none',
+                background: '#009688', color: '#fff',
+                fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', whiteSpace: 'nowrap' }}>
               <Plus size={14} /> Thêm sản phẩm
-            </button>
-          </div>
+            </button>          </div>
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -362,17 +659,31 @@ export default function StockReceiveEditPage() {
                   const priceBad = item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined || Number(item.unitPrice) < 0;
                   const line = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
                   return (
-                    <tr key={item.variantId ?? idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={item.groupKey ?? item.variantId ?? idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '10px 12px' }}>
                         <div style={{ fontWeight: 500, color: '#0f172a', fontSize: 12 }}>{item.productName}</div>
                         {item.variantName && <div style={{ fontSize: 10, color: '#94a3b8' }}>{item.variantName}</div>}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <span style={{ fontSize: 10, fontFamily: 'monospace', backgroundColor: '#f1f5f9', color: '#64748b', padding: '2px 6px', borderRadius: 4 }}>{item.sku}</span>
+                        {item.platforms?.length > 0 && (
+                          <span style={{ display: 'block', marginTop: 4, fontSize: 10, color: '#64748b' }}>
+                            {item.platforms.join(' · ')}
+                          </span>
+                        )}
                       </td>
                       <td style={{ padding: '10px 12px', width: 100 }}>
-                        <input type="number" min="0" step="1" value={item.quantity} onChange={(e) => onQtyChange(idx, e.target.value)}
-                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: `1px solid ${qtyBad ? '#fca5a5' : '#e2e8f0'}`, backgroundColor: qtyBad ? '#fff5f5' : '#fff', fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }} />
+                        <input type="number" min="0" step="1" value={item.quantity}
+                          disabled={Boolean(item.fromPurchaseOrder)}
+                          onChange={(e) => onQtyChange(idx, e.target.value)}
+                          style={{ width: '100%', padding: '6px 8px', borderRadius: 6,
+                            border: `1px solid ${qtyBad ? '#fca5a5' : '#e2e8f0'}`,
+                            backgroundColor: item.fromPurchaseOrder ? '#f8fafc' : qtyBad ? '#fff5f5' : '#fff',
+                            fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box',
+                            cursor: item.fromPurchaseOrder ? 'not-allowed' : 'text' }} />
+                        {item.fromPurchaseOrder && (
+                          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Từ đơn mua hàng</div>
+                        )}
                       </td>
                       <td style={{ padding: '10px 12px', width: 130 }}>
                         <input type="number" min="0" step="1000" value={item.unitPrice} onChange={(e) => onPriceChange(idx, e.target.value)}
@@ -382,12 +693,15 @@ export default function StockReceiveEditPage() {
                         {line > 0 ? formatVND(line) : '—'}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        <button onClick={() => onRemove(idx)}
-                          style={{ width: 24, height: 24, borderRadius: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}>
-                          <Trash2 size={13} />
-                        </button>
+                        {/* Allow removing items not from purchase order, or any item if no PO linked */}
+                        {(!receipt?.purchaseOrderId || !item.fromPurchaseOrder) && (
+                          <button onClick={() => onRemove(idx)}
+                            style={{ width: 24, height: 24, borderRadius: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}>
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -486,10 +800,13 @@ export default function StockReceiveEditPage() {
         </div>
       </div>
       <AddProductModal
-        open={modalOpen}
+        isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        onAdd={onAddProduct}
-        existingVariantIds={items.map((item) => item.variantId)}
+        onConfirm={onAddProducts}
+        existingVariantIds={items.flatMap((item) => item.variantIds ?? [item.variantId])}
+        existingSkus={items.map((item) => String(item.sku ?? '').trim().toLowerCase()).filter(Boolean)}
+        products={warehouseVariants}
+        loading={loadingVariants}
       />
       {ConfirmDialog}
     </div>

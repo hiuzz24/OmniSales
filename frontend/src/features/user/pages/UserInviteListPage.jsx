@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  Search, Mail, UserX, Clock, CheckCircle, RefreshCw, AlertTriangle
+import {
+  Search, Mail, UserX, Clock, CheckCircle, RefreshCw, AlertTriangle,
+  Package2
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import userApi from '../../../api/userApi';
 import styles from './UserInviteListPage.module.css';
+import PageHeader from '../../../shared/components/PageHeader';
 
 const UserInviteListPage = () => {
   const [invitations, setInvitations] = useState([]);
@@ -122,13 +124,14 @@ const UserInviteListPage = () => {
   });
 
   return (
-    <div className={styles.container}>
+    <div className={styles.page}>
       {/* Page Header */}
-      <div className={styles.header}>
-        <div className={styles.titleSection}>
-          <h2>Lịch sử gửi lời mời</h2>
-          <p>Quản lý danh sách các email đã được mời tham gia hệ thống và trạng thái tương ứng</p>
-        </div>
+      <div className={styles.pageHeader}>
+        <PageHeader
+          title="Lịch sử gửi lời mời"
+          subtitle="Quản lý danh sách các email đã được mời tham gia hệ thống và trạng thái tương ứng"
+          icon={() => <Package2 size={20} />}
+        />
       </div>
 
       {/* Filters & Search */}
@@ -167,8 +170,8 @@ const UserInviteListPage = () => {
             <option value="EXPIRED">Hết hạn (Expired)</option>
           </select>
 
-          <button 
-            className={styles.btnInvite} 
+          <button
+            className={styles.btnInvite}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             onClick={fetchInvitations}
             title="Tải lại danh sách"
@@ -206,7 +209,7 @@ const UserInviteListPage = () => {
                   <th>Thời gian gửi</th>
                   <th>Thời gian hết hạn</th>
                   <th>Trạng thái</th>
-                  <th style={{ textAlign: 'right' }}>Thao tác</th>
+                  <th style={{ textAlign: 'center' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>

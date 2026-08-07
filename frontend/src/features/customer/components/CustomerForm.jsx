@@ -126,9 +126,9 @@ const CustomerForm = ({ customer, onSubmit, isSubmitting }) => {
               className={`${styles.select} ${errors.gender ? styles.inputError : ''}`}
             >
               <option value="">Chọn giới tính</option>
-              <option value="Nam">Nam</option>
-              <option value="Nữ">Nữ</option>
-              <option value="Khác">Khác</option>
+              <option value="MALE">Nam</option>
+              <option value="FEMALE">Nữ</option>
+              <option value="OTHER">Khác</option>
             </select>
             {errors.gender && <span className={styles.error}>{errors.gender.message}</span>}
           </div>

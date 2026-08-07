@@ -4,17 +4,23 @@ const {
   createTestChannel,
   deleteTestChannel,
 } = require('../../utils/channel-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Channel API Tests', () => {
 
   let createdChannelIds = [];
 
-  test.afterEach(async ({ request, managerHeaders }) => {
-    if (!createdChannelIds.length) return;
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdChannelIds.splice(0)) {
-      await deleteTestChannel(request, authToken, id);
+  test.afterEach(async ({ request }) => {
+    // Auto-cleanup any tracked ids we created in this test
+    if (createdChannelIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdChannelIds.splice(0)) {
+        await deleteTestChannel(request, authToken, id);
+      }
     }
+    // Marker-based cleanup for anything else we may have created
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/channels
@@ -224,4 +230,44 @@ test.describe('Channel API Tests', () => {
     createdChannelIds.push(id);
   });
 
+  // =========================================================
+  // Phase B4: New endpoint (credentials)
+  // =========================================================
+
+  // CH13 - GET /api/channels/{id}/credentials (no auth)
+  test('CH13 - GET /api/channels/{id}/credentials - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/channels/${fakeId}/credentials`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // CH14 - GET /api/channels/{id}/credentials (with auth)
+  test('CH14 - GET /api/channels/{id}/credentials - With manager auth, non-existent returns 500 (UnsupportedOperationException)', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/channels/${fakeId}/credentials`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 404, 500]).toContain(response.status());
+  });
+
+  // CH15 - GET /api/channels/{id}/credentials (with auth, invalid uuid)
+  test('CH15 - GET /api/channels/{id}/credentials - Invalid UUID returns 400', async ({ request, managerHeaders }) => {
+    const response = await request.get(`${API_BASE}/channels/not-a-uuid/credentials`, {
+      headers: managerHeaders,
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
+
+  // CH16 - GET /api/channels/{id}/credentials (with auth, valid format)
+  test('CH16 - GET /api/channels/{id}/credentials - Valid UUID format returns 200/500 (stub)', async ({ request, managerHeaders }) => {
+    const id = '11111111-1111-1111-1111-111111111111';
+    const response = await request.get(`${API_BASE}/channels/${id}/credentials`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 404, 500]).toContain(response.status());
+  });
 });

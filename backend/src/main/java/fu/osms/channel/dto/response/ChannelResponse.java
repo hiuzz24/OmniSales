@@ -29,6 +29,7 @@ public class ChannelResponse {
     private Boolean syncEnabled;
     private BigDecimal commissionRate;
     private OffsetDateTime lastSyncedAt;
+    private OffsetDateTime lastSyncedApplicationAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 }

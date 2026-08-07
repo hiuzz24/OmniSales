@@ -20,6 +20,10 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
 
     Optional<Customer> findByEmail(String email);
 
+    Optional<Customer> findFirstByFullNameAndPhone(String fullName, String phone);
+
+    Optional<Customer> findFirstByPhoneAndFullName(String phone, String fullName);
+
     @Query("SELECT c FROM Customer c WHERE " +
            "LOWER(c.code) LIKE :keyword OR " +
            "LOWER(c.fullName) LIKE :keyword OR " +
@@ -43,7 +47,7 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
            "LOWER(c.fullName) LIKE :keyword OR " +
            "LOWER(c.phone) LIKE :keyword OR " +
            "LOWER(c.email) LIKE :keyword) " +
-           "AND c.gender = :gender")
+           "AND (c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER'))")
     Page<Customer> findAllBySearchKeywordAndGender(
             @Param("keyword") String keyword,
             @Param("gender") String gender,
@@ -54,7 +58,8 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
            "LOWER(c.fullName) LIKE :keyword OR " +
            "LOWER(c.phone) LIKE :keyword OR " +
            "LOWER(c.email) LIKE :keyword) " +
-           "AND c.isActive = :isActive AND c.gender = :gender")
+           "AND c.isActive = :isActive " +
+           "AND (c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER'))")
     Page<Customer> findAllBySearchKeywordAndStatusAndGender(
             @Param("keyword") String keyword,
             @Param("isActive") Boolean isActive,
@@ -65,6 +70,10 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
 
     Page<Customer> findAllByGender(String gender, Pageable pageable);
 
+    @Query("SELECT c FROM Customer c WHERE c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER')")
+    Page<Customer> findAllByGenderWithNull(@Param("gender") String gender, Pageable pageable);
+
+    @Query("SELECT c FROM Customer c WHERE c.isActive = :isActive AND (c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER'))")
     Page<Customer> findAllByIsActiveAndGender(Boolean isActive, String gender, Pageable pageable);
 
     @Query("SELECT COUNT(c) FROM Customer c")
@@ -76,6 +85,6 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
     @Query("SELECT COUNT(DISTINCT o.id) FROM Order o")
     long countAllOrders();
 
-    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o")
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.status <> 'CANCELLED'")
     BigDecimal sumTotalSpent();
 }

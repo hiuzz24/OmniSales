@@ -7,6 +7,7 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
@@ -14,16 +15,10 @@ import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
-import fu.osms.inventory.entity.InventoryItem;
-import fu.osms.inventory.entity.InventoryTransaction;
-import fu.osms.inventory.entity.Warehouse;
-import fu.osms.inventory.enums.InvTxnType;
-import fu.osms.inventory.repository.InventoryItemRepository;
-import fu.osms.inventory.repository.InventoryTransactionRepository;
-import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.WebhookEvent;
+import fu.osms.sync.inventory.InventoryObservation;
+import fu.osms.sync.inventory.InventoryReconciliationService;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
-import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.PlatformCatalogWebhookProcessor;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
@@ -56,12 +51,9 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ChannelCredentialRepository channelCredentialRepository;
     private final ProductVariantRepository productVariantRepository;
-    private final WarehouseRepository warehouseRepository;
-    private final InventoryItemRepository inventoryItemRepository;
-    private final InventoryTransactionRepository inventoryTransactionRepository;
     private final LazadaAuthorizedApiClient lazadaApiClient;
     private final ObjectMapper objectMapper;
-    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    private final InventoryReconciliationService inventoryReconciliationService;
 
     @Override
     public PlatformType getPlatform() {
@@ -409,6 +401,7 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         if (price != null) {
             variant.setPrice(WebhookPayloadUtils.decimal(price));
         }
+        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
         variant.setOptionValues(optionValues(payload));
         variant.setIsActive(true);
         variant.setDeletedAt(null);
@@ -440,16 +433,22 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
     }
 
     private void processInventoryIfPresent(WebhookEvent event, ProductVariant fallbackVariant, Map<String, Object> payload) {
-        ProductVariant variant = fallbackVariant;
-        if (variant == null) {
-            variant = resolveMappedVariant(event, payload)
-                    .map(ChannelProductVariant::getVariant)
-                    .orElse(null);
-        }
-        if (variant == null) {
+        ChannelProductVariant mapping = resolveMappedVariant(event, payload)
+                .orElseGet(() -> fallbackVariant == null
+                        ? null
+                        : channelProductVariantRepository
+                        .findActiveByVariantIdWithChannel(fallbackVariant.getId())
+                        .stream()
+                        .filter(candidate -> event.getChannel().getId().equals(
+                                candidate.getChannelProduct().getChannel().getId()))
+                        .findFirst()
+                        .orElse(null));
+        if (mapping == null) {
             return;
         }
-        Warehouse masterWarehouse = marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(event.getChannel());
+        String managedWarehouseCode = event.getChannel().getMetadata() == null
+                ? null
+                : textValue(event.getChannel().getMetadata().get("lazadaWarehouseCode"));
 
         boolean processedWarehouseList = false;
         for (String key : List.of("multiWarehouseInventories", "channelInventories", "fblWarehouseInventories",
@@ -459,8 +458,16 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
                 for (Object item : list) {
                     if (item instanceof Map<?, ?> stockMap) {
                         Map<String, Object> stockPayload = WebhookPayloadUtils.copyMap(stockMap);
-                        upsertInventoryItem(event, masterWarehouse, variant,
-                                quantityFrom(stockPayload), reservedFrom(stockPayload));
+                        String warehouseCode = text(stockPayload,
+                                "warehouseCode", "warehouse_code", "warehouseId",
+                                "warehouse_id", "code", "id");
+                        if (managedWarehouseCode != null
+                                && warehouseCode != null
+                                && !managedWarehouseCode.equals(warehouseCode)) {
+                            continue;
+                        }
+                        observeInventory(event, mapping, quantityFrom(stockPayload),
+                                firstNonBlank(warehouseCode, managedWarehouseCode));
                         processedWarehouseList = true;
                     }
                 }
@@ -468,75 +475,27 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         }
 
         if (!processedWarehouseList) {
-            Integer quantity = quantityFrom(payload);
-            if (quantity != null) {
-                upsertInventoryItem(event, masterWarehouse, variant, quantity, reservedFrom(payload));
-            }
+            observeInventory(event, mapping, quantityFrom(payload), managedWarehouseCode);
         }
     }
 
-    private void upsertInventoryItem(WebhookEvent event, Warehouse warehouse, ProductVariant variant, Integer quantity, int reservedQuantity) {
+    private void observeInventory(
+            WebhookEvent event,
+            ChannelProductVariant mapping,
+            Integer quantity,
+            String warehouseCode
+    ) {
         if (quantity == null) {
             return;
         }
-        InventoryItem item = inventoryItemRepository
-                .findByWarehouseIdAndVariantId(warehouse.getId(), variant.getId())
-                .orElseGet(() -> InventoryItem.builder()
-                        .warehouse(warehouse)
-                        .variant(variant)
-                        .lowStockThreshold(variant.getProduct().getLowStockThreshold())
-                        .averageCost(BigDecimal.ZERO)
-                        .build());
-
-        int before = safeInt(item.getQuantityOnHand());
-        int after = Math.max(quantity, 0);
-        item.setQuantityOnHand(after);
-        int reserved = reservedQuantity > 0 ? reservedQuantity : safeInt(item.getReservedQuantity());
-        item.setReservedQuantity(Math.min(Math.max(reserved, 0), after));
-        if (item.getAverageCost() == null) {
-            item.setAverageCost(BigDecimal.ZERO);
-        }
-        inventoryItemRepository.save(item);
-
-        int delta = after - before;
-        if (delta != 0) {
-            inventoryTransactionRepository.save(InventoryTransaction.builder()
-                    .warehouse(warehouse)
-                    .variant(variant)
-                    .type(InvTxnType.ADJUSTMENT)
-                    .referenceType("ADJUSTMENT")
-                    .referenceId(event.getId())
-                    .quantityChange(delta)
-                    .quantityBefore(before)
-                    .quantityAfter(after)
-                    .unitCost(BigDecimal.ZERO)
-                    .note("Lazada inventory webhook")
-                    .performedAt(OffsetDateTime.now())
-                    .build());
-        }
-    }
-
-    private Warehouse resolveLazadaWarehouse(Map<String, Object> payload) {
-        String warehouseCode = firstNonBlank(
-                text(payload, "warehouseCode", "warehouse_code", "warehouseId", "warehouse_id", "code", "id"),
-                "dropshipping"
-        );
-        for (Warehouse warehouse : warehouseRepository.findByDeletedAtIsNull()) {
-            String marker = extractMarkerValue(warehouse.getAddress(), WAREHOUSE_CODE_MARKER);
-            if (warehouseCode.equals(marker) || hasLegacyWarehouseCode(warehouse.getAddress(), warehouseCode)) {
-                return warehouse;
-            }
-        }
-
-        String name = "Lazada Warehouse " + warehouseCode;
-        Warehouse warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(name)
-                .orElseGet(() -> Warehouse.builder()
-                        .name(name)
-                        .isActive(true)
-                        .build());
-        warehouse.setAddress("[" + WAREHOUSE_CODE_MARKER + warehouseCode + "]");
-        warehouse.setIsActive(true);
-        return warehouseRepository.save(warehouse);
+        inventoryReconciliationService.observe(new InventoryObservation(
+                mapping.getId(),
+                PlatformType.LAZADA,
+                Math.max(quantity, 0),
+                observedAt(event),
+                warehouseCode,
+                event.getId()
+        ));
     }
 
     private Integer quantityFrom(Map<String, Object> payload) {
@@ -993,5 +952,31 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private String textValue(Object value) {
+        return value == null || value.toString().isBlank() ? null : value.toString().trim();
+    }
+
+    private OffsetDateTime observedAt(WebhookEvent event) {
+        Object timestamp = firstPresent(eventPayload(event), "timestamp", "updated_at", "updatedAt");
+        if (timestamp instanceof Number number) {
+            long epoch = number.longValue();
+            if (epoch > 10_000_000_000L) {
+                epoch /= 1000;
+            }
+            return OffsetDateTime.ofInstant(
+                    java.time.Instant.ofEpochSecond(epoch),
+                    java.time.ZoneOffset.UTC
+            );
+        }
+        if (timestamp != null) {
+            try {
+                return OffsetDateTime.parse(timestamp.toString());
+            } catch (RuntimeException ignored) {
+                // Fall back to the durable receive time.
+            }
+        }
+        return event.getReceivedAt() == null ? OffsetDateTime.now() : event.getReceivedAt();
     }
 }

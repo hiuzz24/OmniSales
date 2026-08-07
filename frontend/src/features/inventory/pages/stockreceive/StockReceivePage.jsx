@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Save,
   Undo2,
+  AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import stockReceiveService from '../../services/stockReceiveService';
@@ -28,6 +29,7 @@ import {
   formatDate,
   formatNumber,
   formatVND,
+  formatDateTime,
   getResponseData,
   tableCellStyle,
 } from '../components/inventoryDocumentListUtils';
@@ -50,7 +52,7 @@ const columns = [
   { label: 'Giá trị', align: 'right' },
   { label: 'Trạng thái' },
   { label: 'Người tạo' },
-  { label: 'Ngày tạo' },
+  { label: 'Thời gian tạo' },
   { label: '', align: 'right' },
 ];
 
@@ -58,7 +60,7 @@ const RECEIPT_EXPORT_COLUMNS = [
   { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
   { key: 'receiptCode', label: 'Mã', width: 16, defaultChecked: true, getValue: (receipt) => receipt.receiptCode ?? '' },
   { key: 'receiptDate', label: 'Ngày nhập', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.receiptDate ?? receipt.confirmedAt ?? receipt.createdAt) },
-  { key: 'createdAt', label: 'Ngày tạo', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.createdAt) },
+  { key: 'createdAt', label: 'Thời gian tạo', width: 20, defaultChecked: true, getValue: (receipt) => formatExportDateTime(receipt.createdAt) },
   { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (receipt) => getStatusLabel(receipt.status) },
   { key: 'totalCost', label: 'Tổng giá trị', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.totalCost ?? 0 },
   { key: 'paidAmount', label: 'Đã trả', width: 16, type: 'currency', defaultChecked: true, getValue: (receipt) => receipt.paidAmount ?? receipt.totalCost ?? 0 },
@@ -75,7 +77,7 @@ const getReceiptExportDate = (receipt) => receipt.receiptDate ?? receipt.confirm
 const RECEIPT_DETAIL_EXPORT_COLUMNS = [
   { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
   { key: 'receiptCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (row) => row.receiptCode },
-  { key: 'receiptDate', label: 'Ngày nhập', width: 20, defaultChecked: true, getValue: (row) => formatExportDateTime(row.receiptDate) },
+  { key: 'receiptDate', label: 'Thời gian nhập', width: 20, defaultChecked: true, getValue: (row) => formatExportDateTime(row.receiptDate) },
   { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: true, getValue: (row) => row.warehouseName },
   { key: 'supplierName', label: 'Nhà cung cấp', width: 28, defaultChecked: true, getValue: (row) => row.supplierName },
   { key: 'sku', label: 'SKU', width: 18, defaultChecked: true, getValue: (row) => row.sku },
@@ -146,8 +148,26 @@ const ActionMenu = ({ receipt, onComplete, onRefresh, confirm, onPrint }) => {
     if (!ok) return;
 
     try {
-      await onComplete(receipt.id);
+      const response = await onComplete(receipt.id);
       toast.success('Hoàn thành phiếu nhập thành công.');
+      const completedReceipt = getResponseData(response);
+      if (completedReceipt.marketplaceSyncAvailable) {
+        const platforms = (completedReceipt.marketplacePlatforms ?? []).join(', ');
+        const shouldSync = await confirm({
+          title: 'Đồng bộ tồn có thể bán và giá lên sàn?',
+          message: `Tồn kho và giá bán đã được cập nhật. Đồng bộ số lượng có thể bán và giá mới lên ${platforms || 'các sàn đang bán'} ngay bây giờ?`,
+          confirmLabel: 'Đồng bộ ngay',
+          cancelLabel: 'Để sau',
+        });
+        if (shouldSync) {
+          try {
+            await stockReceiveService.syncReceiptMarketplaceInventory(receipt.id);
+            toast.success('Đã đồng bộ tồn có thể bán và giá lên các sàn liên quan.');
+          } catch (syncError) {
+            toast.error(syncError?.response?.data?.message || 'Nhập kho thành công nhưng đồng bộ sàn thất bại.');
+          }
+        }
+      }
       onRefresh();
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || 'Không thể hoàn thành phiếu nhập. Vui lòng thử lại.');
@@ -276,7 +296,7 @@ export default function StockReceivePage() {
       const data = getResponseData(response);
       const count = Number(data.syncedVariantCount ?? 0);
       toast.success(count > 0
-        ? `Đã đồng bộ tồn kho ${formatNumber(count)} SKU từ phiếu nhập lên các sàn liên kết.`
+        ? `Đã đồng bộ tồn có thể bán và giá ${formatNumber(count)} SKU từ phiếu nhập lên các sàn liên kết.`
         : 'Không có SKU phiếu nhập nào cần đồng bộ.');
       await refreshData();
     } catch (error) {
@@ -293,22 +313,36 @@ export default function StockReceivePage() {
     { key: 'cancelled', label: 'Trả hàng', value: statistics.cancelledCount, icon: Undo2, color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
   ];
 
-  const rows = filteredReceipts.map((receipt) => (
-    <tr key={receipt.id ?? receipt.receiptCode}>
-      <td style={{ ...tableCellStyle, color: '#2563eb', fontFamily: 'monospace', fontWeight: 700 }}>{receipt.receiptCode ?? '-'}</td>
-      <td style={tableCellStyle}>{receipt.warehouseName ?? '-'}</td>
-      <td style={{ ...tableCellStyle, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{receipt.supplierName ?? '-'}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(receipt.totalSkuCount ?? 0)}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatNumber(receipt.totalQuantity ?? 0)}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatVND(receipt.totalCost)}</td>
-      <td style={tableCellStyle}><StatusBadge status={receipt.status} /></td>
-      <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
-      <td style={tableCellStyle}>{formatDate(receipt.createdAt)}</td>
-      <td style={{ ...tableCellStyle, textAlign: 'right' }}>
-        <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} onPrint={handlePrintReceipt} />
-      </td>
-    </tr>
-  ));
+  const rows = filteredReceipts.map((receipt) => {
+    const needsSync = receipt.status === 'CONFIRMED' && receipt.marketplaceSyncAvailable === true;
+    const rowStyle = needsSync ? { backgroundColor: '#fffbeb' } : {};
+    return (
+      <tr key={receipt.id ?? receipt.receiptCode} style={rowStyle}>
+        <td style={{ ...tableCellStyle, color: '#2563eb', fontFamily: 'monospace', fontWeight: 700 }}>
+          {receipt.receiptCode ?? '-'}
+          {needsSync && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
+              <AlertTriangle size={11} color="#d97706" />
+              <span style={{ fontSize: 10.5, color: '#d97706', fontWeight: 600, fontFamily: 'inherit' }}>
+                Chưa đồng bộ lên sàn
+              </span>
+            </div>
+          )}
+        </td>
+        <td style={tableCellStyle}>{receipt.warehouseName ?? '-'}</td>
+        <td style={{ ...tableCellStyle, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{receipt.supplierName ?? '-'}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(receipt.totalSkuCount ?? 0)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatNumber(receipt.totalQuantity ?? 0)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatVND(receipt.totalCost)}</td>
+        <td style={tableCellStyle}><StatusBadge status={receipt.status} /></td>
+        <td style={tableCellStyle}>{receipt.createdByName ?? '-'}</td>
+        <td style={tableCellStyle}>{formatDateTime(receipt.createdAt)}</td>
+        <td style={{ ...tableCellStyle, textAlign: 'right' }}>
+          <ActionMenu receipt={receipt} onComplete={stockReceiveService.completeReceipt} onRefresh={refreshData} confirm={confirm} onPrint={handlePrintReceipt} />
+        </td>
+      </tr>
+    );
+  });
 
   const totalPages = Math.max(1, pagination.totalPages);
   const firstVisible = pagination.totalElements === 0 ? 0 : pagination.page * pagination.size + 1;
@@ -331,23 +365,17 @@ export default function StockReceivePage() {
             onClick={handleSyncMarketplaceInventory}
             disabled={syncingMarketplace}
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              height: 40,
-              padding: '0 14px',
-              border: '1px solid #bfdbfe',
-              borderRadius: 12,
+              display: 'inline-flex', alignItems: 'center', gap: 8, height: 40,
+              padding: '0 14px', border: '1px solid #bfdbfe', borderRadius: 12,
               background: syncingMarketplace ? '#eff6ff' : '#2563eb',
               color: syncingMarketplace ? '#1d4ed8' : '#ffffff',
-              fontSize: 13,
-              fontWeight: 700,
+              fontSize: 13, fontWeight: 700,
               cursor: syncingMarketplace ? 'not-allowed' : 'pointer',
               boxShadow: syncingMarketplace ? 'none' : '0 8px 18px rgba(37, 99, 235, 0.22)',
             }}
           >
             <RefreshCw size={15} style={{ animation: syncingMarketplace ? 'spin 1s linear infinite' : undefined }} />
-            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn kho'}
+            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn và giá'}
           </button>
         )}
         stats={stats}

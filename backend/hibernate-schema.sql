@@ -15,7 +15,7 @@ DO $$
             'users','channels','channel_credentials','products',
             'product_variants','channel_products','channel_product_variants',
             'warehouses','inventory_items','daily_sales_summary','report_configs',
-            'customers','suppliers','inventory_receipts',
+            'customers','suppliers','purchase_orders','inventory_receipts',
             'inventory_issues','stock_transfers','stocktake_sessions','orders'
             ]) LOOP
                 EXECUTE format('DROP TRIGGER IF EXISTS trg_%I_updated_at ON %I', tbl, tbl);
@@ -58,6 +58,8 @@ DROP TABLE IF EXISTS inventory_issue_items        CASCADE;
 DROP TABLE IF EXISTS inventory_issues             CASCADE;
 DROP TABLE IF EXISTS inventory_receipt_items      CASCADE;
 DROP TABLE IF EXISTS inventory_receipts           CASCADE;
+DROP TABLE IF EXISTS purchase_order_items         CASCADE;
+DROP TABLE IF EXISTS purchase_orders               CASCADE;
 DROP TABLE IF EXISTS inventory_transactions       CASCADE;
 DROP TABLE IF EXISTS inventory_items              CASCADE;
 DROP TABLE IF EXISTS order_items                  CASCADE;
@@ -214,6 +216,7 @@ CREATE TABLE products (
                           description         TEXT,
                           brand               VARCHAR(255),
                           unit                VARCHAR(50),
+                          has_variants        BOOLEAN        NOT NULL DEFAULT FALSE,
                           status              product_status NOT NULL DEFAULT 'DRAFT',
                           low_stock_threshold INT            NOT NULL DEFAULT 5  CHECK (low_stock_threshold >= 0),
                           weight_grams        INT                                CHECK (weight_grams IS NULL OR weight_grams >= 0),
@@ -463,6 +466,44 @@ CREATE TABLE warehouses (
                             deleted_at TIMESTAMPTZ
 );
 
+-- Purchase orders: Sales creates and sends; Operations receives through one inventory receipt.
+CREATE TABLE purchase_orders (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_code            VARCHAR(100) NOT NULL UNIQUE,
+    supplier_id           UUID NOT NULL REFERENCES suppliers(id),
+    warehouse_id          UUID NOT NULL REFERENCES warehouses(id),
+    status                VARCHAR(30) NOT NULL DEFAULT 'DRAFT'
+        CHECK (status IN ('DRAFT','SENT_TO_SUPPLIER','RECEIVING','INSPECTING','INSPECTED','COMPLETED','CANCELLED')),
+    order_date            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expected_receipt_date DATE NOT NULL,
+    payment_method        VARCHAR(50),
+    total_amount          NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
+    notes                 TEXT,
+    created_by            UUID REFERENCES users(id) ON DELETE SET NULL,
+    sent_at               TIMESTAMPTZ,
+    receiving_at          TIMESTAMPTZ,
+    inspecting_at         TIMESTAMPTZ,
+    inspected_at          TIMESTAMPTZ,
+    completed_at          TIMESTAMPTZ,
+    version               BIGINT NOT NULL DEFAULT 0,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_purchase_orders_status_sent ON purchase_orders(status, sent_at);
+
+CREATE TABLE purchase_order_items (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    purchase_order_id UUID NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    variant_id        UUID NOT NULL REFERENCES product_variants(id),
+    quantity          INT NOT NULL CHECK (quantity > 0),
+    unit_cost         NUMERIC(12,2) NOT NULL CHECK (unit_cost >= 0),
+    total_cost        NUMERIC(14,2) GENERATED ALWAYS AS (quantity * unit_cost) STORED,
+    actual_quantity   INTEGER DEFAULT NULL,
+    surplus_note      TEXT DEFAULT NULL,
+    CONSTRAINT uq_purchase_order_variant UNIQUE (purchase_order_id, variant_id)
+);
+CREATE INDEX idx_purchase_order_items_variant ON purchase_order_items(variant_id);
+
 -- ── Inventory ────────────────────────────────────────────────
 CREATE TABLE inventory_items (
                                  id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -485,7 +526,7 @@ CREATE TABLE inventory_transactions (
                                         warehouse_id    UUID         NOT NULL REFERENCES warehouses(id),
                                         variant_id      UUID         NOT NULL REFERENCES product_variants(id),
                                         type            inv_txn_type NOT NULL,
-                                        reference_type  VARCHAR(15)  CHECK (reference_type IS NULL OR reference_type IN ('ORDER','RECEIPT','ISSUE','ADJUSTMENT', 'TRANSFER')),
+                                        reference_type  VARCHAR(15)  CHECK (reference_type IS NULL OR reference_type IN ('ORDER','RECEIPT','ISSUE','ISSUE_GIFT','ADJUSTMENT', 'TRANSFER')),
                                         reference_id    UUID,
                                         quantity_change INT          NOT NULL CHECK (quantity_change <> 0),
                                         quantity_before INT          NOT NULL,
@@ -502,6 +543,7 @@ CREATE TABLE inventory_receipts (
                                     id             UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
                                     warehouse_id   UUID          NOT NULL REFERENCES warehouses(id),
                                     supplier_id    UUID          REFERENCES suppliers(id) ON DELETE SET NULL,
+                                    purchase_order_id UUID       UNIQUE REFERENCES purchase_orders(id) ON DELETE RESTRICT,
                                     receipt_code   VARCHAR(100)  NOT NULL UNIQUE,
                                     invoice_number VARCHAR(100),
                                     status         VARCHAR(10)   NOT NULL DEFAULT 'DRAFT'
@@ -553,7 +595,8 @@ CREATE TABLE inventory_issue_items (
                                        quantity   INT           NOT NULL CHECK (quantity > 0),
                                        unit_cost  NUMERIC(12,2) NOT NULL CHECK (unit_cost >= 0),
                                        total_cost NUMERIC(14,2) GENERATED ALWAYS AS (quantity * unit_cost) STORED,
-                                       notes      TEXT
+                                       notes      TEXT,
+                                       is_gift    BOOLEAN       NOT NULL DEFAULT false
 );
 
 CREATE TABLE stock_transfers (
@@ -587,6 +630,7 @@ CREATE TABLE stocktake_sessions (
                                         CHECK (status IN ('DRAFT','IN_PROGRESS','COMPLETED','CANCELLED')),
                                     created_by     UUID         REFERENCES users(id) ON DELETE SET NULL,
                                     created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                                    cancelled_at   TIMESTAMPTZ,
                                     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -651,6 +695,69 @@ CREATE TABLE sync_tasks (
                             CONSTRAINT uq_sync_task_per_channel UNIQUE (sync_log_id, channel_id)
 );
 
+-- ── Order Returns & Items ─────────────────────────────────────
+CREATE TABLE order_returns (
+                              id                    UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+                              order_id              UUID          NOT NULL REFERENCES orders(id)             ON DELETE RESTRICT,
+                              channel_id            UUID          NOT NULL REFERENCES channels(id)           ON DELETE RESTRICT,
+                              warehouse_id          UUID                   REFERENCES warehouses(id)         ON DELETE SET NULL,
+                              platform              platform_type NOT NULL,
+                              external_return_id    VARCHAR(200)  NOT NULL,
+                              platform_status       VARCHAR(100),
+                              platform_updated_at   TIMESTAMPTZ,
+                              last_webhook_event_id VARCHAR(200),
+                              status                VARCHAR(40)   NOT NULL DEFAULT 'PENDING_APPROVAL',
+                                  CHECK (status IN ('PENDING_APPROVAL','REJECTED','AWAITING_RETURN','RETURN_IN_TRANSIT','INSPECTED','PLATFORM_PROCESSING','PENDING_STOCK','COMPLETED','FAILED')),
+                              data_validation_state VARCHAR(20)   NOT NULL DEFAULT 'VALID'
+                                  CHECK (data_validation_state IN ('VALID','INVALID')),
+                              last_action           VARCHAR(20)
+                                  CHECK (last_action IS NULL OR last_action IN ('APPROVE','REJECT','PROCESS')),
+                              action_state          VARCHAR(20)   NOT NULL DEFAULT 'IDLE'
+                                  CHECK (action_state IN ('IDLE','PROCESSING','UNKNOWN','FAILED')),
+                              action_request_id     UUID,
+                              action_error          TEXT,
+                              approved_at           TIMESTAMPTZ,
+                              inspected_at          TIMESTAMPTZ,
+                              refund_confirmed_at   TIMESTAMPTZ,
+                              inventory_posted_at   TIMESTAMPTZ,
+                              last_sync_error       TEXT,
+                              metadata              JSONB,
+                              version               BIGINT        NOT NULL DEFAULT 0,
+                              created_at            TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+                              updated_at            TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+                              CONSTRAINT uq_order_return_external UNIQUE (channel_id, external_return_id)
+);
+CREATE INDEX idx_order_returns_order  ON order_returns(order_id);
+CREATE INDEX idx_order_returns_status ON order_returns(status);
+
+CREATE TABLE order_return_items (
+                                   id                       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+                                   return_id                UUID         NOT NULL REFERENCES order_returns(id)    ON DELETE CASCADE,
+                                   order_item_id            UUID                  REFERENCES order_items(id)         ON DELETE SET NULL,
+                                   variant_id               UUID                  REFERENCES product_variants(id)   ON DELETE SET NULL,
+                                   external_order_item_id   VARCHAR(200),
+                                   external_return_item_id  VARCHAR(200),
+                                   external_identity_key    VARCHAR(420) NOT NULL,
+                                   requested_quantity       INT          NOT NULL CHECK (requested_quantity >= 0),
+                                   approved_quantity        INT          NOT NULL CHECK (approved_quantity  >= 0),
+                                   received_quantity        INT                   CHECK (received_quantity IS NULL OR received_quantity >= 0),
+                                   restockable_quantity     INT                   CHECK (restockable_quantity IS NULL OR restockable_quantity >= 0),
+                                   damaged_quantity         INT                   CHECK (damaged_quantity IS NULL OR damaged_quantity >= 0),
+                                   missing_quantity         INT                   CHECK (missing_quantity IS NULL OR missing_quantity >= 0),
+                                   refunded_quantity        INT                   CHECK (refunded_quantity IS NULL OR refunded_quantity >= 0),
+                                   snapshot_sku             VARCHAR(100),
+                                   snapshot_name            VARCHAR(500) NOT NULL,
+                                   snapshot_unit_price      NUMERIC(12,2)         CHECK (snapshot_unit_price IS NULL OR snapshot_unit_price >= 0),
+                                   snapshot_cost_price      NUMERIC(12,2)         CHECK (snapshot_cost_price IS NULL OR snapshot_cost_price >= 0),
+                                   CONSTRAINT uq_return_item_identity UNIQUE (return_id, external_identity_key),
+                                   CONSTRAINT ck_return_item_inspection CHECK (
+                                       (received_quantity IS NULL AND restockable_quantity IS NULL AND damaged_quantity IS NULL AND missing_quantity IS NULL)
+                                       OR (received_quantity = restockable_quantity + damaged_quantity
+                                           AND received_quantity + missing_quantity = approved_quantity)
+                                   )
+);
+CREATE INDEX idx_order_return_items_order_item ON order_return_items(order_item_id);
+
 -- ── Logging & Reporting ──────────────────────────────────────
 CREATE TABLE system_logs (
                              id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -695,11 +802,11 @@ CREATE TABLE system_settings (
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
-                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','STOCK_TRANSFER')),
+                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
-                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY')),
+                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE')),
                                entity_id   UUID,
                                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -781,7 +888,7 @@ DO $$
             'users','channels','channel_credentials','products',
             'product_variants','channel_products','channel_product_variants',
             'warehouses','inventory_items','daily_sales_summary','report_configs',
-            'customers','suppliers','inventory_receipts',
+            'customers','suppliers','purchase_orders','inventory_receipts',
             'inventory_issues','stock_transfers','stocktake_sessions'
             ]) LOOP
                 EXECUTE format(
@@ -1102,11 +1209,17 @@ ON CONFLICT DO NOTHING;
 --  END OF SCRIPT
 -- ============================================================
 
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+
+ALTER TABLE notifications
+    ADD CONSTRAINT notifications_type_check
+        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
+
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_entity_type_check;
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_entity_type_check
-        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','INVENTORY', 'TRANSFER'));
+        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE'));
 
 ALTER TABLE stock_transfers ADD COLUMN note TEXT;
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
@@ -1191,3 +1304,10 @@ INSERT INTO system_settings (key, value, description, category) VALUES
 ON CONFLICT (key) DO NOTHING;
 
 
+ALTER TABLE channels
+    ADD COLUMN last_synced_application_at TIMESTAMPTZ;
+
+-- Optional columns missed in initial schema
+ALTER TABLE order_items       ADD COLUMN IF NOT EXISTS external_item_id        VARCHAR(200);
+ALTER TABLE inventory_issues  ADD COLUMN IF NOT EXISTS document_reference_id   VARCHAR(255);
+ALTER TABLE suppliers         ADD COLUMN IF NOT EXISTS tax_code                VARCHAR(50);

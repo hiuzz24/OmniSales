@@ -1,108 +1,105 @@
 .page {
-  --catalog-accent: #2563eb;
-  --catalog-accent-strong: #1d4ed8;
+  --editor-bg: #f6f7f9;
+  --editor-surface: #ffffff;
+  --editor-subtle: #f8fafc;
+  --editor-text: #111827;
+  --editor-muted: #64748b;
+  --editor-border: #dfe4ea;
+  --editor-primary: #2563eb;
+  --editor-primary-hover: #1d4ed8;
+  --editor-focus: rgba(37, 99, 235, 0.16);
+  --catalog-accent: var(--editor-primary);
+  --catalog-accent-strong: var(--editor-primary-hover);
   --catalog-accent-soft: #eff6ff;
-  --catalog-ink: #09090b;
-  --catalog-muted: #64748b;
-  --catalog-line: #e2e8f0;
-  --catalog-line-soft: #f1f5f9;
-  --catalog-card: #ffffff;
-  --catalog-surface: #fafaf9;
-  --catalog-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
-
-  width: 100%;
+  --catalog-ink: var(--editor-text);
+  --catalog-muted: var(--editor-muted);
+  --catalog-line: var(--editor-border);
+  --catalog-line-soft: #edf0f3;
+  --catalog-card: var(--editor-surface);
+  --catalog-shadow: 0 5px 16px rgba(37, 99, 235, 0.06), 0 1px 3px rgba(15, 23, 42, 0.06);
+  width: calc(100% + 48px);
+  max-width: none;
+  min-height: calc(100dvh - 64px);
+  margin: -24px;
+  padding: 24px;
   box-sizing: border-box;
-  background:
-    radial-gradient(ellipse at top, rgba(241, 245, 249, 0.6) 0%, transparent 60%),
-    var(--catalog-surface);
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  color: var(--catalog-ink);
-  animation: pageFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--editor-text);
+  background: linear-gradient(180deg, #f1f6fb 0%, #f6f7f9 310px);
+  font-family: inherit;
 }
 
 .mainContent {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
+  min-width: 0;
 }
 
 .tabsSection {
-  background: var(--catalog-card);
-  border: 1px solid var(--catalog-line);
-  border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.03);
-  transition: box-shadow 0.3s ease;
-}
-
-.tabsSection:hover {
-  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #d8e1eb;
+  border-radius: 8px;
+  background: var(--editor-surface);
+  box-shadow: var(--catalog-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .tabContent {
+  min-width: 0;
   padding: 28px;
-  background: #ffffff;
-  animation: tabFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(12px) scale(0.99); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  border-top: 1px solid #e4eaf0;
+  background: #fbfcfd;
+  animation: tabFadeIn 0.2s ease-out;
 }
 
 @keyframes tabFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .loadingContainer {
+  width: calc(100% + 48px);
+  min-height: calc(100dvh - 64px);
+  margin: -24px;
+  padding: 24px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100dvh;
-  gap: 20px;
-  color: #64748b;
-  background:
-    radial-gradient(ellipse at top, rgba(241, 245, 249, 0.6), transparent),
-    #fafaf9;
+  gap: 14px;
+  color: var(--editor-muted, #64748b);
+  background: linear-gradient(180deg, #f1f6fb 0%, #f6f7f9 310px);
   text-align: center;
+}
+
+.loadingContainer p {
+  margin: 0;
+  font-size: 14px;
 }
 
 .spinner {
-  width: 44px;
-  height: 44px;
-  color: var(--catalog-accent);
+  width: 32px;
+  height: 32px;
+  color: var(--editor-primary, #2563eb);
 }
 
 .spin {
-  animation: spin 1.2s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+  animation: spin 0.9s linear infinite;
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
-.emptyTab {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 60px;
-  text-align: center;
-  color: var(--catalog-muted);
-  border: 2px dashed #cbd5e1;
-  transition: all 0.3s ease;
-}
-
-.emptyTab:hover {
-  border-color: #94a3b8;
-  background: #f8fafc;
-}
-
 @media (max-width: 768px) {
-  .page { padding: 24px 16px 48px; }
-  .tabContent { padding: 20px 16px; }
+  .tabsSection {
+    box-shadow: 0 3px 10px rgba(37, 99, 235, 0.05), 0 1px 2px rgba(15, 23, 42, 0.05);
+  }
+
+  .tabContent {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tabContent {
+    padding: 12px;
+  }
 }

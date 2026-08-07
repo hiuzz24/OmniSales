@@ -24,10 +24,10 @@ const TabImages = ({ product }) => {
       {images.length === 0 && variantImages.length === 0 ? (
         <div className={styles.emptyState}>Sản phẩm chưa có hình ảnh</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className={styles.gallerySections}>
           {images.length > 0 && (
-            <div>
-              <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Ảnh chung sản phẩm</h4>
+            <section className={styles.gallerySection}>
+              <h4 className={styles.galleryTitle}>Ảnh chung sản phẩm</h4>
               <div className={styles.imageGrid}>
                 {images.map((img, index) => (
                   <div key={img.id || `main-${index}`} className={styles.imageWrapper}>
@@ -38,33 +38,23 @@ const TabImages = ({ product }) => {
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
           {variantImages.length > 0 && (
-            <div>
-              <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#374151', marginBottom: '12px' }}>Ảnh theo biến thể</h4>
+            <section className={styles.gallerySection}>
+              <h4 className={styles.galleryTitle}>Ảnh theo biến thể</h4>
               <div className={styles.imageGrid}>
                 {variantImages.map((vImg, index) => (
                   <div key={vImg.id || `var-${index}`} className={styles.imageWrapper}>
                     <img src={vImg.url} alt={vImg.variantName} className={styles.image} />
-                    <span style={{
-                      position: 'absolute',
-                      bottom: '8px',
-                      left: '8px',
-                      backgroundColor: 'rgba(0,0,0,0.6)',
-                      color: 'white',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      pointerEvents: 'none'
-                    }}>
+                    <span className={styles.variantBadge}>
                       {vImg.variantName}
                     </span>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
         </div>
       )}

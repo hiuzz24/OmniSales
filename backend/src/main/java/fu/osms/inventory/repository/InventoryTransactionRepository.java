@@ -60,6 +60,12 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
     List<InventoryTransaction> findByReferenceTypeAndReferenceId(
             String referenceType, UUID referenceId);
 
+    List<InventoryTransaction> findByReferenceTypeAndReferenceIdAndType(
+            String referenceType, UUID referenceId, InvTxnType type);
+
+    boolean existsByReferenceTypeAndReferenceIdAndType(
+            String referenceType, UUID referenceId, InvTxnType type);
+
     @Query("SELECT t FROM InventoryTransaction t " +
             "JOIN FETCH t.warehouse " +
             "JOIN FETCH t.variant v " +

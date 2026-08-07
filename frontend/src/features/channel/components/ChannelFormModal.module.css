@@ -1,13 +1,14 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(4px);
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(3px);
+  animation: fadeIn 0.16s ease;
 }
 
 @keyframes fadeIn {
@@ -16,137 +17,177 @@
 }
 
 .modal {
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
-  width: 100%;
-  max-width: 520px;
-  max-height: 90vh;
+  width: min(100%, 560px);
+  max-height: 90dvh;
   overflow-y: auto;
-  animation: slideUp 0.25s ease;
-}
-
-@keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  border: 1px solid #dce4ec;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
+  box-shadow: 0 22px 54px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(51, 78, 111, 0.06);
+  scrollbar-width: thin;
+  scrollbar-color: #c9d4df transparent;
 }
 
 .modalHeader {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e1e8ef;
+  background: linear-gradient(135deg, #edf6fc 0%, #f8fafc 62%, #f2f8f5 100%);
 }
 
 .headerLeft {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
 .platformDot {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.9);
   border-radius: 50%;
-  display: inline-block;
-  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(100, 116, 139, 0.18);
 }
 
 .modalTitle {
-  font-size: 18px;
-  font-weight: 700;
-  color: #111827;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
+  color: #172033;
+  font-size: 18px;
+  font-weight: 720;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .closeBtn {
-  background: none;
-  border: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid #d9e2eb;
+  border-radius: 10px;
+  color: #718096;
+  background: rgba(255, 255, 255, 0.8);
   cursor: pointer;
-  color: #9ca3af;
-  display: flex;
-  align-items: center;
-  padding: 4px;
-  border-radius: 6px;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.17s ease, border-color 0.17s ease, background-color 0.17s ease;
 }
 
 .closeBtn:hover {
-  color: #374151;
-  background: #f3f4f6;
+  border-color: #c8d5e1;
+  color: #334155;
+  background: #ffffff;
+}
+
+.closeBtn:focus-visible,
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible,
+.cancelBtn:focus-visible,
+.submitBtn:focus-visible,
+.shopifyConnectBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(63, 115, 189, 0.14);
 }
 
 .form {
-  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 17px;
+  padding: 22px 20px 20px;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .label {
+  color: #344256;
   font-size: 13px;
-  font-weight: 600;
-  color: #374151;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .required {
-  color: #ef4444;
+  color: #b65454;
 }
 
 .labelHint {
+  color: #8491a0;
   font-weight: 400;
-  color: #9ca3af;
 }
 
 .input,
 .select,
 .textarea {
   width: 100%;
-  padding: 10px 14px;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 14px;
-  color: #111827;
-  background: #ffffff;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  outline: none;
   box-sizing: border-box;
+  border: 1px solid #d2dce6;
+  border-radius: 10px;
+  color: #172033;
+  background: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.17s ease, box-shadow 0.17s ease, background-color 0.17s ease;
+}
+
+.input,
+.select {
+  min-height: 42px;
+  padding: 9px 12px;
+}
+
+.textarea {
+  min-height: 84px;
+  padding: 10px 12px;
+  resize: vertical;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.input:hover:not(:disabled),
+.select:hover:not(:disabled),
+.textarea:hover:not(:disabled) {
+  border-color: #bdcad7;
 }
 
 .input:focus,
 .select:focus,
 .textarea:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: #7fa2c7;
+  box-shadow: 0 0 0 3px rgba(63, 115, 189, 0.11);
 }
 
 .input:disabled,
-.select:disabled {
-  background: #f9fafb;
-  color: #9ca3af;
+.select:disabled,
+.textarea:disabled {
+  color: #8793a2;
+  background: #f3f6f8;
   cursor: not-allowed;
 }
 
 .inputError {
-  border-color: #ef4444 !important;
+  border-color: #c97575 !important;
 }
 
 .inputError:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
-}
-
-.textarea {
-  resize: vertical;
-  min-height: 80px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 12px;
+  box-shadow: 0 0 0 3px rgba(185, 78, 78, 0.1) !important;
 }
 
 .inputGroup {
@@ -156,110 +197,117 @@
 }
 
 .inputGroup .input {
-  padding-right: 40px;
+  padding-right: 42px;
 }
 
 .inputSuffix {
   position: absolute;
-  right: 14px;
-  color: #9ca3af;
-  font-size: 14px;
+  right: 13px;
+  color: #8491a0;
+  font-size: 13px;
   pointer-events: none;
 }
 
 .errorMsg {
+  margin-top: 1px;
+  color: #b34f4f;
   font-size: 12px;
-  color: #ef4444;
-  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.fieldHint {
+  margin-top: 1px;
+  color: #7b8795;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fieldHint code {
+  padding: 1px 5px;
+  border: 1px solid #e1e7ed;
+  border-radius: 4px;
+  color: #475569;
+  background: #f5f7f9;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11px;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 9px;
   padding-top: 4px;
 }
 
-.cancelBtn {
-  padding: 10px 20px;
-  background: #f3f4f6;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
+.cancelBtn,
+.submitBtn,
+.shopifyConnectBtn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: color 0.17s ease, border-color 0.17s ease, background-color 0.17s ease, box-shadow 0.17s ease;
+}
+
+.cancelBtn {
+  border-color: #d9e2ea;
+  color: #475569;
+  background: #f7f9fb;
 }
 
 .cancelBtn:hover:not(:disabled) {
-  background: #e5e7eb;
+  background: #eff3f6;
 }
 
 .submitBtn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 22px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  border-color: #4d7fc7;
   color: #ffffff;
-  cursor: pointer;
-  transition: opacity 0.15s, transform 0.15s;
+  background: #3f73bd;
+  box-shadow: 0 2px 7px rgba(37, 99, 235, 0.13);
 }
 
 .submitBtn:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  border-color: #3569b2;
+  background: #3569b2;
 }
 
 .submitBtn:disabled,
-.cancelBtn:disabled {
-  opacity: 0.6;
+.cancelBtn:disabled,
+.shopifyConnectBtn:disabled {
+  opacity: 0.58;
   cursor: not-allowed;
 }
 
 .spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: #fff;
+  display: inline-block;
+  border: 2px solid rgba(255, 255, 255, 0.42);
+  border-top-color: #ffffff;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
-  display: inline-block;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* ── Shopify OAuth styles ───────────────────────────────────────────────── */
-.fieldHint {
-  font-size: 12px;
-  color: #9ca3af;
-  margin-top: 2px;
-}
-
-.fieldHint code {
-  background: #f3f4f6;
-  padding: 1px 4px;
-  border-radius: 4px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
-  font-size: 11px;
-  color: #374151;
-}
-
 .shopifyOAuthBox {
-  background: linear-gradient(135deg, #f0f7e6, #f8fbf1);
-  border: 1.5px solid #c6e09b;
-  border-radius: 12px;
-  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 13px;
+  padding: 15px 16px;
+  border: 1px solid #d8e2eb;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #eff8f2 0%, #f8fbfa 72%);
 }
 
 .shopifyOAuthInfo {
@@ -269,53 +317,63 @@
 }
 
 .shopifyOAuthInfo p {
-  font-size: 13px;
-  color: #4b5563;
   margin: 0;
+  color: #556274;
+  font-size: 13px;
   line-height: 1.5;
 }
 
 .shopifyBadge {
+  width: fit-content;
   display: inline-flex;
   align-items: center;
-  background: #96bf48;
-  color: #fff;
+  padding: 3px 8px;
+  border: 1px solid #c7dab6;
+  border-radius: 8px;
+  color: #537532;
+  background: #f1f7eb;
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 20px;
-  letter-spacing: 0.5px;
-  width: fit-content;
 }
 
 .shopifyConnectBtn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 22px;
-  background: linear-gradient(135deg, #96bf48, #7aa836);
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  border-color: #789c55;
   color: #ffffff;
-  cursor: pointer;
-  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
-  box-shadow: 0 2px 8px rgba(150, 191, 72, 0.35);
+  background: #6f944c;
+  box-shadow: 0 2px 7px rgba(94, 142, 62, 0.13);
 }
 
 .shopifyConnectBtn:hover:not(:disabled) {
-  opacity: 0.92;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(150, 191, 72, 0.45);
-}
-
-.shopifyConnectBtn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
+  border-color: #628442;
+  background: #628442;
 }
 
 .spinIcon {
   animation: spin 0.8s linear infinite;
+}
+
+@media (max-width: 600px) {
+  .overlay {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .modal {
+    max-height: calc(100dvh - 24px);
+  }
+
+  .modalHeader,
+  .form {
+    padding-inline: 16px;
+  }
+
+  .actions {
+    flex-direction: column-reverse;
+  }
+
+  .cancelBtn,
+  .submitBtn,
+  .shopifyConnectBtn {
+    width: 100%;
+  }
 }

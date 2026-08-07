@@ -13,6 +13,12 @@ test.describe('Product Log API Tests', () => {
     categoryId = await getFirstCategoryId(request, managerHeaders.Authorization.replace('Bearer ', ''));
   });
 
+  test.afterEach(async ({ request }) => {
+    const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
+
   // GET /api/product-logs
   test('PL-1 - GET /api/product-logs - List all logs returns 200', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/product-logs?page=0&size=10`, {

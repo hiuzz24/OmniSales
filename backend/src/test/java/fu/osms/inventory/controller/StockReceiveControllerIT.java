@@ -9,6 +9,7 @@ import fu.osms.common.dto.PageResponse;
 import fu.osms.config.ApiUsageFilter;
 import fu.osms.inventory.dto.request.StockReceiveRequest;
 import fu.osms.inventory.dto.response.StockReceiveResponse;
+import fu.osms.inventory.service.StockReceiveExtraItemImportService;
 import fu.osms.inventory.service.StockReceiveService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +51,7 @@ class StockReceiveControllerIT {
 
     @Autowired MockMvc mvc;
     @MockBean StockReceiveService stockReceiveService;
+    @MockBean StockReceiveExtraItemImportService stockReceiveExtraItemImportService;
     @MockBean JwtService jwtService;
     @MockBean UserRepository userRepository;
     @MockBean UserService userService;

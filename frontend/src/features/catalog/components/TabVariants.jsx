@@ -1,4 +1,4 @@
-import { Edit2 } from 'lucide-react';
+import { Boxes } from 'lucide-react';
 import styles from './TabVariants.module.css';
 
 const TabVariants = ({ product }) => {
@@ -7,8 +7,11 @@ const TabVariants = ({ product }) => {
   return (
     <div className={styles.card}>
       <div className={styles.cardHeader}>
-        <h3 className={styles.cardTitle}>Danh sách biến thể</h3>
-        <p className={styles.cardSubtitle}>Quản lý các phiên bản khác nhau của sản phẩm</p>
+        <span className={styles.titleIcon}><Boxes aria-hidden="true" /></span>
+        <div>
+          <h3 className={styles.cardTitle}>Danh sách biến thể</h3>
+          <p className={styles.cardSubtitle}>Quản lý các phiên bản khác nhau của sản phẩm</p>
+        </div>
       </div>
 
       {variants.length === 0 ? (

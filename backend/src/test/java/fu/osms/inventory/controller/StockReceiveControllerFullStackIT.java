@@ -28,7 +28,7 @@ class StockReceiveControllerFullStackIT extends BaseFullStackIT {
 
     @Autowired TestDataFactory factory;
 
-    /** Insert a warehouse + supplier + variant + product + category directly. */
+    /** Insert a warehouse + supplier + variant + product + category + purchase order directly. */
     private Map<String, Object> seedWarehouseSupplierVariant() {
         // Warehouse
         UUID warehouseId = jdbc.queryForObject(
@@ -38,10 +38,12 @@ class StockReceiveControllerFullStackIT extends BaseFullStackIT {
                 "Addr");
         // Supplier
         UUID supplierId = jdbc.queryForObject(
-                "INSERT INTO suppliers (id, supplier_code, name, email, phone, is_active) VALUES (gen_random_uuid(), ?, ?, ?, ?, true) RETURNING id",
+                "INSERT INTO suppliers (id, supplier_code, name, tax_code, email, phone, is_active) " +
+                        "VALUES (gen_random_uuid(), ?, ?, ?, ?, ?, true) RETURNING id",
                 UUID.class,
                 "SUP-IT-" + TestDataFactory.uniqueSuffix(),
                 "Supplier IT " + TestDataFactory.uniqueSuffix(),
+                "MST-IT-" + TestDataFactory.uniqueSuffix(),
                 TestDataFactory.uniqueEmail("sup"),
                 TestDataFactory.uniquePhone());
         // Category
@@ -66,17 +68,32 @@ class StockReceiveControllerFullStackIT extends BaseFullStackIT {
                 productId,
                 "VAR-IT-" + TestDataFactory.uniqueSuffix(),
                 "Variant IT " + TestDataFactory.uniqueSuffix());
+        // Purchase order (required as purchase_order_id when creating a receipt)
+        UUID createdBy = jdbc.queryForObject(
+                "SELECT id FROM users WHERE email='manager@osms.vn'", UUID.class);
+        UUID purchaseOrderId = jdbc.queryForObject(
+                "INSERT INTO purchase_orders (id, order_code, supplier_id, warehouse_id, status, payment_method, " +
+                        "order_date, expected_receipt_date, inspecting_at, inspected_at, created_by, created_at, updated_at) " +
+                        "VALUES (gen_random_uuid(), ?, ?, ?, 'INSPECTED', 'CASH', " +
+                        "CURRENT_DATE, CURRENT_DATE + INTERVAL '7 days', NOW(), NOW(), ?, NOW(), NOW()) RETURNING id",
+                UUID.class,
+                "PO-IT-" + TestDataFactory.uniqueSuffix(),
+                supplierId,
+                warehouseId,
+                createdBy);
 
         return Map.of(
                 "warehouseId", warehouseId,
                 "supplierId", supplierId,
-                "variantId", variantId);
+                "variantId", variantId,
+                "purchaseOrderId", purchaseOrderId);
     }
 
-    private Map<String, Object> receiptRequest(UUID warehouseId, UUID supplierId, UUID variantId) {
+    private Map<String, Object> receiptRequest(UUID warehouseId, UUID supplierId, UUID variantId, UUID purchaseOrderId) {
         java.util.Map<String, Object> m = new java.util.HashMap<>();
         m.put("warehouseId", warehouseId);
         m.put("supplierId", supplierId);
+        m.put("purchaseOrderId", purchaseOrderId);
         m.put("receivedAt",  java.time.LocalDate.now().toString());
         m.put("note", "Receipt created by IT");
         m.put("currency", "VND");
@@ -117,7 +134,7 @@ class StockReceiveControllerFullStackIT extends BaseFullStackIT {
         Map<String, Object> ids = seedWarehouseSupplierVariant();
         ResponseEntity<JsonNode> resp = postForJson("/api/receipts", ownerToken,
                 receiptRequest((UUID) ids.get("warehouseId"), (UUID) ids.get("supplierId"),
-                        (UUID) ids.get("variantId")));
+                        (UUID) ids.get("variantId"), (UUID) ids.get("purchaseOrderId")));
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(readData(resp).get("id").asText()).isNotBlank();
     }
@@ -128,7 +145,7 @@ class StockReceiveControllerFullStackIT extends BaseFullStackIT {
         Map<String, Object> ids = seedWarehouseSupplierVariant();
         ResponseEntity<JsonNode> created = postForJson("/api/receipts", ownerToken,
                 receiptRequest((UUID) ids.get("warehouseId"), (UUID) ids.get("supplierId"),
-                        (UUID) ids.get("variantId")));
+                        (UUID) ids.get("variantId"), (UUID) ids.get("purchaseOrderId")));
         String id = readData(created).get("id").asText();
 
         ResponseEntity<JsonNode> resp = getForJson("/api/receipts/" + id, ownerToken);
@@ -141,7 +158,7 @@ class StockReceiveControllerFullStackIT extends BaseFullStackIT {
         Map<String, Object> ids = seedWarehouseSupplierVariant();
         ResponseEntity<JsonNode> created = postForJson("/api/receipts", ownerToken,
                 receiptRequest((UUID) ids.get("warehouseId"), (UUID) ids.get("supplierId"),
-                        (UUID) ids.get("variantId")));
+                        (UUID) ids.get("variantId"), (UUID) ids.get("purchaseOrderId")));
         String id = readData(created).get("id").asText();
 
         ResponseEntity<JsonNode> resp = patchForJson("/api/receipts/" + id + "/complete", ownerToken, null);
@@ -154,7 +171,7 @@ class StockReceiveControllerFullStackIT extends BaseFullStackIT {
         Map<String, Object> ids = seedWarehouseSupplierVariant();
         ResponseEntity<JsonNode> resp = postForJson("/api/receipts", null,
                 receiptRequest((UUID) ids.get("warehouseId"), (UUID) ids.get("supplierId"),
-                        (UUID) ids.get("variantId")));
+                        (UUID) ids.get("variantId"), (UUID) ids.get("purchaseOrderId")));
         assertThat(resp.getStatusCode().is4xxClientError()).isTrue();
     }
 }

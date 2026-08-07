@@ -14,6 +14,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -24,22 +26,65 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
 
     @Override
     public Map<String, Object> getOrderDetail(Channel channel, String orderId) {
+        return getOrderDetails(channel, List.of(orderId)).get(0);
+    }
+
+    @Override
+    public List<Map<String, Object>> getOrderDetails(Channel channel, List<String> orderIds) {
+        if (orderIds == null || orderIds.isEmpty() || orderIds.size() > 50) {
+            throw new IllegalArgumentException("TikTok order detail accepts between 1 and 50 order IDs");
+        }
         String shopCipher = shopCipher(channel);
         String response = tikTokApiClient.executeGet(channel.getId(),
                 "/order/202309/orders",
-                Map.of("ids", orderId, "shop_cipher", shopCipher)
+                Map.of("ids", String.join(",", orderIds), "shop_cipher", shopCipher)
         );
         Map<String, Object> root = parseSuccess(response, "TikTok order detail");
         Object rawOrders = WebhookPayloadUtils.copyMap(root.get("data")).get("orders");
         if (!(rawOrders instanceof List<?> orders) || orders.isEmpty()) {
-            throw new IllegalStateException("TikTok order detail API returned no order for " + orderId);
+            throw new IllegalStateException("TikTok order detail API returned no orders");
         }
-        return orders.stream()
+        List<Map<String, Object>> mapped = orders.stream()
                 .filter(Map.class::isInstance)
                 .map(WebhookPayloadUtils::copyMap)
-                .filter(order -> orderId.equals(text(WebhookPayloadUtils.firstPresent(order, "id", "order_id"))))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("TikTok order detail response does not contain order " + orderId));
+                .toList();
+        Set<String> requested = new LinkedHashSet<>(orderIds);
+        for (Map<String, Object> order : mapped) {
+            String id = text(WebhookPayloadUtils.firstPresent(order, "id", "order_id"));
+            if (!requested.contains(id)) throw new IllegalStateException("TikTok returned an unexpected order " + id);
+        }
+        Set<String> returned = new LinkedHashSet<>();
+        mapped.forEach(order -> returned.add(text(WebhookPayloadUtils.firstPresent(order, "id", "order_id"))));
+        requested.removeAll(returned);
+        if (!requested.isEmpty()) throw new IllegalStateException("TikTok order detail is missing IDs: " + requested);
+        Map<String, Map<String, Object>> byId = mapped.stream().collect(java.util.stream.Collectors.toMap(
+                order -> text(WebhookPayloadUtils.firstPresent(order, "id", "order_id")), order -> order));
+        return orderIds.stream().map(byId::get).toList();
+    }
+
+    @Override
+    public OrderSearchPage searchOrders(Channel channel, OffsetDateTime from, OffsetDateTime to, String pageToken) {
+        Map<String, String> query = new LinkedHashMap<>();
+        query.put("shop_cipher", shopCipher(channel));
+        query.put("page_size", "100");
+        if (pageToken != null && !pageToken.isBlank()) query.put("page_token", pageToken);
+        String body;
+        try {
+            body = objectMapper.writeValueAsString(Map.of(
+                    "create_time_ge", from.toEpochSecond(),
+                    "create_time_lt", to.toEpochSecond()));
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot serialize TikTok order search request", e);
+        }
+        String response = tikTokApiClient.executePost(channel.getId(), "/order/202309/orders/search", query, body);
+        Map<String, Object> root = parseSuccess(response, "TikTok search orders");
+        Map<String, Object> data = WebhookPayloadUtils.copyMap(root.get("data"));
+        Object rawOrders = data.get("orders");
+        List<String> ids = rawOrders instanceof List<?> orders ? orders.stream().filter(Map.class::isInstance)
+                .map(WebhookPayloadUtils::copyMap)
+                .map(order -> text(WebhookPayloadUtils.firstPresent(order, "id", "order_id")))
+                .filter(value -> value != null && !value.isBlank()).toList() : List.of();
+        return new OrderSearchPage(ids, text(data.get("next_page_token")));
     }
 
     @Override

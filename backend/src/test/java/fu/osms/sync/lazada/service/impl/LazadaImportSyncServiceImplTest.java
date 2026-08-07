@@ -1,12 +1,20 @@
 package fu.osms.sync.lazada.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import fu.osms.catalog.entity.Category;
+import fu.osms.catalog.entity.Product;
+import fu.osms.catalog.entity.ProductImage;
+import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.catalog.repository.CategoryRepository;
+import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
+import fu.osms.channel.entity.ChannelProduct;
+import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
@@ -21,19 +29,25 @@ import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
+import fu.osms.sync.service.PlatformCatalogOwnershipPolicy;
 import fu.osms.sync.service.SyncAlertService;
 import fu.osms.sync.service.impl.ChannelProductAggregationService;
+import fu.osms.sync.service.impl.SyncJobProgressTracker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,6 +57,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,6 +70,7 @@ class LazadaImportSyncServiceImplTest {
     @Mock private ChannelCredentialRepository credentialRepository;
     @Mock private ProductRepository productRepository;
     @Mock private ProductVariantRepository productVariantRepository;
+    @Mock private ProductImageRepository productImageRepository;
     @Mock private CategoryRepository categoryRepository;
     @Mock private ChannelProductRepository channelProductRepository;
     @Mock private ChannelProductVariantRepository channelProductVariantRepository;
@@ -65,7 +81,9 @@ class LazadaImportSyncServiceImplTest {
     @Mock private SyncAlertService syncAlertService;
     @Mock private MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     @Mock private MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    @Mock private PlatformCatalogOwnershipPolicy platformCatalogOwnershipPolicy;
     @Mock private ChannelProductAggregationService channelProductAggregationService;
+    @Mock private SyncJobProgressTracker syncJobProgressTracker;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private LazadaImportSyncServiceImpl service;
@@ -84,6 +102,7 @@ class LazadaImportSyncServiceImplTest {
                 credentialRepository,
                 productRepository,
                 productVariantRepository,
+                productImageRepository,
                 categoryRepository,
                 channelProductRepository,
                 channelProductVariantRepository,
@@ -94,7 +113,9 @@ class LazadaImportSyncServiceImplTest {
                 syncAlertService,
                 marketplaceInventoryPropagationService,
                 marketplaceWarehouseConsistencyService,
-                channelProductAggregationService
+                platformCatalogOwnershipPolicy,
+                channelProductAggregationService,
+                syncJobProgressTracker
         );
 
         channelId = UUID.randomUUID();
@@ -162,6 +183,7 @@ class LazadaImportSyncServiceImplTest {
     @Test
     @DisplayName("syncProductsAndWarehouses — happy path persists SyncLog with status SYNCED")
     void syncProductsAndWarehouses_happy() {
+        channel.setLastSyncedAt(OffsetDateTime.now().minusDays(1));
         lenient().when(channelRepository.findById(channelId)).thenReturn(Optional.of(channel));
         lenient().when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
                 .thenReturn(Optional.of(credential));
@@ -197,6 +219,17 @@ class LazadaImportSyncServiceImplTest {
 
         assertThat(savedLog.get().getStatus()).isEqualTo(fu.osms.common.enums.SyncStatus.SYNCED);
         assertThat(response.getStatus()).isEqualTo("SYNCED");
+        ArgumentCaptor<Map<String, String>> productParams = ArgumentCaptor.forClass(Map.class);
+        verify(lazadaApiClient, times(2)).executeGet(eq(channelId), eq("/products/get"), productParams.capture());
+        // First call: no "filter" - asks Lazada for normal/active products
+        assertThat(productParams.getAllValues().get(0))
+                .doesNotContainKey("filter")
+                .containsKeys("create_after", "update_after");
+        // Second call: filter=inactive to fetch Lazada-inactive products
+        assertThat(productParams.getAllValues().get(1))
+                .containsEntry("filter", "inactive")
+                .containsKeys("create_after", "update_after");
+        verify(marketplaceInventoryPropagationService).schedulePushAvailableStock(any(), eq(channelId));
         verify(syncAlertService, never()).notifySyncFailure(any(SyncLog.class));
     }
 }

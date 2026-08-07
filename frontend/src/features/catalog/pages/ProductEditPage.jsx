@@ -15,7 +15,7 @@ import ProductVariantForm from '../components/ProductVariantForm';
 import ProductShippingInfo from '../components/ProductShippingInfo';
 import ProductChannelSidebar from '../components/ProductChannelSidebar';
 import PlatformConfigSection from '../components/PlatformConfigSection';
-import { buildProductRequest, defaultProductFormValues, productEditorSchema } from '../models/Product';
+import { buildProductRequest, defaultProductFormValues, normalizeVariantForEditor, productEditorSchema, seedVariantFromProduct } from '../models/Product';
 import styles from './ProductCreatePage.module.css';
 
 const unwrap = (response) => response?.data?.data || response?.data || response;
@@ -30,6 +30,7 @@ const toChannelConfig = (sync) => ({
   categoryVersion: sync.platformConfig?.categoryVersion || (sync.platform === 'TIKTOK' ? 'v2' : null),
   brandId: sync.platformConfig?.brandId || '',
   brandName: sync.platformConfig?.brandName || '',
+  listingTitle: sync.platformConfig?.listingTitle || '',
   sizeChartImageUrl: sync.platformConfig?.sizeChartImageUrl || '',
   attributes: sync.platformConfig?.attributes || {},
   variantAttributeValueMappings: sync.platformConfig?.variantAttributeValueMappings || {},
@@ -46,7 +47,7 @@ const ProductEditPage = () => {
     reValidateMode: 'onChange',
     defaultValues: defaultProductFormValues,
   });
-  const { control, reset, setError, setValue, formState: { errors } } = methods;
+  const { control, getValues, reset, setError, setValue, formState: { errors } } = methods;
   const [channels, setChannels] = useState([]);
   const [categories, setCategories] = useState([]);
   const [existingAttributes, setExistingAttributes] = useState({});
@@ -65,8 +66,11 @@ const ProductEditPage = () => {
         if (Array.isArray(categoryData)) setCategories(categoryData);
         if (Array.isArray(channelData)) setChannels(channelData);
 
-        const firstVariant = product.variants?.[0] || {};
-        const isDefaultVariant = product.variants?.length === 1 && !Object.keys(firstVariant.optionValues || {}).length;
+        const normalizedVariants = (product.variants || []).map(normalizeVariantForEditor);
+        const firstVariant = normalizedVariants[0] || {};
+        const legacyDefaultVariant = normalizedVariants.length === 1
+          && normalizedVariants[0]?.sku === product.sku
+          && !(normalizedVariants[0]?.images || []).length;
         const selected = (channelData || [])
           .filter((channel, index) =>
             product.channelIds?.includes(channelId(channel, index))
@@ -91,7 +95,7 @@ const ProductEditPage = () => {
           brand: product.brand || '',
           unit: product.unit || '',
           status: product.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT',
-          hasVariants: !isDefaultVariant,
+          hasVariants: product.hasVariants ?? !legacyDefaultVariant,
           price: firstVariant.price ?? '0',
           costPrice: firstVariant.costPrice ?? '0',
           packageWeightKg: product.weightGrams ? String(product.weightGrams / 1000) : '',
@@ -100,7 +104,7 @@ const ProductEditPage = () => {
           packageLengthCm: product.attributes?.packageLengthCm || '',
           lowStockThreshold: product.lowStockThreshold ?? '5',
           images: product.images || [],
-          variants: product.variants || [],
+          variants: normalizedVariants,
           channelIds: selected,
           channelConfigs: configs,
         });
@@ -138,6 +142,16 @@ const ProductEditPage = () => {
 
   const selectedDetails = channels.filter((channel, index) => (selectedChannels || []).includes(channelId(channel, index)));
 
+  const toggleVariants = () => {
+    if (!hasVariants) {
+      setValue('variants', seedVariantFromProduct(getValues()), {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+    setValue('hasVariants', !hasVariants, { shouldDirty: true, shouldValidate: true });
+  };
+
   if (loading) return <div style={{ padding: '20px' }}>Đang tải...</div>;
 
   return (
@@ -156,8 +170,10 @@ const ProductEditPage = () => {
 
         <div className={styles.layout}>
           <div className={styles.mainColumn}>
-            <ProductImageUploader />
-            <ProductForm categories={categories} />
+            <section className={styles.productOverview}>
+              <ProductImageUploader />
+              <ProductForm categories={categories} />
+            </section>
 
             <div className={styles.variantToggleCard}>
               <div className={styles.variantToggleInfo}>
@@ -171,7 +187,7 @@ const ProductEditPage = () => {
               <button
                 type="button"
                 className={`${styles.variantToggleBtn} ${hasVariants ? styles.variantToggleBtnActive : styles.variantToggleBtnInactive}`}
-                onClick={() => setValue('hasVariants', !hasVariants, { shouldValidate: true })}
+                onClick={toggleVariants}
               >
                 {hasVariants ? 'Đã bật biến thể' : 'Tạo biến thể'}
               </button>
@@ -232,7 +248,6 @@ const ProductEditPage = () => {
           <ProductChannelSidebar
             channels={channels}
             onSubmit={(values) => saveProduct(values, false)}
-            onSubmitAndSync={(values) => saveProduct(values, true)}
             onInvalid={() => toast.error('Vui lòng kiểm tra lại thông tin')}
             onCancel={() => navigate(ROUTES.PRODUCT_DETAIL.replace(':id', id))}
             isEditMode

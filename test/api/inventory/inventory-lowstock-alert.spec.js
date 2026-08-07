@@ -1,5 +1,6 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 /**
  * Playwright API tests for Low-Stock Alert visibility to OWNER.
@@ -10,6 +11,11 @@ const { API_BASE } = require('../../utils/env-config');
  *   - POST /api/notifications/mark-all-read (idempotent count check)
  */
 test.describe('Low-Stock Alert Notifications API', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   test('LS-API-1 — GET /api/notifications returns owner-scoped feed', async ({ request, managerHeaders }) => {
     const response = await request.get(`${API_BASE}/notifications?unreadOnly=true&page=0&size=20`, {

@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -79,7 +79,7 @@ class ProductControllerIT {
                 .content(List.of(sampleProduct(id)))
                 .page(0).size(6).totalElements(1).totalPages(1).first(true).last(true)
                 .build();
-        when(productService.search(eq("test"), eq(null), eq(null), eq(0), eq(6))).thenReturn(page);
+        when(productService.search(any(), any(), any(), anyInt(), anyInt())).thenReturn(page);
 
         mvc.perform(get("/api/products?keyword=test&page=0&size=6"))
                 .andExpect(status().isOk())
@@ -93,10 +93,18 @@ class ProductControllerIT {
 
         String body = """
                 {
+                  "categoryId": "%s",
                   "sku": "SKU-NEW",
                   "name": "New Product",
-                  "variants": [{"sku": "VAR-1", "name": "Default"}],
-                  "categoryId": "%s"
+                  "description": "Product description",
+                  "brand": "Brand X",
+                  "unit": "pcs",
+                  "hasVariants": false,
+                  "weightGrams": 500,
+                  "lowStockThreshold": 5,
+                  "attributes": {"packageWidthCm": 10, "packageHeightCm": 10, "packageLengthCm": 10},
+                  "variants": [{"sku": "VAR-1", "name": "Default", "costPrice": 100000, "price": 150000, "isActive": true, "optionValues": {"Size": "M", "Màu": "Đen"}}],
+                  "images": [{"url": "https://example.com/x.png", "isPrimary": true, "sortOrder": 1}]
                 }
                 """.formatted(UUID.randomUUID());
 

@@ -1,10 +1,21 @@
+import { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductForm.module.css';
 
 const ProductForm = ({ categories = [] }) => {
-  const { register, formState: { errors } } = useFormContext();
-  const [hasOrders, hasVariants] = useWatch({ name: ['hasOrders', 'hasVariants'] });
+  const { register, control, formState: { errors } } = useFormContext();
+  const [hasOrders, hasVariants, currentCategoryId] = useWatch({
+    control,
+    name: ['hasOrders', 'hasVariants', 'categoryId']
+  });
+
+  const activeCategories = useMemo(() => {
+    if (!Array.isArray(categories)) return [];
+    return categories.filter((cat) => {
+      return cat.status === 'ACTIVE' || cat.id === currentCategoryId;
+    });
+  }, [categories, currentCategoryId]);
 
   return (
     <div className={styles.card}>
@@ -50,10 +61,11 @@ const ProductForm = ({ categories = [] }) => {
             <input
               id="product-barcode"
               type="text"
-              className={styles.input}
+              className={`${styles.input} ${errors.barcode ? styles.inputError : ''}`}
               placeholder="8936012345678"
             {...register('barcode')}
             />
+            {errors.barcode && <span className={styles.errorText}>{errors.barcode.message}</span>}
           </div>
         )}
       </div>
@@ -62,24 +74,26 @@ const ProductForm = ({ categories = [] }) => {
       {!hasVariants && (
         <div className={styles.row}>
           <div className={styles.field}>
-            <label className={styles.label}>Size</label>
+            <label className={styles.label}>Size <span className={styles.required}>*</span></label>
             <input
               id="product-size"
               type="text"
-              className={styles.input}
+              className={`${styles.input} ${errors.size ? styles.inputError : ''}`}
               placeholder="Ví dụ: Freesize"
             {...register('size')}
             />
+            {errors.size && <span className={styles.errorText}>{errors.size.message}</span>}
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Màu sắc</label>
+            <label className={styles.label}>Màu sắc <span className={styles.required}>*</span></label>
             <input
               id="product-color"
               type="text"
-              className={styles.input}
+              className={`${styles.input} ${errors.color ? styles.inputError : ''}`}
               placeholder="Ví dụ: Đen"
             {...register('color')}
             />
+            {errors.color && <span className={styles.errorText}>{errors.color.message}</span>}
           </div>
         </div>
       )}
@@ -87,14 +101,15 @@ const ProductForm = ({ categories = [] }) => {
       {/* Mô tả */}
       <div className={styles.row}>
         <div className={`${styles.field} ${styles.fullWidth}`}>
-          <label className={styles.label}>Mô tả sản phẩm</label>
+          <label className={styles.label}>Mô tả sản phẩm <span className={styles.required}>*</span></label>
           <textarea
             id="product-description"
-            className={styles.textarea}
+            className={`${styles.textarea} ${errors.description ? styles.inputError : ''}`}
             placeholder="Mô tả chi tiết về sản phẩm..."
             {...register('description')}
             rows={3}
           />
+          {errors.description && <span className={styles.errorText}>{errors.description.message}</span>}
         </div>
       </div>
 
@@ -111,9 +126,9 @@ const ProductForm = ({ categories = [] }) => {
               {...register('categoryId')}
             >
               <option value="">Chọn danh mục</option>
-              {categories.map((cat) => (
+              {activeCategories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
-                  {cat.name}
+                  {cat.name} {cat.status && cat.status !== 'ACTIVE' ? ' (Đã ngưng hoạt động)' : ''}
                 </option>
               ))}
             </select>
@@ -122,28 +137,30 @@ const ProductForm = ({ categories = [] }) => {
           {errors.categoryId && <span className={styles.errorText}>{errors.categoryId.message}</span>}
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Thương hiệu</label>
+          <label className={styles.label}>Thương hiệu <span className={styles.required}>*</span></label>
           <input
             id="product-brand"
             type="text"
-            className={styles.input}
+            className={`${styles.input} ${errors.brand ? styles.inputError : ''}`}
             placeholder="Basic Wear"
             {...register('brand')}
           />
+          {errors.brand && <span className={styles.errorText}>{errors.brand.message}</span>}
         </div>
       </div>
 
       {/* Đơn vị tính */}
       <div className={styles.row}>
         <div className={styles.field}>
-          <label className={styles.label}>Đơn vị tính</label>
+          <label className={styles.label}>Đơn vị tính <span className={styles.required}>*</span></label>
           <input
             id="product-unit"
             type="text"
-            className={styles.input}
+            className={`${styles.input} ${errors.unit ? styles.inputError : ''}`}
             placeholder="Cái, Hộp, Chiếc..."
             {...register('unit')}
           />
+          {errors.unit && <span className={styles.errorText}>{errors.unit.message}</span>}
         </div>
       </div>
     </div>

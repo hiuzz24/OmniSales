@@ -34,15 +34,16 @@ import InventoryPage from '../../features/inventory/pages/inventory/InventoryPag
 import InventoryDetailPage from '../../features/inventory/pages/inventory/InventoryDetailPage';
 import InventoryLogPage from '../../features/inventory/pages/inventory/InventoryLogPage';
 import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
-import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
-import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
 import OrderListPage from '../../features/order/pages/OrderListPage';
 import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
 import OrderLogPage from '../../features/order/pages/OrderLogPage';
+import OrderReturnListPage from '../../features/orderreturn/pages/OrderReturnListPage';
+import OrderReturnDetailPage from '../../features/orderreturn/pages/OrderReturnDetailPage';
 import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
 import StockReceiveCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveCreatePage';
+import StockReceiveManualCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveManualCreatePage';
 import StockReceiveDetailPage from '../../features/inventory/pages/stockreceive/StockReceiveDetailPage';
 import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/StockReceiveEditPage';
 import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
@@ -53,11 +54,19 @@ import ChannelConnectionHistoryPage from '../../features/channel/pages/ChannelCo
 import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/StockDeliveryEditPage';
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
+import StocktakeDetailPage from '../../features/inventory/pages/stocktake/StocktakeDetailPage';
 import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
+import WarehousePage from '../../features/inventory/pages/WarehousePage';
+import WarehouseDetailPage from '../../features/inventory/pages/WarehouseDetailPage';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 import NotificationListPage from '../../features/user/pages/NotificationListPage';
+import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
+import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
+import PurchaseOrderDetailPage from '../../features/purchase/PurchaseOrderDetailPage';
+import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
+import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
 
 const AppRouter = () => {
   return (
@@ -103,6 +112,7 @@ const AppRouter = () => {
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL} element={<StockReceiveManualCreatePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
               <Route path={ROUTES.STOCK_DELIVERIES} element={<StockDeliveryPage />} />
@@ -111,6 +121,23 @@ const AppRouter = () => {
               <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
               <Route path={ROUTES.STOCKTAKES} element={<StocktakePage />} />
               <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
+              <Route path={ROUTES.STOCKTAKE_DETAIL} element={<StocktakeDetailPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
+              <Route path={ROUTES.PURCHASE_ORDER_CREATE} element={<PurchaseOrderCreatePage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS]} />}>
+              <Route path={ROUTES.PURCHASE_ORDERS} element={<PurchaseOrderPage />} />
+              <Route path={ROUTES.PURCHASE_ORDER_DETAIL} element={<PurchaseOrderDetailPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.WAREHOUSE} element={<WarehousePage />} />
+              <Route path={ROUTES.WAREHOUSE_DETAIL} element={<WarehouseDetailPage />} />
+              <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
+              <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
@@ -134,13 +161,12 @@ const AppRouter = () => {
               <Route path={ROUTES.INVENTORY_DETAIL} element={<InventoryDetailPage />} />
               <Route path={ROUTES.INVENTORY_LOGS} element={<InventoryLogPage />} />
               <Route path={ROUTES.SUPPLIERS} element={<SupplierPage />} />
-              {/* <Route path={ROUTES.INVENTORY_ISSUE} element={<InventoryIssuePage />} /> */}
-              <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
-              <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
               <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
               <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
               <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
               <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
+              <Route path={ROUTES.ORDER_RETURNS} element={<OrderReturnListPage />} />
+              <Route path={ROUTES.ORDER_RETURN_DETAIL} element={<OrderReturnDetailPage />} />
               <Route path={ROUTES.NOTIFICATIONS} element={<NotificationListPage />} />
             </Route>
           </Route>

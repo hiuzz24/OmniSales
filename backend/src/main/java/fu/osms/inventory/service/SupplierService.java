@@ -10,6 +10,8 @@ public interface SupplierService {
 
     PageResponse<SupplierResponse> getAll(int page, int size);
 
+    PageResponse<SupplierResponse> searchActive(String keyword, int page, int size);
+
     SupplierResponse create(SupplierRequest request);
 
     SupplierResponse update(UUID id, SupplierRequest request);

@@ -1,6 +1,7 @@
 package fu.osms.sync.shopify.impl;
 
 import fu.osms.sync.shopify.ShopifyOAuthService;
+import fu.osms.sync.shopify.ShopifyShopDomainNormalizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,8 +13,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.util.Locale;
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.UUID;
 
 @Slf4j
@@ -34,16 +35,18 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
     private String scopes;
 
     private final RestTemplate restTemplate;
+    private final ShopifyShopDomainNormalizer shopDomainNormalizer;
 
     @Override
     public String buildAuthorizationUrl(String shop) {
         validateOAuthConfig();
-        String normalizedShop = normalizeShop(shop);
+        String normalizedShop = shopDomainNormalizer.normalizeHandle(shop);
         String state = UUID.randomUUID().toString();
         String requestedScopes = normalizeScopes(scopes);
 
         String authUrl = UriComponentsBuilder
-                .fromUriString("https://" + normalizedShop + ".myshopify.com/admin/oauth/authorize")
+                .fromUriString("https://" + shopDomainNormalizer.canonicalDomain(normalizedShop)
+                        + "/admin/oauth/authorize")
                 .queryParam("client_id", apiKey)
                 .queryParam("scope", requestedScopes)
                 .queryParam("redirect_uri", redirectUri)
@@ -60,8 +63,9 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
     @Override
     public String exchangeCodeForToken(String shop, String code) {
         validateOAuthConfig();
-        String normalizedShop = normalizeShop(shop);
-        String tokenUrl = String.format("https://%s.myshopify.com/admin/oauth/access_token", normalizedShop);
+        String normalizedShop = shopDomainNormalizer.normalizeHandle(shop);
+        String tokenUrl = "https://" + shopDomainNormalizer.canonicalDomain(normalizedShop)
+                + "/admin/oauth/access_token";
 
         log.info("[ShopifyOAuth] exchangeCodeForToken — shop={}", normalizedShop);
 
@@ -94,33 +98,16 @@ public class ShopifyOAuthServiceImpl implements ShopifyOAuthService {
     }
 
     private String normalizeScopes(String scopes) {
-        if (scopes == null || scopes.isBlank()) {
-            return "";
+        LinkedHashSet<String> requestedScopes = new LinkedHashSet<>();
+        if (scopes != null && !scopes.isBlank()) {
+            java.util.Arrays.stream(scopes.split(","))
+                    .map(String::trim)
+                    .filter(scope -> !scope.isBlank())
+                    .forEach(requestedScopes::add);
         }
-        return String.join(",",
-                java.util.Arrays.stream(scopes.split(","))
-                        .map(String::trim)
-                        .filter(scope -> !scope.isBlank())
-                        .toList());
-    }
-
-    private String normalizeShop(String shop) {
-        if (!StringUtils.hasText(shop)) {
-            throw new IllegalArgumentException("Shop domain must not be blank");
-        }
-        String normalized = shop.trim().toLowerCase(Locale.ROOT)
-                .replaceFirst("^https?://", "");
-        int pathStart = normalized.indexOf('/');
-        if (pathStart >= 0) {
-            normalized = normalized.substring(0, pathStart);
-        }
-        if (normalized.endsWith(".myshopify.com")) {
-            normalized = normalized.substring(0, normalized.length() - ".myshopify.com".length());
-        }
-        if (!StringUtils.hasText(normalized)) {
-            throw new IllegalArgumentException("Shop domain must not be blank");
-        }
-        return normalized;
+        requestedScopes.add("read_returns");
+        requestedScopes.add("write_returns");
+        return String.join(",", requestedScopes);
     }
 
     private void validateOAuthConfig() {

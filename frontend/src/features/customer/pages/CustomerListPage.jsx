@@ -6,11 +6,12 @@ import useAuth from '../../auth/hooks/useAuth';
 import useDebounce from '../../../shared/hooks/useDebounce';
 import {
   Plus, Search, Eye, Pencil, Trash2,
-  FileDown, UserCheck, UserX, TrendingUp, Phone, Mail, Users
+  FileDown, UserCheck, UserX, TrendingUp, Phone, Mail, Users, RefreshCw
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import Pagination from '../../../shared/components/Pagination';
 import customerService from '../services/customerService';
+import orderService from '../../order/services/orderService';
 import ExportCustomersModal from '../components/ExportCustomersModal';
 import styles from './CustomerListPage.module.css';
 
@@ -33,8 +34,12 @@ const CustomerListPage = () => {
   const [totalElements, setTotalElements] = useState(0);
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const [stats, setStats] = useState({ totalCustomers: 0, activeCustomers: 0, totalOrders: 0, totalSpent: 0 });
+  const [stats, setStats] = useState({ totalCustomers: 0, activeCustomers: 0 });
+  const [aggregated, setAggregated] = useState({ totalOrders: 0, totalSpent: 0 });
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [uncustomerdCount, setUncustomerdCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [confirmSync, setConfirmSync] = useState(false);
 
   const debouncedSearch = useDebounce(searchInput, 500);
 
@@ -45,10 +50,14 @@ const CustomerListPage = () => {
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await customerService.getAll(page, PAGE_SIZE, debouncedSearch, statusFilter, genderFilter);
+      const data = await customerService.getPageWithOrderCustomers(page, PAGE_SIZE, debouncedSearch, statusFilter, genderFilter);
       setCustomers(data.content || []);
       setTotalPages(data.totalPages || 0);
       setTotalElements(data.totalElements || 0);
+      setAggregated({
+        totalOrders: data.aggregated?.totalOrders || 0,
+        totalSpent: data.aggregated?.totalSpent || 0,
+      });
     } catch (error) {
       console.error('Failed to fetch customers:', error);
     } finally {
@@ -69,7 +78,38 @@ const CustomerListPage = () => {
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
+  const fetchUncustomerdCount = useCallback(async () => {
+    try {
+      const data = await orderService.getUncustomerdCount();
+      setUncustomerdCount(data?.count ?? 0);
+    } catch (error) {
+      console.error('Failed to fetch uncustomerd count:', error);
+    }
+  }, []);
+
+  useEffect(() => { fetchUncustomerdCount(); }, [fetchUncustomerdCount]);
+
   useEffect(() => { setPage(0); }, [debouncedSearch, statusFilter, genderFilter]);
+
+  const handleSyncFromOrders = async () => {
+    setConfirmSync(false);
+    setSyncing(true);
+    try {
+      const result = await customerService.syncFromOrders();
+      const updatedCount = result?.updatedCount ?? 0;
+      await Promise.all([fetchCustomers(), fetchStats(), fetchUncustomerdCount()]);
+      // eslint-disable-next-line no-alert
+      alert(updatedCount > 0
+        ? `Đã đồng bộ ${updatedCount} đơn hàng về danh sách khách hàng.`
+        : 'Tất cả đơn hàng đã có khách hàng. Không có gì để đồng bộ.');
+    } catch (error) {
+      console.error('Failed to sync customers from orders:', error);
+      // eslint-disable-next-line no-alert
+      alert('Đồng bộ thất bại. Vui lòng thử lại.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -114,12 +154,12 @@ const CustomerListPage = () => {
   const statsItems = [
     { label: 'Tổng khách hàng', value: stats.totalCustomers, icon: Users, color: 'slate' },
     { label: 'Đang hoạt động', value: stats.activeCustomers, icon: UserCheck, color: 'teal' },
-    { label: 'Tổng đơn hàng', value: stats.totalOrders, icon: TrendingUp, color: 'blue' },
-    { label: 'Tổng chi tiêu', value: formatCurrency(stats.totalSpent), icon: TrendingUp, color: 'violet', isVND: true },
+    { label: 'Tổng đơn hàng (trong trang + KH từ đơn)', value: aggregated.totalOrders.toLocaleString('vi-VN'), icon: TrendingUp, color: 'blue' },
+    { label: 'Tổng chi tiêu (trong trang + KH từ đơn)', value: formatCurrency(aggregated.totalSpent), icon: TrendingUp, color: 'violet', isVND: true },
   ];
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       {/* Header */}
       <div className={styles.pageHeader}>
         <div className={styles.headerLeft}>
@@ -132,6 +172,18 @@ const CustomerListPage = () => {
           </div>
         </div>
         <div className={styles.headerActions}>
+          <button
+            className={`${styles.btnOutline} ${styles.btnSync}`}
+            onClick={() => setConfirmSync(true)}
+            disabled={syncing}
+            title="Kéo khách hàng từ đơn hàng về danh sách khách hàng"
+          >
+            <RefreshCw size={15} className={syncing ? styles.spinning : ''} />
+            Đồng bộ KH từ đơn
+            {uncustomerdCount > 0 && (
+              <span className={styles.syncBadge}>{uncustomerdCount}</span>
+            )}
+          </button>
           <button className={styles.btnOutline} onClick={() => setIsExportModalOpen(true)}>
             <FileDown size={15} />
             Xuất Excel
@@ -225,7 +277,14 @@ const CustomerListPage = () => {
                         {getInitials(c.fullName)}
                       </div>
                       <div>
-                        <p className={styles.customerName}>{c.fullName || '-'}</p>
+                        <p className={styles.customerName}>
+                          {c.fullName || '-'}
+                          {c.fromOrders && (
+                            <span className={styles.fromOrdersBadge} title="Khách hàng này chỉ tồn tại trong đơn hàng, không có trong danh sách khách hàng hiện tại">
+                              KH từ đơn hàng
+                            </span>
+                          )}
+                        </p>
                         <p className={styles.customerMeta}>Địa chỉ: {formatAddress(c.address)}</p>
                       </div>
                     </div>
@@ -243,7 +302,7 @@ const CustomerListPage = () => {
                     </div>
                   </td>
                   <td>
-                    <span className={`${styles.genderBadge} ${c.gender === 'Nam' ? styles.genderMale : c.gender === 'Nữ' ? styles.genderFemale : styles.genderOther}`}>
+                    <span className={`${styles.genderBadge} ${c.gender === 'MALE' ? styles.genderMale : c.gender === 'FEMALE' ? styles.genderFemale : styles.genderOther}`}>
                       {getGenderLabel(c.gender)}
                     </span>
                   </td>
@@ -340,6 +399,39 @@ const CustomerListPage = () => {
       )}
 
       <ExportCustomersModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
+
+      {/* Confirm sync modal */}
+      {confirmSync && (
+        <div className={styles.modalOverlay} onClick={() => setConfirmSync(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Đồng bộ khách hàng từ đơn hàng</h3>
+            <p className={styles.modalBody}>
+              {uncustomerdCount > 0 ? (
+                <>
+                  Có <b>{uncustomerdCount}</b> đơn hàng chưa gắn khách hàng trong hệ thống. Hệ thống sẽ tự động:
+                  <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+                    <li>Tìm khách hàng trùng tên + số điện thoại trong DB để tái sử dụng.</li>
+                    <li>Tạo khách hàng mới cho các đơn còn lại (tên mặc định: <b>Khách vãng lai</b>).</li>
+                    <li>Gắn <b>customer_id</b> cho từng đơn hàng để liệt kê trên trang này.</li>
+                  </ul>
+                </>
+              ) : (
+                'Hiện tại tất cả đơn hàng đã có khách hàng. Bạn có thể chạy lại để kiểm tra.'
+              )}
+            </p>
+            <div className={styles.modalActions}>
+              <button className={styles.cancelBtn} onClick={() => setConfirmSync(false)} disabled={syncing}>Hủy</button>
+              <button
+                className={styles.confirmDeleteBtn}
+                onClick={handleSyncFromOrders}
+                disabled={syncing}
+              >
+                {syncing ? 'Đang đồng bộ...' : 'Đồng bộ ngay'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

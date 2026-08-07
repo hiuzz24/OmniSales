@@ -7,6 +7,7 @@ const {
   cleanupTestData,
   uniqueCode,
 } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 function nowIso() {
   return new Date().toISOString();
@@ -38,11 +39,15 @@ test.describe('Stock Transfer API Tests', () => {
     }
   });
 
-  test.afterAll(async ({ request, managerHeaders }) => {
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdIds) {
-      await cleanupTestData(request, authToken, 'transfer', id);
+  test.afterEach(async ({ request }) => {
+    if (createdIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdIds.splice(0)) {
+        await cleanupTestData(request, authToken, 'transfer', id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/transfer

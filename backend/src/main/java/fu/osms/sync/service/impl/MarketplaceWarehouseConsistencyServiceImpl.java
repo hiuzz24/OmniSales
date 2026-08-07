@@ -15,6 +15,7 @@ import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.shopify.ShopifyApiClient;
 import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
+import fu.osms.sync.tiktok.util.TikTokWarehouseAddressFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,22 +32,28 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWarehouseConsistencyService {
 
-    private static final String SHARED_WAREHOUSE_NAME = "Kho mặc định đa sàn";
     private static final List<PlatformType> SUPPORTED_PLATFORMS = List.of(
             PlatformType.SHOPIFY,
             PlatformType.LAZADA,
-            PlatformType.TIKTOK
-    );
+            PlatformType.TIKTOK);
+    private static final String SHARED_WAREHOUSE_DISPLAY_NAME = "Kho mặc định đa sàn";
     private static final Pattern DIACRITICS = Pattern.compile("\\p{M}+");
     private static final Pattern NON_ALNUM = Pattern.compile("[^\\p{IsAlphabetic}\\p{IsDigit}]+");
+    private static final Set<String> STREET_TYPE_TOKENS = Set.of(
+            "duong", "pho", "so", "dai", "lo", "hem", "ngo", "ngach",
+            "street", "st", "road", "rd", "avenue", "ave", "boulevard", "blvd",
+            "highway", "lane", "drive", "dr", "way", "alley", "place", "pl");
 
     private final ChannelRepository channelRepository;
     private final ChannelCredentialRepository credentialRepository;
@@ -57,7 +66,9 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
     @Override
     @Transactional
     public Warehouse resolveMasterWarehouse() {
-        return resolveSharedWarehouse(null);
+        Warehouse warehouse = resolveSharedWarehouse(null);
+        alignSupportedChannelWarehouseMetadata(warehouse);
+        return warehouse;
     }
 
     @Override
@@ -69,8 +80,9 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
 
         validateConnectedPrimaryWarehouses();
         RemotePrimaryWarehouse remoteWarehouse = fetchPrimaryWarehouse(channel);
-        Warehouse warehouse = resolveSharedWarehouse(remoteWarehouse.firstAddressLine());
+        Warehouse warehouse = resolveSharedWarehouse(remoteWarehouse.fullAddress());
         persistChannelWarehouseMetadata(channel, warehouse, remoteWarehouse);
+        alignSupportedChannelWarehouseMetadata(warehouse);
         return warehouse;
     }
 
@@ -89,7 +101,8 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
         RemotePrimaryWarehouse baseline = warehouses.get(0);
         String normalizedBaseline = normalizeAddressLine(baseline.firstAddressLine());
         List<RemotePrimaryWarehouse> mismatches = warehouses.stream()
-                .filter(warehouse -> !Objects.equals(normalizedBaseline, normalizeAddressLine(warehouse.firstAddressLine())))
+                .filter(warehouse -> !Objects.equals(normalizedBaseline,
+                        normalizeAddressLine(warehouse.firstAddressLine())))
                 .toList();
 
         if (!mismatches.isEmpty()) {
@@ -101,15 +114,15 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
             throw new AppException(
                     ErrorCode.INVALID_REQUEST,
                     "Kho chính của các sàn chưa cùng địa chỉ. Vui lòng cấu hình cùng dòng địa chỉ đầu tiên trước khi đồng bộ tồn kho: "
-                            + details
-            );
+                            + details);
         }
     }
 
     private List<Channel> connectedMarketplaceChannels() {
         List<Channel> result = new ArrayList<>();
         for (Channel channel : channelRepository.findByDeletedAtIsNull()) {
-            if (!SUPPORTED_PLATFORMS.contains(channel.getPlatform()) || !Boolean.TRUE.equals(channel.getSyncEnabled())) {
+            if (!SUPPORTED_PLATFORMS.contains(channel.getPlatform())
+                    || !Boolean.TRUE.equals(channel.getSyncEnabled())) {
                 continue;
             }
             Optional<ChannelCredential> credential = credentialRepository
@@ -147,13 +160,17 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
                               address {
                                 formatted
                                 address1
+                                address2
+                                city
+                                province
+                                zip
+                                country
                               }
                             }
                           }
                         }
                         """,
-                Map.of()
-        );
+                Map.of());
         ensureNoGraphQlErrors(response);
 
         Map<String, Object> data = map(response.get("data"));
@@ -167,20 +184,19 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
                         .findFirst()
                         .orElseThrow(() -> new AppException(
                                 ErrorCode.INVALID_REQUEST,
-                                "Shopify chưa có location active để đồng bộ tồn kho."
-                        )));
+                                "Shopify chưa có location active để đồng bộ tồn kho.")));
 
         Map<String, Object> address = map(selected.get("address"));
-        String firstLine = firstFormattedAddressLine(address);
+        String fullAddress = firstFormattedAddress(address);
         return new RemotePrimaryWarehouse(
                 channel.getPlatform(),
                 channel.getId(),
                 channel.getDisplayName(),
                 numericId(stringValue(selected.get("id"))),
                 stringValue(selected.get("name")),
-                firstLine,
-                "shopifyLocationId"
-        );
+                firstAddressLine(fullAddress),
+                "shopifyLocationId",
+                fullAddress);
     }
 
     private RemotePrimaryWarehouse fetchLazadaPrimaryWarehouse(Channel channel) {
@@ -189,19 +205,17 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
                 "detail_address",
                 "detailAddress",
                 "warehouse_code",
-                "warehouseCode"
-        ).orElseThrow(() -> new AppException(
-                ErrorCode.INVALID_REQUEST,
-                "Lazada không trả về kho chính từ /rc/warehouse/detail/get."
-        ));
+                "warehouseCode").orElseThrow(
+                        () -> new AppException(
+                                ErrorCode.INVALID_REQUEST,
+                                "Lazada không trả về kho chính từ /rc/warehouse/detail/get."));
 
-        String address = firstText(selected,
+        String fullAddress = firstText(selected,
                 "detail_address",
                 "detailAddress",
                 "address",
                 "warehouse_address",
-                "warehouseAddress"
-        );
+                "warehouseAddress");
         String code = firstText(selected, "warehouse_code", "warehouseCode", "code", "id", "warehouse_id");
         return new RemotePrimaryWarehouse(
                 channel.getPlatform(),
@@ -209,9 +223,9 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
                 channel.getDisplayName(),
                 code,
                 firstText(selected, "name", "warehouse_name", "warehouseName"),
-                firstAddressLine(address),
-                "lazadaWarehouseCode"
-        );
+                firstAddressLine(fullAddress),
+                "lazadaWarehouseCode",
+                fullAddress);
     }
 
     private JsonNode fetchLazadaWarehouseDetail(Channel channel) {
@@ -231,8 +245,7 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
             } catch (Exception fallbackError) {
                 throw new AppException(
                         ErrorCode.INVALID_REQUEST,
-                        "Không lấy được kho Lazada để kiểm tra địa chỉ: " + fallbackError.getMessage()
-                );
+                        "Không lấy được kho Lazada để kiểm tra địa chỉ: " + fallbackError.getMessage());
             }
         }
     }
@@ -246,61 +259,99 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
                 .findFirst()
                 .orElseThrow(() -> new AppException(
                         ErrorCode.INVALID_REQUEST,
-                        "TikTok Shop chưa có warehouse is_default=true."
-                ));
+                        "TikTok Shop chưa có warehouse is_default=true."));
 
-        String address = firstNonBlank(
+        String fullAddress = firstNonBlank(
+                formatTikTokAddress(map(selected.get("address")), stringValue(selected.get("id"))),
                 stringValue(selected.get("full_address")),
                 stringValue(map(selected.get("address")).get("full_address")),
-                stringValue(map(selected.get("address")).get("fullAddress"))
-        );
+                stringValue(map(selected.get("address")).get("fullAddress")));
         return new RemotePrimaryWarehouse(
                 channel.getPlatform(),
                 channel.getId(),
                 channel.getDisplayName(),
                 stringValue(selected.get("id")),
                 stringValue(selected.get("name")),
-                firstAddressLine(address),
-                "tiktokWarehouseId"
-        );
+                firstAddressLine(fullAddress),
+                "tiktokWarehouseId",
+                fullAddress);
     }
 
     private Warehouse resolveSharedWarehouse(String remoteAddress) {
-        Optional<UUID> existingConfiguredWarehouseId = connectedMarketplaceChannels().stream()
+        Map<UUID, Long> configuredWarehouseUsage = connectedMarketplaceChannels().stream()
                 .map(Channel::getMetadata)
                 .map(metadata -> optionalText(metadata, "defaultWarehouseId"))
                 .filter(this::hasText)
                 .map(this::parseUuidOrNull)
                 .filter(Objects::nonNull)
-                .findFirst();
-        if (existingConfiguredWarehouseId.isPresent()) {
-            return warehouseRepository.findById(existingConfiguredWarehouseId.get())
-                    .filter(warehouse -> warehouse.getDeletedAt() == null && Boolean.TRUE.equals(warehouse.getIsActive()))
-                    .orElseThrow(() -> new AppException(ErrorCode.WAREHOUSE_NOT_FOUND));
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        List<UUID> configuredWarehouseIds = configuredWarehouseUsage.entrySet().stream()
+                .sorted(Map.Entry.<UUID, Long>comparingByValue(Comparator.reverseOrder())
+                        .thenComparing(entry -> entry.getKey().toString()))
+                .map(Map.Entry::getKey)
+                .toList();
+        for (UUID configuredWarehouseId : configuredWarehouseIds) {
+            Optional<Warehouse> configuredWarehouse = warehouseRepository.findById(configuredWarehouseId)
+                    .filter(warehouse -> warehouse.getDeletedAt() == null
+                            && Boolean.TRUE.equals(warehouse.getIsActive()));
+            if (configuredWarehouse.isPresent()) {
+                return ensureWarehouseAddress(configuredWarehouse.get(), remoteAddress);
+            }
         }
 
         List<Warehouse> activeWarehouses = warehouseRepository.findByDeletedAtIsNull().stream()
                 .filter(warehouse -> Boolean.TRUE.equals(warehouse.getIsActive()))
                 .toList();
         if (activeWarehouses.size() == 1) {
-            return activeWarehouses.get(0);
+            return ensureWarehouseAddress(activeWarehouses.get(0), remoteAddress);
         }
 
-        Warehouse warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(SHARED_WAREHOUSE_NAME)
+        Warehouse warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(SHARED_WAREHOUSE_DISPLAY_NAME)
                 .orElseGet(() -> Warehouse.builder()
-                        .name(SHARED_WAREHOUSE_NAME)
+                        .name(SHARED_WAREHOUSE_DISPLAY_NAME)
                         .isActive(true)
                         .build());
-        if (!hasText(warehouse.getAddress()) && hasText(remoteAddress)) {
+        if (!Objects.equals(warehouse.getAddress(), remoteAddress) && hasText(remoteAddress)) {
             warehouse.setAddress(remoteAddress);
         }
         warehouse.setIsActive(true);
         return warehouseRepository.save(warehouse);
     }
 
+    private Warehouse ensureWarehouseAddress(Warehouse warehouse, String remoteAddress) {
+        if (warehouse == null || !hasText(remoteAddress)
+                || Objects.equals(warehouse.getAddress(), remoteAddress)) {
+            return warehouse;
+        }
+        warehouse.setAddress(remoteAddress);
+        return warehouseRepository.save(warehouse);
+    }
+
+    private void alignSupportedChannelWarehouseMetadata(Warehouse warehouse) {
+        if (warehouse == null || warehouse.getId() == null) {
+            return;
+        }
+        String canonicalWarehouseId = warehouse.getId().toString();
+        for (Channel channel : channelRepository.findByDeletedAtIsNull()) {
+            if (!SUPPORTED_PLATFORMS.contains(channel.getPlatform())
+                    || !Boolean.TRUE.equals(channel.getSyncEnabled())) {
+                continue;
+            }
+            Map<String, Object> metadata = channel.getMetadata() == null
+                    ? new HashMap<>()
+                    : new HashMap<>(channel.getMetadata());
+            if (canonicalWarehouseId.equals(optionalText(metadata, "defaultWarehouseId"))) {
+                continue;
+            }
+            metadata.put("defaultWarehouseId", canonicalWarehouseId);
+            channel.setMetadata(metadata);
+            channelRepository.save(channel);
+        }
+    }
+
     private void persistChannelWarehouseMetadata(Channel channel,
-                                                 Warehouse warehouse,
-                                                 RemotePrimaryWarehouse remoteWarehouse) {
+            Warehouse warehouse,
+            RemotePrimaryWarehouse remoteWarehouse) {
         Map<String, Object> metadata = channel.getMetadata() == null
                 ? new HashMap<>()
                 : new HashMap<>(channel.getMetadata());
@@ -308,8 +359,10 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
         if (hasText(remoteWarehouse.externalWarehouseId())) {
             metadata.put(remoteWarehouse.externalMetadataKey(), remoteWarehouse.externalWarehouseId());
         }
-        metadata.put(remoteWarehouse.platform().name().toLowerCase(Locale.ROOT) + "PrimaryWarehouseAddress",
-                remoteWarehouse.firstAddressLine());
+        if (hasText(remoteWarehouse.fullAddress())) {
+            metadata.put(remoteWarehouse.platform().name().toLowerCase(Locale.ROOT) + "PrimaryWarehouseAddress",
+                    remoteWarehouse.fullAddress());
+        }
         channel.setMetadata(metadata);
         channelRepository.save(channel);
     }
@@ -318,8 +371,7 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
         return credentialRepository.findByChannelIdAndConnectionState(channel.getId(), "CONNECTED")
                 .orElseThrow(() -> new AppException(
                         ErrorCode.CHANNEL_NOT_CONNECTED,
-                        "Kênh " + channel.getDisplayName() + " chưa kết nối."
-                ));
+                        "Kênh " + channel.getDisplayName() + " chưa kết nối."));
     }
 
     private String extractShopDomain(Channel channel) {
@@ -339,8 +391,7 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
             String message = firstNonBlank(
                     root.path("message").asText(null),
                     root.path("msg").asText(null),
-                    root.path("error_msg").asText(null)
-            );
+                    root.path("error_msg").asText(null));
             throw new AppException(ErrorCode.INVALID_REQUEST, "Lazada API " + apiPath + " lỗi: " + message);
         }
     }
@@ -374,27 +425,45 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
         return Optional.empty();
     }
 
-    private String firstFormattedAddressLine(Map<String, Object> address) {
+    private String firstFormattedAddress(Map<String, Object> address) {
         Object formatted = address.get("formatted");
         if (formatted instanceof List<?> lines) {
-            return lines.stream()
-                    .map(this::stringValue)
-                    .filter(this::hasText)
-                    .findFirst()
-                    .orElse(null);
+            for (Object line : lines) {
+                String value = stringValue(line);
+                if (hasText(value)) {
+                    return value;
+                }
+            }
         }
-        return firstAddressLine(firstNonBlank(
+        return firstNonBlank(
                 stringValue(formatted),
-                stringValue(address.get("address1"))
-        ));
+                stringValue(address.get("address1")));
+    }
+
+    private String formatTikTokAddress(Map<String, Object> address, String warehouseId) {
+        if (address == null || address.isEmpty()) {
+            return null;
+        }
+        String formatted = TikTokWarehouseAddressFormatter.format(address, warehouseId);
+        return formatted != null && formatted.startsWith("TikTok warehouse ") ? null : formatted;
     }
 
     private String normalizeAddressLine(String value) {
         if (!hasText(value)) {
             return "";
         }
-        String stripped = DIACRITICS.matcher(Normalizer.normalize(value.trim(), Normalizer.Form.NFD)).replaceAll("");
-        return NON_ALNUM.matcher(stripped.toLowerCase(Locale.ROOT)).replaceAll(" ").trim();
+        String stripped = DIACRITICS.matcher(
+                Normalizer.normalize(value.trim(), Normalizer.Form.NFD))
+                .replaceAll("")
+                .replace('đ', 'd')
+                .replace('Đ', 'D');
+        String normalized = NON_ALNUM.matcher(stripped.toLowerCase(Locale.ROOT)).replaceAll(" ").trim();
+        if (normalized.isBlank()) {
+            return "";
+        }
+        return Arrays.stream(normalized.split("\\s+"))
+                .filter(token -> !STREET_TYPE_TOKENS.contains(token))
+                .collect(Collectors.joining(" "));
     }
 
     private String firstAddressLine(String value) {
@@ -512,7 +581,7 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
             String externalWarehouseId,
             String externalWarehouseName,
             String firstAddressLine,
-            String externalMetadataKey
-    ) {
+            String externalMetadataKey,
+            String fullAddress) {
     }
 }

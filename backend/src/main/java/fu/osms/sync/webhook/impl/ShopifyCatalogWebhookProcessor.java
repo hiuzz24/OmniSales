@@ -4,22 +4,18 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
-import fu.osms.inventory.entity.InventoryItem;
-import fu.osms.inventory.entity.InventoryTransaction;
-import fu.osms.inventory.entity.Warehouse;
-import fu.osms.inventory.enums.InvTxnType;
-import fu.osms.inventory.repository.InventoryItemRepository;
-import fu.osms.inventory.repository.InventoryTransactionRepository;
-import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.sync.entity.WebhookEvent;
-import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
+import fu.osms.sync.inventory.InventoryObservation;
+import fu.osms.sync.inventory.InventoryReconciliationService;
 import fu.osms.sync.service.PlatformCatalogWebhookProcessor;
+import fu.osms.sync.shopify.inventory.ShopifyInventoryGateway;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,15 +36,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookProcessor {
 
-    private static final String LOCATION_ID_MARKER = "SHOPIFY_LOCATION_ID=";
-
     private final ChannelProductRepository channelProductRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final ProductVariantRepository productVariantRepository;
-    private final WarehouseRepository warehouseRepository;
-    private final InventoryItemRepository inventoryItemRepository;
-    private final InventoryTransactionRepository inventoryTransactionRepository;
-    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
+    private final InventoryReconciliationService inventoryReconciliationService;
+    private final ShopifyInventoryGateway shopifyInventoryGateway;
 
     @Override
     public PlatformType getPlatform() {
@@ -95,11 +88,12 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
 
         Product product = channelProduct.getProduct();
         updateProduct(product, payload);
+        Map<Integer, String> optionNames = optionNames(payload);
         Object variantValue = payload.get("variants");
         if (variantValue instanceof List<?> variants) {
             for (Object variantObject : variants) {
                 if (variantObject instanceof Map<?, ?> variantMap) {
-                    upsertVariant(channelProduct, product, WebhookPayloadUtils.copyMap(variantMap));
+                    upsertVariant(channelProduct, product, WebhookPayloadUtils.copyMap(variantMap), optionNames);
                 }
             }
         }
@@ -133,13 +127,19 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
             return "IGNORED";
         }
 
-        Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveAndValidatePrimaryWarehouse(event.getChannel());
-        upsertInventoryItem(event, warehouse, mapping.get().getVariant(), available);
-
-        ChannelProductVariant channelVariant = mapping.get();
-        channelVariant.setSyncStatus(SyncStatus.SYNCED);
-        channelVariant.setLastSyncedAt(OffsetDateTime.now());
-        channelProductVariantRepository.save(channelVariant);
+        String managedLocationId = shopifyInventoryGateway
+                .resolveManagedLocationId(event.getChannel().getId());
+        if (!numericId(managedLocationId).equals(numericId(locationId))) {
+            return "IGNORED";
+        }
+        inventoryReconciliationService.observe(new InventoryObservation(
+                mapping.get().getId(),
+                PlatformType.SHOPIFY,
+                Math.max(available, 0),
+                observedAt(payload, event),
+                managedLocationId,
+                event.getId()
+        ));
         return "PROCESSED";
     }
 
@@ -167,7 +167,10 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         product.setAttributes(attributes);
     }
 
-    private void upsertVariant(ChannelProduct channelProduct, Product product, Map<String, Object> variantPayload) {
+    private void upsertVariant(ChannelProduct channelProduct,
+                               Product product,
+                               Map<String, Object> variantPayload,
+                               Map<Integer, String> optionNames) {
         String externalVariantId = numericId(WebhookPayloadUtils.text(
                 WebhookPayloadUtils.firstPresent(variantPayload, "id", "variant_id", "admin_graphql_api_id")));
         if (externalVariantId == null || externalVariantId.isBlank()) {
@@ -181,7 +184,7 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
                 ? mapping.getVariant()
                 : resolveOrCreateVariant(product, externalVariantId, variantPayload);
 
-        updateVariant(variant, externalVariantId, variantPayload);
+        updateVariant(variant, externalVariantId, variantPayload, optionNames);
         variant = productVariantRepository.save(variant);
         ProductVariant savedVariant = variant;
 
@@ -197,7 +200,9 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         mapping.setChannelProduct(channelProduct);
         mapping.setVariant(savedVariant);
         applyExternalVariantId(channelProduct, mapping, externalVariantId);
-        mapping.setExternalSku(variant.getSku());
+        String externalSku = usableSku(WebhookPayloadUtils.text(
+                WebhookPayloadUtils.firstPresent(variantPayload, "sku")));
+        mapping.setExternalSku(firstNonBlank(externalSku, mapping.getExternalSku(), variant.getSku()));
         mapping.setExternalPrice(variant.getPrice());
         mapping.setSyncStatus(SyncStatus.SYNCED);
         mapping.setLastSyncedAt(OffsetDateTime.now());
@@ -251,7 +256,10 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
                 .build();
     }
 
-    private void updateVariant(ProductVariant variant, String externalVariantId, Map<String, Object> variantPayload) {
+    private void updateVariant(ProductVariant variant,
+                               String externalVariantId,
+                               Map<String, Object> variantPayload,
+                               Map<Integer, String> optionNames) {
         String sku = usableSku(WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(variantPayload, "sku")));
         if (sku != null && canUseSku(variant, sku)) {
             variant.setSku(sku);
@@ -271,77 +279,62 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         if (price != null) {
             variant.setPrice(WebhookPayloadUtils.decimal(price));
         }
+        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
         Integer weight = WebhookPayloadUtils.integer(WebhookPayloadUtils.firstPresent(variantPayload, "grams", "weight"), 0);
         if (weight != null && weight > 0) {
             variant.setWeightGrams(weight);
         }
-        variant.setOptionValues(optionValues(variantPayload));
+        Map<String, Object> incomingOptionValues = optionValues(variantPayload, optionNames);
+        if (!incomingOptionValues.isEmpty()) {
+            variant.setOptionValues(incomingOptionValues);
+        }
         variant.setIsActive(true);
         variant.setDeletedAt(null);
     }
 
-    private void upsertInventoryItem(WebhookEvent event, Warehouse warehouse, ProductVariant variant, int available) {
-        InventoryItem item = inventoryItemRepository
-                .findByWarehouseIdAndVariantId(warehouse.getId(), variant.getId())
-                .orElseGet(() -> InventoryItem.builder()
-                        .warehouse(warehouse)
-                        .variant(variant)
-                        .lowStockThreshold(variant.getProduct().getLowStockThreshold())
-                        .averageCost(BigDecimal.ZERO)
-                        .build());
-
-        int before = safeInt(item.getQuantityOnHand());
-        int after = Math.max(available, 0);
-        int reserved = Math.min(Math.max(safeInt(item.getReservedQuantity()), 0), after);
-        item.setQuantityOnHand(after);
-        item.setReservedQuantity(reserved);
-        if (item.getAverageCost() == null) {
-            item.setAverageCost(BigDecimal.ZERO);
+    private Map<String, Object> optionValues(Map<String, Object> variantPayload,
+                                             Map<Integer, String> optionNames) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (int position = 1; position <= 3; position++) {
+            String optionName = optionNames.getOrDefault(position, "Option " + position);
+            putIfPresent(values, normalizeOptionName(optionName), variantPayload.get("option" + position));
         }
-        inventoryItemRepository.save(item);
-
-        int delta = after - before;
-        if (delta != 0) {
-            inventoryTransactionRepository.save(InventoryTransaction.builder()
-                    .warehouse(warehouse)
-                    .variant(variant)
-                    .type(InvTxnType.ADJUSTMENT)
-                    .referenceType("ADJUSTMENT")
-                    .referenceId(event.getId())
-                    .quantityChange(delta)
-                    .quantityBefore(before)
-                    .quantityAfter(after)
-                    .unitCost(BigDecimal.ZERO)
-                    .note("Shopify inventory webhook")
-                    .performedAt(OffsetDateTime.now())
-                    .build());
-        }
+        return values;
     }
 
-    private Warehouse resolveShopifyWarehouse(String locationId) {
-        for (Warehouse warehouse : warehouseRepository.findByDeletedAtIsNull()) {
-            if (locationId.equals(extractMarkerValue(warehouse.getAddress(), LOCATION_ID_MARKER))) {
-                return warehouse;
+    private Map<Integer, String> optionNames(Map<String, Object> productPayload) {
+        Object value = productPayload.get("options");
+        if (!(value instanceof List<?> options)) {
+            return Map.of();
+        }
+        Map<Integer, String> names = new HashMap<>();
+        for (Object optionValue : options) {
+            if (!(optionValue instanceof Map<?, ?> optionMap)) {
+                continue;
+            }
+            Map<String, Object> option = WebhookPayloadUtils.copyMap(optionMap);
+            int position = WebhookPayloadUtils.integer(option.get("position"), 0);
+            String name = WebhookPayloadUtils.text(option.get("name"));
+            if (position > 0 && name != null && !name.isBlank()) {
+                names.put(position, name.trim());
             }
         }
-
-        String name = "Shopify - Location " + locationId;
-        Warehouse warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(name)
-                .orElseGet(() -> Warehouse.builder()
-                        .name(name)
-                        .isActive(true)
-                        .build());
-        warehouse.setAddress("[" + LOCATION_ID_MARKER + locationId + "]");
-        warehouse.setIsActive(true);
-        return warehouseRepository.save(warehouse);
+        return names;
     }
 
-    private Map<String, Object> optionValues(Map<String, Object> variantPayload) {
-        Map<String, Object> values = new HashMap<>();
-        putIfPresent(values, "Option 1", variantPayload.get("option1"));
-        putIfPresent(values, "Option 2", variantPayload.get("option2"));
-        putIfPresent(values, "Option 3", variantPayload.get("option3"));
-        return values;
+    private String normalizeOptionName(String name) {
+        if (name == null) return "";
+        String normalized = name.trim();
+        if (normalized.equalsIgnoreCase("size") || normalized.equalsIgnoreCase("kích thước")) {
+            return "Size";
+        }
+        if (normalized.equalsIgnoreCase("color")
+                || normalized.equalsIgnoreCase("colour")
+                || normalized.equalsIgnoreCase("màu")
+                || normalized.equalsIgnoreCase("màu sắc")) {
+            return "Màu";
+        }
+        return normalized;
     }
 
     private void putIfPresent(Map<String, Object> map, String key, Object value) {
@@ -435,5 +428,17 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private OffsetDateTime observedAt(Map<String, Object> payload, WebhookEvent event) {
+        Object value = WebhookPayloadUtils.firstPresent(payload, "updated_at", "updatedAt");
+        if (value != null) {
+            try {
+                return OffsetDateTime.parse(value.toString());
+            } catch (RuntimeException ignored) {
+                // Fall back to the durable receive time.
+            }
+        }
+        return event.getReceivedAt() == null ? OffsetDateTime.now() : event.getReceivedAt();
     }
 }

@@ -30,6 +30,16 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     List<ProductVariant> findByProductIdInAndDeletedAtIsNull(Collection<UUID> productIds);
 
+    @Query("SELECT v FROM ProductVariant v " +
+            "JOIN FETCH v.product p " +
+            "WHERE v.deletedAt IS NULL " +
+            "AND p.deletedAt IS NULL " +
+            "AND NOT EXISTS (" +
+            "    SELECT 1 FROM InventoryItem i " +
+            "    WHERE i.variant = v" +
+            ")")
+    List<ProductVariant> findVariantsWithoutInventoryItems();
+
     boolean existsBySkuInAndDeletedAtIsNull(Collection<String> skus);
 
     boolean existsByBarcodeInAndDeletedAtIsNull(Collection<String> barcodes);
@@ -49,4 +59,17 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             "WHERE v.isActive = true AND v.deletedAt IS NULL " +
             "ORDER BY v.createdAt DESC")
     Page<ProductVariant> findAllActive(Pageable pageable);
+
+    @Query("SELECT v FROM ProductVariant v JOIN FETCH v.product p " +
+            "WHERE v.isActive = true AND v.deletedAt IS NULL " +
+            "AND p.deletedAt IS NULL " +
+            "AND CAST(p.status AS string) = 'ACTIVE' " +
+            "ORDER BY p.name, v.name, v.sku")
+    List<ProductVariant> findAllImportableWithProduct();
+
+    @Query("SELECT v FROM ProductVariant v JOIN FETCH v.product p " +
+            "WHERE v.id = :id AND v.isActive = true AND v.deletedAt IS NULL " +
+            "AND p.deletedAt IS NULL")
+    Optional<ProductVariant> findImportableById(@Param("id") UUID id);
+
 }

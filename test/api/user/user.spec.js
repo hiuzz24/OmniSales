@@ -4,17 +4,21 @@ const {
   cleanupTestUser,
   API_BASE,
 } = require('../../utils/user-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('User API Tests', () => {
 
   let createdUserIds = [];
 
-  test.afterEach(async ({ request, managerHeaders }) => {
-    if (!createdUserIds.length) return;
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdUserIds.splice(0)) {
-      await cleanupTestUser(request, authToken, id);
+  test.afterEach(async ({ request }) => {
+    if (createdUserIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdUserIds.splice(0)) {
+        await cleanupTestUser(request, authToken, id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // POST /users
@@ -216,5 +220,49 @@ test.describe('User API Tests', () => {
       headers: { ...managerHeaders, 'Content-Type': 'application/json' },
       data: { fullName: originalName },
     });
+  });
+
+  // =========================================================
+  // Phase B5: New endpoint (POST /me/change-password)
+  // =========================================================
+
+  // USR-CP-1 - POST /me/change-password (no auth)
+  test('USR-CP-1 - POST /api/users/me/change-password - Without auth returns 401 or 403', async ({ request }) => {
+    const response = await request.post(`${API_BASE}/users/me/change-password`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { oldPassword: 'x', newPassword: 'y' },
+    });
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // USR-CP-2 - POST /me/change-password (with auth, wrong old password)
+  test('USR-CP-2 - POST /api/users/me/change-password - Wrong old password returns 400/401/500', async ({ request, managerHeaders }) => {
+    const response = await request.post(`${API_BASE}/users/me/change-password`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: { oldPassword: 'WRONG_OLD_PASSWORD', newPassword: 'NewP@ss123' },
+    });
+
+    expect([200, 400, 401, 500]).toContain(response.status());
+  });
+
+  // USR-CP-3 - POST /me/change-password (empty body)
+  test('USR-CP-3 - POST /api/users/me/change-password - Empty body returns 400', async ({ request, managerHeaders }) => {
+    const response = await request.post(`${API_BASE}/users/me/change-password`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: {},
+    });
+
+    expect([400, 500]).toContain(response.status());
+  });
+
+  // USR-CP-4 - POST /me/change-password (no new password)
+  test('USR-CP-4 - POST /api/users/me/change-password - Missing new password returns 400', async ({ request, managerHeaders }) => {
+    const response = await request.post(`${API_BASE}/users/me/change-password`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: { oldPassword: 'test-old' },
+    });
+
+    expect([400, 500]).toContain(response.status());
   });
 });

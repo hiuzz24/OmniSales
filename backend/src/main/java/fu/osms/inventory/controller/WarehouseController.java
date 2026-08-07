@@ -1,9 +1,12 @@
 package fu.osms.inventory.controller;
 
 import fu.osms.common.dto.ApiResponse;
+import fu.osms.inventory.dto.request.WarehouseMarketplaceSyncRequest;
 import fu.osms.inventory.dto.request.WarehouseRequest;
+import fu.osms.inventory.dto.response.WarehouseMarketplaceSyncResult;
 import fu.osms.inventory.dto.response.WarehouseResponse;
 import fu.osms.inventory.service.WarehouseService;
+import fu.osms.inventory.service.WarehouseSyncService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,15 +23,19 @@ import java.util.UUID;
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
+    private final WarehouseSyncService warehouseSyncService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> create(@Valid @RequestBody WarehouseRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(warehouseService.create(request)));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> getById(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.getById(id)));
     }
 
     @GetMapping("/master")
@@ -39,24 +46,54 @@ public class WarehouseController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
-    public ResponseEntity<ApiResponse<List<WarehouseResponse>>> getAll() {
-        List<WarehouseResponse> warehouses = warehouseService.getAll();
+    public ResponseEntity<ApiResponse<List<WarehouseResponse>>> getAll(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status) {
+        List<WarehouseResponse> warehouses = warehouseService.getAll(keyword, status);
         return ResponseEntity.ok(ApiResponse.success(warehouses));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<WarehouseResponse>> update(@PathVariable UUID id,
                                                                  @Valid @RequestBody WarehouseRequest request) {
-        throw new UnsupportedOperationException("Chưa code");
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.update(id, request)));
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<WarehouseResponse>> toggleStatus(@PathVariable UUID id,
+                                                                       @RequestBody java.util.Map<String, Boolean> body) {
+        Boolean isActive = body.getOrDefault("isActive", true);
+        return ResponseEntity.ok(ApiResponse.success(warehouseService.toggleStatus(id, isActive)));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
-        throw new UnsupportedOperationException("Chưa code");
+        warehouseService.delete(id);
+        return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/userWarehouse/{id}")
     public ResponseEntity<ApiResponse<WarehouseResponse>> getUserWarehouseById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(warehouseService.getWarehouseByUserId(id)));
+    }
+
+    /**
+     * Sync warehouse name, address, and contact info to all connected marketplace channels.
+     * Each channel (Shopify, Lazada, TikTok) is attempted independently so a failure on one
+     * does not block the others. The response contains per-channel results.
+     */
+    @PostMapping("/{id}/sync-to-marketplaces")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<WarehouseMarketplaceSyncResult>> syncToMarketplaces(
+            @PathVariable UUID id,
+            @Valid @RequestBody WarehouseMarketplaceSyncRequest request) {
+        WarehouseMarketplaceSyncResult result = warehouseSyncService.syncToMarketplaces(id, request);
+        String message = result.isAllSucceeded()
+                ? "Đã cập nhật kho hàng lên tất cả các sàn thành công."
+                : "Cập nhật kho hàng hoàn tất — một số sàn gặp lỗi, vui lòng kiểm tra chi tiết.";
+        return ResponseEntity.ok(ApiResponse.success(message, result));
     }
 }

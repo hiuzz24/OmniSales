@@ -73,7 +73,7 @@ const ISSUE_TYPES = {
 };
 
 const STATUS_CONFIG = {
-  DRAFT: { label: 'Lưu tạm', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  DRAFT: { label: 'Đang xử lý', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
   CONFIRMED: { label: 'Hoàn thành', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
   CANCELLED: { label: 'Đã hủy', color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
 };
@@ -98,7 +98,7 @@ const DELIVERY_EXPORT_COLUMNS = [
   { key: 'issueCode', label: 'Mã phiếu', width: 16, defaultChecked: true, getValue: (delivery) => delivery.issueCode ?? '' },
   { key: 'warehouseName', label: 'Kho', width: 24, defaultChecked: true, getValue: (delivery) => delivery.warehouseName ?? '' },
   { key: 'issueType', label: 'Loại xuất', width: 18, defaultChecked: true, getValue: (delivery) => getStatusLabel(delivery.issueType ?? delivery.deliveryType) },
-  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (delivery) => getStatusLabel(delivery.status) },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: true, getValue: (delivery) => delivery.status === 'DRAFT' ? 'Đang xử lý' : getStatusLabel(delivery.status) },
   { key: 'recipient', label: 'Người / Đơn nhận', width: 24, defaultChecked: true, getValue: (delivery) => delivery.recipient ?? '' },
   { key: 'totalSkuCount', label: 'SL SKU', width: 10, type: 'number', defaultChecked: true, getValue: (delivery) => delivery.totalSkuCount ?? delivery.items?.length ?? 0 },
   { key: 'totalQuantity', label: 'Tổng SL', width: 12, type: 'number', defaultChecked: true, getValue: (delivery) => delivery.totalQuantity ?? 0 },
@@ -123,7 +123,7 @@ const DELIVERY_DETAIL_EXPORT_COLUMNS = [
   { key: 'quantity', label: 'Số lượng', width: 12, type: 'number', defaultChecked: true, getValue: (row) => row.quantity },
   { key: 'unitCost', label: 'Đơn giá', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.unitCost },
   { key: 'lineTotal', label: 'Thành tiền', width: 16, type: 'currency', defaultChecked: true, getValue: (row) => row.lineTotal },
-  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => getStatusLabel(row.status) },
+  { key: 'status', label: 'Trạng thái', width: 16, defaultChecked: false, getValue: (row) => row.status === 'DRAFT' ? 'Đang xử lý' : getStatusLabel(row.status) },
   { key: 'note', label: 'Ghi chú', width: 30, defaultChecked: false, getValue: (row) => row.note },
 ];
 
@@ -160,8 +160,11 @@ const TypeBadge = ({ type }) => {
   return <Badge {...config} label={config.shortLabel} />;
 };
 
-const StatusBadge = ({ status }) => {
-  const config = STATUS_CONFIG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
+const StatusBadge = ({ status, issueType }) => {
+  const base = STATUS_CONFIG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
+  const config = issueType === 'ORDER' && status === 'DRAFT'
+    ? { ...base, label: 'Chờ xuất kho' }
+    : base;
   return <Badge {...config} />;
 };
 
@@ -190,12 +193,12 @@ const ActionMenu = ({ delivery, canComplete, isOwner, completingId, cancellingId
       <ActionMenuItem onClick={() => { setOpen(false); onDetail(delivery.id); }}>
         <Eye size={14} /> Xem chi tiết
       </ActionMenuItem>
-      {delivery.status === 'DRAFT' && (
+      {delivery.status === 'DRAFT' && delivery.issueType !== 'ORDER' && (
         <ActionMenuItem onClick={() => { setOpen(false); onEdit(delivery.id); }}>
           <Pencil size={14} /> Chỉnh sửa
         </ActionMenuItem>
       )}
-      {canComplete && delivery.status === 'DRAFT' && (
+      {canComplete && delivery.status === 'DRAFT' && delivery.issueType !== 'ORDER' && (
         <ActionMenuItem
           color="#059669"
           disabled={completingId === delivery.id}
@@ -204,7 +207,8 @@ const ActionMenu = ({ delivery, canComplete, isOwner, completingId, cancellingId
           <CheckCircle2 size={14} /> {completingId === delivery.id ? 'Đang hoàn thành...' : 'Hoàn thành xuất kho'}
         </ActionMenuItem>
       )}
-      {isOwner && delivery.status !== 'CANCELLED' && (
+      {isOwner && delivery.status !== 'CANCELLED'
+        && !(delivery.issueType === 'ORDER' && delivery.status === 'CONFIRMED') && (
         <ActionMenuItem
           color="#dc2626"
           disabled={cancellingId === delivery.id}
@@ -340,9 +344,12 @@ export default function StockDeliveryPage() {
 
   const handleCancelDelivery = async (delivery) => {
     if (!isOwner || !delivery?.id || delivery.status === 'CANCELLED') return;
+    const isOrderDraft = delivery.issueType === 'ORDER' && delivery.status === 'DRAFT';
     const ok = await confirm({
       title: 'Hủy phiếu xuất?',
-      message: `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
+      message: isOrderDraft
+        ? `Phiếu "${delivery.issueCode}" sẽ bị hủy. Hàng đã giữ của đơn không được giải phóng và bạn có thể tạo lại phiếu khi đơn vẫn đang xử lý.`
+        : `Phiếu "${delivery.issueCode}" sẽ bị hủy và tồn kho của các sản phẩm trong phiếu sẽ được khôi phục.`,
       confirmText: 'Hủy phiếu',
       tone: 'danger',
     });
@@ -353,7 +360,9 @@ export default function StockDeliveryPage() {
     setCancellingId(delivery.id);
     try {
       await stockDeliveryService.cancelStockDelivery(delivery.id);
-      toast.success('Hủy phiếu xuất thành công. Tồn kho đã được khôi phục.');
+      toast.success(isOrderDraft
+        ? 'Đã hủy phiếu xuất. Reservation của đơn hàng vẫn được giữ.'
+        : 'Hủy phiếu xuất thành công. Tồn kho đã được khôi phục.');
       await Promise.all([fetchDeliveries(), fetchStatistics()]);
     } catch (error) {
       toast.error(error?.message || 'Không thể hủy phiếu xuất. Vui lòng thử lại.');
@@ -366,7 +375,7 @@ export default function StockDeliveryPage() {
     if (!canComplete || !delivery?.id || delivery.status !== 'DRAFT') return;
     const ok = await confirm({
       title: 'Hoàn thành phiếu xuất?',
-      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`,
+      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Đang xử lý.`,
       confirmText: 'Hoàn thành',
     });
     if (!ok) {
@@ -420,7 +429,7 @@ export default function StockDeliveryPage() {
       <td style={{ ...tableCellStyle, color: '#ff3d00', fontFamily: 'monospace', fontWeight: 700 }}>{delivery.issueCode ?? '-'}</td>
       <td style={tableCellStyle}>{delivery.warehouseName ?? '-'}</td>
       <td style={tableCellStyle}><TypeBadge type={delivery.issueType ?? delivery.deliveryType} /></td>
-      <td style={tableCellStyle}><StatusBadge status={delivery.status} /></td>
+      <td style={tableCellStyle}><StatusBadge status={delivery.status} issueType={delivery.issueType} /></td>
       <td style={{ ...tableCellStyle, color: '#020617' }}>{delivery.recipient ?? '-'}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(delivery.totalSkuCount ?? delivery.items?.length ?? 0)}</td>
       <td style={{ ...tableCellStyle, textAlign: 'right', color: '#020617', fontWeight: 700 }}>{formatNumber(delivery.totalQuantity)}</td>

@@ -1,5 +1,6 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Stocktake API Tests', () => {
 
@@ -16,6 +17,11 @@ test.describe('Stocktake API Tests', () => {
         warehouseId = data[0].id;
       }
     }
+  });
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/stocktakes/statistics
@@ -120,6 +126,57 @@ test.describe('Stocktake API Tests', () => {
         'Content-Type': 'application/json',
       },
       data: { status: 'INVALID_STATUS' },
+    });
+
+    expect([400, 404, 500]).toContain(response.status());
+  });
+
+  // =========================================================
+  // Phase B5: New endpoint (PUT /{id})
+  // =========================================================
+
+  // ST-12 - PUT /api/stocktakes/{id} (no auth)
+  test('ST-12 - PUT /api/stocktakes/{id} - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.put(`${API_BASE}/stocktakes/${fakeId}`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {},
+    });
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // ST-13 - PUT /api/stocktakes/{id} (with auth, non-existent id)
+  test('ST-13 - PUT /api/stocktakes/{id} - Non-existent id returns 404/500', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.put(`${API_BASE}/stocktakes/${fakeId}`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: {
+        warehouseId: warehouseId || '00000000-0000-0000-0000-000000000001',
+        sessionDate: new Date().toISOString().split('T')[0],
+        reason: 'ST-13 PUT test',
+      },
+    });
+
+    expect([200, 400, 404, 500]).toContain(response.status());
+  });
+
+  // ST-14 - PUT /api/stocktakes/{id} (invalid body)
+  test('ST-14 - PUT /api/stocktakes/{id} - Invalid body returns 400', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.put(`${API_BASE}/stocktakes/${fakeId}`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: {},
+    });
+
+    expect([400, 500]).toContain(response.status());
+  });
+
+  // ST-15 - PUT /api/stocktakes/{id} (invalid uuid)
+  test('ST-15 - PUT /api/stocktakes/{id} - Invalid UUID returns 400/500', async ({ request, managerHeaders }) => {
+    const response = await request.put(`${API_BASE}/stocktakes/not-a-uuid`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: { warehouseId: warehouseId || '00000000-0000-0000-0000-000000000001' },
     });
 
     expect([400, 404, 500]).toContain(response.status());

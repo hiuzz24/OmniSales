@@ -16,6 +16,8 @@ public interface AvailableVariantDTOMapper {
     @Mapping(target = "productName", source = "variant.product.name")
     @Mapping(target = "variantName", source = "variant.name")
     @Mapping(target = "unitPrice", source = "variant.price")
+    @Mapping(target = "salePrice", source = "variant.price")
+    @Mapping(target = "currentSalePrice", source = "variant.price")
     @Mapping(target = "averageCost", source = "item.averageCost")
     @Mapping(target = "availableQuantity", source = "item.availableQuantity")
     AvailableVariantDTO toAvailableDto(ProductVariant variant, InventoryItem item);

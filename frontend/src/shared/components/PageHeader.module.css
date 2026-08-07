@@ -49,8 +49,8 @@
 
 .title {
   margin: 0;
-  font-size: clamp(28px, 3.5vw, 36px);
-  font-weight: 800;
+  font-size: 24px;
+  font-weight: 700;
   line-height: 1.1;
   color: var(--catalog-ink, #09090b);
   letter-spacing: -0.03em;
@@ -59,7 +59,7 @@
 
 .subtitle {
   margin-top: 6px;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 1.5;
   color: var(--catalog-muted, #64748b);

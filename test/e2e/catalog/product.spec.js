@@ -21,15 +21,19 @@ test.describe('Product Listing E2E Tests', () => {
   });
 
   test('A3 - Filter by status (ACTIVE)', async ({ managerPage }) => {
-    const statusSelect = managerPage.locator('select').nth(1);
+    // There is only one <select> on the product filter bar (status).
+    const statusSelect = managerPage.locator('select').first();
     await statusSelect.selectOption('ACTIVE');
     await managerPage.waitForTimeout(500);
     await expect(managerPage.getByRole('heading', { name: /Danh sách sản phẩm/ })).toBeVisible();
   });
 
-  test('A4 - Filter by platform (SHOPEE)', async ({ managerPage }) => {
-    const platformSelect = managerPage.locator('select').nth(0);
-    await platformSelect.selectOption('SHOPEE');
+  test('A4 - Filter by platform (Shopify)', async ({ managerPage }) => {
+    // Platforms are rendered as toggle buttons (LAZADA, SHOPIFY, TIKTOK),
+    // not as a <select>. Click the Shopify chip to toggle the filter.
+    const platformBtn = managerPage.locator('button:has-text("Shopify")').first();
+    await expect(platformBtn).toBeVisible({ timeout: 5000 });
+    await platformBtn.click();
     await managerPage.waitForTimeout(500);
     await expect(managerPage.getByRole('heading', { name: /Danh sách sản phẩm/ })).toBeVisible();
   });

@@ -4,6 +4,7 @@ import fu.osms.common.enums.PlatformType;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.service.PlatformCatalogWebhookProcessor;
 import fu.osms.sync.service.PlatformOrderWebhookProcessor;
+import fu.osms.sync.service.PlatformReturnWebhookProcessor;
 import fu.osms.sync.service.WebhookBusinessProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,10 +22,21 @@ public class WebhookBusinessProcessorImpl implements WebhookBusinessProcessor {
 
     private final List<PlatformOrderWebhookProcessor> orderWebhookProcessors;
     private final List<PlatformCatalogWebhookProcessor> catalogWebhookProcessors;
+    private final List<PlatformReturnWebhookProcessor> returnWebhookProcessors;
 
     @Override
     public String process(WebhookEvent event) {
         String eventType = event.getEventType() != null ? event.getEventType().toUpperCase() : "";
+        PlatformReturnWebhookProcessor returnProcessor = returnWebhookProcessors.stream()
+                .filter(candidate -> candidate.supports(event))
+                .findFirst()
+                .orElse(null);
+        if (returnProcessor != null) {
+            return returnProcessor.process(event);
+        }
+        if ("TIKTOK_INVENTORY_CHANGED".equals(eventType)) {
+            return processCatalogEvent(event);
+        }
         if (event.getPlatform() != PlatformType.TIKTOK && !eventType.contains("ORDER")) {
             return processCatalogEvent(event);
         }

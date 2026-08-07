@@ -1,10 +1,11 @@
 import axiosClient from './axiosClient';
 
 const orderApi = {
-  getAll: async ({ status, channelId, keyword, from, to, page = 0, size = 20 } = {}) => {
+  getAll: async ({ status, channelId, customerId, keyword, from, to, page = 0, size = 20 } = {}) => {
     const params = { page, size };
     if (status) params.status = status;
     if (channelId) params.channelId = channelId;
+    if (customerId) params.customerId = customerId;
     if (keyword) params.keyword = keyword;
     if (from) params.from = from;
     if (to) params.to = to;
@@ -54,6 +55,26 @@ const orderApi = {
 
   getStats: async () => {
     const response = await axiosClient.get('/orders/stats');
+    return response.data.data;
+  },
+
+  getUncustomerdCount: async () => {
+    const response = await axiosClient.get('/orders/uncustomerd-count');
+    return response.data.data;
+  },
+
+  pullOrders: async (data) => {
+    const response = await axiosClient.post('/orders/pull', data);
+    return response.data.data;
+  },
+
+  getPullJob: async (id) => {
+    const response = await axiosClient.get(`/orders/pull/${id}`);
+    return response.data.data;
+  },
+
+  getActivePullJobs: async () => {
+    const response = await axiosClient.get('/orders/pull/active');
     return response.data.data;
   },
 };

@@ -133,3 +133,8 @@
     grid-template-columns: 1fr;
   }
 }
+
+.row { gap: 12px; }
+.label { color: #52667c; font-size: 11px; font-weight: 750; letter-spacing: 0.035em; text-transform: uppercase; }
+.select, .input { min-height: 40px; border-color: #cbd8e2; border-radius: 8px; color: #172033; background-color: #fff; font-size: 13px; }
+.select:focus, .input:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }

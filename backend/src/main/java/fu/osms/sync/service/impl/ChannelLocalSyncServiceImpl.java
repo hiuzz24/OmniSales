@@ -1,17 +1,10 @@
 package fu.osms.sync.service.impl;
 
-import fu.osms.catalog.entity.Product;
-import fu.osms.catalog.entity.ProductImage;
-import fu.osms.catalog.entity.ProductVariant;
-import fu.osms.catalog.repository.ProductImageRepository;
-import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.channel.dto.response.ChannelImportSyncResponse;
 import fu.osms.channel.dto.response.ChannelSyncDetailResponse;
 import fu.osms.channel.entity.Channel;
-import fu.osms.channel.entity.ChannelProduct;
-import fu.osms.channel.repository.ChannelProductRepository;
-import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.AppException;
@@ -19,12 +12,11 @@ import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
 import fu.osms.sync.entity.SyncLog;
-import fu.osms.sync.lazada.dto.LazadaSyncTask;
-import fu.osms.sync.lazada.service.LazadaSyncTaskDispatcher;
+import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
+import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.repository.SyncLogRepository;
 import fu.osms.sync.service.ChannelLocalSyncService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
-import fu.osms.sync.service.PlatformSyncService;
 import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
 import fu.osms.sync.tiktok.TikTokInventoryUpdateService;
 import lombok.RequiredArgsConstructor;
@@ -35,7 +27,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -49,13 +40,9 @@ import java.util.UUID;
 public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
 
     private final ChannelRepository channelRepository;
-    private final ChannelProductRepository channelProductRepository;
-    private final ChannelProductVariantRepository channelProductVariantRepository;
-    private final ProductVariantRepository productVariantRepository;
-    private final ProductImageRepository productImageRepository;
-    private final PlatformSyncServiceFactory platformSyncServiceFactory;
+    private final ChannelConnectionValidator channelConnectionValidator;
     private final SyncLogRepository syncLogRepository;
-    private final LazadaSyncTaskDispatcher lazadaSyncTaskDispatcher;
+    private final LazadaInventoryUpdateService lazadaInventoryUpdateService;
     private final ShopifyInventoryUpdateService shopifyInventoryUpdateService;
     private final TikTokInventoryUpdateService tikTokInventoryUpdateService;
     private final StockReceiveRepository stockReceiveRepository;
@@ -65,16 +52,16 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
 
     @Override
     public ChannelImportSyncResponse syncAllLocalChanges(UUID requestedChannelId) {
-        channelRepository.findById(requestedChannelId)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+        channelConnectionValidator.requireConnected(requestedChannelId);
+        return syncAllLocalChanges();
+    }
 
+    @Override
+    public ChannelImportSyncResponse syncAllLocalChanges() {
         marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
 
-        int productCount = 0;
-        int variantCount = 0;
-        int warehouseCount = 0;
         int pushedVariantCount = 0;
+        int warehouseCount = 0;
         int failedCount = 0;
         List<String> failedMessages = new ArrayList<>();
         List<ChannelSyncDetailResponse> details = new ArrayList<>();
@@ -95,10 +82,8 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
                 if (response == null) {
                     continue;
                 }
-                productCount += response.getProductCount();
-                variantCount += response.getVariantCount();
-                warehouseCount += response.getWarehouseCount();
                 pushedVariantCount += response.getPushedVariantCount();
+                warehouseCount += response.getWarehouseCount();
                 details.add(detail(channel, response, response.getStatus(), response.getMessage(), startedAt));
             } catch (Exception e) {
                 failedCount++;
@@ -108,16 +93,23 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
             }
         }
 
+        String message;
+        if (failedCount > 0) {
+            message = "Đồng bộ hoàn tất một phần. Lỗi " + failedCount + " kênh: " + failedMessages;
+        } else if (pushedVariantCount == 0) {
+            message = "Không có phiếu nhập hoặc phiếu xuất kho mới cần đồng bộ.";
+        } else {
+            message = "Đã đồng bộ tồn kho và giá từ các phiếu nhập/xuất kho lên tất cả sàn đã liên kết.";
+        }
+
         return ChannelImportSyncResponse.builder()
-                .channelId(requestedChannelId)
-                .productCount(productCount)
-                .variantCount(variantCount)
+                .channelId(null)
+                .productCount(0)
+                .variantCount(pushedVariantCount)
                 .warehouseCount(warehouseCount)
                 .pushedVariantCount(pushedVariantCount)
                 .status(failedCount == 0 ? SyncStatus.SYNCED.name() : SyncStatus.FAILED.name())
-                .message(failedCount == 0
-                        ? "Đã đồng bộ từ ứng dụng lên tất cả sàn đã liên kết."
-                        : "Đồng bộ hoàn tất một phần. Lỗi " + failedCount + " kênh: " + failedMessages)
+                .message(message)
                 .details(details)
                 .build();
     }
@@ -125,9 +117,7 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
     @Override
     @Transactional
     public ChannelImportSyncResponse syncLocalChanges(UUID channelId) {
-        Channel channel = channelRepository.findById(channelId)
-                .filter(c -> c.getDeletedAt() == null)
-                .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+        Channel channel = channelConnectionValidator.requireConnected(channelId);
 
         if (!Boolean.TRUE.equals(channel.getSyncEnabled())) {
             throw new IllegalStateException("Kênh đang tắt đồng bộ.");
@@ -136,47 +126,74 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
         marketplaceWarehouseConsistencyService.validateConnectedPrimaryWarehouses();
         validateSellerBinding(channel);
 
-        if (channel.getPlatform() == PlatformType.LAZADA) {
-            return lazadaSyncTaskDispatcher.dispatch(LazadaSyncTask.localChanges(channelId));
-        }
-        if (channel.getPlatform() == PlatformType.TIKTOK) {
-            return syncTikTokInventory(channel);
-        }
-        if (channel.getPlatform() != PlatformType.SHOPIFY) {
-            throw new IllegalArgumentException("Chỉ hỗ trợ đồng bộ thủ công cho Lazada và Shopify.");
+        if (channel.getPlatform() != PlatformType.LAZADA
+                && channel.getPlatform() != PlatformType.SHOPIFY
+                && channel.getPlatform() != PlatformType.TIKTOK) {
+            throw new IllegalArgumentException("Chỉ hỗ trợ đồng bộ tồn kho cho Lazada, Shopify và TikTok Shop.");
         }
 
-        return syncShopifyLocalChanges(channel);
+        return syncInventoryDocuments(channel);
     }
 
-    private ChannelImportSyncResponse syncTikTokInventory(Channel channel) {
+    private ChannelImportSyncResponse syncInventoryDocuments(Channel channel) {
         SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
                 .channel(channel)
-                .jobType("TIKTOK_INVENTORY_PUSH_SYNC")
+                .jobType(channel.getPlatform().name() + "_APPLICATION_INVENTORY_SYNC")
                 .status(SyncStatus.PENDING)
                 .startedAt(OffsetDateTime.now())
                 .build());
+
         try {
-            int pushedVariantCount = tikTokInventoryUpdateService.pushAvailableStock(channel.getId());
-            OffsetDateTime syncedAt = OffsetDateTime.now();
-            channel.setLastSyncedAt(syncedAt);
+            OffsetDateTime syncStartedAt = OffsetDateTime.now();
+            OffsetDateTime changedSince = channel.getLastSyncedApplicationAt();
+            Set<UUID> changedVariantIds = findStockChangedVariantIds(changedSince, syncStartedAt);
+
+            log.info(
+                    "[ChannelLocalSync] Resolved inventory documents channelId={} platform={} changedSince={} changedUntil={} variantCount={}",
+                    channel.getId(),
+                    channel.getPlatform(),
+                    changedSince,
+                    syncStartedAt,
+                    changedVariantIds.size()
+            );
+
+            if (changedVariantIds.isEmpty()) {
+                channel.setLastSyncedApplicationAt(syncStartedAt);
+                channelRepository.save(channel);
+                completeSyncLog(syncLog, 0, syncStartedAt);
+                return response(channel, syncLog, 0, 0,
+                        "Không có phiếu nhập hoặc phiếu xuất kho mới cần đồng bộ.");
+            }
+
+            int pushedVariantCount;
+            int changedWarehouseCount = 0;
+            if (channel.getPlatform() == PlatformType.LAZADA) {
+                LazadaInventorySyncResult result = lazadaInventoryUpdateService.syncChangedSellableStock(
+                        channel.getId(), changedSince, syncStartedAt, changedVariantIds);
+                pushedVariantCount = result.pushedVariantCount();
+                changedWarehouseCount = result.changedWarehouseCount();
+            } else if (channel.getPlatform() == PlatformType.SHOPIFY) {
+                pushedVariantCount = shopifyInventoryUpdateService.syncChangedAvailableStock(
+                        channel.getId(), changedSince, syncStartedAt, changedVariantIds);
+            } else {
+                pushedVariantCount = tikTokInventoryUpdateService.pushAvailableStock(
+                        channel.getId(), changedVariantIds);
+            }
+
+            Map<String, Object> metadata = channel.getMetadata() == null
+                    ? new HashMap<>()
+                    : new HashMap<>(channel.getMetadata());
+            metadata.put("lastPushedSkuVariantCount", pushedVariantCount);
+            metadata.put("lastChangedWarehouseCount", changedWarehouseCount);
+            channel.setMetadata(metadata);
+            channel.setLastSyncedApplicationAt(syncStartedAt);
             channelRepository.save(channel);
-            syncLog.setStatus(SyncStatus.SYNCED);
-            syncLog.setTotalItems(pushedVariantCount);
-            syncLog.setSuccessCount(pushedVariantCount);
-            syncLog.setFailCount(0);
-            syncLog.setCompletedAt(syncedAt);
-            syncLogRepository.save(syncLog);
-            return ChannelImportSyncResponse.builder()
-                    .channelId(channel.getId())
-                    .syncLogId(syncLog.getId())
-                    .productCount(0)
-                    .variantCount(pushedVariantCount)
-                    .warehouseCount(0)
-                    .pushedVariantCount(pushedVariantCount)
-                    .status(SyncStatus.SYNCED.name())
-                    .message("Đã đẩy tồn kho từ ứng dụng lên TikTok Shop.")
-                    .build();
+            completeSyncLog(syncLog, pushedVariantCount, OffsetDateTime.now());
+
+            String message = pushedVariantCount == 0
+                    ? "Không có SKU đã liên kết cần cập nhật trên " + channel.getPlatform() + "."
+                    : "Đã cập nhật tồn kho và giá từ phiếu nhập/xuất kho lên " + channel.getPlatform() + ".";
+            return response(channel, syncLog, pushedVariantCount, changedWarehouseCount, message);
         } catch (Exception e) {
             syncLog.setStatus(SyncStatus.FAILED);
             syncLog.setFailCount(1);
@@ -187,134 +204,41 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
         }
     }
 
-    private ChannelImportSyncResponse syncShopifyLocalChanges(Channel channel) {
-        SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
-                .channel(channel)
-                .jobType("SHOPIFY_LOCAL_CHANGES_SYNC")
-                .status(SyncStatus.PENDING)
-                .startedAt(OffsetDateTime.now())
-                .build());
+    private ChannelImportSyncResponse response(Channel channel,
+                                               SyncLog syncLog,
+                                               int pushedVariantCount,
+                                               int changedWarehouseCount,
+                                               String message) {
+        return ChannelImportSyncResponse.builder()
+                .channelId(channel.getId())
+                .syncLogId(syncLog.getId())
+                .productCount(0)
+                .variantCount(pushedVariantCount)
+                .warehouseCount(changedWarehouseCount)
+                .pushedVariantCount(pushedVariantCount)
+                .status(SyncStatus.SYNCED.name())
+                .message(message)
+                .build();
+    }
 
-        int syncedProductCount = 0;
-        int failedProductCount = 0;
-        int variantCount = 0;
-        int pushedVariantCount = 0;
-
-        try {
-            OffsetDateTime syncStartedAt = OffsetDateTime.now();
-            OffsetDateTime changedSince = channel.getLastSyncedAt();
-            Set<UUID> stockChangedVariantIds = findStockChangedVariantIds(changedSince, syncStartedAt);
-            List<ChannelProduct> channelProducts = changedSince == null
-                    ? channelProductRepository.findActiveByChannelIdWithProduct(channel.getId())
-                    : channelProductRepository.findActiveChangedByChannelIdSince(
-                            channel.getId(),
-                            changedSince,
-                            SyncStatus.SYNCED
-                    );
-            if (changedSince != null && !stockChangedVariantIds.isEmpty()) {
-                Map<UUID, ChannelProduct> scopedProducts = new LinkedHashMap<>();
-                for (ChannelProduct channelProduct : channelProducts) {
-                    scopedProducts.put(channelProduct.getId(), channelProduct);
-                }
-                channelProductRepository.findActiveByChannelIdAndVariantIdIn(channel.getId(), stockChangedVariantIds)
-                        .forEach(channelProduct -> scopedProducts.put(channelProduct.getId(), channelProduct));
-                channelProducts = new ArrayList<>(scopedProducts.values());
-            }
-
-            PlatformSyncService platformSyncService = platformSyncServiceFactory.getService(channel.getPlatform());
-            Set<UUID> changedVariantIds = new HashSet<>(stockChangedVariantIds);
-            for (ChannelProduct channelProduct : channelProducts) {
-                Product product = channelProduct.getProduct();
-                if (product == null || product.getId() == null) {
-                    continue;
-                }
-
-                List<ProductVariant> variants = productVariantRepository.findByProductIdAndDeletedAtIsNull(product.getId());
-                List<ProductImage> images = productImageRepository.findByProductIdOrderByIsPrimaryDescSortOrderAsc(product.getId());
-                variantCount += variants.size();
-
-                try {
-                    boolean success = platformSyncService.syncProduct(product, variants, images, channel, channelProduct);
-                    if (success) {
-                        syncedProductCount++;
-                        variants.stream()
-                                .map(ProductVariant::getId)
-                                .filter(id -> id != null)
-                                .forEach(changedVariantIds::add);
-                    } else {
-                        failedProductCount++;
-                    }
-                } catch (Exception e) {
-                    failedProductCount++;
-                    log.error(
-                            "[ShopifyLocalSync] Product sync failed channelId={} productId={} productName={}",
-                            channel.getId(),
-                            product.getId(),
-                            product.getName(),
-                            e
-                    );
-                }
-            }
-
-            pushedVariantCount = shopifyInventoryUpdateService.syncChangedAvailableStock(
-                    channel.getId(),
-                    changedSince,
-                    syncStartedAt,
-                    changedVariantIds
-            );
-
-            Map<String, Object> metadata = channel.getMetadata() == null
-                    ? new HashMap<>()
-                    : new HashMap<>(channel.getMetadata());
-            metadata.put("productCount", channelProductRepository.countByChannelIdAndMappingState(channel.getId(), "ACTIVE"));
-            metadata.put("skuVariantCount", channelProductVariantRepository.countActiveByChannelId(channel.getId()));
-            metadata.put("lastPushedProductCount", syncedProductCount);
-            metadata.put("lastPushedSkuVariantCount", pushedVariantCount);
-            channel.setMetadata(metadata);
-            channel.setLastSyncedAt(syncStartedAt);
-            channelRepository.save(channel);
-
-            syncLog.setStatus(failedProductCount == 0 ? SyncStatus.SYNCED : SyncStatus.FAILED);
-            syncLog.setTotalItems(syncedProductCount + failedProductCount + pushedVariantCount);
-            syncLog.setSuccessCount(syncedProductCount + pushedVariantCount);
-            syncLog.setFailCount(failedProductCount);
-            if (failedProductCount > 0) {
-                syncLog.setErrorSummary("Có " + failedProductCount + " sản phẩm đồng bộ lên Shopify thất bại.");
-            }
-            syncLog.setCompletedAt(OffsetDateTime.now());
-            syncLogRepository.save(syncLog);
-
-            return ChannelImportSyncResponse.builder()
-                    .channelId(channel.getId())
-                    .syncLogId(syncLog.getId())
-                    .productCount(syncedProductCount)
-                    .variantCount(variantCount)
-                    .warehouseCount(0)
-                    .pushedVariantCount(pushedVariantCount)
-                    .status(syncLog.getStatus().name())
-                    .message(failedProductCount == 0
-                            ? "Đã đồng bộ thay đổi từ ứng dụng lên Shopify."
-                            : "Đồng bộ hoàn tất một phần, có sản phẩm bị lỗi.")
-                    .build();
-        } catch (Exception e) {
-            syncLog.setStatus(SyncStatus.FAILED);
-            syncLog.setTotalItems(syncedProductCount + failedProductCount + pushedVariantCount);
-            syncLog.setSuccessCount(syncedProductCount + pushedVariantCount);
-            syncLog.setFailCount(Math.max(1, failedProductCount));
-            syncLog.setErrorSummary(e.getMessage());
-            syncLog.setCompletedAt(OffsetDateTime.now());
-            syncLogRepository.save(syncLog);
-            throw e;
-        }
+    private void completeSyncLog(SyncLog syncLog, int pushedVariantCount, OffsetDateTime completedAt) {
+        syncLog.setStatus(SyncStatus.SYNCED);
+        syncLog.setTotalItems(pushedVariantCount);
+        syncLog.setSuccessCount(pushedVariantCount);
+        syncLog.setFailCount(0);
+        syncLog.setCompletedAt(completedAt);
+        syncLogRepository.save(syncLog);
     }
 
     private Set<UUID> findStockChangedVariantIds(OffsetDateTime changedSince, OffsetDateTime changedUntil) {
-        if (changedSince == null) {
-            return Set.of();
-        }
         Set<UUID> variantIds = new HashSet<>();
-        variantIds.addAll(stockReceiveRepository.findChangedConfirmedVariantIdsBetween(changedSince, changedUntil));
-        variantIds.addAll(inventoryIssueRepository.findChangedAppliedVariantIdsBetween(changedSince, changedUntil));
+        if (changedSince == null) {
+            variantIds.addAll(stockReceiveRepository.findConfirmedVariantIdsUpTo(changedUntil));
+            variantIds.addAll(inventoryIssueRepository.findConfirmedVariantIdsUpTo(changedUntil));
+        } else {
+            variantIds.addAll(stockReceiveRepository.findChangedConfirmedVariantIdsBetween(changedSince, changedUntil));
+            variantIds.addAll(inventoryIssueRepository.findChangedAppliedVariantIdsBetween(changedSince, changedUntil));
+        }
         return variantIds;
     }
 
@@ -332,7 +256,7 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
                 .shopDomain(metadataText(channel, "shopDomain", "shop"))
                 .status(status)
                 .message(message)
-                .productCount(response == null ? 0 : response.getProductCount())
+                .productCount(0)
                 .variantCount(response == null ? 0 : response.getVariantCount())
                 .warehouseCount(response == null ? 0 : response.getWarehouseCount())
                 .pushedVariantCount(response == null ? 0 : response.getPushedVariantCount())
@@ -358,7 +282,8 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
             throw new AppException(ErrorCode.INVALID_REQUEST,
                     "Kênh Lazada thiếu accountId/sellerId. Hãy kết nối lại Lazada trước khi đồng bộ.");
         }
-        if (channel.getPlatform() == PlatformType.TIKTOK && metadataText(channel, "shopCipher", "shop_cipher", "cipher") == null) {
+        if (channel.getPlatform() == PlatformType.TIKTOK
+                && metadataText(channel, "shopCipher", "shop_cipher", "cipher") == null) {
             throw new AppException(ErrorCode.INVALID_REQUEST,
                     "Kênh TikTok thiếu shopCipher. Hãy kết nối lại TikTok Shop trước khi đồng bộ.");
         }

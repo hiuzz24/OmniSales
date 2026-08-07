@@ -1,0 +1,124 @@
+.product-workspace {
+  --workspace-accent: #3f73bd;
+  --workspace-accent-strong: #3569b2;
+  --workspace-accent-soft: #eef6fb;
+  --workspace-ink: #172033;
+  --workspace-muted: #64748b;
+  --workspace-line: #dfe7ef;
+  --workspace-line-soft: #edf1f5;
+  --workspace-card: #fff;
+  width: calc(100% + 48px) !important;
+  max-width: none !important;
+  min-height: calc(100dvh - 64px) !important;
+  margin: -24px !important;
+  padding: 24px !important;
+  box-sizing: border-box;
+  color: var(--workspace-ink) !important;
+  background:
+    radial-gradient(circle at 8% 2%, rgba(189, 219, 242, .28), transparent 27%),
+    radial-gradient(circle at 96% 8%, rgba(208, 224, 217, .22), transparent 24%),
+    linear-gradient(180deg, #f2f7fb 0%, #f7f8fa 360px) !important;
+}
+
+.product-workspace--flow {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  padding-bottom: 32px;
+}
+
+.product-workspace--flow > :first-child {
+  padding: 14px 18px !important;
+  border: 1px solid #d8e3ed !important;
+  border-radius: 14px !important;
+  background: linear-gradient(135deg, rgba(235,245,252,.96), rgba(247,250,252,.96) 58%, rgba(240,248,246,.94)) !important;
+  box-shadow: 0 10px 28px rgba(61,91,126,.065), inset 0 1px rgba(255,255,255,.82) !important;
+}
+
+.product-workspace :where(input, select, textarea) {
+  min-height: 42px;
+  border-color: #d3dde7 !important;
+  border-radius: 10px !important;
+  color: #1f2937;
+  background-color: rgba(248,250,252,.9);
+  transition: border-color .17s ease, background-color .17s ease, box-shadow .17s ease;
+}
+
+.product-workspace :where(input, select, textarea):focus {
+  border-color: #9bbce0 !important;
+  background-color: #fff !important;
+  box-shadow: 0 0 0 3px rgba(65,116,184,.1) !important;
+  outline: none;
+}
+
+.product-workspace table {
+  color: #334155;
+  background: #fff;
+}
+
+.product-workspace thead,
+.product-workspace thead tr {
+  background: #f3f7fa !important;
+}
+
+.product-workspace th {
+  border-bottom-color: #e3e9ef !important;
+  color: #5b6878 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.product-workspace tbody tr {
+  transition: background-color .17s ease, box-shadow .17s ease;
+}
+
+.product-workspace tbody tr:hover {
+  background: linear-gradient(90deg, #f2f8fc, #f8fbfc 66%, #f4f9f7) !important;
+  box-shadow: inset 4px 0 #9dbdd9;
+}
+
+.product-workspace tbody td {
+  border-bottom-color: #f0f3f6 !important;
+}
+
+.product-workspace button {
+  transition: color .17s ease, border-color .17s ease, background-color .17s ease, box-shadow .17s ease, opacity .17s ease;
+}
+
+.product-workspace button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37,99,235,.16) !important;
+}
+
+.product-workspace :where(section, article) {
+  scroll-margin-top: 80px;
+}
+
+@media (max-width: 640px) {
+  .product-workspace {
+    width: calc(100% + 32px) !important;
+    margin: -16px !important;
+    padding: 16px !important;
+  }
+
+  .product-workspace--flow > :first-child {
+    align-items: flex-start !important;
+    padding: 12px !important;
+  }
+
+  .product-workspace :where(input, select, textarea) {
+    font-size: 16px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-workspace *,
+  .product-workspace *::before,
+  .product-workspace *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

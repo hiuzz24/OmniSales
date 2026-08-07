@@ -10,6 +10,7 @@ import {
   ShoppingBag, Store, PenTool, ChevronRight, ArrowRight,
 } from 'lucide-react';
 import orderService from '../services/orderService';
+import stockDeliveryService from '../../inventory/services/stockDeliveryService';
 import styles from './OrderDetailPage.module.css';
 
 const STATUS_CONFIG = {
@@ -72,6 +73,9 @@ const OrderDetailPage = () => {
   const [cancelReasons, setCancelReasons] = useState([]);
   const [cancelReasonsLoading, setCancelReasonsLoading] = useState(false);
   const [cancelReasonsError, setCancelReasonsError] = useState(null);
+  const [readiness, setReadiness] = useState(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
+  const [readinessError, setReadinessError] = useState(null);
 
   const fetchOrder = async ({ silent = false } = {}) => {
     if (!silent) {
@@ -101,13 +105,34 @@ const OrderDetailPage = () => {
     }
   };
 
+  const fetchReadiness = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setReadinessLoading(true);
+      setReadinessError(null);
+    }
+    try {
+      const response = await stockDeliveryService.getOrderReadiness(id);
+      setReadiness(response?.data ?? response);
+      setReadinessError(null);
+    } catch {
+      setReadiness(null);
+      setReadinessError('Không thể kiểm tra phiếu xuất kho');
+    } finally {
+      if (!silent) {
+        setReadinessLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     fetchOrder();
     fetchHistory();
+    fetchReadiness();
 
     const refreshInterval = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchOrder({ silent: true });
+        fetchReadiness({ silent: true });
       }
     }, 15_000);
 
@@ -121,14 +146,18 @@ const OrderDetailPage = () => {
 
   const handleConfirmStatus = async () => {
     if (!confirmStatus) return;
+    const targetStatus = confirmStatus;
     setUpdating(true);
     try {
-      const updated = await orderService.updateStatus(id, confirmStatus);
+      const updated = await orderService.updateStatus(id, targetStatus);
       setOrder(updated);
-      toast.success('Cập nhật trạng thái thành công');
+      if (targetStatus !== 'PROCESSING') {
+        toast.success('Cập nhật trạng thái thành công');
+      }
       fetchHistory();
-    } catch {
-      toast.error('Cập nhật trạng thái thất bại');
+      fetchReadiness({ silent: true });
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || 'Cập nhật trạng thái thất bại');
     } finally {
       setUpdating(false);
       setConfirmStatus(null);
@@ -337,7 +366,9 @@ const OrderDetailPage = () => {
       return [];
     }
     if (!isPlatformOrder(order)) {
-      return STATUS_FLOW.filter((status) => status !== order.status);
+      return STATUS_FLOW.filter(
+        (status) => status !== order.status && status !== 'CANCELLED',
+      );
     }
 
     const tikTokRawStatus = order.platformMetadata?.tiktok?.rawOrderStatus;
@@ -378,7 +409,9 @@ const OrderDetailPage = () => {
 
   const sc = STATUS_CONFIG[order.status] || { label: order.status, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' };
   const StatusIcon = sc.icon;
-  const canChangeStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
+  const canChangeStatus = role === ROLES.OWNER || role === ROLES.SALES;
+  const canCreateOrderDelivery = role === ROLES.OWNER || role === ROLES.OPERATIONS;
+  const canChangePaymentStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
   const tikTokCancelPending = isTikTokOrder(order)
     && order.platformMetadata?.tiktok?.pendingConfirmation === true;
   const tikTokAwaitingShipment = order.platformMetadata?.tiktok?.rawOrderStatus === 'AWAITING_SHIPMENT';
@@ -398,6 +431,7 @@ const OrderDetailPage = () => {
   };
   const pc = paymentLabels[order.paymentStatus] || paymentLabels.UNPAID;
   const availableStatusOptions = getAvailableStatusOptions();
+  const shipmentReady = readiness?.readyForShipment === true;
   const groupedItems = groupOrderItems(order.items || []);
   const totalItemQuantity = groupedItems.reduce((sum, item) => sum + toNumber(item.quantity), 0);
 
@@ -460,11 +494,15 @@ const OrderDetailPage = () => {
                   {availableStatusOptions.map((s) => {
                     const cfg = STATUS_CONFIG[s];
                     const Icon = cfg.icon;
+                    const shipmentBlocked = s === 'SHIPPED'
+                      && (readinessLoading || readinessError || !shipmentReady);
                     return (
                       <button
                         key={s}
                         className={styles.dropdownItem}
                         onClick={() => handleUpdateStatus(s)}
+                        disabled={shipmentBlocked}
+                        title={shipmentBlocked ? 'Cần tạo phiếu xuất kho trước' : undefined}
                       >
                         <Icon size={13} style={{ color: cfg.color }} />
                         {cfg.label}
@@ -476,38 +514,7 @@ const OrderDetailPage = () => {
               )}
             </div>
           )}
-          {canChangeStatus && (
-            <div className={styles.statusDropdown}>
-              <button
-                className={styles.updatePaymentBtn}
-                style={{ '--btn-color': pc.color, '--btn-border': pc.border }}
-                onClick={() => setShowPaymentMenu((v) => !v)}
-                disabled={updating}
-              >
-                <RotateCcw size={14} />
-                Đổi TT thanh toán
-              </button>
-              {showPaymentMenu && (
-                <div className={styles.dropdownMenu}>
-                  {Object.entries(paymentLabels).map(([key, cfg]) => {
-                    if (key === order.paymentStatus) return null;
-                    return (
-                      <button
-                        key={key}
-                        className={styles.dropdownItem}
-                        onClick={() => handleUpdatePaymentStatus(key)}
-                      >
-                        <span className={styles.paymentDot} style={{ background: cfg.color }} />
-                        {cfg.label}
-                        <ChevronRight size={12} style={{ marginLeft: 'auto', opacity: 0.4 }} />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-          {isCancellable && (
+          {canChangeStatus && isCancellable && (
             <button
               className={styles.cancelBtn}
               onClick={handleOpenCancelModal}
@@ -518,6 +525,36 @@ const OrderDetailPage = () => {
           )}
         </div>
       </div>
+
+      {order.status === 'PROCESSING' && !shipmentReady && (
+        <div className={styles.readinessNotice}>
+          <AlertTriangle size={16} />
+          <span>
+            {readinessLoading
+              ? 'Đang kiểm tra phiếu xuất kho...'
+              : readinessError
+                || (canCreateOrderDelivery
+                  ? 'Đơn hàng chưa có phiếu xuất kho. Hãy tạo phiếu trước khi chuyển sang Sẵn sàng giao.'
+                  : 'Đơn hàng đang chờ bộ phận kho tạo phiếu xuất kho.')}
+          </span>
+          {readinessError && (
+            <button type="button" onClick={() => fetchReadiness()}>
+              Thử lại
+            </button>
+          )}
+          {!readinessLoading && !readinessError && canCreateOrderDelivery && (
+            <button
+              type="button"
+              className={styles.readinessPrimaryAction}
+              onClick={() => navigate(`${ROUTES.STOCK_DELIVERY_CREATE}?tab=BY_ORDER&orderId=${order.id}`)}
+            >
+              <Package size={14} />
+              Tạo phiếu xuất kho
+              <ArrowRight size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Order Progress */}
       {!['CANCELLED'].includes(order.status) && (

@@ -1,0 +1,11 @@
+package fu.osms.purchase.enums;
+
+public enum PurchaseOrderStatus {
+    DRAFT,
+    SENT_TO_SUPPLIER,
+    RECEIVING,
+    INSPECTING,
+    INSPECTED,
+    COMPLETED,
+    CANCELLED
+}

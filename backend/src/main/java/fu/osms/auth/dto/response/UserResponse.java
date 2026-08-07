@@ -23,5 +23,6 @@ public class UserResponse {
     private Boolean passwordExpired;
     private UUID warehouseId;
     private String warehouseName;
+    private String inviteStatus;
     private OffsetDateTime deletedAt;
 }

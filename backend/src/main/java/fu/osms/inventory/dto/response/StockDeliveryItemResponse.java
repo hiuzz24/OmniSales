@@ -23,4 +23,5 @@ public class StockDeliveryItemResponse {
     private BigDecimal unitCost;
     private BigDecimal totalCost;
     private String note;
+    private Boolean isGift;
 }

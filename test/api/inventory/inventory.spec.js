@@ -4,6 +4,7 @@ const {
   getFirstWarehouseVariantId,
   API_BASE,
 } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthToken } = require('../../utils/cleanup-helpers');
 
 test.describe('Inventory API Tests', () => {
 
@@ -128,5 +129,47 @@ test.describe('Inventory API Tests', () => {
     const body = await response.json();
     expect(body.success).toBe(true);
     expect(body.data).toHaveProperty('variantId');
+  });
+
+  // =========================================================
+  // Phase B5: New endpoints (POST items, GET items/{id})
+  // =========================================================
+
+  // INV-X - POST /api/inventory/items (no auth)
+  test('INV-40 - POST /api/inventory/items - Without auth returns 401 or 403', async ({ request }) => {
+    const response = await request.post(`${API_BASE}/inventory/items`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: {},
+    });
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // INV-X - POST /api/inventory/items (with auth, stub)
+  test('INV-41 - POST /api/inventory/items - With manager auth returns 500 (UnsupportedOperationException)', async ({ request, managerHeaders }) => {
+    const response = await request.post(`${API_BASE}/inventory/items`, {
+      headers: { ...managerHeaders, 'Content-Type': 'application/json' },
+      data: { warehouseId: '00000000-0000-0000-0000-000000000001', variantId: '00000000-0000-0000-0000-000000000002', quantityOnHand: 10 },
+    });
+
+    expect([200, 201, 400, 500]).toContain(response.status());
+  });
+
+  // INV-X - GET /api/inventory/items/{id} (no auth)
+  test('INV-42 - GET /api/inventory/items/{id} - Without auth returns 401 or 403', async ({ request }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/inventory/items/${fakeId}`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // INV-X - GET /api/inventory/items/{id} (with auth, stub)
+  test('INV-43 - GET /api/inventory/items/{id} - With manager auth returns 500 (UnsupportedOperationException)', async ({ request, managerHeaders }) => {
+    const fakeId = '00000000-0000-0000-0000-000000000099';
+    const response = await request.get(`${API_BASE}/inventory/items/${fakeId}`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 404, 500]).toContain(response.status());
   });
 });

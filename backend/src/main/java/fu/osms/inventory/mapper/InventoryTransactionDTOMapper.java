@@ -32,7 +32,6 @@ public interface InventoryTransactionDTOMapper {
             case ORDER_DEDUCT -> "Trừ kho (Giữ chỗ đơn hàng)";
             case ORDER_CANCEL -> "Hoàn kho (Hủy đơn hàng)";
             case OUTBOUND -> "Xuất kho";
-            case INBOUND -> "Nhập kho";
         };
     }
 

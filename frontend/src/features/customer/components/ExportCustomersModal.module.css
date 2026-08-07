@@ -523,3 +523,21 @@
   transform: none;
   box-shadow: none;
 }
+
+/* Product workspace modal language */
+.overlay { background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
+.modal { border: 1px solid #dbe5ec; border-radius: 15px; box-shadow: 0 24px 64px rgba(15, 23, 42, 0.26); }
+.header { border-color: #dbe5ec; background: linear-gradient(135deg, #f5faff, #f4fbf8); }
+.title { color: #0f172a; }
+.toolbar { border-color: #dbe5ec; background: #fbfdff; }
+.searchInput, .columnPickerBtn { min-height: 40px; border-color: #cbd8e2; border-radius: 8px; font-size: 13px; }
+.searchInput:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12); }
+.columnMenu { border-color: #dbe5ec; border-radius: 10px; box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16); }
+.table { border-collapse: separate; border-spacing: 0; }
+.table thead th { color: #42566d; background: #f3f7fa; font-size: 11px; font-weight: 750; letter-spacing: 0.025em; text-transform: uppercase; }
+.table tbody td { border-color: #e8eef3; color: #334155; font-size: 13px; }
+.tr:hover { background: linear-gradient(90deg, rgba(239, 246, 255, 0.7), rgba(240, 253, 250, 0.42)); }
+.footer { border-color: #dbe5ec; background: #fbfdff; }
+.cancelBtn, .exportBtn { min-height: 38px; border-radius: 9px; font-size: 13px; font-weight: 650; }
+.exportBtn { border-color: #2563eb; background: #2563eb; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16); }
+.exportBtn:hover:not(:disabled) { border-color: #1d4ed8; background: #1d4ed8; }

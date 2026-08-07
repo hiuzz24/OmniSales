@@ -8,6 +8,5 @@ public enum InvTxnType {
     TRANSFER_OUT,
     ORDER_DEDUCT,
     ORDER_CANCEL,
-    OUTBOUND,
-    INBOUND
+    OUTBOUND
 }

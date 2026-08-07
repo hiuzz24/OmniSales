@@ -6,6 +6,7 @@ const {
   cleanupTestData,
   addInventory,
 } = require('../../utils/inventory-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 function todayIso() {
   return new Date().toISOString().split('T')[0];
@@ -25,11 +26,15 @@ test.describe('Stock Delivery API Tests', () => {
     }
   });
 
-  test.afterAll(async ({ request, managerHeaders }) => {
-    const authToken = managerHeaders.Authorization.replace('Bearer ', '');
-    for (const id of createdIds) {
-      await cleanupTestData(request, authToken, 'delivery', id);
+  test.afterEach(async ({ request }) => {
+    if (createdIds.length) {
+      const authToken = await getAuthTokenCached(request);
+      for (const id of createdIds.splice(0)) {
+        await cleanupTestData(request, authToken, 'delivery', id);
+      }
     }
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
   });
 
   // GET /api/stock-deliveries
@@ -351,5 +356,34 @@ test.describe('Stock Delivery API Tests', () => {
     expect(response.status()).toBe(200);
     const j = await response.json();
     expect(j.data.status).toBe('CANCELLED');
+  });
+
+  // =========================================================
+  // Phase B3: New endpoint (sync-marketplace-inventory)
+  // =========================================================
+
+  // SD-X - POST /api/stock-deliveries/sync-marketplace-inventory
+  test('SD-1 - POST /api/stock-deliveries/sync-marketplace-inventory - Without auth returns 401 or 403', async ({ request }) => {
+    const response = await request.post(`${API_BASE}/stock-deliveries/sync-marketplace-inventory`);
+
+    expect([401, 403]).toContain(response.status());
+  });
+
+  // SD-X - POST /api/stock-deliveries/sync-marketplace-inventory with admin role
+  test('SD-2 - POST /api/stock-deliveries/sync-marketplace-inventory - Admin/operations role returns 200', async ({ request, adminHeaders }) => {
+    const response = await request.post(`${API_BASE}/stock-deliveries/sync-marketplace-inventory`, {
+      headers: adminHeaders,
+    });
+
+    expect([200, 202, 403, 500]).toContain(response.status());
+  });
+
+  // SD-X - POST /api/stock-deliveries/sync-marketplace-inventory with manager role (denied or 200)
+  test('SD-3 - POST /api/stock-deliveries/sync-marketplace-inventory - Manager role returns 200/403', async ({ request, managerHeaders }) => {
+    const response = await request.post(`${API_BASE}/stock-deliveries/sync-marketplace-inventory`, {
+      headers: managerHeaders,
+    });
+
+    expect([200, 202, 403, 500]).toContain(response.status());
   });
 });

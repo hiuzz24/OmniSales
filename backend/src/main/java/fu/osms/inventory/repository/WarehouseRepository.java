@@ -20,7 +20,15 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
 
     List<Warehouse> findByIsActiveTrueOrderByNameAsc();
 
+    @Query("SELECT w FROM Warehouse w WHERE w.deletedAt IS NULL " +
+           "AND (:isActive IS NULL OR w.isActive = :isActive) " +
+           "AND (:keyword IS NULL OR :keyword = '' OR LOWER(w.name) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(w.address) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+           "ORDER BY w.name ASC")
+    List<Warehouse> searchWarehouses(@Param("keyword") String keyword, @Param("isActive") Boolean isActive);
+
     Optional<Warehouse> findFirstByNameAndDeletedAtIsNull(String name);
+
+    Optional<Warehouse> findFirstByDeletedAtIsNullAndIsActiveTrueOrderByCreatedAtAsc();
 
     @Query("SELECT w FROM Warehouse w WHERE w.id = (SELECT u.warehouse.id FROM User u WHERE u.id = :userId)")
     Warehouse findWarehouseByUserId(@Param("userId") UUID userId);

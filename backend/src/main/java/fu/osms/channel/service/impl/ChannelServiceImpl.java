@@ -10,10 +10,12 @@ import fu.osms.channel.mapper.ChannelMapper;
 import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.service.ChannelConnectionService;
+import fu.osms.channel.service.ChannelMappingLifecycleService;
 import fu.osms.channel.service.ChannelProductQueryService;
 import fu.osms.channel.service.ChannelResponseService;
 import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.PageResponse;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.sync.dto.shopify.WebhookRegistrationResult;
@@ -25,6 +27,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -35,14 +38,37 @@ public class ChannelServiceImpl implements ChannelService {
     private final ChannelCredentialRepository credentialRepository;
     private final ChannelMapper channelMapper;
     private final ChannelConnectionService connectionService;
+    private final ChannelMappingLifecycleService mappingLifecycleService;
     private final ChannelProductQueryService productQueryService;
     private final ChannelResponseService responseService;
 
     @Override
     @Transactional
     public ChannelResponse create(ChannelRequest request) {
-        if (channelRepository.existsByPlatformAndDisplayName(request.getPlatform(), request.getDisplayName())) {
+        if (request.getPlatform() == PlatformType.SHOPIFY
+                || request.getPlatform() == PlatformType.LAZADA
+                || request.getPlatform() == PlatformType.TIKTOK) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Shopify, Lazada, and TikTok channels must be connected through OAuth");
+        }
+        Optional<Channel> existing = channelRepository.findByPlatformAndDisplayName(
+                request.getPlatform(), request.getDisplayName());
+        if (existing.isPresent() && existing.get().getDeletedAt() == null) {
             throw new AppException(ErrorCode.CHANNEL_ALREADY_EXISTS);
+        }
+        if (existing.isPresent()) {
+            Channel restored = existing.get();
+            restored.setDeletedAt(null);
+            restored.setStatus("CONNECTED");
+            restored.setSyncEnabled(true);
+            mergeMetadata(restored, request.getMetadata());
+            channelRepository.save(restored);
+            credentialRepository.findByChannelId(restored.getId()).ifPresent(credential -> {
+                credential.setConnectionState("CONNECTED");
+                credentialRepository.save(credential);
+            });
+            mappingLifecycleService.restoreAfterReconnect(restored.getId());
+            return responseService.toResponse(restored);
         }
         Channel channel = channelMapper.toEntity(request);
         channel.setStatus("CONNECTED");

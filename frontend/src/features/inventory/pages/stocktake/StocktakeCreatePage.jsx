@@ -236,11 +236,14 @@ export default function StocktakeCreatePage() {
     warehouseId,
     sessionCode,
     scheduledDate,
+    notes: notes || null,
     items: items.map((item) => ({
       variantId: item.variantId,
       systemQuantity: Number(item.systemQuantity || 0),
-      actualQuantity: fillMissingWithSystem && item.actualQuantity === '' ? Number(item.systemQuantity || 0) : Number(item.actualQuantity),
-      notes: item.notes || notes || null,
+      actualQuantity: item.actualQuantity === '' || item.actualQuantity === null || item.actualQuantity === undefined
+        ? (fillMissingWithSystem ? Number(item.systemQuantity || 0) : null)
+        : Number(item.actualQuantity),
+      notes: item.notes || null,
     })),
   });
 
@@ -287,7 +290,7 @@ export default function StocktakeCreatePage() {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} product-workspace`}>
       <div className={styles.pageHeader}>
         <button type="button" className={styles.backBtn} onClick={() => navigate(ROUTES.STOCKTAKES)}>
           <ArrowLeft size={15} /> Quay lại
@@ -327,20 +330,6 @@ export default function StocktakeCreatePage() {
                 <span className={styles.fieldLabel}>Giờ kiểm</span>
                 <input readOnly value={new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} className={`${styles.fieldInput} ${styles.readonlyInput}`} />
               </label>
-              <div className={styles.defaultWarehouseCard}>
-                <div className={styles.defaultWarehouseIcon}>
-                  {loadingWarehouse ? <Loader2 size={18} className={styles.spinIcon} /> : <Warehouse size={18} />}
-                </div>
-                <div className={styles.defaultWarehouseContent}>
-                  <span className={styles.defaultWarehouseLabel}>Kho kiểm mặc định</span>
-                  <strong>{loadingWarehouse ? 'Đang tải kho mặc định...' : defaultWarehouse?.name || 'Chưa cấu hình kho mặc định'}</strong>
-                  {defaultWarehouse?.address && <small><MapPin size={13} /> {defaultWarehouse.address}</small>}
-                </div>
-                <span className={warehouseId ? styles.lockedPill : styles.warningPill}>
-                  <LockKeyhole size={13} />
-                  {warehouseId ? 'Đã khóa' : 'Cần cấu hình'}
-                </span>
-              </div>
             </div>
 
             {!warehouseId && !loadingWarehouse && (
@@ -482,11 +471,23 @@ export default function StocktakeCreatePage() {
           <div className={`${styles.card} ${styles.sidebarCard}`}>
             <div className={styles.sidebarCardTitle}>Kho đang kiểm</div>
             <div className={styles.sidebarWarehouseBox}>
-              <Warehouse size={18} />
+              {loadingWarehouse
+                ? <Loader2 size={18} className={styles.spinIcon} />
+                : <Warehouse size={18} />}
               <div>
-                <strong>{defaultWarehouse?.name || 'Kho mặc định'}</strong>
-                <span>{defaultWarehouse?.address || 'Hệ thống chỉ dùng kho mặc định cho phiếu kiểm này.'}</span>
+                <strong>
+                  {loadingWarehouse
+                    ? 'Đang tải kho mặc định...'
+                    : defaultWarehouse?.name || 'Chưa cấu hình kho mặc định'}
+                </strong>
+                <span>
+                  {defaultWarehouse?.address || 'Hệ thống chỉ dùng kho mặc định cho phiếu kiểm này.'}
+                </span>
               </div>
+              <span className={warehouseId ? styles.lockedPill : styles.warningPill} style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                <LockKeyhole size={13} />
+                {warehouseId ? 'Đã khóa' : 'Cần cấu hình'}
+              </span>
             </div>
           </div>
 

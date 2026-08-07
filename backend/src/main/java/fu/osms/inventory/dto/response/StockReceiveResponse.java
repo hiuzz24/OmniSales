@@ -20,6 +20,8 @@ public class StockReceiveResponse {
     private String warehouseName;
     private UUID supplierId;
     private String supplierName;
+    private UUID purchaseOrderId;
+    private String purchaseOrderCode;
     private String receiptCode;
     private String invoiceNumber;
     private String status;
@@ -35,8 +37,17 @@ public class StockReceiveResponse {
     private OffsetDateTime updatedAt;
 
     private List<StockReceiveItemResponse> items;
+    private List<String> marketplacePlatforms;
+    private Boolean marketplaceSyncAvailable;
     
     // Computed fields
     private Integer totalSkuCount;  // Tổng số lượng SKU (số items)
     private Integer totalQuantity;  // Tổng số lượng sản phẩm (tổng quantity của các items)
+
+    /** Order code of the auto-created shortage/surplus order (if any) after receipt completion. */
+    private String autoCreatedOrderCode;
+    /** "SHORTAGE" or "SURPLUS" — type of the auto-created order, null if none. */
+    private String autoCreatedOrderType;
+    /** Human-readable summary of the auto-created order (e.g. product names + qty). */
+    private String autoCreatedOrderSummary;
 }

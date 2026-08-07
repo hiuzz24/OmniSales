@@ -30,7 +30,7 @@ public class StocktakeItem {
     @Column(name = "system_quantity", nullable = false)
     private Integer systemQuantity;
 
-    @Column(name = "actual_quantity", nullable = false)
+    @Column(name = "actual_quantity")
     private Integer actualQuantity;
 
     @Column(name = "difference", insertable = false, updatable = false)

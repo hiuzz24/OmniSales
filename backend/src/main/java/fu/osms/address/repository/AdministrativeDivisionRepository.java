@@ -33,4 +33,6 @@ public interface AdministrativeDivisionRepository extends JpaRepository<Administ
             @Param("level") Integer level);
 
     boolean existsByCountryCode(String countryCode);
+
+    long countByCountryCodeAndLevel(String countryCode, Integer level);
 }

@@ -20,6 +20,8 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.inventory.service.OrderStockDeliveryReadinessService;
+import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
 import fu.osms.order.dto.request.OrderRequest;
@@ -96,11 +98,15 @@ class OrderServiceImplTest {
     @Mock
     private InventoryAlertService inventoryAlertService;
     @Mock
+    private OrderStockDeliveryReadinessService orderStockDeliveryReadinessService;
+    @Mock
     private OrderStatusPushService orderStatusPushService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    @Mock
+    private PlatformOrderInventoryService platformOrderInventoryService;
 
     @InjectMocks
     private OrderServiceImpl orderService;
@@ -242,6 +248,7 @@ class OrderServiceImplTest {
                 .thenReturn(successPushResult);
         lenient().when(orderStatusPushService.push(any(Order.class), any(OrderStatus.class), any(OrderStatusPushContext.class)))
                 .thenReturn(successPushResult);
+        lenient().doNothing().when(orderStockDeliveryReadinessService).requireReadyForShipment(any());
         lenient().doNothing().when(eventPublisher).publishEvent(any());
     }
 
@@ -406,7 +413,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
                 when(orderMapper.toResponseWithItems(updatedOrder)).thenReturn(orderResponse);
 
@@ -437,7 +444,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
                 when(orderMapper.toResponseWithItems(updatedOrder)).thenReturn(orderResponse);
 
@@ -467,7 +474,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(updatedOrder);
                 when(orderMapper.toResponseWithItems(updatedOrder)).thenReturn(orderResponse);
 
@@ -503,7 +510,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(deliveredOrder);
                 when(orderMapper.toResponseWithItems(deliveredOrder)).thenReturn(orderResponse);
 
@@ -538,7 +545,7 @@ class OrderServiceImplTest {
                         .shippingAddress(order.getShippingAddress())
                         .build();
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+                when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
                 when(orderRepository.save(any(Order.class))).thenReturn(deliveredOrder);
                 when(orderMapper.toResponseWithItems(deliveredOrder)).thenReturn(orderResponse);
 
@@ -550,55 +557,33 @@ class OrderServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should throw ORDER_ALREADY_CANCELLED when order is already cancelled")
+        @DisplayName("Should throw ORDER_CANCEL_ENDPOINT_REQUIRED when trying to set already-cancelled order")
         void shouldThrowWhenOrderAlreadyCancelled() {
             order.setStatus(OrderStatus.CANCELLED);
-            when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+            when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
 
             assertThatThrownBy(() -> orderService.updateStatus(orderId, OrderStatus.CANCELLED))
                     .isInstanceOf(AppException.class)
                     .satisfies(e -> assertThat(((AppException) e).getErrorCode())
-                            .isEqualTo(ErrorCode.ORDER_ALREADY_CANCELLED));
+                            .isEqualTo(ErrorCode.ORDER_CANCEL_ENDPOINT_REQUIRED));
         }
 
         @Test
-        @DisplayName("Should cancel order when status is CANCELLED")
+        @DisplayName("Should throw ORDER_CANCEL_ENDPOINT_REQUIRED when updateStatus is called with CANCELLED")
         void shouldCancelOrderOnCancelStatus() {
-            try (MockedStatic<SecurityUtils> mocked = mockSecurityUtils()) {
-                order.setStatus(OrderStatus.PENDING);
-                Order cancelledOrder = Order.builder()
-                        .id(orderId)
-                        .platform(PlatformType.SHOPEE)
-                        .channelName("Shopee Store")
-                        .externalOrderId("EXT-001")
-                        .status(OrderStatus.CANCELLED)
-                        .paymentStatus("UNPAID")
-                        .subtotal(new BigDecimal("300000"))
-                        .discountAmount(BigDecimal.ZERO)
-                        .shippingFee(BigDecimal.ZERO)
-                        .currency("VND")
-                        .shippingAddress(order.getShippingAddress())
-                        .cancelReason("Customer request")
-                        .build();
+            order.setStatus(OrderStatus.PENDING);
+            when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.of(order));
 
-                when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-                when(orderItemRepository.findByOrderId(orderId)).thenReturn(List.of(orderItem));
-                when(productVariantRepository.findBySkuAndDeletedAtIsNull("TEST-001")).thenReturn(Optional.of(variant));
-                when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
-                when(orderRepository.save(any(Order.class))).thenReturn(cancelledOrder);
-                when(orderMapper.toResponseWithItems(cancelledOrder)).thenReturn(orderResponse);
-
-                OrderResponse result = orderService.updateStatus(orderId, OrderStatus.CANCELLED);
-
-                assertThat(result).isNotNull();
-                verify(inventoryItemRepository).findByVariantIdWithLock(variantId);
-            }
+            assertThatThrownBy(() -> orderService.updateStatus(orderId, OrderStatus.CANCELLED))
+                    .isInstanceOf(AppException.class)
+                    .satisfies(e -> assertThat(((AppException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.ORDER_CANCEL_ENDPOINT_REQUIRED));
         }
 
         @Test
         @DisplayName("Should throw EntityNotFoundException when order not found for status update")
         void shouldThrowWhenOrderNotFoundForStatusUpdate() {
-            when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
+            when(orderRepository.findForUpdateById(orderId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> orderService.updateStatus(orderId, OrderStatus.CONFIRMED))
                     .isInstanceOf(EntityNotFoundException.class)
@@ -815,15 +800,18 @@ class OrderServiceImplTest {
                 inventoryItem.setReservedQuantity(2);
 
                 when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-                when(orderItemRepository.findByOrderId(orderId)).thenReturn(List.of(orderItem));
-                when(productVariantRepository.findBySkuAndDeletedAtIsNull("TEST-001")).thenReturn(Optional.of(variant));
-                when(inventoryItemRepository.findByVariantIdWithLock(variantId)).thenReturn(List.of(inventoryItem));
+                when(orderStatusPushService.push(any(Order.class), any(OrderStatus.class), any(OrderStatusPushContext.class)))
+                        .thenReturn(successPushResult);
                 when(orderRepository.save(any(Order.class))).thenReturn(order);
 
                 orderService.cancel(orderId, makeCancelRequest("Customer cancelled"));
 
                 assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
-                verify(inventoryItemRepository).findByVariantIdWithLock(variantId);
+                // New behaviour: cancel delegates reservation sync to the platform-aware
+                // inventory service. SHOPEE is a platform order, so non-platform propagation
+                // is not invoked.
+                verify(platformOrderInventoryService).syncReservations(order);
+                verify(marketplaceInventoryPropagationService, never()).schedulePushAvailableStock(anyCollection());
             }
         }
 
@@ -935,6 +923,43 @@ class OrderServiceImplTest {
             assertThat(result.deliveredCount()).isEqualTo(25L);
             assertThat(result.cancelledCount()).isEqualTo(5L);
             assertThat(result.totalRevenue()).isEqualTo(new BigDecimal("5000000"));
+        }
+
+        @Test
+        @DisplayName("Should propagate totalRevenue from repository (excludes CANCELLED)")
+        void shouldPropagateRevenueFromRepository() {
+            when(orderRepository.countAll()).thenReturn(0L);
+            when(orderRepository.countByStatus(any())).thenReturn(0L);
+            when(orderRepository.sumRevenueDelivered()).thenReturn(new BigDecimal("123456789"));
+
+            OrderStats result = orderService.getStats();
+
+            assertThat(result.totalRevenue()).isEqualTo(new BigDecimal("123456789"));
+        }
+
+        @Test
+        @DisplayName("Should return zero revenue when sumRevenueDelivered returns BigDecimal.ZERO")
+        void shouldReturnZeroRevenueWhenNoOrders() {
+            when(orderRepository.countAll()).thenReturn(0L);
+            when(orderRepository.countByStatus(any())).thenReturn(0L);
+            when(orderRepository.sumRevenueDelivered()).thenReturn(BigDecimal.ZERO);
+
+            OrderStats result = orderService.getStats();
+
+            assertThat(result.totalRevenue()).isEqualByComparingTo(BigDecimal.ZERO);
+            assertThat(result.totalRevenue()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Should preserve non-negative revenue values")
+        void shouldPreserveNonNegativeRevenue() {
+            when(orderRepository.countAll()).thenReturn(5L);
+            when(orderRepository.countByStatus(any())).thenReturn(0L);
+            when(orderRepository.sumRevenueDelivered()).thenReturn(new BigDecimal("0"));
+
+            OrderStats result = orderService.getStats();
+
+            assertThat(result.totalRevenue().signum()).isGreaterThanOrEqualTo(0);
         }
     }
 

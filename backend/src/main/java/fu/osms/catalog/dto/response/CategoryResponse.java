@@ -18,5 +18,6 @@ public class CategoryResponse {
     private String name;
     private String slug;
     private Integer sortOrder;
+    private fu.osms.catalog.enums.CategoryStatus status;
     private OffsetDateTime createdAt;
 }

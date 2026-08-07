@@ -8,30 +8,12 @@ import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';
 import ExportProductsModal from '../components/ExportProductsModal';
 import ImportProductsModal from '../components/ImportProductsModal';
-import MarketplaceSyncButton from '../../inventory/pages/components/MarketplaceSyncButton';
 import styles from './ProductManagementPage.module.css';
-
-const PLATFORM_LABELS = {
-  LAZADA: 'Lazada',
-  SHOPIFY: 'Shopify',
-  TIKTOK: 'TikTok Shop',
-};
-
-const formatCount = (value) => Number(value ?? 0).toLocaleString('vi-VN');
-
-const buildProductSyncMessage = ({ channel, direction, result }) => {
-  const channelLabel = `${PLATFORM_LABELS[channel.platform] ?? channel.platform} - ${channel.displayName ?? 'Chưa đặt tên'}`;
-  if (direction === 'from-marketplace') {
-    return `Đã đồng bộ ${channelLabel}: lấy được ${formatCount(result?.productCount)} sản phẩm và ${formatCount(result?.variantCount)} sản phẩm con từ sàn.`;
-  }
-
-  return `Đã đồng bộ ${channelLabel}: đẩy ${formatCount(result?.productCount)} sản phẩm và ${formatCount(result?.pushedVariantCount)} SKU tồn kho lên sàn.`;
-};
 
 const ProductManagementPage = () => {
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [platformFilter, setPlatformFilter] = useState('');
+  const [platformFilters, setPlatformFilters] = useState([]);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [tableRefreshKey, setTableRefreshKey] = useState(0);
@@ -41,11 +23,10 @@ const ProductManagementPage = () => {
 
   const actions = (
     <>
-      <MarketplaceSyncButton
-        getSuccessMessage={buildProductSyncMessage}
-        onSynced={() => setTableRefreshKey((k) => k + 1)}
-      />
       <button
+        type="button"
+        aria-label="Lịch sử đồng bộ"
+        title="Lịch sử đồng bộ"
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.SYNC_HISTORY)}
       >
@@ -53,6 +34,9 @@ const ProductManagementPage = () => {
         Lịch sử đồng bộ
       </button>
       <button
+        type="button"
+        aria-label="Nhật ký hệ thống"
+        title="Nhật ký hệ thống"
         className={`${styles.actionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
       >
@@ -60,6 +44,9 @@ const ProductManagementPage = () => {
         Nhật ký hệ thống
       </button>
       <button
+        type="button"
+        aria-label="Nhập Excel"
+        title="Nhập Excel"
         className={`${styles.actionBtn} ${styles.importBtn}`}
         onClick={() => setIsImportModalOpen(true)}
       >
@@ -67,13 +54,22 @@ const ProductManagementPage = () => {
         Nhập Excel
       </button>
       <button
+        type="button"
+        aria-label="Xuất Excel"
+        title="Xuất Excel"
         className={`${styles.actionBtn} ${styles.exportBtn}`}
         onClick={() => setIsExportModalOpen(true)}
       >
         <FileDown className={styles.exportIcon} />
         Xuất Excel
       </button>
-      <button className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={() => navigate(ROUTES.PRODUCT_CREATE)}>
+      <button
+        type="button"
+        aria-label="Thêm sản phẩm mới"
+        title="Thêm sản phẩm mới"
+        className={`${styles.actionBtn} ${styles.primaryBtn}`}
+        onClick={() => navigate(ROUTES.PRODUCT_CREATE)}
+      >
         <Plus className={styles.primaryIcon} />
         Thêm sản phẩm mới
       </button>
@@ -82,25 +78,27 @@ const ProductManagementPage = () => {
 
   return (
     <div className={styles.page}>
-      <PageHeader
-        title="Sản phẩm"
-        subtitle="Quản lý kho hàng và các sản phẩm trên hệ thống"
-        icon={() => <Package size={20}/>}
-        actions={actions}
-      />
+      <div className={styles.pageHeader}>
+        <PageHeader
+          title="Sản phẩm"
+          subtitle="Quản lý kho hàng và các sản phẩm trên hệ thống"
+          icon={() => <Package size={20} />}
+          actions={actions}
+        />
+      </div>
       <ProductFilterBar
         searchInput={searchInput}
         onSearchChange={setSearchInput}
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}
-        platformFilter={platformFilter}
-        onPlatformChange={setPlatformFilter}
+        platformFilters={platformFilters}
+        onPlatformChange={setPlatformFilters}
       />
       <ProductTable
-        key={`${tableRefreshKey}-${debouncedKeyword}-${statusFilter}-${platformFilter}`}
+        key={`${tableRefreshKey}-${debouncedKeyword}-${statusFilter}-${platformFilters.join(',')}`}
         keyword={debouncedKeyword}
         statusFilter={statusFilter}
-        platformFilter={platformFilter}
+        platformFilters={platformFilters}
       />
       <ExportProductsModal
         isOpen={isExportModalOpen}

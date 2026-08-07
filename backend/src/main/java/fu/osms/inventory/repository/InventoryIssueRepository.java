@@ -3,6 +3,7 @@ package fu.osms.inventory.repository;
 import fu.osms.inventory.entity.InventoryIssue;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -12,6 +13,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, UUID>, JpaSpecificationExecutor<InventoryIssue> {
@@ -24,6 +26,16 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
     Optional<InventoryIssue> findByIdWithDetails(@Param("id") UUID id);
 
     Optional<InventoryIssue> findByReferenceId(UUID referenceId);
+
+    List<InventoryIssue> findByReferenceIdAndIssueTypeAndStatusIn(
+            UUID referenceId, String issueType, List<String> statuses);
+
+    Optional<InventoryIssue> findFirstByReferenceIdAndIssueTypeAndStatus(
+            UUID referenceId, String issueType, String status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT ii FROM InventoryIssue ii LEFT JOIN FETCH ii.items WHERE ii.id = :id")
+    Optional<InventoryIssue> findByIdForUpdate(@Param("id") UUID id);
 
     @Query("SELECT COUNT(ii) FROM InventoryIssue ii WHERE ii.status = :status")
     Long countByStatus(@Param("status") String status);
@@ -38,21 +50,28 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
 
     Optional<InventoryIssue> findTopByIssueCodeStartingWithOrderByIssueCodeDesc(String prefix);
 
+    List<InventoryIssue> findByIssueCodeStartingWithOrderByIssueCodeDesc(String prefix);
+
     @Query("SELECT COUNT(ii) FROM InventoryIssue ii " +
             "WHERE ii.issueType IN ('ORDER', 'ADJUSTMENT', 'DISPOSAL', 'TRANSFER')")
     Long countDeliveries();
 
     @Query("SELECT DISTINCT item.productVariant.id FROM InventoryIssueItem item " +
-            "WHERE item.inventoryIssue.status <> 'DRAFT' " +
-            "AND item.inventoryIssue.updatedAt >= :changedSince " +
-            "AND item.inventoryIssue.updatedAt <= :changedUntil")
+            "WHERE item.inventoryIssue.status = 'CONFIRMED' " +
+            "AND ((item.inventoryIssue.createdAt > :changedSince AND item.inventoryIssue.createdAt <= :changedUntil) " +
+            "OR (item.inventoryIssue.updatedAt > :changedSince AND item.inventoryIssue.updatedAt <= :changedUntil))")
     List<UUID> findChangedAppliedVariantIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                    @Param("changedUntil") OffsetDateTime changedUntil);
 
+    @Query("SELECT DISTINCT item.productVariant.id FROM InventoryIssueItem item " +
+            "WHERE item.inventoryIssue.status = 'CONFIRMED' " +
+            "AND (item.inventoryIssue.createdAt <= :changedUntil OR item.inventoryIssue.updatedAt <= :changedUntil)")
+    List<UUID> findConfirmedVariantIdsUpTo(@Param("changedUntil") OffsetDateTime changedUntil);
+
     @Query("SELECT DISTINCT item.inventoryIssue.warehouse.id FROM InventoryIssueItem item " +
-            "WHERE item.inventoryIssue.status <> 'DRAFT' " +
-            "AND item.inventoryIssue.updatedAt >= :changedSince " +
-            "AND item.inventoryIssue.updatedAt <= :changedUntil")
+            "WHERE item.inventoryIssue.status = 'CONFIRMED' " +
+            "AND ((item.inventoryIssue.createdAt > :changedSince AND item.inventoryIssue.createdAt <= :changedUntil) " +
+            "OR (item.inventoryIssue.updatedAt > :changedSince AND item.inventoryIssue.updatedAt <= :changedUntil))")
     List<UUID> findChangedAppliedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                      @Param("changedUntil") OffsetDateTime changedUntil);
 

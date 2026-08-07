@@ -3,6 +3,7 @@ package fu.osms.sync.shopify.impl;
 import fu.osms.sync.dto.shopify.WebhookRegistrationResult;
 import fu.osms.sync.dto.shopify.response.ShopifyWebhookResponse;
 import fu.osms.sync.shopify.ShopifyApiClient;
+import fu.osms.sync.shopify.ShopifyShopDomainNormalizer;
 import fu.osms.sync.shopify.ShopifyWebhookSubscriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ import java.util.Set;
 public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubscriptionService {
 
     private final ShopifyApiClient shopifyApiClient;
+    private final ShopifyShopDomainNormalizer shopDomainNormalizer;
 
     @Value("${shopify.webhook-callback-url:}")
     private String callbackUrl;
@@ -40,7 +42,7 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
                     .build();
         }
 
-        String normalizedShop = normalizeShop(shopDomain);
+        String normalizedShop = shopDomainNormalizer.normalizeHandle(shopDomain);
         List<Map<String, Object>> registeredWebhooks = new ArrayList<>();
         List<String> errors = new ArrayList<>();
 
@@ -97,6 +99,8 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
             }
         }
 
+        registerGraphQlReturnWebhooks(normalizedShop, accessToken, registeredWebhooks, errors);
+
         String status = errors.isEmpty()
                 ? "SUCCESS"
                 : errors.size() < webhookTopics.size() ? "PARTIAL" : "FAILED";
@@ -116,7 +120,7 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
             return;
         }
 
-        String normalizedShop = normalizeShop(shopDomain);
+        String normalizedShop = shopDomainNormalizer.normalizeHandle(shopDomain);
         Set<Long> deletedIds = new HashSet<>();
 
         if (savedWebhooks != null) {
@@ -125,7 +129,12 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
                 if (!callbackUrl.equals(address)) {
                     continue;
                 }
-                Long webhookId = toLong(savedWebhook.get("id"));
+                Object rawId = savedWebhook.get("id");
+                if (rawId != null && rawId.toString().startsWith("gid://shopify/WebhookSubscription/")) {
+                    deleteGraphQlWebhook(normalizedShop, accessToken, rawId.toString());
+                    continue;
+                }
+                Long webhookId = toLong(rawId);
                 if (webhookId == null) {
                     continue;
                 }
@@ -193,12 +202,116 @@ public class ShopifyWebhookSubscriptionServiceImpl implements ShopifyWebhookSubs
         }
     }
 
-    private String normalizeShop(String shop) {
-        if (shop == null || shop.isBlank()) {
-            return shop;
+    private void registerGraphQlReturnWebhooks(String shopDomain,
+                                               String accessToken,
+                                               List<Map<String, Object>> registered,
+                                               List<String> errors) {
+        Map<String, Map<String, Object>> existing = graphQlWebhookSubscriptions(shopDomain, accessToken);
+        for (String topic : graphQlReturnTopics()) {
+            if (existing.containsKey(topic)) {
+                registered.add(existing.get(topic));
+                continue;
+            }
+            String mutation = """
+                    mutation CreateReturnWebhook(
+                      $topic: WebhookSubscriptionTopic!,
+                      $subscription: WebhookSubscriptionInput!
+                    ) {
+                      webhookSubscriptionCreate(topic: $topic, webhookSubscription: $subscription) {
+                        webhookSubscription { id topic uri }
+                        userErrors { field message }
+                      }
+                    }
+                    """;
+            try {
+                Map<String, Object> response = shopifyApiClient.executeGraphQl(
+                        shopDomain,
+                        accessToken,
+                        mutation,
+                        Map.of("topic", topic, "subscription", Map.of("uri", callbackUrl)));
+                Map<String, Object> payload = object(object(response.get("data")).get("webhookSubscriptionCreate"));
+                List<Map<String, Object>> userErrors = maps(payload.get("userErrors"));
+                if (!userErrors.isEmpty()) {
+                    throw new IllegalStateException(String.valueOf(userErrors));
+                }
+                Map<String, Object> subscription = object(payload.get("webhookSubscription"));
+                registered.add(Map.of(
+                        "id", String.valueOf(subscription.getOrDefault("id", "")),
+                        "topic", String.valueOf(subscription.getOrDefault("topic", topic)),
+                        "address", String.valueOf(subscription.getOrDefault("uri", callbackUrl))));
+            } catch (Exception exception) {
+                errors.add(topic);
+                log.error("[ShopifyWebhook] Failed GraphQL return topic={} shop={}: {}",
+                        topic, shopDomain, exception.getMessage());
+            }
         }
-        return shop.endsWith(".myshopify.com")
-                ? shop.substring(0, shop.length() - ".myshopify.com".length())
-                : shop;
     }
+
+    private Map<String, Map<String, Object>> graphQlWebhookSubscriptions(String shopDomain, String accessToken) {
+        String query = """
+                query ReturnWebhookSubscriptions {
+                  webhookSubscriptions(first: 250) {
+                    nodes { id topic uri }
+                  }
+                }
+                """;
+        try {
+            Map<String, Object> response = shopifyApiClient.executeGraphQl(shopDomain, accessToken, query, Map.of());
+            Map<String, Object> connection = object(object(response.get("data")).get("webhookSubscriptions"));
+            Map<String, Map<String, Object>> result = new LinkedHashMap<>();
+            for (Map<String, Object> subscription : maps(connection.get("nodes"))) {
+                if (!callbackUrl.equals(String.valueOf(subscription.get("uri")))) continue;
+                String topic = String.valueOf(subscription.get("topic"));
+                result.put(topic, Map.of(
+                        "id", String.valueOf(subscription.getOrDefault("id", "")),
+                        "topic", topic,
+                        "address", callbackUrl));
+            }
+            return result;
+        } catch (Exception exception) {
+            log.warn("[ShopifyWebhook] Could not list GraphQL return webhooks shop={}: {}",
+                    shopDomain, exception.getMessage());
+            return Map.of();
+        }
+    }
+
+    private void deleteGraphQlWebhook(String shopDomain, String accessToken, String id) {
+        String mutation = """
+                mutation DeleteReturnWebhook($id: ID!) {
+                  webhookSubscriptionDelete(id: $id) {
+                    deletedWebhookSubscriptionId
+                    userErrors { field message }
+                  }
+                }
+                """;
+        try {
+            shopifyApiClient.executeGraphQl(shopDomain, accessToken, mutation, Map.of("id", id));
+        } catch (Exception exception) {
+            log.warn("[ShopifyWebhook] Failed to delete GraphQL webhook id={}: {}", id, exception.getMessage());
+        }
+    }
+
+    private List<String> graphQlReturnTopics() {
+        return List.of(
+                "RETURNS_REQUEST",
+                "RETURNS_APPROVE",
+                "RETURNS_DECLINE",
+                "RETURNS_UPDATE",
+                "RETURNS_PROCESS",
+                "RETURNS_CANCEL",
+                "REFUNDS_CREATE");
+    }
+
+    private Map<String, Object> object(Object value) {
+        if (!(value instanceof Map<?, ?> source)) return new LinkedHashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
+        source.forEach((key, item) -> result.put(String.valueOf(key), item));
+        return result;
+    }
+
+    private List<Map<String, Object>> maps(Object value) {
+        if (!(value instanceof List<?> list)) return List.of();
+        return list.stream().filter(Map.class::isInstance).map(this::object).toList();
+    }
+
 }

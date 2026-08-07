@@ -221,6 +221,12 @@ public class LazadaChannelSyncServiceImpl implements LazadaChannelSyncService {
             );
             return new ProductSyncSummary(0, 0, 0, Set.of());
         }
+        log.info(
+                "[LazadaSync] Queued local product changes channelId={} changedSince={} queuedProducts={}",
+                channel.getId(),
+                changedSince,
+                channelProducts.size()
+        );
 
         PlatformSyncService platformSyncService = platformSyncServiceFactory.getService(channel.getPlatform());
         Set<UUID> changedVariantIds = new HashSet<>();

@@ -23,8 +23,17 @@ public class AddressDataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        if (divisionRepository.count() > 0) {
-            log.info("Address data already exists, skipping seed.");
+        boolean hasAny = divisionRepository.count() > 0;
+        long vnLevel3Count = hasAny ? divisionRepository.countByCountryCodeAndLevel("VN", 3) : 0L;
+
+        if (hasAny && vnLevel3Count > 0) {
+            log.info("Address data already exists (including VN level 3), skipping seed.");
+            return;
+        }
+
+        if (hasAny) {
+            log.info("Existing address data found but no VN level-3 entries. Running partial seed for level 3 only...");
+            seedLevel3Only();
             return;
         }
 
@@ -138,6 +147,39 @@ public class AddressDataInitializer implements CommandLineRunner {
 
         long elapsed = System.currentTimeMillis() - start;
         log.info("Seeded {} divisions in {} ms.", divisions.size(), elapsed);
+    }
+
+    private void seedLevel3Only() throws Exception {
+        long start = System.currentTimeMillis();
+        JsonNode root;
+        try (InputStream is = new ClassPathResource("address-data.json").getInputStream()) {
+            root = objectMapper.readTree(is);
+        }
+
+        List<AdministrativeDivision> level3 = new ArrayList<>();
+        JsonNode divsNode = root.get("divisions").get("VN");
+        if (divsNode != null) {
+            for (JsonNode d : divsNode) {
+                if (d.get("level").asInt() == 3) {
+                    level3.add(AdministrativeDivision.builder()
+                            .countryCode("VN")
+                            .code(d.get("code").asText())
+                            .name(d.get("name").asText())
+                            .level(3)
+                            .parentCode(d.get("parentCode").asText())
+                            .build());
+                }
+            }
+        }
+
+        int batchSize = 500;
+        for (int i = 0; i < level3.size(); i += batchSize) {
+            List<AdministrativeDivision> batch = level3.subList(i, Math.min(i + batchSize, level3.size()));
+            divisionRepository.saveAll(batch);
+        }
+
+        long elapsed = System.currentTimeMillis() - start;
+        log.info("Seeded {} level-3 VN divisions in {} ms.", level3.size(), elapsed);
     }
 
     private void addCountryDivisions(List<AdministrativeDivision> list, String countryCode, List<String[]> entries) {

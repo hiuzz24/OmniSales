@@ -5,11 +5,14 @@ import fu.osms.catalog.dto.request.ChannelConfigRequest;
 import fu.osms.catalog.dto.response.ChannelProductConfigResponse;
 import fu.osms.catalog.dto.response.PlatformAttributeOptionResponse;
 import fu.osms.catalog.dto.response.PlatformAttributeResponse;
+import fu.osms.catalog.dto.TikTokProductTitleInput;
+import fu.osms.catalog.dto.TikTokProductTitleResult;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.catalog.service.PlatformLookupService;
 import fu.osms.catalog.service.ProductChannelConfigService;
+import fu.osms.catalog.service.TikTokProductTitleResolver;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.common.enums.PlatformType;
@@ -52,6 +55,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
     private final ProductVariantRepository productVariantRepository;
     private final PlatformLookupServiceFactory lookupServiceFactory;
     private final ObjectMapper objectMapper;
+    private final TikTokProductTitleResolver tikTokProductTitleResolver;
 
     @Override
     @Transactional(readOnly = true)
@@ -140,6 +144,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         if (platform == PlatformType.TIKTOK) {
             nextConfig.put("categoryVersion", textOrDefault(request.getCategoryVersion(), "v2"));
             putIfText(nextConfig, "sizeChartImageUrl", request.getSizeChartImageUrl());
+            putIfText(nextConfig, "listingTitle", request.getListingTitle());
         }
 
         PlatformLookupService lookup = lookupServiceFactory.get(platform);
@@ -184,6 +189,10 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
                 validationError = "TikTok size chart image URL must start with http:// or https://";
             }
         }
+        if (validationError == null && platform == PlatformType.TIKTOK) {
+            TikTokProductTitleResult titleResult = resolveTikTokTitle(channelProduct.getProduct(), nextConfig);
+            if (!titleResult.valid()) validationError = titleResult.validationError();
+        }
         if (validationError != null) {
             markNotReady(nextConfig, validationError);
         } else {
@@ -194,13 +203,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
     }
 
     private boolean isHttpUrl(String value) {
-        try {
-            URI uri = URI.create(value.trim());
-            return uri.isAbsolute() && ("http".equalsIgnoreCase(uri.getScheme())
-                    || "https".equalsIgnoreCase(uri.getScheme()));
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
+        return configValidator().isHttpUrl(value);
     }
 
     private String validationError(List<PlatformAttributeResponse> schema,
@@ -364,6 +367,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
                 .categoryVersion(stringValue(config.get("categoryVersion")))
                 .brandId(stringValue(config.get("brandId")))
                 .brandName(stringValue(config.get("brandName")))
+                .listingTitle(stringValue(config.get("listingTitle")))
                 .attributes(mapValue(config.get("attributes")))
                 .variantAttributeValueMappings(nestedStringMapValue(config.get("variantAttributeValueMappings")))
                 .readyToSync(isReady(channelProduct))
@@ -379,32 +383,17 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> config(ChannelProduct channelProduct) {
-        Map<String, Object> metadata = channelProduct.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channelProduct.getMetadata());
-        Object value = metadata.get(CONFIG_KEY);
-        if (value instanceof Map<?, ?> map) {
-            return objectMapper.convertValue(map, Map.class);
-        }
-        return new HashMap<>();
+        return metadataCodec().decode(channelProduct);
     }
 
     private void persistConfig(ChannelProduct channelProduct, Map<String, Object> config) {
-        Map<String, Object> metadata = channelProduct.getMetadata() == null
-                ? new HashMap<>()
-                : new HashMap<>(channelProduct.getMetadata());
-        metadata.put(CONFIG_KEY, config);
-        channelProduct.setMetadata(metadata);
+        metadataCodec().persist(channelProduct, config);
     }
 
     private void persistConfigChange(ChannelProduct channelProduct,
                                      Map<String, Object> previousConfig,
                                      Map<String, Object> nextConfig) {
-        if (!Objects.equals(previousConfig, nextConfig)) {
-            channelProduct.setSyncStatus(SyncStatus.PENDING);
-            channelProduct.setLastSyncError(null);
-        }
-        persistConfig(channelProduct, nextConfig);
+        metadataCodec().persistChange(channelProduct, previousConfig, nextConfig);
     }
 
     private void markNotReady(Map<String, Object> config, String error) {
@@ -414,73 +403,31 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> mapValue(Object value) {
-        return value instanceof Map<?, ?> map ? objectMapper.convertValue(map, Map.class) : new HashMap<>();
+        return metadataCodec().mapValue(value);
     }
 
     private Map<String, Map<String, String>> nestedStringMapValue(Object value) {
-        if (!(value instanceof Map<?, ?> map)) return new HashMap<>();
-        Map<String, Map<String, String>> result = new HashMap<>();
-        map.forEach((key, nestedValue) -> {
-            if (nestedValue instanceof Map<?, ?> nestedMap) {
-                Map<String, String> entries = new HashMap<>();
-                nestedMap.forEach((nestedKey, entryValue) -> {
-                    if (nestedKey != null && entryValue != null) {
-                        entries.put(String.valueOf(nestedKey), String.valueOf(entryValue));
-                    }
-                });
-                result.put(String.valueOf(key), entries);
-            }
-        });
-        return result;
+        return metadataCodec().nestedStringMapValue(value);
     }
 
     private boolean isEmpty(Object value) {
-        if (value == null) return true;
-        if (value instanceof String text) return text.isBlank();
-        if (value instanceof List<?> list) return list.isEmpty();
-        return false;
+        return configValidator().isEmpty(value);
     }
 
     private String shippingValidationError(ChannelProduct channelProduct) {
-        if (channelProduct == null || channelProduct.getChannel() == null
-                || channelProduct.getChannel().getPlatform() != PlatformType.LAZADA) {
-            return null;
-        }
-        Product product = channelProduct.getProduct();
-        if (product == null || product.getWeightGrams() == null || product.getWeightGrams() <= 0) {
-            return "Missing Package Weight (kg)";
-        }
-        Map<String, Object> attributes = product.getAttributes();
-        for (String key : List.of("packageWidthCm", "packageHeightCm", "packageLengthCm")) {
-            Object value = attributes == null ? null : attributes.get(key);
-            if (!isPositiveNumber(value)) {
-                return "Missing " + packageFieldLabel(key);
-            }
-        }
-        return null;
+        return lazadaValidator().shippingValidationError(channelProduct);
     }
 
     private String platformProductValidationError(ChannelProduct channelProduct) {
-        if (channelProduct == null || channelProduct.getProduct() == null
-                || channelProduct.getChannel() == null
-                || channelProduct.getChannel().getPlatform() != PlatformType.TIKTOK) {
-            return null;
-        }
-        String name = channelProduct.getProduct().getName();
-        int length = name == null ? 0 : name.trim().length();
-        if (length < 25 || length > 255) {
-            return "TikTok product name must be between 25 and 255 characters";
-        }
-        return null;
+        return tikTokValidator().productValidationError(channelProduct, config(channelProduct));
+    }
+
+    private TikTokProductTitleResult resolveTikTokTitle(Product product, Map<String, Object> config) {
+        return tikTokValidator().resolveTitle(product, config);
     }
 
     private boolean isPositiveNumber(Object value) {
-        if (value == null || value.toString().isBlank()) return false;
-        try {
-            return new java.math.BigDecimal(value.toString()).signum() > 0;
-        } catch (NumberFormatException e) {
-            return false;
-        }
+        return configValidator().isPositiveNumber(value);
     }
 
     private String packageFieldLabel(String key) {
@@ -542,6 +489,21 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         return value == null || value.isBlank() ? fallback : value;
     }
 
+    private ChannelProductConfigMetadataCodec metadataCodec() {
+        return new ChannelProductConfigMetadataCodec(objectMapper);
+    }
+
+    private ProductChannelConfigValidator configValidator() {
+        return new ProductChannelConfigValidator();
+    }
+
+    private LazadaProductConfigValidator lazadaValidator() {
+        return new LazadaProductConfigValidator();
+    }
+
+    private TikTokProductConfigValidator tikTokValidator() {
+        return new TikTokProductConfigValidator(tikTokProductTitleResolver);
+    }
 
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);

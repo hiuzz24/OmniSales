@@ -25,6 +25,7 @@ public class ChannelProductConfigResponse {
     private String categoryVersion;
     private String brandId;
     private String brandName;
+    private String listingTitle;
     private Map<String, Object> attributes;
     private Map<String, String> variantAttributeBindings;
     private Map<String, Map<String, String>> variantAttributeValueMappings;

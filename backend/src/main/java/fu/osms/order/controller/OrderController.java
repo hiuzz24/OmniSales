@@ -9,6 +9,7 @@ import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderStats;
+import fu.osms.order.dto.response.UncustomerdCountResponse;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.service.OrderService;
 import jakarta.validation.Valid;
@@ -16,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -49,6 +51,7 @@ public class OrderController {
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getOrders(
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(required = false) UUID channelId,
+            @RequestParam(required = false) UUID customerId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
@@ -59,7 +62,7 @@ public class OrderController {
         OffsetDateTime toDt = to != null ? to.atTime(LocalTime.MAX).atOffset(OffsetDateTime.now().getOffset()) : null;
 
         PageResponse<OrderResponse> result = orderService.getFiltered(
-                status, channelId, keyword, fromDt, toDt, page, size);
+                status, channelId, keyword, fromDt, toDt, customerId, page, size);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
@@ -78,7 +81,15 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
+    @GetMapping("/uncustomerd-count")
+    public ResponseEntity<ApiResponse<UncustomerdCountResponse>> getUncustomerdCount() {
+        long count = orderService.countOrdersWithoutCustomer();
+        return ResponseEntity.ok(ApiResponse.success(
+                UncustomerdCountResponse.builder().count(count).build()));
+    }
+
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<OrderResponse>> updateStatus(@PathVariable UUID id,
                                                                    @RequestParam OrderStatus status) {
         OrderResponse response = orderService.updateStatus(id, status);
@@ -100,6 +111,7 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id,
                                                     @RequestBody(required = false) CancelOrderRequest request,
                                                     @RequestParam(required = false) String reason) {
@@ -112,6 +124,7 @@ public class OrderController {
     }
 
     @GetMapping("/{id}/cancel-reasons")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<List<CancelReasonResponse>>> getCancelReasons(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getCancelReasons(id)));
     }

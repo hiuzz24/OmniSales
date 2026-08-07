@@ -23,6 +23,8 @@ public interface ChannelProductRepository extends JpaRepository<ChannelProduct, 
 
     List<ChannelProduct> findByChannelId(UUID channelId);
 
+    List<ChannelProduct> findByChannelIdAndMappingState(UUID channelId, String mappingState);
+
     Optional<ChannelProduct> findByChannelIdAndExternalProductId(UUID channelId, String externalProductId);
 
     Optional<ChannelProduct> findByProductIdAndChannelId(UUID productId, UUID channelId);
@@ -62,18 +64,41 @@ public interface ChannelProductRepository extends JpaRepository<ChannelProduct, 
             "JOIN FETCH cp.product p " +
             "JOIN FETCH cp.channel ch " +
             "WHERE ch.id = :channelId " +
+            "AND cp.id IN :ids " +
+            "AND ch.deletedAt IS NULL " +
+            "AND cp.mappingState = 'ACTIVE' " +
+            "AND p.deletedAt IS NULL")
+    List<ChannelProduct> findActiveByChannelIdAndIdInWithProduct(
+            @Param("channelId") UUID channelId,
+            @Param("ids") Collection<UUID> ids);
+
+    @Query("SELECT cp FROM ChannelProduct cp " +
+            "JOIN FETCH cp.product p " +
+            "JOIN FETCH cp.channel ch " +
+            "WHERE ch.id = :channelId " +
             "AND ch.deletedAt IS NULL " +
             "AND cp.mappingState = 'ACTIVE' " +
             "AND p.deletedAt IS NULL " +
             "AND (" +
             "    cp.syncStatus <> :syncedStatus " +
+            "    OR cp.createdAt > :changedSince " +
             "    OR cp.updatedAt > :changedSince " +
+            "    OR p.createdAt > :changedSince " +
             "    OR p.updatedAt > :changedSince " +
             "    OR EXISTS (" +
             "        SELECT 1 FROM ProductVariant v " +
             "        WHERE v.product = p " +
             "        AND v.deletedAt IS NULL " +
-            "        AND v.updatedAt > :changedSince" +
+            "        AND (v.createdAt > :changedSince OR v.updatedAt > :changedSince)" +
+            "    ) " +
+            "    OR EXISTS (" +
+            "        SELECT 1 FROM ChannelProductVariant cpv " +
+            "        WHERE cpv.channelProduct = cp " +
+            "        AND (" +
+            "            cpv.syncStatus <> :syncedStatus " +
+            "            OR cpv.createdAt > :changedSince " +
+            "            OR cpv.updatedAt > :changedSince" +
+            "        )" +
             "    )" +
             ")")
     List<ChannelProduct> findActiveChangedByChannelIdSince(@Param("channelId") UUID channelId,

@@ -1,3 +1,4 @@
+import { AlignLeft, BadgeDollarSign, Info, PackageCheck } from 'lucide-react';
 import styles from './TabOverview.module.css';
 
 const TabOverview = ({ product }) => {
@@ -5,15 +6,14 @@ const TabOverview = ({ product }) => {
   let priceDisplay = '0 đ';
   let costDisplay = '0 đ';
   let profitDisplay = '0 đ';
-  let profitVal = 0;
 
   if (product.variants && product.variants.length > 0) {
     if (product.variants.length === 1) {
       const v = product.variants[0];
       priceDisplay = `${v.price?.toLocaleString()} đ`;
       costDisplay = `${v.costPrice?.toLocaleString() || 0} đ`;
-      profitVal = (v.price || 0) - (v.costPrice || 0);
-      profitDisplay = `${profitVal.toLocaleString()} đ`;
+      const profitValue = (v.price || 0) - (v.costPrice || 0);
+      profitDisplay = `${profitValue.toLocaleString()} đ`;
     } else {
       const prices = product.variants.map(v => v.price || 0);
       const minP = Math.min(...prices);
@@ -33,12 +33,48 @@ const TabOverview = ({ product }) => {
 
   const barcodeDisplay = product.variants?.length === 1 ? product.variants[0].barcode : 'Theo biến thể';
 
+  const normalizeDescription = (rawDescription) => {
+    const emptyDescription = 'Chưa có mô tả';
+
+    if (typeof rawDescription !== 'string') {
+      return emptyDescription;
+    }
+
+    const value = rawDescription.trim();
+    const textOnlyValue = value
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .trim();
+
+    if (!value || !textOnlyValue) {
+      return emptyDescription;
+    }
+
+    const looksLikeHtml = /<\/?[a-z][^>]*>/i.test(value);
+
+    if (!looksLikeHtml) {
+      return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\r\n?/g, '\n')
+        .replace(/\n/g, '<br />');
+    }
+
+    return value;
+  };
+
+  const descriptionHtml = normalizeDescription(product.description);
+
   return (
     <div className={styles.tabContainer}>
       <div className={styles.grid}>
         {/* Thông tin cơ bản */}
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Thông tin cơ bản</h3>
+        <section className={`${styles.card} ${styles.basicCard}`}>
+          <div className={styles.cardHeading}>
+            <span className={styles.cardIcon}><Info aria-hidden="true" /></span>
+            <h3 className={styles.cardTitle}>Thông tin cơ bản</h3>
+          </div>
           <div className={styles.infoList}>
             <div className={styles.infoRow}>
               <span className={styles.label}>Tên sản phẩm:</span>
@@ -67,11 +103,14 @@ const TabOverview = ({ product }) => {
               </span>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* Giá & Chi phí */}
-        <div className={styles.card}>
-          <h3 className={styles.cardTitle}>Giá & Chi phí</h3>
+        <section className={`${styles.card} ${styles.priceCard}`}>
+          <div className={styles.cardHeading}>
+            <span className={styles.cardIcon}><BadgeDollarSign aria-hidden="true" /></span>
+            <h3 className={styles.cardTitle}>Giá & Chi phí</h3>
+          </div>
           <div className={styles.infoList}>
             <div className={styles.infoRow}>
               <span className={styles.label}>Giá bán:</span>
@@ -87,20 +126,30 @@ const TabOverview = ({ product }) => {
               <span className={styles.valueProfit}>{profitDisplay}</span>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       {/* Mô tả sản phẩm */}
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Mô tả sản phẩm</h3>
-        <p className={styles.description}>
-          {product.description || 'Chưa có mô tả.'}
-        </p>
-      </div>
+      <section className={`${styles.card} ${styles.descriptionCard}`}>
+        <div className={styles.cardHeading}>
+          <span className={styles.cardIcon}><AlignLeft aria-hidden="true" /></span>
+          <h3 className={styles.cardTitle}>Mô tả sản phẩm</h3>
+        </div>
+        <div
+          className={styles.description}
+          style={{ whiteSpace: 'pre-wrap' }}
+          dangerouslySetInnerHTML={{
+            __html: descriptionHtml
+          }}
+        />
+      </section>
 
       {/* Thông tin vận chuyển */}
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Thông tin vận chuyển</h3>
+      <section className={`${styles.card} ${styles.shippingCard}`}>
+        <div className={styles.cardHeading}>
+          <span className={styles.cardIcon}><PackageCheck aria-hidden="true" /></span>
+          <h3 className={styles.cardTitle}>Thông tin vận chuyển</h3>
+        </div>
         <div className={styles.infoList}>
           <div className={styles.infoRow}>
             <span className={styles.label}>Khối lượng:</span>
@@ -115,7 +164,7 @@ const TabOverview = ({ product }) => {
             <span className={styles.value}>{product.lowStockThreshold ?? 5}</span>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

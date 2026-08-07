@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -16,6 +17,8 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
     List<OrderItem> findByOrderId(UUID orderId);
 
     List<OrderItem> findByOrderIdIn(List<UUID> orderIds);
+
+    Optional<OrderItem> findByOrderIdAndExternalItemId(UUID orderId, String externalItemId);
 
     @Modifying
     @Query("DELETE FROM OrderItem oi WHERE oi.order.id = :orderId")

@@ -1,6 +1,12 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Order E2E Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // Order List Page
 

@@ -38,7 +38,7 @@ const formatDateOnly = (s) => {
 const getItemProductName = (item) =>
   item?.productName ?? item?.productVariantName ?? item?.variantProductName ?? item?.variantName ?? item?.variantSku ?? item?.sku ?? '—';
 
-const getItemSku = (item) => item?.sku ?? item?.variantSku ?? '—';
+const getItemSku = (item) => item?.marketplaceSku ?? item?.sku ?? item?.variantSku ?? '—';
 
 // Status config
 const STATUS_CFG = {
@@ -145,16 +145,6 @@ export default function StockReceiveDetailPage() {
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
 
-  useEffect(() => {
-    if (!id) {
-      toast.error('ID phiếu nhập không hợp lệ');
-      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
-      return;
-    }
-    fetchReceipt();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
   const fetchReceipt = async () => {
     setLoading(true);
     try {
@@ -222,6 +212,17 @@ export default function StockReceiveDetailPage() {
     }
   };
 
+  useEffect(() => {
+    if (!id) {
+      toast.error('ID phiếu nhập không hợp lệ');
+      navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS);
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchReceipt();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   if (loading) {
     return (
       <div
@@ -285,7 +286,7 @@ export default function StockReceiveDetailPage() {
 
   return (
     <>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="product-workspace product-workspace--flow" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Header */}
       <div
         style={{

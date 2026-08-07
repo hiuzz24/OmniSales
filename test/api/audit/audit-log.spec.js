@@ -1,7 +1,13 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/product-helpers');
+const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
 test.describe('Audit/Inventory Logs API Tests', () => {
+
+  test.afterEach(async ({ request }) => {
+    const token = await getAuthTokenCached(request);
+    await cleanupAllTestData(request, token);
+  });
 
   // GET /api/audit-logs - List Audit Logs
   test('A1 - GET /api/audit-logs - List logs with pagination returns 200', async ({ request, managerHeaders }) => {

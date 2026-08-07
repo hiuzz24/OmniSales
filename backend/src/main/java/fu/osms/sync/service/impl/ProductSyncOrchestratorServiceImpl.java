@@ -9,6 +9,7 @@ import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.repository.ChannelProductRepository;
+import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
@@ -36,6 +37,7 @@ public class ProductSyncOrchestratorServiceImpl implements ProductSyncOrchestrat
     private final ProductVariantRepository productVariantRepository;
     private final ProductImageRepository productImageRepository;
     private final ChannelProductRepository channelProductRepository;
+    private final ChannelConnectionValidator channelConnectionValidator;
     private final PlatformSyncServiceFactory platformSyncServiceFactory;
     private final SyncLogRepository syncLogRepository;
     private final SyncAlertService syncAlertService;
@@ -64,6 +66,16 @@ public class ProductSyncOrchestratorServiceImpl implements ProductSyncOrchestrat
                     .channelName(channel.getDisplayName())
                     .platform(channel.getPlatform().name())
                     .build();
+
+            try {
+                channelConnectionValidator.validateConnected(channel);
+            } catch (AppException error) {
+                failedCount++;
+                detail.setSuccess(false);
+                detail.setErrorMessage(error.getMessage());
+                result.getDetails().add(detail);
+                continue;
+            }
 
             SyncLog syncLog = SyncLog.builder()
                     .product(product)
@@ -129,6 +141,7 @@ public class ProductSyncOrchestratorServiceImpl implements ProductSyncOrchestrat
                 .filter(mapping -> "ACTIVE".equals(mapping.getMappingState()))
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Active product channel mapping not found"));
         Channel channel = channelProduct.getChannel();
+        channelConnectionValidator.validateConnected(channel);
         List<ProductVariant> variants = productVariantRepository.findByProductIdAndDeletedAtIsNull(productId);
         List<ProductImage> images = productImageRepository.findByProductIdOrderByIsPrimaryDescSortOrderAsc(productId);
 

@@ -22,6 +22,7 @@ const configFromSync = (sync) => ({
   categoryVersion: sync.platformConfig?.categoryVersion || (sync.platform === 'TIKTOK' ? 'v2' : null),
   brandId: sync.platformConfig?.brandId || '',
   brandName: sync.platformConfig?.brandName || '',
+  listingTitle: sync.platformConfig?.listingTitle || '',
   sizeChartImageUrl: sync.platformConfig?.sizeChartImageUrl || '',
   attributes: sync.platformConfig?.attributes || {},
   variantAttributeValueMappings: sync.platformConfig?.variantAttributeValueMappings || {},
@@ -102,7 +103,7 @@ const TabPlatform = ({ product, onRefresh }) => {
     <div className={styles.card}>
       <div className={styles.cardHeader}>
         <div className={styles.titleRow}>
-          <span className={styles.sectionIcon}>🔄</span>
+          <span className={styles.sectionIcon}><RefreshCw aria-hidden="true" /></span>
           <h3 className={styles.cardTitle}>Trạng thái đồng bộ</h3>
         </div>
         <p className={styles.cardSubtitle}>Kiểm tra trạng thái kết nối và đồng bộ của sản phẩm trên các sàn.</p>

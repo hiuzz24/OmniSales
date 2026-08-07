@@ -14,11 +14,14 @@ import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.customer.entity.Customer;
 import fu.osms.customer.repository.CustomerRepository;
+import fu.osms.customer.service.CustomerService;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.inventory.service.OrderStockDeliveryReadinessService;
+import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderItemRequest;
@@ -53,6 +56,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import fu.osms.order.event.OrderCreatedEvent;
 import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderPaidEvent;
+import fu.osms.order.event.OrderStatusChangedEvent;
 
 import fu.osms.common.utils.SecurityUtils;
 import java.math.BigDecimal;
@@ -73,6 +77,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository orderItemRepository;
     private final ChannelRepository channelRepository;
     private final CustomerRepository customerRepository;
+    private final CustomerService customerService;
     private final AuditLogRepository auditLogRepository;
     private final AuditService auditService;
     private final OrderMapper orderMapper;
@@ -82,7 +87,9 @@ public class OrderServiceImpl implements OrderService {
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryAlertService inventoryAlertService;
     private final OrderStatusPushService orderStatusPushService;
+    private final OrderStockDeliveryReadinessService orderStockDeliveryReadinessService;
     private final ApplicationEventPublisher eventPublisher;
+    private final PlatformOrderInventoryService platformOrderInventoryService;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
     @Override
@@ -94,11 +101,13 @@ public class OrderServiceImpl implements OrderService {
             Channel channel = channelRepository.findById(request.getChannelId())
                     .orElseThrow(() -> new EntityNotFoundException("Channel not found: " + request.getChannelId()));
             order.setChannel(channel);
-        }
-
+}
         if (request.getCustomerId() != null) {
             Customer customer = customerRepository.findById(request.getCustomerId())
                     .orElseThrow(() -> new EntityNotFoundException("Customer not found: " + request.getCustomerId()));
+            order.setCustomer(customer);
+        } else if (order.getBuyerName() != null || order.getBuyerPhone() != null) {
+            Customer customer = customerService.findOrCreateFromBuyer(order.getBuyerName(), order.getBuyerPhone());
             order.setCustomer(customer);
         }
 
@@ -107,7 +116,7 @@ public class OrderServiceImpl implements OrderService {
 
         Set<UUID> changedVariantIds = new HashSet<>();
         for (OrderItemRequest itemReq : request.getItems()) {
-            ProductVariant variant = resolveVariant(itemReq);
+            ProductVariant variant = manualInventoryService().resolveVariant(itemReq);
             OrderItem item = OrderItem.builder()
                     .order(savedOrder)
                     .variant(variant)
@@ -120,12 +129,12 @@ public class OrderServiceImpl implements OrderService {
             orderItemRepository.save(item);
 
             if (variant != null) {
-                if (reserveInventory(variant, itemReq.getQuantity())) {
+                if (manualInventoryService().reserve(variant, itemReq.getQuantity())) {
                     changedVariantIds.add(variant.getId());
                 }
             }
         }
-        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        manualInventoryService().propagate(changedVariantIds);
 
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
@@ -135,7 +144,7 @@ public class OrderServiceImpl implements OrderService {
 
         eventPublisher.publishEvent(new OrderCreatedEvent(savedOrder));
 
-        return toResponseWithItems(savedOrder);
+        return responseAssembler().withItems(savedOrder);
     }
 
     @Override
@@ -143,7 +152,7 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse getById(UUID id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
-        return toResponseWithItems(order);
+        return responseAssembler().withItems(order);
     }
 
     @Override
@@ -151,7 +160,7 @@ public class OrderServiceImpl implements OrderService {
     public PageResponse<OrderResponse> getAll(int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Order> orderPage = orderRepository.findAll(pageRequest);
-        return toPageResponse(orderPage);
+        return responseAssembler().page(orderPage);
     }
 
     @Override
@@ -159,37 +168,28 @@ public class OrderServiceImpl implements OrderService {
     public PageResponse<OrderResponse> getByStatus(OrderStatus status, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Order> orderPage = orderRepository.findByStatus(status, pageRequest);
-        return toPageResponse(orderPage);
+        return responseAssembler().page(orderPage);
     }
 
     @Override
     @Transactional
     public OrderResponse updateStatus(UUID id, OrderStatus status) {
-        Order order = orderRepository.findById(id)
+        Order order = orderRepository.findForUpdateById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
 
         OrderStatus oldStatus = order.getStatus();
         String oldPaymentStatus = order.getPaymentStatus();
 
-        if (oldStatus == OrderStatus.CANCELLED && status == OrderStatus.CANCELLED) {
-            throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
-        }
-
-        validateTikTokProcessingTransition(order, oldStatus, status);
+        statusTransitionPolicy().validate(order, oldStatus, status, id);
 
         OrderStatusPushResult pushResult = orderStatusPushService.push(order, status, OrderStatusPushContext.empty());
-        if (shouldBlockLocalUpdate(order, status, pushResult)) {
+        if (statusTransitionPolicy().shouldBlockLocalUpdate(order, status, pushResult)) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION, pushResult.getMessage());
         }
 
-        if (status == OrderStatus.CANCELLED) {
-            order.setStatus(OrderStatus.CANCELLED);
-            marketplaceInventoryPropagationService.schedulePushAvailableStock(releaseReservedInventory(order));
-        } else {
-            order.setStatus(status);
-        }
+        order.setStatus(status);
 
-        boolean shouldAutoMarkPaid = shouldAutoMarkPaid(order, status);
+        boolean shouldAutoMarkPaid = statusTransitionPolicy().shouldAutoMarkPaid(order, status);
         if (shouldAutoMarkPaid) {
             order.setPaymentStatus("PAID");
         }
@@ -213,19 +213,23 @@ public class OrderServiceImpl implements OrderService {
         }
         auditService.record(actorId, actorEmail, "STATUS_CHANGE", "ORDER", id, id.toString(), auditChanges);
 
-        if (savedOrder.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED) {
-            eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
-        }
         if ("PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus)) {
             eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
         }
+        if (oldStatus != savedOrder.getStatus()) {
+            eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                    savedOrder.getId(), oldStatus, savedOrder.getStatus()));
+        }
 
-        return toResponseWithItems(savedOrder);
+        return responseAssembler().withItems(savedOrder);
     }
 
     @Override
     @Transactional
     public OrderResponse updatePaymentStatus(UUID id, PaymentStatus paymentStatus) {
+        if (paymentStatus == PaymentStatus.REFUNDED) {
+            throw new AppException(ErrorCode.ORDER_REFUND_SYSTEM_MANAGED);
+        }
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
 
@@ -243,7 +247,7 @@ public class OrderServiceImpl implements OrderService {
             eventPublisher.publishEvent(new OrderPaidEvent(savedOrder));
         }
 
-        return toResponseWithItems(savedOrder);
+        return responseAssembler().withItems(savedOrder);
     }
 
     @Override
@@ -274,7 +278,7 @@ public class OrderServiceImpl implements OrderService {
         auditService.record(actorId, actorEmail, "UPDATE", "ORDER", id,
                 savedOrder.getId().toString(), null);
 
-        return toResponseWithItems(savedOrder);
+        return responseAssembler().withItems(savedOrder);
     }
 
     @Override
@@ -291,7 +295,7 @@ public class OrderServiceImpl implements OrderService {
                 ? cancelRequest.getShopifyReason()
                 : ShopifyCancelReason.OTHER;
         OrderStatus oldStatus = order.getStatus();
-        if (requiresTextCancelReason(order) && (reason == null || reason.isBlank())) {
+        if (statusTransitionPolicy().requiresTextCancelReason(order) && (reason == null || reason.isBlank())) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
         if (order.getPlatform() == PlatformType.LAZADA && (reasonId == null || reasonId.isBlank())) {
@@ -300,7 +304,8 @@ public class OrderServiceImpl implements OrderService {
         if (order.getPlatform() == PlatformType.TIKTOK && (tikTokReason == null || tikTokReason.isBlank())) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Vui lòng chọn lý do hủy TikTok");
         }
-        if (order.getPlatform() == PlatformType.TIKTOK && isTikTokCancellationPending(order)) {
+        if (order.getPlatform() == PlatformType.TIKTOK
+                && statusTransitionPolicy().isTikTokCancellationPending(order)) {
             throw new AppException(ErrorCode.CONFLICT, "Đơn hàng đang chờ TikTok xác nhận hủy");
         }
         if (oldStatus == OrderStatus.CANCELLED) {
@@ -320,7 +325,7 @@ public class OrderServiceImpl implements OrderService {
                         .restock(cancelRequest.getRestock())
                         .refund(cancelRequest.getRefund())
                         .build());
-        if (shouldBlockLocalUpdate(order, OrderStatus.CANCELLED, pushResult)) {
+        if (statusTransitionPolicy().shouldBlockLocalUpdate(order, OrderStatus.CANCELLED, pushResult)) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION, pushResult.getMessage());
         }
 
@@ -347,11 +352,15 @@ public class OrderServiceImpl implements OrderService {
             return;
         }
 
-        Set<UUID> changedVariantIds = releaseReservedInventory(order);
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
         order.setStatusChangedAt(OffsetDateTime.now());
         Order savedOrder = orderRepository.save(order);
+        if (statusTransitionPolicy().isPlatformOrder(savedOrder)) {
+            platformOrderInventoryService.syncReservations(savedOrder);
+        } else {
+            manualInventoryService().propagate(manualInventoryService().release(savedOrder));
+        }
 
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);
@@ -374,8 +383,9 @@ public class OrderServiceImpl implements OrderService {
         auditService.record(actorId, actorEmail, "ORDER_CANCEL", "ORDER", id,
                 order.getId().toString(), auditChanges);
 
-        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
         eventPublisher.publishEvent(new OrderCancelledEvent(savedOrder));
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(
+                savedOrder.getId(), oldStatus, savedOrder.getStatus()));
     }
 
     @Override
@@ -397,109 +407,15 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    private boolean isPlatformOrder(Order order) {
-        return order.getChannel() != null
-                && order.getPlatform() != null
-                && order.getPlatform() != PlatformType.MANUAL;
-    }
-
-    private boolean shouldAutoMarkPaid(Order order, OrderStatus status) {
-        return !isPlatformOrder(order)
-                && status == OrderStatus.DELIVERED
-                && "UNPAID".equals(order.getPaymentStatus());
-    }
-
-    private boolean isStrictPlatformOrder(Order order) {
-        return order.getPlatform() == PlatformType.LAZADA
-                || order.getPlatform() == PlatformType.SHOPIFY
-                || order.getPlatform() == PlatformType.TIKTOK;
-    }
-
-    private boolean requiresTextCancelReason(Order order) {
-        return order.getPlatform() != PlatformType.LAZADA
-                && order.getPlatform() != PlatformType.SHOPIFY
-                && order.getPlatform() != PlatformType.TIKTOK;
-    }
-
-    private boolean shouldBlockLocalUpdate(Order order, OrderStatus status, OrderStatusPushResult pushResult) {
-        if (!isPlatformOrder(order) || !requiresPlatformPush(order, status)) {
-            return false;
-        }
-        if (isStrictPlatformOrder(order)) {
-            return !pushResult.isSuccess();
-        }
-        return !pushResult.isSuccess() && !pushResult.isSkipped();
-    }
-
-    private boolean requiresPlatformPush(Order order, OrderStatus status) {
-        if (order.getPlatform() == PlatformType.LAZADA) {
-            return status == OrderStatus.PROCESSING
-                    || status == OrderStatus.SHIPPED
-                    || status == OrderStatus.CANCELLED;
-        }
-        if (order.getPlatform() == PlatformType.SHOPIFY) {
-            return status == OrderStatus.SHIPPED
-                    || status == OrderStatus.CANCELLED;
-        }
-        if (order.getPlatform() == PlatformType.TIKTOK) {
-            return status == OrderStatus.SHIPPED
-                    || status == OrderStatus.CANCELLED;
-        }
-        return status == OrderStatus.CANCELLED;
-    }
-
-    private boolean isTikTokCancellationPending(Order order) {
-        if (order.getPlatformMetadata() == null) {
-            return false;
-        }
-        Object rawTikTok = order.getPlatformMetadata().get("tiktok");
-        if (!(rawTikTok instanceof Map<?, ?> tikTok)) {
-            return false;
-        }
-        Object pending = tikTok.get("pendingConfirmation");
-        return pending instanceof Boolean value ? value : Boolean.parseBoolean(String.valueOf(pending));
-    }
-
-    private void validateTikTokProcessingTransition(Order order, OrderStatus oldStatus, OrderStatus targetStatus) {
-        if (order.getPlatform() != PlatformType.TIKTOK || oldStatus != OrderStatus.PENDING) {
-            return;
-        }
-        if (targetStatus != OrderStatus.CONFIRMED
-                && targetStatus != OrderStatus.PROCESSING
-                && targetStatus != OrderStatus.SHIPPED) {
-            return;
-        }
-        String rawStatus = tikTokRawOrderStatus(order);
-        if (!"AWAITING_SHIPMENT".equalsIgnoreCase(rawStatus)) {
-            throw new AppException(
-                    ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
-                    "TikTok chưa chuyển đơn sang AWAITING_SHIPMENT; trạng thái hiện tại="
-                            + (rawStatus != null ? rawStatus : "UNKNOWN")
-            );
-        }
-    }
-
-    private String tikTokRawOrderStatus(Order order) {
-        if (order.getPlatformMetadata() == null) {
-            return null;
-        }
-        Object rawTikTok = order.getPlatformMetadata().get("tiktok");
-        if (!(rawTikTok instanceof Map<?, ?> tikTok)) {
-            return null;
-        }
-        Object rawStatus = tikTok.get("rawOrderStatus");
-        return rawStatus != null ? String.valueOf(rawStatus) : null;
-    }
-
     @Override
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getFiltered(OrderStatus status, UUID channelId, String keyword,
                                                     OffsetDateTime from, OffsetDateTime to,
-                                                    int page, int size) {
+                                                    UUID customerId, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size);
-        Specification<Order> spec = OrderSpec.withFilters(status, channelId, keyword, from, to);
+        Specification<Order> spec = OrderSpec.withFilters(status, channelId, keyword, from, to, customerId);
         Page<Order> orderPage = orderRepository.findAll(spec, pageRequest);
-        return toPageResponse(orderPage);
+        return responseAssembler().page(orderPage);
     }
 
     @Override
@@ -515,6 +431,12 @@ public class OrderServiceImpl implements OrderService {
                 orderRepository.countByStatus(OrderStatus.CANCELLED),
                 orderRepository.sumRevenueDelivered()
         );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countOrdersWithoutCustomer() {
+        return orderRepository.countByCustomerIsNull();
     }
 
     @Override
@@ -538,139 +460,22 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    private OrderResponse toResponseWithItems(Order order) {
-        OrderResponse response = orderMapper.toResponseWithItems(order);
-
-        List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
-        List<OrderItemResponse> itemResponses = items.stream()
-                .map(orderItemMapper::toResponse)
-                .toList();
-        response.setItems(itemResponses);
-
-        return response;
+    private ManualOrderInventoryService manualInventoryService() {
+        return new ManualOrderInventoryService(
+                productVariantRepository,
+                inventoryItemRepository,
+                inventoryAlertService,
+                orderItemRepository,
+                marketplaceInventoryPropagationService
+        );
     }
 
-    private PageResponse<OrderResponse> toPageResponse(Page<Order> orderPage) {
-        List<OrderResponse> content = orderPage.getContent().stream()
-                .map(orderMapper::toResponse)
-                .toList();
-        attachItems(content);
-
-        return PageResponse.<OrderResponse>builder()
-                .content(content)
-                .page(orderPage.getNumber())
-                .size(orderPage.getSize())
-                .totalElements(orderPage.getTotalElements())
-                .totalPages(orderPage.getTotalPages())
-                .first(orderPage.isFirst())
-                .last(orderPage.isLast())
-                .build();
+    private OrderResponseAssembler responseAssembler() {
+        return new OrderResponseAssembler(orderMapper, orderItemMapper, orderItemRepository);
     }
 
-    private void attachItems(List<OrderResponse> orders) {
-        if (orders == null || orders.isEmpty()) {
-            return;
-        }
-
-        List<UUID> orderIds = orders.stream()
-                .map(OrderResponse::getId)
-                .toList();
-        Map<UUID, List<OrderItemResponse>> itemsByOrderId = orderItemRepository.findByOrderIdIn(orderIds).stream()
-                .collect(Collectors.groupingBy(
-                        item -> item.getOrder().getId(),
-                        Collectors.mapping(orderItemMapper::toResponse, Collectors.toList())
-                ));
-
-        orders.forEach(order ->
-                order.setItems(itemsByOrderId.getOrDefault(order.getId(), List.of())));
-    }
-
-    private ProductVariant resolveVariant(OrderItemRequest itemReq) {
-        if (itemReq.getVariantId() != null) {
-            return productVariantRepository.findById(itemReq.getVariantId())
-                    .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
-        }
-        if (itemReq.getSku() == null || itemReq.getSku().isBlank()) {
-            return null;
-        }
-        return productVariantRepository.findBySkuAndDeletedAtIsNull(itemReq.getSku()).orElse(null);
-    }
-
-    private boolean reserveInventory(ProductVariant variant, int quantity) {
-        List<InventoryItem> inventoryItems = inventoryItemRepository.findByVariantIdWithLock(variant.getId());
-        if (inventoryItems.isEmpty()) {
-            throw new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND,
-                    "SKU " + variant.getSku() + " is not available in any warehouse.");
-        }
-
-        int totalAvailable = inventoryItems.stream().mapToInt(this::availableQuantity).sum();
-        if (totalAvailable < quantity) {
-            throw new AppException(ErrorCode.INSUFFICIENT_STOCK,
-                    "SKU " + variant.getSku() + " has only " + totalAvailable + " available units.");
-        }
-
-        int remaining = quantity;
-        List<InventoryItem> changedItems = new ArrayList<>();
-        for (InventoryItem item : inventoryItems) {
-            if (remaining <= 0) break;
-            int reserveFromItem = Math.min(availableQuantity(item), remaining);
-            if (reserveFromItem <= 0) continue;
-
-            item.setReservedQuantity(safeInt(item.getReservedQuantity()) + reserveFromItem);
-            changedItems.add(item);
-            remaining -= reserveFromItem;
-        }
-
-        inventoryItemRepository.saveAll(changedItems);
-        changedItems.forEach(inventoryAlertService::notifyLowStockAfterStockChange);
-        return !changedItems.isEmpty();
-    }
-
-    private Set<UUID> releaseReservedInventory(Order order) {
-        Set<UUID> changedVariantIds = new HashSet<>();
-        List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
-        for (OrderItem orderItem : orderItems) {
-            ProductVariant variant = orderItem.getVariant();
-            if (variant == null) {
-                variant = resolveVariantBySku(orderItem.getSku());
-            }
-            if (variant == null) continue;
-
-            int remaining = safeInt(orderItem.getQuantity());
-            List<InventoryItem> inventoryItems = inventoryItemRepository.findByVariantIdWithLock(variant.getId());
-            List<InventoryItem> changedItems = new ArrayList<>();
-
-            for (InventoryItem item : inventoryItems) {
-                if (remaining <= 0) break;
-                int releaseFromItem = Math.min(safeInt(item.getReservedQuantity()), remaining);
-                if (releaseFromItem <= 0) continue;
-
-                item.setReservedQuantity(safeInt(item.getReservedQuantity()) - releaseFromItem);
-                changedItems.add(item);
-                remaining -= releaseFromItem;
-            }
-
-            if (!changedItems.isEmpty()) {
-                inventoryItemRepository.saveAll(changedItems);
-                changedVariantIds.add(variant.getId());
-            }
-        }
-        return changedVariantIds;
-    }
-
-    private ProductVariant resolveVariantBySku(String sku) {
-        if (sku == null || sku.isBlank()) {
-            return null;
-        }
-        return productVariantRepository.findBySkuAndDeletedAtIsNull(sku).orElse(null);
-    }
-
-    private int availableQuantity(InventoryItem item) {
-        return safeInt(item.getQuantityOnHand()) - safeInt(item.getReservedQuantity());
-    }
-
-    private int safeInt(Integer value) {
-        return value == null ? 0 : value;
+    private OrderStatusTransitionPolicy statusTransitionPolicy() {
+        return new OrderStatusTransitionPolicy(orderStockDeliveryReadinessService);
     }
 
 }
