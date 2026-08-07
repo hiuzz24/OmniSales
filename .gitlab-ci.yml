@@ -73,6 +73,8 @@ package-backend:
   before_script:
     # Install wget để download Kaniko binary
     - apk add --no-cache wget bash
+    # Tạo thư mục /kaniko TRƯỚC khi download (Alpine không có sẵn)
+    - mkdir -p /kaniko
     # Download Kaniko binary từ GitHub release chính thức của Google
     - wget -q "https://github.com/GoogleContainerTools/kaniko/releases/download/v1.22.0/executor" -O /kaniko/executor
     - chmod +x /kaniko/executor
