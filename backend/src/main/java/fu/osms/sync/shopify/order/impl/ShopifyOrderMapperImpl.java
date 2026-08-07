@@ -3,6 +3,7 @@ package fu.osms.sync.shopify.order.impl;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.sync.shopify.order.ShopifyOrderMapper;
 import fu.osms.sync.shopify.order.ShopifyOrderWriteModel;
+import fu.osms.sync.order.importing.PlatformOrderTimestampParser;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import org.springframework.stereotype.Component;
 
@@ -30,7 +31,10 @@ public class ShopifyOrderMapperImpl implements ShopifyOrderMapper {
         if (items.isEmpty()) throw new IllegalStateException("Shopify order is missing line items");
         Map<String, Object> address = WebhookPayloadUtils.copyMap(
                 WebhookPayloadUtils.firstPresent(payload, "shipping_address", "address"));
-        return new ShopifyOrderWriteModel(id, status(eventType, payload), payment(payload), buyerName(payload),
+        return new ShopifyOrderWriteModel(id,
+                PlatformOrderTimestampParser.parse(WebhookPayloadUtils.firstPresent(
+                        payload, "created_at", "createdAt", "order_created_at")),
+                status(eventType, payload), payment(payload), buyerName(payload),
                 buyerPhone(payload), address, decimal(payload, "subtotal_price", "subtotal"),
                 decimal(payload, "total_discounts", "discount_amount"), shippingFee(payload),
                 fallback(text(payload, "currency", "currency_code"), "VND"), text(payload, "note", "remarks"),

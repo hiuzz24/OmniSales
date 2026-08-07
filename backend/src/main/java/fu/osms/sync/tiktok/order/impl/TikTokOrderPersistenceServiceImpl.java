@@ -59,6 +59,7 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
         order.setChannel(channel);
         order.setChannelName(channel.getDisplayName());
         order.setPlatform(PlatformType.TIKTOK);
+        if (upsert.created() && model.createdAt() != null) order.setCreatedAt(model.createdAt());
         if (model.status() != null && (upsert.created() || oldStatus != model.status())) order.setStatusChangedAt(OffsetDateTime.now());
         if (model.status() != null) order.setStatus(model.status());
         order.setPaymentStatus(model.paymentStatus());

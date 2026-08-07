@@ -5,6 +5,8 @@ import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.common.exception.AppException;
+import fu.osms.common.exception.ErrorCode;
 import fu.osms.common.utils.SecurityUtils;
 import fu.osms.sync.dto.SyncLogResponse;
 import fu.osms.sync.entity.SyncLog;
@@ -78,9 +80,10 @@ public class OrderPullServiceImpl implements OrderPullService {
     }
 
     private void validateRange(OffsetDateTime from, OffsetDateTime to) {
-        if (from.isAfter(to)) throw new IllegalArgumentException("Order pull start time must be before end time");
+        if (from.isAfter(to)) throw new AppException(ErrorCode.INVALID_REQUEST,
+                "Thời điểm bắt đầu phải trước thời điểm kết thúc");
         if (Duration.between(from, to).compareTo(Duration.ofDays(7)) > 0)
-            throw new IllegalArgumentException("Order pull range cannot exceed 7 days");
+            throw new AppException(ErrorCode.ORDER_PULL_RANGE_INVALID);
     }
     private void validatePlatform(Channel channel) {
         if (!SUPPORTED.contains(channel.getPlatform()))

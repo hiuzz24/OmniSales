@@ -44,6 +44,7 @@ public class LazadaOrderPersistenceServiceImpl implements LazadaOrderPersistence
         order.setChannel(channel);
         order.setChannelName(channel.getDisplayName());
         order.setPlatform(PlatformType.LAZADA);
+        if (upsert.created() && model.createdAt() != null) order.setCreatedAt(model.createdAt());
         if (upsert.created() || oldStatus != model.status()) order.setStatusChangedAt(OffsetDateTime.now());
         order.setStatus(model.status());
         order.setPaymentStatus(model.paymentStatus());
