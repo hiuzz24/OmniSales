@@ -16,7 +16,9 @@ import { ROUTES } from '../../../app/router/routes';
 import PageHeader from '../../../shared/components/PageHeader';
 import {
   formatExternalReturnId,
+  formatPlatformLabel,
   formatReturnDateTime,
+  formatReturnErrorMessage,
   ORDER_RETURN_STATUS_LABELS,
   RETURN_ACTION_LABELS,
   RETURN_ACTION_STATE_LABELS,
@@ -109,11 +111,11 @@ const OrderReturnListPage = () => {
           <table className={`${styles.returnTable} ${rows.length === PAGE_SIZE ? styles.tableFilled : ''}`}>
             <thead>
               <tr>
-                <th>Mã return</th>
+                <th>Mã trả hàng</th>
                 <th>Đơn hàng</th>
                 <th>Sàn / Kênh</th>
                 <th>Trạng thái</th>
-                <th>Xử lý API</th>
+                <th>Trạng thái xử lý</th>
                 <th>Cập nhật</th>
                 <th className={styles.actionColumn}><span className={styles.srOnly}>Thao tác</span></th>
               </tr>
@@ -138,7 +140,7 @@ const OrderReturnListPage = () => {
               )}
 
               {!loading && rows.map((item) => {
-                const issueMessage = item.actionError || item.lastSyncError;
+                const issueMessage = formatReturnErrorMessage(item.actionError || item.lastSyncError);
                 return (
                   <tr key={item.id} className={styles.dataRow}>
                     <td>
@@ -157,7 +159,7 @@ const OrderReturnListPage = () => {
                     </td>
                     <td>
                       <span className={`${styles.platformBadge} ${styles[item.platform?.toLowerCase()]}`}>
-                        {item.platform || '-'}
+                        {formatPlatformLabel(item.platform)}
                       </span>
                       <span className={styles.cellHint} title={item.channelName}>{item.channelName || '-'}</span>
                     </td>
@@ -189,7 +191,7 @@ const OrderReturnListPage = () => {
                         type="button"
                         className={styles.iconButton}
                         title="Xem chi tiết"
-                        aria-label={`Xem return ${formatExternalReturnId(item.externalReturnId)}`}
+                        aria-label={`Xem yêu cầu trả hàng ${formatExternalReturnId(item.externalReturnId)}`}
                         onClick={() => openDetail(item.id)}
                       >
                         <Eye size={17} />

@@ -39,6 +39,101 @@ export const RETURN_ACTION_STATE_LABELS = {
   FAILED: 'Thất bại',
 };
 
+export const PLATFORM_LABELS = {
+  SHOPIFY: 'Shopify',
+  LAZADA: 'Lazada',
+  TIKTOK: 'TikTok',
+};
+
+export const RETURN_PLATFORM_STATUS_LABELS = {
+  REQUESTED: 'Chờ duyệt yêu cầu',
+  OPEN: 'Đã mở yêu cầu trả hàng',
+  CLOSED: 'Đã hoàn tất trả hàng',
+  DECLINED: 'Đã từ chối yêu cầu',
+  CANCELED: 'Đã hủy yêu cầu',
+  CANCELLED: 'Đã hủy yêu cầu',
+  RETURN_OR_REFUND_REQUEST_PENDING: 'Chờ duyệt yêu cầu trả hàng',
+  AWAITING_BUYER_SHIP: 'Chờ khách gửi hàng',
+  BUYER_SHIPPED_ITEM: 'Khách đã gửi hàng',
+  REQUEST_SUCCESS: 'Sàn đã xác nhận xử lý',
+  RETURN_OR_REFUND_REQUEST_COMPLETE: 'Đã hoàn tất trả hàng và hoàn tiền',
+  REQUEST_REJECTED: 'Yêu cầu đã bị từ chối',
+  RECEIVE_REJECTED: 'Đã từ chối nhận hàng trả về',
+  RETURN_OR_REFUND_CANCEL: 'Yêu cầu trả hàng đã bị hủy',
+};
+
+export const DATA_VALIDATION_LABELS = {
+  VALID: 'Hợp lệ',
+  INVALID: 'Không hợp lệ',
+};
+
+export const formatPlatformLabel = (platform) => PLATFORM_LABELS[platform] ?? 'Sàn bán hàng';
+
+export const formatReturnPlatformStatus = (status) => {
+  if (!status) return '-';
+  return RETURN_PLATFORM_STATUS_LABELS[status] ?? 'Trạng thái khác từ sàn';
+};
+
+const RETURN_ERROR_TRANSLATIONS = [
+  ['Platform has not applied the action', 'Sàn chưa áp dụng thao tác này.'],
+  ['Shopify may have partially processed the return; check Shopify before retrying',
+    'Shopify có thể đã xử lý một phần yêu cầu. Hãy kiểm tra Shopify trước khi thử lại.'],
+  ['Partial return requires manual processing on the platform; never restock missing items.',
+    'Yêu cầu nhận thiếu cần được xử lý thủ công trên sàn. Không nhập kho hàng còn thiếu.'],
+  ['TikTok return action failed: reverse status cannot approve receive',
+    'TikTok chưa cho phép xác nhận nhận hàng ở trạng thái hiện tại.'],
+  ['TikTok return action failed: unknown reverse reason',
+    'TikTok không chấp nhận lý do trả hàng hiện tại.'],
+];
+
+export const formatReturnErrorMessage = (message) => {
+  if (!message) return '';
+  const normalized = String(message).trim();
+  const exact = RETURN_ERROR_TRANSLATIONS.find(([source]) => normalized === source);
+  if (exact) return exact[1];
+  if (normalized.startsWith('Platform succeeded but OSMS could not persist the result')) {
+    return 'Sàn đã xử lý thành công nhưng OSMS chưa lưu được kết quả. Hãy đồng bộ lại trạng thái sàn.';
+  }
+  if (normalized.startsWith('Retry failed:')) {
+    return `Thử lại thất bại: ${formatReturnErrorMessage(normalized.slice('Retry failed:'.length))}`;
+  }
+  return normalized;
+};
+
+const sumNullable = (items, field) => {
+  const values = items.map((item) => item[field]).filter((value) => value != null);
+  return values.length === 0 ? null : values.reduce((total, value) => total + Number(value), 0);
+};
+
+export const groupOrderReturnItems = (items = []) => {
+  const groups = new Map();
+  items.forEach((item) => {
+    const normalizedSku = String(item.sku ?? '').trim().toLowerCase();
+    const key = normalizedSku
+      ? `sku:${normalizedSku}`
+      : item.orderItemId || `${item.name || ''}|${item.unitPrice ?? ''}`;
+    const current = groups.get(key) ?? [];
+    current.push(item);
+    groups.set(key, current);
+  });
+
+  return Array.from(groups.entries()).map(([key, sourceItems]) => {
+    const first = sourceItems[0];
+    return {
+      ...first,
+      id: key,
+      sourceItems,
+      requestedQuantity: sourceItems.reduce((total, item) => total + (item.requestedQuantity ?? 0), 0),
+      approvedQuantity: sourceItems.reduce((total, item) => total + (item.approvedQuantity ?? 0), 0),
+      receivedQuantity: sumNullable(sourceItems, 'receivedQuantity'),
+      restockableQuantity: sumNullable(sourceItems, 'restockableQuantity'),
+      damagedQuantity: sumNullable(sourceItems, 'damagedQuantity'),
+      missingQuantity: sumNullable(sourceItems, 'missingQuantity'),
+      refundedQuantity: sumNullable(sourceItems, 'refundedQuantity'),
+    };
+  });
+};
+
 export const formatReturnDateTime = (value) => {
   if (!value) return '-';
   return new Date(value).toLocaleString('vi-VN', {

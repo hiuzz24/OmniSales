@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import stockDeliveryService from '../../services/stockDeliveryService';
 import OrderDetailPreviewModal from './OrderDetailPreviewModal';
 import OrderGiftProductPickerModal from './OrderGiftProductPickerModal';
+import { groupStockDeliveryOrderItems } from './stockDeliveryOrderItemDisplay';
 import styles from './OrderStockDeliverySelector.module.css';
 
 const PAGE_SIZE = 8;
@@ -228,10 +229,12 @@ export default function OrderStockDeliverySelector({ orderId }) {
                   </td>
                   <td>
                     <div className={styles.items}>
-                      {(order.items || []).slice(0, 2).map((item) => (
-                        <span key={item.orderItemId}>{item.name} <b>x{item.quantity}</b></span>
+                      {groupStockDeliveryOrderItems(order.items).slice(0, 2).map((item) => (
+                        <span key={item.id}>{item.name} <b>x{item.quantity}</b></span>
                       ))}
-                      {(order.items || []).length > 2 && <span>+{order.items.length - 2} sản phẩm khác</span>}
+                      {groupStockDeliveryOrderItems(order.items).length > 2 && (
+                        <span>+{groupStockDeliveryOrderItems(order.items).length - 2} sản phẩm khác</span>
+                      )}
                     </div>
                     {(giftItemsByOrderId[order.orderId] || []).length > 0 && (
                       <div className={styles.giftList}>
