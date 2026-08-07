@@ -41,7 +41,7 @@ services:
     # Tag cố định SHA (không dùng :latest) để Render KHÔNG cache image cũ.
     # Mỗi deploy sẽ set tag mới qua Render API hoặc manual deploy trên Dashboard.
     image:
-      url: duydz1604/osms-backend:c193fdd
+      url: duydz1604/osms-backend:d07cbfe
     plan: free
     region: oregon
     autoDeploy: false  # GitLab CI sẽ trigger deploy qua Deploy Hook
