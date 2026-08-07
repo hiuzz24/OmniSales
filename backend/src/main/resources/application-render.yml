@@ -25,7 +25,7 @@ server:
 spring:
   jpa:
     hibernate:
-      ddl-auto: create   # HARDCODED CREATE for bootstrap. Đổi sang 'update' sau khi DB có tables + data.
+      ddl-auto: validate  # HARDCODED CREATE for bootstrap. Đổi sang 'update' sau khi DB có tables + data.
     show-sql: false
     defer-datasource-initialization: false  # Hibernate KHÔNG cần schema init (để schema.sql chạy SAU)
 
