@@ -14,8 +14,13 @@
 .github/
 
 # ----- Maven build output -----
+# Ignore root target/ (nếu có từ Maven parent chạy tại root)
 target/
-**/target/
+# NHƯNG giữ lại backend/target/*.jar — cần cho COPY JAR_FILE trong Dockerfile.ci
+!backend/
+backend/target/*.jar.original
+backend/target/*.jar.sha1
+backend/target/*.jar.md5
 .mvn/
 mvnw
 mvnw.cmd
