@@ -21,13 +21,11 @@ databases:
     databaseName: OSMS
     user: postgres
     plan: free
-    # Only allow internal Render services to connect.
-    # External connections: dùng Render-provided external connection string.
     ipAllowList: []
 
 services:
   # ---------------------------------------------------------------------------
-  # Backend (Spring Boot, Java 17)
+  # Backend (Spring Boot, Java 17) — Docker-based web service
   # ---------------------------------------------------------------------------
   - type: web
     name: api-osms
@@ -39,9 +37,6 @@ services:
     branch: main
     autoDeploy: true
     healthCheckPath: /api/auth/login
-    # Resource limits cho free tier — Render default 0.5 CPU / 512MB RAM.
-    # Cần khởi động nhỏ để khỏi OOM lúc Maven build (build chạy trong Dockerfile, OK).
-    dockerCommand: ""
     envVars:
       # ----- Database (auto-fill từ database resource phía trên) -----
       - key: DB_HOST
@@ -132,18 +127,15 @@ services:
       - key: JAVA_TOOL_OPTIONS
         value: "-Xmx384m -Xms192m -XX:+UseG1GC -XX:MaxRAMPercentage=75.0"
 
-# ---------------------------------------------------------------------------
-# Frontend (React + Vite SPA) — static site
-#
-# Phải khai báo trong block `staticSites:` riêng, không nằm trong `services:`.
-# Xem: https://render.com/docs/blueprint-spec#static-sites
-# ---------------------------------------------------------------------------
-staticSites:
-  - type: static
+  # ---------------------------------------------------------------------------
+  # Frontend (React + Vite SPA) — static site
+  # ---------------------------------------------------------------------------
+  - type: web
     name: app-osms
+    runtime: static
     rootDir: ./frontend
     buildCommand: npm ci && npm run build
-    publishPath: dist
+    staticPublishPath: dist
     plan: free
     region: oregon
     branch: main
