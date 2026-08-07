@@ -7,10 +7,11 @@
 #
 # Khác biệt chính so với application.yaml:
 #   * server.port  : dùng ${PORT} (Render inject, mặc định 10000) thay vì hardcode 8080
-#   * ddl-auto     : 'none' — schema đã được setup bởi init script (schema-postgresql.sql
-#                    + DatabaseMigration Java). KHÔNG để Hibernate tự CREATE/ALTER
-#                    vì sẽ fail với FK ordering trên DB trống.
-#                    'update' trước đó tạo table nhưng FK sai thứ tự → ERROR relation does not exist.
+#   * ddl-auto     : 'update' — Hibernate so sánh entity ↔ DB, CREATE TABLE nếu thiếu,
+#                    ALTER TABLE nếu schema thay đổi. Phù hợp cho môi trường Render
+#                    Postgres free tier (DB có thể bị reset, cần tạo lại tables).
+#                    Lần deploy đầu vào DB trống sẽ tự tạo đủ 49 tables.
+#                    Đổi sang 'none' sau khi schema ổn định nếu muốn dùng Flyway.
 #   * banner-mode  : tắt banner cho log gọn (Render logs dễ đọc hơn)
 #   * sql.init.mode: KHÔNG bật — schema/data đã được seed qua DatabaseMigration class
 #                    (tránh Spring Boot tự load schema.sql gây conflict với Hibernate).
@@ -24,7 +25,7 @@ server:
 spring:
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:create}    # Force CREATE for first Render boot (DB trống).
     show-sql: false
     defer-datasource-initialization: false  # Hibernate KHÔNG cần schema init (để schema.sql chạy SAU)
 
