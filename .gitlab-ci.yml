@@ -60,28 +60,30 @@ build-backend:
 # -----------------------------------------------------------------------------
 package-backend:
   stage: package
-  image: docker:24-dind
-  services:
-    - docker:24-dind
+  # Dùng buildah thay docker:dind — chạy được trong unprivileged GitLab Runner
+  # mà KHÔNG cần privileged service. Buildah vẫn build OCI image chuẩn,
+  # push thẳng lên GitLab Container Registry qua 'buildah push'.
+  image: quay.io/buildah/stable:v1.34.1
   needs:
     # artifacts: true → download JAR từ build-backend vào workspace
     - job: build-backend
       artifacts: true
-  variables:
-    DOCKER_TLS_CERTDIR: "/certs"
   before_script:
     # Verify artifact có thật trước khi build
     - ls -lh backend/target/*.jar
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Buildah dùng /etc/containers để lưu config; mount registry auth từ biến CI.
+    - mkdir -p ~/.docker
+    - echo "$CI_REGISTRY_PASSWORD" | buildah login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
-    - docker build
+    - buildah bud
         --build-arg JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar
         -f backend/Dockerfile.ci
         -t $BACKEND_IMAGE:$BACKEND_IMAGE_TAG
         .
-    - docker tag $BACKEND_IMAGE:$BACKEND_IMAGE_TAG $BACKEND_IMAGE:latest
-    - docker push $BACKEND_IMAGE:$BACKEND_IMAGE_TAG
-    - docker push $BACKEND_IMAGE:latest
+    - buildah tag $BACKEND_IMAGE:$BACKEND_IMAGE_TAG $BACKEND_IMAGE:latest
+    - buildah push $BACKEND_IMAGE:$BACKEND_IMAGE_TAG
+    - buildah push $BACKEND_IMAGE:latest
+    - buildah images | grep backend
 
 # -----------------------------------------------------------------------------
 # Stage 3: Trigger Render redeploy bằng Deploy Hook.
