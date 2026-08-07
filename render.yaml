@@ -41,7 +41,7 @@ services:
     # Tag cố định SHA (không dùng :latest) để Render KHÔNG cache image cũ.
     # Mỗi deploy sẽ set tag mới qua Render API hoặc manual deploy trên Dashboard.
     image:
-      url: registry.gitlab.com/summer20241/26summer/ep490-g63/omnisales/backend:fc814b24
+      url: duydz1604/osms-backend:fc814b24
     plan: free
     region: oregon
     autoDeploy: false  # GitLab CI sẽ trigger deploy qua Deploy Hook
