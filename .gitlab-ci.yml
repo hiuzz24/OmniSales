@@ -79,7 +79,7 @@ package-backend:
     - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')\"},\"https://index.docker.io/v1/\":{\"auth\":\"$(printf '%s:%s' "$DOCKERHUB_USERNAME" "$DOCKERHUB_TOKEN" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
   script:
     # Gộp 1 dòng: Runner exec "/busybox/sh -c '/kaniko/executor ...'" → args chính xác.
-    - /kaniko/executor --context=. --dockerfile=backend/Dockerfile.ci --build-arg=JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG --destination=$BACKEND_IMAGE:latest --destination=docker.io/$DOCKERHUB_USERNAME/osms-backend:$BACKEND_IMAGE_TAG
+    - /kaniko/executor --context=. --dockerfile=backend/Dockerfile.ci --build-arg=JAR_FILE=backend/target/OSMS-0.0.1-SNAPSHOT.jar --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG --destination=$BACKEND_IMAGE:latest --destination=docker.io/$DOCKERHUB_USERNAME/osms-backend:$BACKEND_IMAGE_TAG
 
 # -----------------------------------------------------------------------------
 # Stage 3: Trigger Render redeploy bằng Deploy Hook.
