@@ -1,5 +1,8 @@
 import { RefreshCw, X } from 'lucide-react';
-import styles from '../pages/OrderReturnDetailPage.module.css';
+import pageStyles from '../pages/OrderReturnDetailPage.module.css';
+import modalStyles from './OrderReturnModal.module.css';
+
+const styles = { ...pageStyles, ...modalStyles };
 
 const OrderReturnRejectModal = ({
   options,
