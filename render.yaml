@@ -42,7 +42,6 @@ services:
       url: registry.gitlab.com/summer20241/26summer/ep490-g63/omnisales/backend:latest
     plan: free
     region: oregon
-    branch: main
     autoDeploy: false  # GitLab CI sẽ trigger deploy qua Deploy Hook
     healthCheckPath: /api/address/countries
     # Registry credentials dùng Render Secret (set 1 lần trong Dashboard):
