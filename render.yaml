@@ -24,18 +24,29 @@ databases:
 
 services:
   # ---------------------------------------------------------------------------
-  # Backend (Spring Boot, Java 17) — Docker-based web service
+  # Backend (Spring Boot, Java 17) — Pull pre-built image từ GitLab Container Registry
+  #
+  # Render KHÔNG build ở đây. Build được thực hiện bởi GitLab CI
+  # (8GB RAM Shared Runner) — xem .gitlab-ci.yml.
+  # Image được push lên GitLab Container Registry, Render chỉ pull về chạy.
+  # Lợi ích: tránh hoàn toàn lỗi "Ran out of memory 512MB" trên Render free tier.
   # ---------------------------------------------------------------------------
   - type: web
     name: api-osms
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: .
+    runtime: image
+    # Image path đầy đủ: registry.gitlab.com/<group>/<project>/<image>:<tag>
+    # <project> ở đây là "omnisales" (lowercase GitLab convention).
+    # Nếu repo của bạn tên khác (vd "OmniSales"), đổi cho khớp.
+    image: registry.gitlab.com/summer20241/26summer/ep490-g63/omnisales/backend:latest
     plan: free
     region: oregon
     branch: main
-    autoDeploy: true
+    autoDeploy: false  # GitLab CI sẽ trigger deploy qua Deploy Hook
     healthCheckPath: /api/address/countries
+    # Registry credentials dùng Render Secret (set 1 lần trong Dashboard):
+    #   api-osms → Environment → Secret Files → thêm GITLAB_REGISTRY_PASSWORD
+    # Hoặc dùng envVars DOCKER_REGISTRY_* (xem note bên dưới).
+    # Lưu ý: Render cần image public HOẶC Secret File chứa password.
     envVars:
       # ----- Database (auto-fill từ database resource phía trên) -----
       - key: DB_HOST
