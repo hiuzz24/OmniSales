@@ -183,6 +183,10 @@
                             <goal>compile</goal>
                         </goals>
                         <configuration>
+                            <!-- Single-threaded compile (tiết kiệm RAM trên Render free 512MB) -->
+                            <fork>false</fork>
+                            <maxmem>256m</maxmem>
+                            <meminitial>128m</meminitial>
                             <annotationProcessorPaths>
                                 <path>
                                     <groupId>org.projectlombok</groupId>
@@ -208,6 +212,9 @@
                             <goal>testCompile</goal>
                         </goals>
                         <configuration>
+                            <fork>false</fork>
+                            <maxmem>256m</maxmem>
+                            <meminitial>128m</meminitial>
                             <annotationProcessorPaths>
                                 <path>
                                     <groupId>org.projectlombok</groupId>
