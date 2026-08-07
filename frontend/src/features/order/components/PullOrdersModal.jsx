@@ -14,6 +14,7 @@ const PullOrdersModal = ({ open, channels, submitting, onClose, onSubmit }) => {
   const [selected, setSelected] = useState([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [validationError, setValidationError] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -21,6 +22,7 @@ const PullOrdersModal = ({ open, channels, submitting, onClose, onSubmit }) => {
     setTo(localDateTime(end));
     setFrom(localDateTime(new Date(end.getTime() - 24 * 60 * 60 * 1000)));
     setSelected([]);
+    setValidationError('');
   }, [open]);
 
   if (!open) return null;
@@ -28,6 +30,17 @@ const PullOrdersModal = ({ open, channels, submitting, onClose, onSubmit }) => {
     current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   const submit = (event) => {
     event.preventDefault();
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    if (fromDate > toDate) {
+      setValidationError('Thời điểm bắt đầu phải trước thời điểm kết thúc.');
+      return;
+    }
+    if (toDate.getTime() - fromDate.getTime() > 7 * 24 * 60 * 60 * 1000) {
+      setValidationError('Chỉ hỗ trợ kéo đơn trong khoảng thời gian tối đa 1 tuần.');
+      return;
+    }
+    setValidationError('');
     onSubmit({ channelIds: selected, from: new Date(from).toISOString(), to: new Date(to).toISOString() });
   };
 
@@ -53,9 +66,10 @@ const PullOrdersModal = ({ open, channels, submitting, onClose, onSubmit }) => {
               ))}
           </fieldset>
           <div className={styles.range}>
-            <label>Từ thời điểm<input type="datetime-local" value={from} onChange={(event) => setFrom(event.target.value)} required /></label>
-            <label>Đến thời điểm<input type="datetime-local" value={to} onChange={(event) => setTo(event.target.value)} required /></label>
+            <label>Từ thời điểm<input type="datetime-local" value={from} onChange={(event) => { setFrom(event.target.value); setValidationError(''); }} required /></label>
+            <label>Đến thời điểm<input type="datetime-local" value={to} onChange={(event) => { setTo(event.target.value); setValidationError(''); }} required /></label>
           </div>
+          {validationError && <p className={styles.validationError} role="alert">{validationError}</p>}
           <p className={styles.hint}>Khoảng thời gian tối đa 7 ngày. Đơn đã tồn tại sẽ được cập nhật, không tạo bản ghi trùng.</p>
         </div>
         <footer className={styles.footer}>

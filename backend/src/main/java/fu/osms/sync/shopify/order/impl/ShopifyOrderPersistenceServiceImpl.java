@@ -43,6 +43,7 @@ public class ShopifyOrderPersistenceServiceImpl implements ShopifyOrderPersisten
         order.setChannel(channel);
         order.setChannelName(channel.getDisplayName());
         order.setPlatform(PlatformType.SHOPIFY);
+        if (upsert.created() && model.createdAt() != null) order.setCreatedAt(model.createdAt());
         if (upsert.created() || oldStatus != resolvedStatus) order.setStatusChangedAt(OffsetDateTime.now());
         order.setStatus(resolvedStatus);
         order.setPaymentStatus(model.paymentStatus());
