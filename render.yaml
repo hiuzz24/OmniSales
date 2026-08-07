@@ -49,6 +49,10 @@ services:
     # Hoặc dùng envVars DOCKER_REGISTRY_* (xem note bên dưới).
     # Lưu ý: Render cần image public HOẶC Secret File chứa password.
     envVars:
+      # JVM heap tune cho Render Free (512MB).
+      # Native + metaspace + Spring Boot 3.5 vượt 512MB nếu để mặc định → OOM boot.
+      - key: JAVA_OPTS
+        value: "-Xmx300m -Xms128m -XX:+UseG1GC -XX:MaxMetaspaceSize=128m -XX:+ExitOnOutOfMemoryError"
       # ----- Database (auto-fill từ database resource phía trên) -----
       - key: DB_HOST
         fromDatabase:
