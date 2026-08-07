@@ -90,13 +90,11 @@ deploy-render:
   image: curlimages/curl:latest
   needs:
     - package-backend
-  variables:
-    # Tag image mới nhất để Render biết pull version nào
-    RENDER_IMAGE_TAG: $BACKEND_IMAGE_TAG
   script:
-    - echo "Triggering Render redeploy with image tag $RENDER_IMAGE_TAG"
-    # Gửi POST request tới Render Deploy Hook URL (dùng || để không fail job nếu hook lỗi)
-    - 'curl -fsS -X POST "$RENDER_DEPLOY_HOOK" || { echo "WARNING: Render hook failed (non-blocking)"; exit 0; }'
+    - echo "Triggering Render deploy for image duydz1604/osms-backend:$BACKEND_IMAGE_TAG"
+    # Dùng Render API thay vì deploy hook → set image URL mới mỗi deploy
+    # Bỏ qua việc update render.yaml thủ công
+    - 'curl -fsS -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" -d "{\"imageUrl\": \"duydz1604/osms-backend:$BACKEND_IMAGE_TAG\"}" || { echo "WARNING: Render API deploy failed (non-blocking)"; exit 0; }'
   environment:
     name: production
     url: https://api-osms.onrender.com
