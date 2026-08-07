@@ -3,6 +3,7 @@ package fu.osms.sync.tiktok.order.impl;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.sync.tiktok.order.TikTokOrderMapper;
 import fu.osms.sync.tiktok.order.TikTokOrderWriteModel;
+import fu.osms.sync.order.importing.PlatformOrderTimestampParser;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import org.springframework.stereotype.Component;
 
@@ -30,7 +31,10 @@ public class TikTokOrderMapperImpl implements TikTokOrderMapper {
         metadata.put("recipientAddressStatus", hasAddress(address) ? "AVAILABLE" : "MASKED_OR_UNAVAILABLE");
         put(metadata, "buyerEmail", text(detail, "buyer_email"));
         put(metadata, "buyerUserId", text(detail, "user_id", "buyer_id"));
-        return new TikTokOrderWriteModel(id, status(rawStatus), rawStatus, paymentStatus(rawStatus, payment),
+        return new TikTokOrderWriteModel(id,
+                PlatformOrderTimestampParser.parse(WebhookPayloadUtils.firstPresent(
+                        detail, "create_time", "created_at", "createdAt")),
+                status(rawStatus), rawStatus, paymentStatus(rawStatus, payment),
                 text(address, "name", "recipient_name"), text(address, "phone_number", "phone"), address,
                 subtotal(payment, rawItems), discount(payment), decimal(payment, "shipping_fee"),
                 fallback(text(payment, "currency"), "VND"), text(detail, "buyer_message", "buyer_note"),

@@ -3,11 +3,13 @@ package fu.osms.sync.lazada.order;
 import fu.osms.order.enums.OrderStatus;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
 public record LazadaOrderWriteModel(
         String externalOrderId,
+        OffsetDateTime createdAt,
         OrderStatus status,
         String paymentStatus,
         String buyerName,
