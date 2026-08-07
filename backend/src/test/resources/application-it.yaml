@@ -34,6 +34,8 @@ spring:
     listener:
       simple:
         auto-startup: false
+    admin:
+      auto-startup: false
   task:
     scheduling:
       pool:
@@ -43,6 +45,12 @@ server:
   port: 0  # random port (assigned by Spring at boot)
 
 app:
+  messaging:
+    mode: local
+  webhook-retry:
+    enabled: false
+  rate-limit:
+    enabled: false
   security:
     max-failed-attempts: 5
     lock-time-duration: 5

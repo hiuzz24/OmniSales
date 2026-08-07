@@ -1,5 +1,6 @@
 package fu.osms.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -15,6 +16,24 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Configuration
 @EnableAsync
 public class AsyncConfig {
+
+    @Value("${app.async.order-pull.core-size:2}")
+    private int orderPullCoreSize;
+
+    @Value("${app.async.order-pull.max-size:6}")
+    private int orderPullMaxSize;
+
+    @Value("${app.async.order-pull.queue-capacity:50}")
+    private int orderPullQueueCapacity;
+
+    @Value("${app.async.sync-job.core-size:4}")
+    private int syncJobCoreSize;
+
+    @Value("${app.async.sync-job.max-size:8}")
+    private int syncJobMaxSize;
+
+    @Value("${app.async.sync-job.queue-capacity:100}")
+    private int syncJobQueueCapacity;
 
     @Bean(name = "taskExecutor")
     public Executor taskExecutor() {
@@ -54,9 +73,9 @@ public class AsyncConfig {
     @Bean(name = "orderPullExecutor")
     public Executor orderPullExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(1);
-        executor.setMaxPoolSize(3);
-        executor.setQueueCapacity(20);
+        executor.setCorePoolSize(orderPullCoreSize);
+        executor.setMaxPoolSize(orderPullMaxSize);
+        executor.setQueueCapacity(orderPullQueueCapacity);
         executor.setThreadNamePrefix("OrderPull-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         executor.initialize();
@@ -66,9 +85,9 @@ public class AsyncConfig {
     @Bean(name = "syncJobExecutor")
     public Executor syncJobExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(3);
-        executor.setMaxPoolSize(5);
-        executor.setQueueCapacity(100);
+        executor.setCorePoolSize(syncJobCoreSize);
+        executor.setMaxPoolSize(syncJobMaxSize);
+        executor.setQueueCapacity(syncJobQueueCapacity);
         executor.setThreadNamePrefix("Marketplace-Sync-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         executor.initialize();

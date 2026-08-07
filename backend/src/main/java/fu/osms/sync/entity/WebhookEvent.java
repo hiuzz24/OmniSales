@@ -51,6 +51,10 @@ public class WebhookEvent {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "retry_count", nullable = false)
+    @Builder.Default
+    private Integer retryCount = 0;
+
     @Column(name = "received_at", nullable = false)
     private OffsetDateTime receivedAt;
 

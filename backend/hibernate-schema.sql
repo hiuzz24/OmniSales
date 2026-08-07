@@ -653,6 +653,7 @@ CREATE TABLE webhook_events (
                                     CHECK (status IN ('RECEIVED','PROCESSING','PROCESSED','FAILED','IGNORED')),
                                 raw_payload       JSONB         NOT NULL,
                                 error_message     TEXT,
+                                retry_count       INT           NOT NULL DEFAULT 0,
                                 received_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
                                 processed_at      TIMESTAMPTZ
 );
