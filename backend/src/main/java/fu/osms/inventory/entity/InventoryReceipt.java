@@ -9,6 +9,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -33,8 +35,8 @@ public class InventoryReceipt {
     @JoinColumn(name = "supplier_id")
     private Supplier supplier;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "purchase_order_id", unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "purchase_order_id")
     private PurchaseOrder purchaseOrder;
 
     @Column(name = "receipt_code", nullable = false, unique = true, length = 100)
@@ -68,6 +70,10 @@ public class InventoryReceipt {
     @Column(name = "confirmed_at")
     private OffsetDateTime confirmedAt;
 
+    @OneToMany(mappedBy = "receipt", fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<InventoryReceiptItem> items = new ArrayList<>();
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -75,4 +81,8 @@ public class InventoryReceipt {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
+
+    public void addItem(InventoryReceiptItem item) {
+        items.add(item);
+    }
 }

@@ -30,18 +30,20 @@ public class PurchaseOrderResponse {
     private String createdByName;
     private UUID receiptId;
     private String receiptCode;
+    private int receiptCount;
+    private List<ReceiptSummary> receipts;
+    private String evidenceUrl;
     private OffsetDateTime sentAt;
     private OffsetDateTime receivingAt;
-    private OffsetDateTime inspectingAt;
-    private OffsetDateTime inspectedAt;
     private OffsetDateTime completedAt;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
     private List<PurchaseOrderItemResponse> items;
-    /** True if any item has actualQuantity > quantity (surplus from inspection). */
-    private boolean hasSurplus;
-    /** True if any item has actualQuantity < quantity (shortage from inspection). */
-    private boolean hasShortage;
-    /** True if any item has a surplusNote set (shortage or surplus annotation). */
-    private boolean hasNote;
+
+    @Data
+    @Builder
+    public static class ReceiptSummary {
+        private UUID id;
+        private String receiptCode;
+    }
 }

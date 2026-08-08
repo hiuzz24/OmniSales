@@ -253,7 +253,6 @@ class StockReceiveServiceImplTest {
 
         // Default stubs for repositories used inside the happy paths
         lenient().when(purchaseOrderRepository.findByIdWithDetails(purchaseOrderId)).thenReturn(Optional.of(purchaseOrder));
-        lenient().when(stockReceiveRepository.existsByPurchaseOrderId(purchaseOrderId)).thenReturn(false);
         lenient().when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(supplier));
         lenient().when(variantRepository.findById(variantId)).thenReturn(Optional.of(variant));
         lenient().when(userRepository.findById(userId)).thenReturn(Optional.of(user));
@@ -369,13 +368,19 @@ class StockReceiveServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should throw exception when PO already has a receipt")
-        void shouldThrowExceptionWhenDuplicateForPurchaseOrder() {
-            when(stockReceiveRepository.existsByPurchaseOrderId(purchaseOrderId)).thenReturn(true);
+        @DisplayName("Should allow a second receipt for the same PO (partial delivery batches)")
+        void shouldAllowMultipleReceiptsForSamePurchaseOrder() {
+            purchaseOrder.getReceipts().add(InventoryReceipt.builder()
+                    .id(UUID.randomUUID())
+                    .receiptCode("PN-2026-001")
+                    .status("CONFIRMED")
+                    .purchaseOrder(purchaseOrder)
+                    .build());
 
-            assertThatThrownBy(() -> stockReceiveService.createReceipt(request, userId))
-                    .isInstanceOf(AppException.class)
-                    .extracting("errorCode").isEqualTo(ErrorCode.CONFLICT);
+            StockReceiveResponse result = stockReceiveService.createReceipt(request, userId);
+
+            assertThat(result).isNotNull();
+            assertThat(result.getStatus()).isEqualTo("CONFIRMED");
         }
 
         @Test
