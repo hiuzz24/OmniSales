@@ -17,6 +17,22 @@ services:
       retries: 5
     restart: unless-stopped
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: osms_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-osms}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-osms}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -31,8 +47,14 @@ services:
       - LAZADA_APP_SECRET=${LAZADA_APP_SECRET}
       - LAZADA_REDIRECT_URI=${LAZADA_REDIRECT_URI}
       - LAZADA_WEBHOOK_CALLBACK_URL=${LAZADA_WEBHOOK_CALLBACK_URL}
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - SPRING_RABBITMQ_PORT=5672
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_USERNAME:-osms}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-osms}
     depends_on:
       postgres_db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 

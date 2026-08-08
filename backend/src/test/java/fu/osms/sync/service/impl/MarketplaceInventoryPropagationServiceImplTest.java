@@ -8,6 +8,7 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.messaging.publisher.EventPublisher;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.service.InventoryAutoPushSyncLogService;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
@@ -56,6 +57,10 @@ class MarketplaceInventoryPropagationServiceImplTest {
         private MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
         @Mock
         private InventoryAutoPushSyncLogService inventoryAutoPushSyncLogService;
+        @Mock
+        private EventPublisher eventPublisher;
+        @Mock
+        private java.util.concurrent.Executor syncJobExecutor;
 
         private MarketplaceInventoryPropagationServiceImpl service;
 
@@ -70,7 +75,9 @@ class MarketplaceInventoryPropagationServiceImplTest {
                                 lazadaInventoryUpdateService,
                                 tikTokInventoryUpdateService,
                                 marketplaceStockQuantityResolver,
-                                inventoryAutoPushSyncLogService);
+                                inventoryAutoPushSyncLogService,
+                                eventPublisher,
+                                syncJobExecutor);
         }
 
         @Test

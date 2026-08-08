@@ -27,4 +27,8 @@ public interface ProductService {
     SyncResult syncProductToAllChannels(UUID productId);
 
     SyncResult syncProductToChannel(UUID productId, UUID channelId);
+
+    void syncProductToAllChannelsAsync(UUID productId);
+
+    void syncProductToChannelAsync(UUID productId, UUID channelId);
 }

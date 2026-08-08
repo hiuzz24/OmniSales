@@ -114,6 +114,20 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success("Channel sync triggered", result));
     }
 
+    @PostMapping("/{productId}/sync/async")
+    public ResponseEntity<ApiResponse<Void>> syncProductToAllChannelsAsync(@PathVariable UUID productId) {
+        productService.syncProductToAllChannelsAsync(productId);
+        return ResponseEntity.accepted().body(ApiResponse.success("Sync queued", null));
+    }
+
+    @PostMapping("/{productId}/channels/{channelId}/sync/async")
+    public ResponseEntity<ApiResponse<Void>> syncProductToChannelAsync(
+            @PathVariable UUID productId,
+            @PathVariable UUID channelId) {
+        productService.syncProductToChannelAsync(productId, channelId);
+        return ResponseEntity.accepted().body(ApiResponse.success("Channel sync queued", null));
+    }
+
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<ProductImportResult>> importExcel(
             @RequestParam("file") MultipartFile file) {
