@@ -54,6 +54,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import fu.osms.sync.dto.SyncResult;
 import fu.osms.sync.service.ProductSyncOrchestratorService;
+import fu.osms.messaging.constants.RabbitMQConstants;
+import fu.osms.messaging.dto.ProductSyncMessage;
+import fu.osms.messaging.publisher.EventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -87,6 +90,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductLogRepository productLogRepository;
     private final ProductSyncOrchestratorService productSyncOrchestratorService;
     private final ProductChannelConfigService productChannelConfigService;
+    private final EventPublisher eventPublisher;
     private final WarehouseRepository warehouseRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final ChannelProductVariantRepository channelProductVariantRepository;
@@ -382,6 +386,22 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public SyncResult syncProductToChannel(UUID productId, UUID channelId) {
         return productSyncOrchestratorService.syncProductToChannel(productId, channelId);
+    }
+
+    @Override
+    public void syncProductToAllChannelsAsync(UUID productId) {
+        eventPublisher.publish(
+                RabbitMQConstants.PRODUCT_SYNC_PUSH,
+                new ProductSyncMessage(productId, null),
+                () -> productSyncOrchestratorService.syncProductToAllChannels(productId));
+    }
+
+    @Override
+    public void syncProductToChannelAsync(UUID productId, UUID channelId) {
+        eventPublisher.publish(
+                RabbitMQConstants.PRODUCT_SYNC_PUSH,
+                new ProductSyncMessage(productId, channelId),
+                () -> productSyncOrchestratorService.syncProductToChannel(productId, channelId));
     }
 
     private ProductInventoryInitializer inventoryInitializer() {

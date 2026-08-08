@@ -542,7 +542,7 @@ export default function StockReceiveManualCreatePage() {
         </div>
         <div>
           <h1 className={styles.headerTitle}>Tạo phiếu nhập kho</h1>
-          <p className={styles.headerSubtitle}>Nhập hàng hóa trực tiếp vào kho không cần đơn mua hàng</p>
+          <p className={styles.headerSubtitle}>Nhập hàng hóa trực tiếp vào kho không cần đơn đặt hàng</p>
         </div>
       </div>
 
@@ -554,7 +554,7 @@ export default function StockReceiveManualCreatePage() {
           className={`${styles.actionBtn} ${styles.secondaryBtn}`}
           style={{ padding: '7px 16px' }}
         >
-          Theo đơn mua hàng
+          Theo đơn đặt hàng
         </button>
         <button
           type="button"
@@ -736,7 +736,7 @@ export default function StockReceiveManualCreatePage() {
               <span className={styles.noteTitle} style={{ color: '#15803d' }}>Lưu ý khi nhập thủ công</span>
             </div>
             <ul className={styles.noteList}>
-              {['Nhập thủ công không cần đơn mua hàng.', 'Kiểm tra số lượng và đơn giá trước khi hoàn thành.', 'Tồn kho sẽ cập nhật sau khi hoàn thành nhập kho.', 'Lưu tạm để tiếp tục chỉnh sửa sau.'].map((note) => (
+              {['Nhập thủ công không cần đơn đặt hàng.', 'Kiểm tra số lượng và đơn giá trước khi hoàn thành.', 'Tồn kho sẽ cập nhật sau khi hoàn thành nhập kho.', 'Lưu tạm để tiếp tục chỉnh sửa sau.'].map((note) => (
                 <li key={note} className={styles.noteItem} style={{ color: '#15803d' }}>{note}</li>
               ))}
             </ul>

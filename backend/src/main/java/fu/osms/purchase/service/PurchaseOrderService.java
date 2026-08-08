@@ -2,7 +2,6 @@ package fu.osms.purchase.service;
 
 import fu.osms.common.dto.PageResponse;
 import fu.osms.purchase.dto.AutoCreatedOrderResult;
-import fu.osms.purchase.dto.InspectionItemRequest;
 import fu.osms.purchase.dto.PurchaseOrderRequest;
 import fu.osms.purchase.dto.PurchaseOrderResponse;
 import fu.osms.purchase.dto.PurchaseOrderFormOptionsResponse;
@@ -23,17 +22,13 @@ public interface PurchaseOrderService {
     Map<String, Long> getStatistics();
     PurchaseOrderFormOptionsResponse getFormOptions();
     String generateOrderCode();
-    PurchaseOrderResponse confirmReceiving(UUID id);
+    /** Supplier confirmed the shipment is in transit → SENT_TO_SUPPLIER → RECEIVING (Đang vận chuyển). */
+    PurchaseOrderResponse confirmShipping(UUID id);
     void completeFromReceipt(UUID purchaseOrderId);
-    /** Complete the purchase order from a receipt, auto-creating shortage/surplus orders if needed.
-     *  Returns the auto-created order info if one was created, empty otherwise. */
+    /** Evaluate whether a purchase order is now fully received after a receipt.
+     *  Transitions the order to COMPLETED only when every ordered variant has
+     *  been received in full across all confirmed receipts. */
     Optional<AutoCreatedOrderResult> completeFromReceiptWithResult(UUID purchaseOrderId);
-    /** Save actual quantities (stays in INSPECTING — "Tiếp tục" / draft save). */
-    PurchaseOrderResponse saveInspection(UUID id, List<InspectionItemRequest> items);
-    /** Finalize inspection → INSPECTED ("Hoàn thành kiểm tra"). */
-    PurchaseOrderResponse completeInspection(UUID id, List<InspectionItemRequest> items);
-    /** If any items have surplus (actualQty > orderedQty), spin off a new INSPECTED order for the surplus quantities. */
-    PurchaseOrderResponse createSurplusOrder(UUID originalOrderId);
-    /** If any items have shortage (actualQty < orderedQty), create a supplementary INSPECTED order for the missing quantities. */
-    PurchaseOrderResponse createShortageOrder(UUID originalOrderId);
+    /** Replace the purchase order evidence image (uploading a new one replaces the old). */
+    PurchaseOrderResponse updateEvidence(UUID id, String evidenceUrl);
 }

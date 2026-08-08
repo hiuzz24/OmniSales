@@ -23,6 +23,7 @@ public class StockReceiveItemResponse {
     private String variantName;
     private List<PlatformType> platforms;
     private Integer quantity;
+    private Integer surplusQuantity;
     private BigDecimal unitCost;
     private BigDecimal totalCost;
     private BigDecimal avgCostBefore;

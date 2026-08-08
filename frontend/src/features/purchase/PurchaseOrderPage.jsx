@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Clock3, PackageCheck, Plus, Search, ShoppingBag, Truck, FileEdit, ClipboardList, XCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronDown, Clock3, Eye, PackageCheck, PackagePlus, Plus, Search, Send, ShoppingBag, Truck, FileEdit, X, XCircle, ImagePlus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import purchaseOrderApi from '../../api/purchaseOrderApi';
 import { ROUTES } from '../../app/router/routes';
@@ -9,12 +10,57 @@ import useAuth from '../auth/hooks/useAuth';
 import useConfirmDialog from '../inventory/hooks/useConfirmDialog';
 import styles from './PurchaseOrderPage.module.css';
 
+function useTooltip() {
+  const [tip, setTip] = useState(null);
+
+  const show = (e, text) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const below = rect.bottom + 46 <= window.innerHeight;
+    setTip({
+      text,
+      x: Math.min(Math.max(rect.left + rect.width / 2, 96), window.innerWidth - 96),
+      y: below ? rect.bottom + 9 : rect.top - 9,
+      above: !below,
+    });
+  };
+
+  const hide = () => setTip(null);
+
+  useEffect(() => {
+    if (!tip) return undefined;
+    const clear = () => setTip(null);
+    window.addEventListener('scroll', clear, true);
+    window.addEventListener('resize', clear);
+    return () => {
+      window.removeEventListener('scroll', clear, true);
+      window.removeEventListener('resize', clear);
+    };
+  }, [tip]);
+
+  return { tip, show, hide };
+}
+
+function TipButton({ label, style, showTip, hideTip, onClick, children }) {
+  return (
+    <button
+      className={styles.iconAction}
+      style={style}
+      aria-label={label}
+      onMouseEnter={(e) => showTip(e, label)}
+      onFocus={(e) => showTip(e, label)}
+      onMouseLeave={hideTip}
+      onBlur={hideTip}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 const STATUS = {
   DRAFT: { label: 'Nháp', className: styles.draft },
   SENT_TO_SUPPLIER: { label: 'Đã gửi NCC', className: styles.sent },
   RECEIVING: { label: 'Đang giao hàng', className: styles.receiving },
-  INSPECTING: { label: 'Đang kiểm tra', className: styles.inspecting },
-  INSPECTED: { label: 'Đã kiểm tra', className: styles.inspected },
   COMPLETED: { label: 'Hoàn thành', className: styles.completed },
   CANCELLED: { label: 'Đã hủy', className: styles.cancelled },
 };
@@ -39,8 +85,9 @@ export default function PurchaseOrderPage() {
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const canCreate = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
-  const canInspect = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
+  const canReceive = [ROLES.OPERATIONS, ROLES.OWNER].includes(user?.role);
   const { confirm, ConfirmDialog } = useConfirmDialog();
+  const { tip, show, hide } = useTooltip();
 
   const load = useCallback(async () => {
     try {
@@ -80,8 +127,6 @@ export default function PurchaseOrderPage() {
     { label: 'Nháp',           value: statistics.DRAFT              ?? 0, icon: FileEdit,       key: 'DRAFT' },
     { label: 'Đã gửi NCC',     value: statistics.SENT_TO_SUPPLIER   ?? 0, icon: Clock3,         key: 'SENT_TO_SUPPLIER' },
     { label: 'Đang giao hàng', value: statistics.RECEIVING          ?? 0, icon: Truck,          key: 'RECEIVING' },
-    { label: 'Đang kiểm tra',  value: statistics.INSPECTING         ?? 0, icon: ClipboardCheck, key: 'INSPECTING' },
-    { label: 'Đã kiểm tra',    value: statistics.INSPECTED          ?? 0, icon: ClipboardList,  key: 'INSPECTED' },
     { label: 'Hoàn thành',     value: statistics.COMPLETED          ?? 0, icon: PackageCheck,   key: 'COMPLETED' },
     { label: 'Đã hủy',         value: statistics.CANCELLED          ?? 0, icon: XCircle,        key: 'CANCELLED' },
   ];
@@ -89,27 +134,24 @@ export default function PurchaseOrderPage() {
   const goToDetail = (id) =>
     navigate(ROUTES.PURCHASE_ORDER_DETAIL.replace(':id', id));
 
-  const goToInspect = (id) =>
-    navigate(`${ROUTES.PURCHASE_ORDER_DETAIL.replace(':id', id)}?inspect=true`);
-
   return (
     <main className={`${styles.page} product-workspace`}>
       <div className={styles.header}>
         <div className={styles.titleGroup}>
           <div className={styles.iconBox}><ShoppingBag size={22} /></div>
           <div>
-            <h1 className={styles.title}>Đơn mua hàng</h1>
+            <h1 className={styles.title}>Đơn đặt hàng</h1>
             <p className={styles.subtitle}>Quản lý đơn đặt hàng từ nhà cung cấp</p>
           </div>
         </div>
         {canCreate && (
           <button className={styles.primaryButton} onClick={() => navigate(ROUTES.PURCHASE_ORDER_CREATE)}>
-            <Plus size={18} /> Tạo đơn mua hàng
+            <Plus size={18} /> Tạo đơn đặt hàng
           </button>
         )}
       </div>
 
-      <section className={styles.stats} aria-label="Thống kê đơn mua hàng" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+      <section className={styles.stats} aria-label="Thống kê đơn đặt hàng" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
         {cards.map(({ label, value, icon: Icon, key }) => {
           const isActive = status === key;
           return (
@@ -137,17 +179,32 @@ export default function PurchaseOrderPage() {
         })}
       </section>
 
-      <div className={styles.toolbar} style={{ gridTemplateColumns: '1fr' }}>
+      <div className={styles.filterBar}>
         <div className={styles.searchWrap}>
           <Search size={18} />
           <input
             className={styles.input}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="Tìm theo mã đơn, nhà cung cấp..."
-            aria-label="Tìm đơn mua hàng"
+            placeholder="Tìm theo mã đơn, nhà cung cấp, kho..."
+            aria-label="Tìm đơn đặt hàng"
           />
         </div>
+        <div className={styles.filterSelectWrap}>
+          <select className={styles.select} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Lọc theo trạng thái">
+            <option value="">Tất cả trạng thái</option>
+            {Object.entries(STATUS).map(([key, cfg]) => (
+              <option key={key} value={key}>{cfg.label}</option>
+            ))}
+          </select>
+          <ChevronDown size={15} />
+        </div>
+        {(keyword || status) && (
+          <button className={styles.filterClear} onClick={() => { setKeyword(''); setStatus(''); }}>
+            <X size={14} /> Xóa lọc
+          </button>
+        )}
+        <span className={styles.filterCount}><strong>{filtered.length}</strong> đơn</span>
       </div>
 
       <section className={styles.tableCard}>
@@ -162,6 +219,7 @@ export default function PurchaseOrderPage() {
                 <th>Thời gian nhập</th>
                 <th className={styles.money}>Tổng tiền</th>
                 <th>Phiếu nhập</th>
+                <th>Chứng từ</th>
                 <th>Trạng thái</th>
                 <th>Ghi chú</th>
                 <th aria-label="Thao tác" />
@@ -189,10 +247,20 @@ export default function PurchaseOrderPage() {
                         <strong>{money(order.totalAmount)}</strong>
                       </td>
                       <td>
-                        {order.receiptCode ? (
-                          <span className={styles.code}>{order.receiptCode}</span>
+                        {order.receipts?.length ? (
+                          <span className={styles.code} style={{ fontSize: 12 }}>{order.receipts.length} phiếu nhập</span>
                         ) : (
                           '—'
+                        )}
+                      </td>
+                      <td>
+                        {order.evidenceUrl ? (
+                          <a href={order.evidenceUrl} target="_blank" rel="noreferrer" title="Mở ảnh chứng từ"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#0369a1', textDecoration: 'none' }}>
+                            <ImagePlus size={14} /> Có
+                          </a>
+                        ) : (
+                          <span style={{ fontSize: 11, color: '#cbd5e1' }}>—</span>
                         )}
                       </td>
                       <td>
@@ -201,18 +269,18 @@ export default function PurchaseOrderPage() {
                         </span>
                       </td>
                       <td style={{ maxWidth: 180 }}>
-                        {order.items?.some((item) => item?.surplusNote) ? (
-                          <span style={{ fontSize: 11, color: '#d97706' }} title={order.items.filter((i) => i?.surplusNote).map((i) => `${i.productName}: ${i.surplusNote}`).join('\n')}>
-                            ⚠ Có ghi chú thừa/thiếu
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 11, color: '#cbd5e1' }}>—</span>
-                        )}
+                        <span style={{ fontSize: 11, color: order.notes ? '#475569' : '#cbd5e1' }}>
+                          {order.notes || '—'}
+                        </span>
                       </td>
                       <td>
                         <div className={styles.actions}>
                           {canCreate && order.status === 'DRAFT' && (
-                            <button className={styles.actionButton}
+                            <TipButton
+                              label="Gửi NCC"
+                              style={{ color: '#1d4ed8', borderColor: '#bfdbfe' }}
+                              showTip={show}
+                              hideTip={hide}
                               onClick={async () => {
                                 const ok = await confirm({
                                   title: 'Gửi đơn cho nhà cung cấp?',
@@ -224,103 +292,48 @@ export default function PurchaseOrderPage() {
                                 try { await purchaseOrderApi.send(order.id); await load(); }
                                 catch (e) { toast.error(e?.response?.data?.message || 'Không thể gửi đơn.'); }
                               }}>
-                              Gửi NCC
-                            </button>
+                              <Send size={15} />
+                            </TipButton>
                           )}
-                          {(canCreate || canInspect) && order.status === 'SENT_TO_SUPPLIER' && (
-                            <button className={styles.actionButton}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0369a1', borderColor: '#bae6fd' }}
+                          {order.status === 'SENT_TO_SUPPLIER' && (
+                            <TipButton
+                              label="Xác nhận giao hàng"
+                              style={{ color: '#0369a1', borderColor: '#bae6fd' }}
+                              showTip={show}
+                              hideTip={hide}
                               onClick={async () => {
                                 const ok = await confirm({
-                                  title: 'Xác nhận đang nhận hàng?',
-                                  message: `Đơn ${order.orderCode} sẽ chuyển sang "Đang giao hàng". Bắt đầu quá trình kiểm tra hàng hóa.`,
-                                  confirmLabel: 'Xác nhận nhận hàng',
+                                  title: 'Xác nhận bên NCC đang giao hàng?',
+                                  message: `Đơn ${order.orderCode} sẽ chuyển sang "Đang giao hàng".`,
+                                  confirmLabel: 'Xác nhận',
                                   tone: 'warning',
                                 });
                                 if (!ok) return;
-                                try { await purchaseOrderApi.confirmReceiving(order.id); await load(); }
+                                try { await purchaseOrderApi.confirmShipping(order.id); await load(); }
                                 catch (e) { toast.error(e?.response?.data?.message || 'Không thể xác nhận.'); }
                               }}>
-                              <Truck size={13} /> Xác nhận nhận hàng
-                            </button>
+                              <Truck size={15} />
+                            </TipButton>
                           )}
-                          {canInspect && (order.status === 'RECEIVING' || order.status === 'INSPECTING') && (
-                            <button className={styles.actionButton}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#7c3aed', borderColor: '#ddd6fe' }}
-                              onClick={() => goToInspect(order.id)}>
-                              <ClipboardCheck size={13} /> Kiểm tra
-                            </button>
+                          {canReceive && order.status === 'RECEIVING' && (
+                            <TipButton
+                              label="Tạo phiếu nhập"
+                              style={{ color: '#047857', borderColor: '#a7f3d0' }}
+                              showTip={show}
+                              hideTip={hide}
+                              onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}>
+                              <PackagePlus size={15} />
+                            </TipButton>
                           )}
-                          {(canInspect || canCreate) && order.status === 'INSPECTED' && !order.receiptId && (
-                            <>
-                              <button className={styles.actionButton}
-                                onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}>
-                                Tạo phiếu nhập
-                              </button>
-                              {order.hasShortage && (
-                                <button className={styles.actionButton}
-                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#c2410c', borderColor: '#fed7aa', background: '#fff7ed' }}
-                                  onClick={async () => {
-                                    const shortageItems = (order.items ?? []).filter(
-                                      (item) => item.actualQuantity != null && item.actualQuantity < item.quantity
-                                    );
-                                    const itemDesc = shortageItems.map((item) =>
-                                      `• ${item.productName}: thiếu ${item.quantity - item.actualQuantity} sản phẩm`
-                                    ).join('\n');
-                                    const ok = await confirm({
-                                      title: 'Tạo đơn bổ sung hàng thiếu?',
-                                      message: `Sẽ tạo đơn mới ở trạng thái Đã kiểm tra cho số lượng còn thiếu:\n\n${itemDesc || 'Xem chi tiết đơn để biết thêm.'}\n\nGhi chú bổ sung sẽ được tự động điền.`,
-                                      confirmLabel: 'Tạo đơn bổ sung',
-                                      tone: 'warning',
-                                    });
-                                    if (!ok) return;
-                                    try {
-                                      const newOrder = await purchaseOrderApi.createShortageOrder(order.id);
-                                      toast.success(`Đã tạo đơn bổ sung ${newOrder.orderCode}.`);
-                                      await load();
-                                    } catch (e) {
-                                      toast.error(e?.response?.data?.message || 'Không thể tạo đơn bổ sung.');
-                                    }
-                                  }}>
-                                  <TrendingDown size={13} /> Tạo đơn bổ sung
-                                </button>
-                              )}
-                              {order.hasSurplus && (
-                                <button className={styles.actionButton}
-                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#7c3aed', borderColor: '#ddd6fe' }}
-                                  onClick={async () => {
-                                    const surplusItems = (order.items ?? []).filter(
-                                      (item) => item.actualQuantity != null && item.actualQuantity > item.quantity
-                                    );
-                                    const itemDesc = surplusItems.map((item) =>
-                                      `• ${item.productName}: thừa ${item.actualQuantity - item.quantity} sản phẩm`
-                                    ).join('\n');
-                                    const ok = await confirm({
-                                      title: 'Tạo đơn thặng dư?',
-                                      message: `Sẽ tạo đơn mới ở trạng thái Đã kiểm tra cho số lượng thừa:\n\n${itemDesc || 'Xem chi tiết đơn để biết thêm.'}\n\nGhi chú thặng dư sẽ được tự động điền.`,
-                                      confirmLabel: 'Tạo đơn thặng dư',
-                                      tone: 'warning',
-                                    });
-                                    if (!ok) return;
-                                    try {
-                                      const newOrder = await purchaseOrderApi.createSurplusOrder(order.id);
-                                      toast.success(`Đã tạo đơn thặng dư ${newOrder.orderCode}.`);
-                                      await load();
-                                    } catch (e) {
-                                      toast.error(e?.response?.data?.message || 'Không thể tạo đơn thặng dư.');
-                                    }
-                                  }}>
-                                  <TrendingUp size={13} /> Tạo đơn thặng dư
-                                </button>
-                              )}
-                            </>
-                          )}
-                          {(canCreate || canInspect) && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
-                            <button className={styles.actionButton}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b91c1c', borderColor: '#fecaca' }}
+                          {order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && order.status !== 'RECEIVING' && (
+                            <TipButton
+                              label="Hủy đơn"
+                              style={{ color: '#b91c1c', borderColor: '#fecaca' }}
+                              showTip={show}
+                              hideTip={hide}
                               onClick={async () => {
                                 const ok = await confirm({
-                                  title: 'Hủy đơn mua hàng?',
+                                  title: 'Hủy đơn đặt hàng?',
                                   message: `Bạn chắc chắn muốn hủy đơn ${order.orderCode}?\nThao tác này không thể hoàn tác.`,
                                   confirmLabel: 'Hủy đơn',
                                   tone: 'danger',
@@ -333,12 +346,16 @@ export default function PurchaseOrderPage() {
                                   toast.error(e?.response?.data?.message || 'Không thể hủy đơn.');
                                 }
                               }}>
-                              Hủy đơn
-                            </button>
+                              <XCircle size={15} />
+                            </TipButton>
                           )}
-                          <button className={styles.actionButton} onClick={() => goToDetail(order.id)}>
-                            Xem
-                          </button>
+                          <TipButton
+                            label="Xem chi tiết"
+                            showTip={show}
+                            hideTip={hide}
+                            onClick={() => goToDetail(order.id)}>
+                            <Eye size={15} />
+                          </TipButton>
                         </div>
                       </td>
                     </tr>
@@ -347,11 +364,22 @@ export default function PurchaseOrderPage() {
             </tbody>
           </table>
         </div>
-        {loading && <div className={styles.empty}>Đang tải đơn mua hàng...</div>}
+        {loading && <div className={styles.empty}>Đang tải đơn đặt hàng...</div>}
         {!loading && filtered.length === 0 && (
-          <div className={styles.empty}>Chưa có đơn mua hàng phù hợp.</div>
+          <div className={styles.empty}>Chưa có đơn đặt hàng phù hợp.</div>
         )}
       </section>
+      {tip &&
+        createPortal(
+          <span
+            className={styles.tooltip}
+            style={{ left: tip.x, top: tip.y, transform: tip.above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)' }}
+            role="tooltip"
+          >
+            {tip.text}
+          </span>,
+          document.body,
+        )}
       {ConfirmDialog}
     </main>
   );

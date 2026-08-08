@@ -227,22 +227,6 @@ const downloadImportErrors = (errors) => {
   XLSX.writeFile(wb, 'stock-in-import-errors.xlsx');
 };
 
-// ── Import preview modal style constants ─────────────────────────────────────
-const modalBackdropStyle = {
-  position: 'fixed', inset: 0, zIndex: 1000,
-  background: 'rgba(15, 23, 42, 0.48)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-};
-const modalStyle = {
-  width: 'min(520px, 100%)', maxHeight: '76vh', background: '#fff',
-  borderRadius: 10, boxShadow: '0 22px 60px rgba(15, 23, 42, 0.28)',
-  border: '1px solid #e2e8f0', padding: 20, display: 'flex', flexDirection: 'column', gap: 14,
-};
-const modalHeaderStyle = { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 };
-const modalTitleStyle = { margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' };
-const modalSubtitleStyle = { margin: '5px 0 0', fontSize: 13, color: '#64748b' };
-const modalCloseButtonStyle = { width: 28, height: 28, borderRadius: 6, border: 'none', background: 'transparent', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
-
 // ── Zod schema ────────────────────────────────────────────────────────────────
 const schema = z.object({
   warehouseId: z.string().min(1, 'Vui lòng chọn kho nhập.'),
@@ -627,7 +611,7 @@ export default function StockReceiveEditPage() {
               <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: 0 }}>Danh sách sản phẩm</h3>
               <p style={{ fontSize: 11, color: receipt?.purchaseOrderId ? '#f97316' : '#94a3b8', margin: '2px 0 0' }}>
                 {receipt?.purchaseOrderId
-                  ? '⚠ Phiếu từ đơn mua hàng — số lượng cố định, chỉ chỉnh sửa được đơn giá'
+                  ? 'Phiếu từ đơn đặt hàng — có thể điều chỉnh số lượng (nhập hàng nhiều đợt)'
                   : 'Cập nhật số lượng và đơn giá'}
               </p>
             </div>
@@ -674,15 +658,13 @@ export default function StockReceiveEditPage() {
                       </td>
                       <td style={{ padding: '10px 12px', width: 100 }}>
                         <input type="number" min="0" step="1" value={item.quantity}
-                          disabled={Boolean(item.fromPurchaseOrder)}
                           onChange={(e) => onQtyChange(idx, e.target.value)}
                           style={{ width: '100%', padding: '6px 8px', borderRadius: 6,
                             border: `1px solid ${qtyBad ? '#fca5a5' : '#e2e8f0'}`,
-                            backgroundColor: item.fromPurchaseOrder ? '#f8fafc' : qtyBad ? '#fff5f5' : '#fff',
-                            fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box',
-                            cursor: item.fromPurchaseOrder ? 'not-allowed' : 'text' }} />
+                            backgroundColor: qtyBad ? '#fff5f5' : '#fff',
+                            fontSize: 12, textAlign: 'right', outline: 'none', boxSizing: 'border-box' }} />
                         {item.fromPurchaseOrder && (
-                          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Từ đơn mua hàng</div>
+                          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>Từ đơn đặt hàng</div>
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', width: 130 }}>
@@ -693,15 +675,12 @@ export default function StockReceiveEditPage() {
                         {line > 0 ? formatVND(line) : '—'}
                       </td>
                       <td style={{ padding: '10px 12px' }}>
-                        {/* Allow removing items not from purchase order, or any item if no PO linked */}
-                        {(!receipt?.purchaseOrderId || !item.fromPurchaseOrder) && (
-                          <button onClick={() => onRemove(idx)}
-                            style={{ width: 24, height: 24, borderRadius: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}>
-                            <Trash2 size={13} />
-                          </button>
-                        )}
+                        <button onClick={() => onRemove(idx)}
+                          style={{ width: 24, height: 24, borderRadius: 4, border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}>
+                          <Trash2 size={13} />
+                        </button>
                       </td>
                     </tr>
                   );

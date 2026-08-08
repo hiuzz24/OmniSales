@@ -7,6 +7,7 @@ import fu.osms.inventory.entity.Warehouse;
 import fu.osms.purchase.enums.PurchaseOrderStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -14,7 +15,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -61,6 +64,9 @@ public class PurchaseOrder {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "evidence_url", columnDefinition = "TEXT")
+    private String evidenceUrl;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
@@ -71,12 +77,6 @@ public class PurchaseOrder {
     @Column(name = "receiving_at")
     private OffsetDateTime receivingAt;
 
-    @Column(name = "inspecting_at")
-    private OffsetDateTime inspectingAt;
-
-    @Column(name = "inspected_at")
-    private OffsetDateTime inspectedAt;
-
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
 
@@ -84,8 +84,11 @@ public class PurchaseOrder {
     @Builder.Default
     private List<PurchaseOrderItem> items = new ArrayList<>();
 
-    @OneToOne(mappedBy = "purchaseOrder", fetch = FetchType.LAZY)
-    private InventoryReceipt receipt;
+    @OneToMany(mappedBy = "purchaseOrder", fetch = FetchType.LAZY)
+    @OrderBy("createdAt ASC")
+    @BatchSize(size = 100)
+    @Builder.Default
+    private Set<InventoryReceipt> receipts = new LinkedHashSet<>();
 
     @Version
     private Long version;
@@ -101,5 +104,10 @@ public class PurchaseOrder {
     public void addItem(PurchaseOrderItem item) {
         items.add(item);
         item.setPurchaseOrder(this);
+    }
+
+    public void addReceipt(InventoryReceipt receipt) {
+        receipts.add(receipt);
+        receipt.setPurchaseOrder(this);
     }
 }

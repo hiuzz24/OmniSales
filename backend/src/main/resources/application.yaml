@@ -25,6 +25,22 @@ spring:
       max-file-size: 20MB
       max-request-size: 20MB
 
+  # Cấu hình RabbitMQ cho các luồng đồng bộ (webhook, push inventory/product)
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:osms}
+    password: ${RABBITMQ_PASSWORD:osms}
+    connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:3000}
+    listener:
+      simple:
+        retry:
+          enabled: ${RABBITMQ_LISTENER_RETRY_ENABLED:true}
+          max-attempts: ${RABBITMQ_LISTENER_MAX_ATTEMPTS:5}
+          initial-interval: 1s
+          multiplier: 2
+          max-interval: 30s
+
   # Cấu hình SMTP Server cho Gmail (Đã chuyển về đúng nhóm spring)
   mail:
     host: smtp.gmail.com
@@ -44,9 +60,31 @@ spring:
           write timeout: 5000
 
 app:
+  messaging:
+    mode: ${APP_MESSAGING_MODE:broker}
   inventory-extra-import:
     fuzzy-threshold: ${INVENTORY_EXTRA_IMPORT_FUZZY_THRESHOLD:0.4}
     error-directory: ${INVENTORY_EXTRA_IMPORT_ERROR_DIRECTORY:${java.io.tmpdir}/osms/inventory-extra-import-errors}
+  webhook-retry:
+    enabled: ${WEBHOOK_RETRY_ENABLED:true}
+    fixed-delay-ms: ${WEBHOOK_RETRY_FIXED_DELAY_MS:30000}
+    stuck-after-ms: ${WEBHOOK_RETRY_STUCK_AFTER_MS:120000}
+    max-retries: ${WEBHOOK_RETRY_MAX_RETRIES:3}
+    batch-size: ${WEBHOOK_RETRY_BATCH_SIZE:50}
+  async:
+    order-pull:
+      core-size: ${ASYNC_ORDER_PULL_CORE_SIZE:2}
+      max-size: ${ASYNC_ORDER_PULL_MAX_SIZE:6}
+      queue-capacity: ${ASYNC_ORDER_PULL_QUEUE_CAPACITY:50}
+    sync-job:
+      core-size: ${ASYNC_SYNC_JOB_CORE_SIZE:4}
+      max-size: ${ASYNC_SYNC_JOB_MAX_SIZE:8}
+      queue-capacity: ${ASYNC_SYNC_JOB_QUEUE_CAPACITY:100}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    lazada-requests-per-minute: ${RATE_LIMIT_LAZADA_RPM:100}
+    tiktok-requests-per-minute: ${RATE_LIMIT_TIKTOK_RPM:100}
+    shopify-requests-per-minute: ${RATE_LIMIT_SHOPIFY_RPM:120}
   inventory-reconciliation:
     enabled: ${INVENTORY_RECONCILIATION_ENABLED:true}
     fixed-delay-ms: ${INVENTORY_RECONCILIATION_FIXED_DELAY_MS:5000}

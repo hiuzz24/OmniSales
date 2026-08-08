@@ -4,6 +4,7 @@ import {
   ArrowLeft, Package, Warehouse, Building2, FileText,
   Calendar, User, DollarSign, Hash, AlertCircle, Loader2,
   CheckCircle2, Save, Undo2, Printer, Edit, Check,
+  ShoppingBag, PackagePlus,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import stockReceiveService from '../../services/stockReceiveService';
@@ -349,6 +350,21 @@ export default function StockReceiveDetailPage() {
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 8 }}>
+          {receipt.purchaseOrderId && (
+            <button
+              onClick={() => navigate(ROUTES.PURCHASE_ORDER_DETAIL.replace(':id', receipt.purchaseOrderId))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', borderRadius: 7,
+                border: '1px solid #bfdbfe', background: '#eff6ff',
+                fontSize: 13, fontWeight: 500, color: '#1d4ed8', cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#dbeafe')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#eff6ff')}
+            >
+              <ShoppingBag size={14} /> Xem đơn đặt hàng
+            </button>
+          )}
           {receipt.status === 'DRAFT' && (
             <>
               <button
@@ -411,6 +427,21 @@ export default function StockReceiveDetailPage() {
                 )}
               </button>
             </>
+          )}
+          {receipt.status === 'CONFIRMED' && receipt.purchaseOrderId && (
+            <button
+              onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${receipt.purchaseOrderId}`)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 14px', borderRadius: 7,
+                border: '1px solid #a7f3d0', background: '#ecfdf5',
+                fontSize: 13, fontWeight: 500, color: '#047857', cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#d1fae5')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#ecfdf5')}
+            >
+              <PackagePlus size={14} /> Tạo phiếu nhập tiếp
+            </button>
           )}
           <button
             onClick={handlePrint}
