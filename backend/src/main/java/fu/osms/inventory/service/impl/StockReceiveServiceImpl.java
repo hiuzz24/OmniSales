@@ -77,20 +77,17 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     @Transactional
     public StockReceiveResponse createReceipt(StockReceiveRequest request, UUID createdByUserId) {
         if (request.getPurchaseOrderId() == null) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "Đơn mua hàng là bắt buộc.");
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Đơn đặt hàng là bắt buộc.");
         }
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
 
         PurchaseOrder purchaseOrder = purchaseOrderRepository.findByIdWithDetails(request.getPurchaseOrderId())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn mua hàng."));
-        if (purchaseOrder.getStatus() != PurchaseOrderStatus.INSPECTED) {
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn đặt hàng."));
+        if (!isPoReceivable(purchaseOrder.getStatus())) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
-                    "Chỉ đơn ở trạng thái Đã kiểm tra mới được tạo phiếu nhập kho.");
-        }
-        if (stockReceiveRepository.existsByPurchaseOrderId(purchaseOrder.getId())) {
-            throw new AppException(ErrorCode.CONFLICT, "Đơn mua hàng đã có phiếu nhập kho.");
+                    "Chỉ đơn ở trạng thái Đang giao hàng mới được tạo phiếu nhập kho.");
         }
         validatePurchaseOrderItems(purchaseOrder, request.getItems());
 
@@ -138,6 +135,10 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         List<StockReceiveItemRequest> itemRequests = resolvedLines.requests();
         List<ProductVariant> variants = resolvedLines.variants();
 
+        // Compute the delivery-batch diff (shortage/surplus) and auto-note for the PO.
+        BatchDiff batchDiff = computeBatchDiff(purchaseOrder, null, itemRequests, variants);
+        String batchNote = mergeNotes(request.getNotes(), buildBatchNote(batchDiff));
+
         // 7. Calculate totalCost BEFORE creating receipt
         BigDecimal totalCost = calculateGroupedReceiptTotal(itemRequests, variants);
 
@@ -163,12 +164,16 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 .status(status)
                 .confirmedAt(confirmedAt)
                 .receivedAt(receivedAt)
-                .notes(request.getNotes())
+                .notes(batchNote)
                 .createdBy(createdByUser)
                 .totalCost(totalCost)  // Set totalCost from the beginning
                 .build();
 
         receipt = stockReceiveRepository.save(receipt);
+
+        // Keep the in-memory receipts collection in sync so PO completion checks
+        // (confirmedReceiptTotals) can see the just-saved receipt within the same tx.
+        purchaseOrder.addReceipt(receipt);
 
         // 11. Process each item
         List<InventoryReceiptItem> savedItems = new ArrayList<>();
@@ -249,8 +254,13 @@ public class StockReceiveServiceImpl implements StockReceiveService {
                 }
             }
 
-            // c. Save receiptItem (for both DRAFT and CONFIRMED)
+            // c. Save receiptItem (for both DRAFT and CONFIRMED). Keep the
+            // in-memory items collection in sync so PO completion checks
+            // (confirmedReceiptTotals) count this receipt's items — a receipt
+            // built with a fresh ArrayList stays "initialized" after save, so
+            // Hibernate never re-loads it from the DB.
             receiptItem = stockReceiveItemRepository.save(receiptItem);
+            receipt.addItem(receiptItem);
             savedItems.add(receiptItem);
 
             // d. Create InventoryTransaction (for both DRAFT and CONFIRMED)
@@ -287,19 +297,16 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 12. Build and return response (no need to update totalCost again)
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
-        List<StockReceiveItemResponse> itemResponses = toItemResponses(savedItems);
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(savedItems, batchDiff.surplusByGroup());
         response.setItems(itemResponses);
         
         ReceiptGroupSummary summary = summarizeReceiptItems(savedItems);
         response.setTotalSkuCount(summary.skuCount());
         response.setTotalQuantity(summary.totalQuantity());
         if ("CONFIRMED".equals(status) && purchaseOrder != null) {
-            var autoCreated = purchaseOrderService.completeFromReceiptWithResult(purchaseOrder.getId());
-            autoCreated.ifPresent(result -> {
-                response.setAutoCreatedOrderCode(result.getOrderCode());
-                response.setAutoCreatedOrderType(result.getType());
-                response.setAutoCreatedOrderSummary(result.getSummary());
-            });
+            recordActualReceivedBatch(purchaseOrder, savedItems);
+            purchaseOrderService.completeFromReceiptWithResult(purchaseOrder.getId());
+            response.setPoCompleted(isPurchaseOrderCompleted(purchaseOrder.getId()));
             notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
         }
 
@@ -538,22 +545,21 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         }
 
         if (request.getPurchaseOrderId() == null) {
-            throw new AppException(ErrorCode.VALIDATION_FAILED, "Đơn mua hàng là bắt buộc.");
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Đơn đặt hàng là bắt buộc.");
         }
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED, "Receipt must have at least one item");
         }
 
         PurchaseOrder purchaseOrder = purchaseOrderRepository.findByIdWithDetails(request.getPurchaseOrderId())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn mua hàng."));
-        if (purchaseOrder.getStatus() != PurchaseOrderStatus.RECEIVING
-                && purchaseOrder.getStatus() != PurchaseOrderStatus.INSPECTED) {
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn đặt hàng."));
+        if (!isPoReceivable(purchaseOrder.getStatus())) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
-                    "Chỉ đơn ở trạng thái Đang giao hàng hoặc Chờ nhập kho mới được dùng cho phiếu nhập kho.");
+                    "Chỉ đơn ở trạng thái Đang giao hàng, Đang kiểm tra hoặc Đã kiểm tra mới được dùng cho phiếu nhập kho.");
         }
         if (receipt.getPurchaseOrder() != null
                 && !receipt.getPurchaseOrder().getId().equals(purchaseOrder.getId())) {
-            throw new AppException(ErrorCode.CONFLICT, "Không thể đổi đơn mua hàng của phiếu nhập kho.");
+            throw new AppException(ErrorCode.CONFLICT, "Không thể đổi đơn đặt hàng của phiếu nhập kho.");
         }
         validatePurchaseOrderItems(purchaseOrder, request.getItems());
         Warehouse warehouse = purchaseOrder.getWarehouse();
@@ -574,6 +580,10 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         List<StockReceiveItemRequest> itemRequests = resolvedLines.requests();
         List<ProductVariant> variants = resolvedLines.variants();
 
+        // Recompute the delivery-batch diff (shortage/surplus) and auto-note.
+        BatchDiff batchDiff = computeBatchDiff(purchaseOrder, receiptId, itemRequests, variants);
+        String batchNote = mergeNotes(request.getNotes(), buildBatchNote(batchDiff));
+
         // 10. Calculate totalCost
         BigDecimal totalCost = calculateGroupedReceiptTotal(itemRequests, variants);
 
@@ -588,7 +598,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         receipt.setPurchaseOrder(purchaseOrder);
         receipt.setInvoiceNumber(receipt.getReceiptCode());
         receipt.setReceivedAt(receivedAt);
-        receipt.setNotes(request.getNotes());
+        receipt.setNotes(batchNote);
         receipt.setTotalCost(totalCost);
         receipt.setUpdatedAt(OffsetDateTime.now());
         receipt = stockReceiveRepository.save(receipt);
@@ -638,7 +648,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 16. Build and return response
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
-        List<StockReceiveItemResponse> itemResponses = toItemResponses(savedItems);
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(savedItems, batchDiff.surplusByGroup());
         response.setItems(itemResponses);
         
         ReceiptGroupSummary summary = summarizeReceiptItems(savedItems);
@@ -761,14 +771,32 @@ public class StockReceiveServiceImpl implements StockReceiveService {
 
         // 8. Build and return response
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
-        List<StockReceiveItemResponse> itemResponses = toItemResponses(receiptItems);
+        BatchDiff completeDiff = receipt.getPurchaseOrder() == null
+                ? null
+                : computeBatchDiff(
+                        receipt.getPurchaseOrder(),
+                        receipt.getId(),
+                        receiptItems.stream()
+                                .map(item -> StockReceiveItemRequest.builder()
+                                        .variantId(item.getVariant().getId())
+                                        .quantity(item.getQuantity())
+                                        .unitCost(item.getUnitCost())
+                                        .notes(item.getNotes())
+                                        .build())
+                                .toList(),
+                        receiptItems.stream().map(InventoryReceiptItem::getVariant).toList());
+        List<StockReceiveItemResponse> itemResponses = toItemResponses(
+                receiptItems,
+                completeDiff == null ? null : completeDiff.surplusByGroup());
         response.setItems(itemResponses);
         
         ReceiptGroupSummary summary = summarizeReceiptItems(receiptItems);
         response.setTotalSkuCount(summary.skuCount());
         response.setTotalQuantity(summary.totalQuantity());
         if (receipt.getPurchaseOrder() != null) {
+            recordActualReceivedBatch(receipt.getPurchaseOrder(), receiptItems);
             purchaseOrderService.completeFromReceipt(receipt.getPurchaseOrder().getId());
+            response.setPoCompleted(isPurchaseOrderCompleted(receipt.getPurchaseOrder().getId()));
             notifyMarketplaceSyncChoice(receipt, approvedByUser, changedVariantIds);
         }
 
@@ -849,42 +877,119 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     }
 
     private void validatePurchaseOrderItems(PurchaseOrder order, List<StockReceiveItemRequest> receiptItems) {
-        // Build expected quantities: use actualQuantity (inspection result) if set, else fall back to ordered quantity.
-        // When actualQuantity > quantity (surplus), the surplus is handled by a separate surplus order,
-        // so the receipt only needs to cover min(actualQuantity, quantity) = quantity for shortage,
-        // or actualQuantity capped at quantity for surplus (surplus order carries the rest).
-        Map<String, Integer> ordered = new HashMap<>();
-        for (PurchaseOrderItem item : order.getItems()) {
-            String groupKey = sharedStockGroupKey(resolveSharedStockVariants(item.getVariant()));
-            // Expected receipt qty = actualQuantity if inspected; if surplus use orderedQty (surplus goes to separate order)
-            int expectedQty = item.getActualQuantity() != null
-                    ? Math.min(item.getActualQuantity(), item.getQuantity())
-                    : item.getQuantity();
-            Integer previous = ordered.putIfAbsent(groupKey, expectedQty);
-            if (previous != null && !Objects.equals(previous, expectedQty)) {
-                throw new AppException(ErrorCode.VALIDATION_FAILED,
-                        "Các dòng cùng SKU trong đơn mua hàng có số lượng không nhất quán.");
-            }
+        // A receipt may cover only a subset of the purchase order lines (partial
+        // delivery) and quantities may be over or under the ordered amount. Keep
+        // only the per-SKU grouping consistency check.
+        if (receiptItems == null || receiptItems.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED, "Phiếu nhập phải có ít nhất một sản phẩm.");
         }
         Map<String, Integer> received = new HashMap<>();
-        if (receiptItems != null) {
-            for (StockReceiveItemRequest item : receiptItems) {
-                ProductVariant variant = variantRepository.findById(item.getVariantId())
-                        .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
-                String groupKey = sharedStockGroupKey(resolveSharedStockVariants(variant));
-                Integer previous = received.putIfAbsent(groupKey, item.getQuantity());
-                if (previous != null && !Objects.equals(previous, item.getQuantity())) {
-                    throw new AppException(ErrorCode.VALIDATION_FAILED,
-                            "Các dòng cùng SKU trong phiếu nhập có số lượng không nhất quán.");
-                }
-            }
-        }
-        for (Map.Entry<String, Integer> orderedItem : ordered.entrySet()) {
-            if (!Objects.equals(received.get(orderedItem.getKey()), orderedItem.getValue())) {
+        for (StockReceiveItemRequest item : receiptItems) {
+            ProductVariant variant = variantRepository.findById(item.getVariantId())
+                    .orElseThrow(() -> new AppException(ErrorCode.VARIANT_NOT_FOUND));
+            String groupKey = sharedStockGroupKey(resolveSharedStockVariants(variant));
+            Integer previous = received.putIfAbsent(groupKey, item.getQuantity());
+            if (previous != null && !Objects.equals(previous, item.getQuantity())) {
                 throw new AppException(ErrorCode.VALIDATION_FAILED,
-                        "Phiếu nhập phải giữ đủ sản phẩm và số lượng của đơn mua hàng; có thể thêm sản phẩm khác.");
+                        "Các dòng cùng SKU trong phiếu nhập có số lượng không nhất quán.");
             }
         }
+    }
+
+    private boolean isPoReceivable(PurchaseOrderStatus status) {
+        return status == PurchaseOrderStatus.RECEIVING;
+    }
+
+    private boolean isPurchaseOrderCompleted(UUID purchaseOrderId) {
+        return purchaseOrderRepository.findById(purchaseOrderId)
+                .map(order -> order.getStatus() == PurchaseOrderStatus.COMPLETED)
+                .orElse(false);
+    }
+
+    private BatchDiff computeBatchDiff(
+            PurchaseOrder order,
+            UUID excludeReceiptId,
+            List<StockReceiveItemRequest> itemRequests,
+            List<ProductVariant> variants) {
+        Map<String, Integer> batchQtyByGroup = new HashMap<>();
+        for (int i = 0; i < itemRequests.size(); i++) {
+            String key = sharedStockGroupKey(resolveSharedStockVariants(variants.get(i)));
+            Integer qty = itemRequests.get(i).getQuantity();
+            batchQtyByGroup.merge(key, qty == null ? 0 : qty, Integer::sum);
+        }
+        return computeBatchDiff(order, excludeReceiptId, batchQtyByGroup);
+    }
+
+    private BatchDiff computeBatchDiff(
+            PurchaseOrder order, UUID excludeReceiptId, Map<String, Integer> batchQtyByGroup) {
+        Map<String, Integer> orderedByGroup = new LinkedHashMap<>();
+        Map<String, String> groupLabels = new HashMap<>();
+        for (PurchaseOrderItem item : order.getItems()) {
+            String key = sharedStockGroupKey(resolveSharedStockVariants(item.getVariant()));
+            orderedByGroup.putIfAbsent(key, item.getQuantity());
+            groupLabels.putIfAbsent(key, productLabel(item.getVariant()));
+        }
+
+        Map<String, Integer> priorByGroup = new HashMap<>();
+        String priorReceiptCode = null;
+        for (InventoryReceipt receipt : order.getReceipts()) {
+            if (excludeReceiptId != null && excludeReceiptId.equals(receipt.getId())) {
+                continue;
+            }
+            if (!"CONFIRMED".equals(receipt.getStatus())) {
+                continue;
+            }
+            for (InventoryReceiptItem item : receipt.getItems()) {
+                String key = sharedStockGroupKey(resolveSharedStockVariants(item.getVariant()));
+                priorByGroup.merge(key, item.getQuantity(), Integer::sum);
+            }
+            priorReceiptCode = receipt.getReceiptCode();
+        }
+
+        Map<String, Integer> shortageByGroup = new LinkedHashMap<>();
+        Map<String, Integer> surplusByGroup = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : orderedByGroup.entrySet()) {
+            String key = entry.getKey();
+            int orderedQty = entry.getValue();
+            int batchQty = batchQtyByGroup.getOrDefault(key, 0);
+            int remaining = orderedQty - priorByGroup.getOrDefault(key, 0);
+            if (batchQty > remaining) {
+                surplusByGroup.put(key, batchQty - remaining);
+            }
+            if (batchQty < remaining) {
+                shortageByGroup.put(key, remaining - batchQty);
+            }
+        }
+        return new BatchDiff(shortageByGroup, surplusByGroup, groupLabels, priorReceiptCode);
+    }
+
+    private String buildBatchNote(BatchDiff diff) {
+        List<String> parts = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : diff.shortageByGroup().entrySet()) {
+            parts.add(diff.groupLabels().getOrDefault(entry.getKey(), "Sản phẩm") + " thiếu " + entry.getValue());
+        }
+        for (Map.Entry<String, Integer> entry : diff.surplusByGroup().entrySet()) {
+            parts.add(diff.groupLabels().getOrDefault(entry.getKey(), "Sản phẩm") + " thừa " + entry.getValue());
+        }
+        String summary = parts.isEmpty() ? "Nhận đủ theo đơn mua." : String.join("; ", parts);
+        if (diff.priorReceiptCode() == null) {
+            return summary;
+        }
+        return "Tạo thêm từ phiếu nhập " + diff.priorReceiptCode() + ". " + summary;
+    }
+
+    private String mergeNotes(String userNotes, String batchNote) {
+        if (userNotes == null || userNotes.isBlank()) {
+            return batchNote;
+        }
+        return batchNote + " | " + userNotes.trim();
+    }
+
+    private String productLabel(ProductVariant variant) {
+        String name = variant.getProduct().getName();
+        return variant.getName() != null && !variant.getName().isBlank()
+                ? name + " (" + variant.getName() + ")"
+                : name;
     }
 
     private StockReceiveResponse enrichMarketplaceInfo(StockReceiveResponse response) {
@@ -920,6 +1025,53 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     }
 
     private List<StockReceiveItemResponse> toItemResponses(List<InventoryReceiptItem> items) {
+        return toItemResponses(items, null);
+    }
+
+    /**
+     * Record the actually-received quantity of the latest batch onto the matching
+     * purchase-order line(s) (purchase_order_items.actual_quantity). This value is
+     * exposed to the receiving UI so it can prefill the "Số lượng thực tế" input
+     * when the next batch for the same PO is created.
+     */
+    private void recordActualReceivedBatch(PurchaseOrder purchaseOrder, List<InventoryReceiptItem> batchItems) {
+        if (purchaseOrder == null || batchItems == null || batchItems.isEmpty()
+                || purchaseOrder.getItems() == null || purchaseOrder.getItems().isEmpty()) {
+            return;
+        }
+        Map<UUID, Integer> batchByVariant = new HashMap<>();
+        for (InventoryReceiptItem item : batchItems) {
+            if (item.getVariant() == null || item.getQuantity() == null) {
+                continue;
+            }
+            batchByVariant.merge(item.getVariant().getId(), item.getQuantity(), Integer::sum);
+        }
+        if (batchByVariant.isEmpty()) {
+            return;
+        }
+        boolean changed = false;
+        for (PurchaseOrderItem poItem : purchaseOrder.getItems()) {
+            if (poItem.getVariant() == null) {
+                continue;
+            }
+            Integer batchQty = batchByVariant.get(poItem.getVariant().getId());
+            if (batchQty == null) {
+                continue;
+            }
+            int previous = poItem.getActualQuantity() == null ? 0 : poItem.getActualQuantity();
+            int accumulated = previous + batchQty;
+            if (accumulated != previous) {
+                poItem.setActualQuantity(accumulated);
+                changed = true;
+            }
+        }
+        if (changed) {
+            purchaseOrderRepository.save(purchaseOrder);
+        }
+    }
+
+    private List<StockReceiveItemResponse> toItemResponses(
+            List<InventoryReceiptItem> items, Map<String, Integer> surplusByGroup) {
         if (items == null || items.isEmpty()) {
             return List.of();
         }
@@ -971,6 +1123,9 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             response.setSku(marketplaceSku);
             response.setMarketplaceSku(marketplaceSku);
             response.setPlatforms(platforms);
+            response.setSurplusQuantity(surplusByGroup == null
+                    ? 0
+                    : surplusByGroup.getOrDefault(entry.getKey(), 0));
             return response;
         }).toList();
     }
@@ -1257,6 +1412,13 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     }
 
     private record ReceiptGroupSummary(int skuCount, int totalQuantity) {
+    }
+
+    private record BatchDiff(
+            Map<String, Integer> shortageByGroup,
+            Map<String, Integer> surplusByGroup,
+            Map<String, String> groupLabels,
+            String priorReceiptCode) {
     }
 
     private OffsetDateTime resolveDocumentTime(LocalDate documentDate) {

@@ -6,8 +6,9 @@ import fu.osms.order.entity.Order;
 import fu.osms.order.event.OrderPaidEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.List;
 
@@ -19,7 +20,7 @@ public class OrderPaidNotificationListener {
     private final NotificationService notificationService;
     private final UserRoleRepository userRoleRepository;
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void handleOrderPaidEvent(OrderPaidEvent event) {
         Order order = event.getOrder();
         if (order == null || order.getId() == null) {
@@ -34,7 +35,7 @@ public class OrderPaidNotificationListener {
                 .distinct()
                 .forEach(userId -> {
                     try {
-                        notificationService.createNotification(
+                        notificationService.createNotificationIfAbsent(
                                 userId,
                                 "ORDER_PAID",
                                 title,

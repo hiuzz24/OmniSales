@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -90,6 +91,17 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional
+    public void markAsRead(UUID id, UUID userId) {
+        Notification notification = notificationRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND));
+        if (notification.getReadAt() == null) {
+            notification.setReadAt(OffsetDateTime.now());
+            notificationRepository.save(notification);
+        }
+    }
+
+    @Override
+    @Transactional
     public int markAllAsRead(UUID userId) {
         return notificationRepository.markAllAsRead(userId);
     }
@@ -112,6 +124,18 @@ public class NotificationServiceImpl implements NotificationService {
         if (emailEnabled) {
             emailService.sendNotificationEmail(user.getEmail(), "[OmniSales] " + title, body);
         }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean createNotificationIfAbsent(UUID userId, String type, String title, String body,
+                                              String entityType, UUID entityId) {
+        if (entityId != null && notificationRepository
+                .existsByUserIdAndTypeAndEntityTypeAndEntityId(userId, type, entityType, entityId)) {
+            return false;
+        }
+        createNotification(userId, type, title, body, entityType, entityId);
+        return true;
     }
 
     private PageResponse<NotificationResponse> toPageResponse(Page<Notification> page) {

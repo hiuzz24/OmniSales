@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -26,6 +26,13 @@ const NOTIF_META = {
   ORDER_CANCELLED: { icon: ShoppingCart, color: '#dc2626', bg: '#fef2f2' },
   ORDER_PICK_REQUIRED: { icon: Package, color: '#d97706', bg: '#fffbeb' },
   ORDER_READY_SHIP: { icon: ShoppingCart, color: '#0f766e', bg: '#f0fdfa' },
+  ORDER_SHIPPED: { icon: ShoppingCart, color: '#0284c7', bg: '#f0f9ff' },
+  ORDER_DELIVERED: { icon: ShoppingCart, color: '#059669', bg: '#ecfdf5' },
+  ORDER_RETURN_REQUESTED: { icon: RefreshCw, color: '#d97706', bg: '#fffbeb' },
+  ORDER_RETURN_REJECTED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
+  ORDER_RETURN_COMPLETED: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
+  ORDER_RETURN_ATTENTION: { icon: AlertTriangle, color: '#dc2626', bg: '#fef2f2' },
+  CHANNEL_DISCONNECTED: { icon: AlertTriangle, color: '#dc2626', bg: '#fef2f2' },
   SYNC: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
   SYNC_FAILED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
   INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
@@ -40,7 +47,6 @@ const formatNotificationTime = (value) => {
   const diffMs = Date.now() - created.getTime();
   const minute = 60 * 1000;
   const hour = 60 * minute;
-  const day = 24 * hour;
   if (diffMs < minute) return 'Vừa xong';
   if (diffMs < hour) return `${Math.floor(diffMs / minute)} phút trước`;
   if (diffMs < hour * 24) return `${Math.floor(diffMs / hour)} giờ trước`;
@@ -71,19 +77,18 @@ const NotificationListPage = () => {
   const fetchUnreadCount = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const count = await notificationApi.countUnread(user.id);
+      const count = await notificationApi.countUnread();
       setUnreadCount(count);
     } catch (error) {
       console.error('Failed to fetch unread count:', error);
     }
-  }, [user?.id]);
+  }, [user]);
 
   const loadNotifications = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
       const data = await notificationApi.getNotifications({
-        userId: user.id,
         unreadOnly: activeTab === 'unread',
         page,
         size: pageSize,
@@ -96,11 +101,14 @@ const NotificationListPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, activeTab, page, pageSize]);
+  }, [user, activeTab, page, pageSize]);
 
   useEffect(() => {
-    loadNotifications();
-    fetchUnreadCount();
+    const timeout = window.setTimeout(() => {
+      loadNotifications();
+      fetchUnreadCount();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [loadNotifications, fetchUnreadCount]);
 
   // Listener to refresh if any global changes happen
@@ -118,7 +126,7 @@ const NotificationListPage = () => {
   const handleMarkAllAsRead = async () => {
     if (!user?.id || unreadCount === 0) return;
     try {
-      await notificationApi.markAllAsRead(user.id);
+      await notificationApi.markAllAsRead();
       
       // Dispatch refresh events to let MainLayout know it should reload too
       window.dispatchEvent(new Event('notifications:refresh'));
@@ -149,6 +157,10 @@ const NotificationListPage = () => {
       navigate(`${ROUTES.STOCK_DELIVERY_CREATE}?tab=BY_ORDER&orderId=${notif.entityId}`);
     } else if (notif.entityType === 'ORDER' && notif.entityId) {
       navigate(ROUTES.ORDER_DETAIL.replace(':id', notif.entityId));
+    } else if (notif.entityType === 'RETURN' && notif.entityId) {
+      navigate(ROUTES.ORDER_RETURN_DETAIL.replace(':id', notif.entityId));
+    } else if (notif.entityType === 'CHANNEL') {
+      navigate(ROUTES.CHANNELS);
     } else if (notif.entityType === 'INVENTORY' && notif.entityId) {
       if (notif.type === 'STOCK_TRANSFER') {
         navigate(ROUTES.STOCK_TRANSFER, { state: { openTransferId: notif.entityId } });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Warehouse, ShoppingCart, Share2,
@@ -10,8 +10,8 @@ import {
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
 import useAuth from '../../features/auth/hooks/useAuth';
-import notificationApi from '../../api/notificationApi';
 import { toast } from 'react-toastify';
+import useNotifications from '../providers/useNotifications';
 
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -41,7 +41,7 @@ const NAV_ITEMS = [
       { name: 'Nhật ký kho', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
     ],
   },
-  { name: 'Đơn mua hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
+  { name: 'Đơn đặt hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
   { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Trả hàng', href: ROUTES.ORDER_RETURNS, icon: RotateCcw, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
@@ -83,17 +83,19 @@ const NOTIF_META = {
   ORDER_CANCELLED: { icon: ShoppingCart, color: '#dc2626', bg: '#fef2f2' },
   ORDER_PICK_REQUIRED: { icon: PackageMinus, color: '#d97706', bg: '#fffbeb' },
   ORDER_READY_SHIP: { icon: ShoppingCart, color: '#0f766e', bg: '#f0fdfa' },
+  ORDER_SHIPPED: { icon: ShoppingCart, color: '#0284c7', bg: '#f0f9ff' },
+  ORDER_DELIVERED: { icon: ShoppingCart, color: '#059669', bg: '#ecfdf5' },
+  ORDER_RETURN_REQUESTED: { icon: RotateCcw, color: '#d97706', bg: '#fffbeb' },
+  ORDER_RETURN_REJECTED: { icon: RotateCcw, color: '#dc2626', bg: '#fef2f2' },
+  ORDER_RETURN_COMPLETED: { icon: RotateCcw, color: '#059669', bg: '#ecfdf5' },
+  ORDER_RETURN_ATTENTION: { icon: AlertTriangle, color: '#dc2626', bg: '#fef2f2' },
+  CHANNEL_DISCONNECTED: { icon: Share2, color: '#dc2626', bg: '#fef2f2' },
   SYNC: { icon: RefreshCw, color: '#059669', bg: '#ecfdf5' },
   SYNC_FAILED: { icon: RefreshCw, color: '#dc2626', bg: '#fef2f2' },
   INVENTORY: { icon: Package, color: '#d97706', bg: '#fffbeb' },
   STOCK_TRANSFER: { icon: ArrowRightLeft, color: '#7c3aed', bg: '#f5f3ff' },
   STOCKTAKE: { icon: ClipboardList, color: '#0f766e', bg: '#f0fdfa' },
   SYSTEM: { icon: Info, color: '#475569', bg: '#f8fafc' },
-};
-
-const ROLE_LABEL = {
-  [ROLES.OWNER]: 'Owner', [ROLES.OPERATIONS]: 'Operations',
-  [ROLES.SALES]: 'Sales', [ROLES.SYSTEM_ADMIN]: 'Admin',
 };
 
 const getInitials = (name) => {
@@ -135,17 +137,19 @@ export default function MainLayout() {
   const [open, setOpen] = useState(true);
   const [expanded, setExpanded] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const notifRef = useRef(null);
-  const seenNotificationIdsRef = useRef(new Set());
-  const notificationBaselineReadyRef = useRef(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const {
+    recentNotifications: notifications,
+    unreadCount,
+    refresh,
+    markAsRead,
+    markAllAsRead,
+  } = useNotifications();
 
   const role = user?.role;
-  const displayName = user?.fullName || user?.full_name || user?.name || user?.email || 'User';
   const sidebarW = open ? SIDEBAR_OPEN : SIDEBAR_CLOSE;
 
   // Close notif on outside click
@@ -170,11 +174,15 @@ export default function MainLayout() {
     return pathMatches(location.pathname, href, exact);
   };
 
-  const navigateFromNotification = (notification) => {
+  const navigateFromNotification = useCallback((notification) => {
     if (notification.type === 'ORDER_PICK_REQUIRED' && notification.entityId) {
       navigate(`${ROUTES.STOCK_DELIVERY_CREATE}?tab=BY_ORDER&orderId=${notification.entityId}`);
     } else if (notification.entityType === 'ORDER' && notification.entityId) {
       navigate(ROUTES.ORDER_DETAIL.replace(':id', notification.entityId));
+    } else if (notification.entityType === 'RETURN' && notification.entityId) {
+      navigate(ROUTES.ORDER_RETURN_DETAIL.replace(':id', notification.entityId));
+    } else if (notification.entityType === 'CHANNEL') {
+      navigate(ROUTES.CHANNELS);
     } else if (notification.entityType === 'INVENTORY' && notification.entityId) {
       if (notification.type === 'STOCK_TRANSFER') {
         navigate(ROUTES.STOCK_TRANSFER, { state: { openTransferId: notification.entityId } });
@@ -191,31 +199,19 @@ export default function MainLayout() {
       navigate(ROUTES.SYNC_HISTORY);
     }
     setNotifOpen(false);
-  };
+  }, [navigate]);
 
-  const handleNotificationClick = async (notification) => {
+  const handleNotificationClick = useCallback(async (notification) => {
     if (!notification.readAt) {
-      await notificationApi.markAsRead(notification.id);
-      await loadNotifications();
+      await markAsRead(notification.id);
     }
     navigateFromNotification(notification);
-  };
+  }, [markAsRead, navigateFromNotification]);
 
-  const loadNotifications = async () => {
-    if (!user?.id) {
-      setNotifications([]);
-      setUnreadCount(0);
-      return;
-    }
-    try {
-      const [list, count] = await Promise.all([
-        notificationApi.getNotifications({ userId: user.id, page: 0, size: 10 }),
-        notificationApi.countUnread(user.id),
-      ]);
-      const loadedNotifications = list?.content ?? [];
-      setNotifications(loadedNotifications);
-      setUnreadCount(Number(count ?? 0));
-
+  useEffect(() => {
+    const showNewNotifications = (event) => {
+      (event.detail ?? []).filter((notification) => !notification.readAt).forEach((notification) => {
+          const actionLabel = 'Mở chi tiết';
       if (!notificationBaselineReadyRef.current) {
         loadedNotifications.forEach((notification) => {
           if (notification.id) seenNotificationIdsRef.current.add(notification.id);
@@ -264,39 +260,11 @@ export default function MainLayout() {
               onClick: () => handleNotificationClick(notification),
             },
           );
-        });
-      }
-    } catch (err) {
-      console.error('Lỗi tải thông báo:', err);
-      setNotifications([]);
-      setUnreadCount(0);
-    }
-  };
-
-  useEffect(() => {
-    seenNotificationIdsRef.current = new Set();
-    notificationBaselineReadyRef.current = false;
-    loadNotifications();
-    const interval = setInterval(() => {
-      loadNotifications();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [user?.id]);
-
-  useEffect(() => {
-    const refreshWhenVisible = () => {
-      if (!document.hidden) {
-        loadNotifications();
-      }
+      });
     };
-    document.addEventListener('visibilitychange', refreshWhenVisible);
-    return () => document.removeEventListener('visibilitychange', refreshWhenVisible);
-  }, [user?.id]);
-
-  useEffect(() => {
-    window.addEventListener('notifications:refresh', loadNotifications);
-    return () => window.removeEventListener('notifications:refresh', loadNotifications);
-  }, [user?.id]);
+    window.addEventListener('notifications:new', showNewNotifications);
+    return () => window.removeEventListener('notifications:new', showNewNotifications);
+  }, [handleNotificationClick]);
 
   const toggleMenu = (name) =>
     setExpanded((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
@@ -447,7 +415,7 @@ export default function MainLayout() {
               <button
                 onClick={() => {
                   setNotifOpen((v) => !v);
-                  loadNotifications();
+                  refresh({ announce: false });
                 }}
                 style={{
                   position: 'relative', width: 36, height: 36,
@@ -486,8 +454,7 @@ export default function MainLayout() {
                     </div>
                     {unreadCount > 0 && (
                       <button onClick={async () => {
-                        await notificationApi.markAllAsRead(user.id);
-                        await loadNotifications();
+                        await markAllAsRead();
                       }}
                         style={{ fontSize: 12, color: '#2563eb', fontWeight: 500, border: 'none', background: 'none', cursor: 'pointer' }}>
                         Đánh dấu đã đọc

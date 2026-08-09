@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Building2,
@@ -28,6 +28,7 @@ import styles from './PurchaseOrderPage.module.css';
 
 const SUPPLIER_PAGE_SIZE = 20;
 const PRODUCT_GROUP_BATCH_SIZE = 50;
+const EDITABLE_STATUSES = ['DRAFT', 'SENT_TO_SUPPLIER'];
 
 const money = (value) => new Intl.NumberFormat('vi-VN', {
   style: 'currency',
@@ -488,6 +489,8 @@ function ProductPickerModal({ onClose, onConfirm, catalog, existingGroupKeys }) 
 
 export default function PurchaseOrderCreatePage() {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const today = new Date().toISOString().slice(0, 10);
   const [orderCode, setOrderCode] = useState('');
@@ -501,6 +504,9 @@ export default function PurchaseOrderCreatePage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(true);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+  const [editBlocked, setEditBlocked] = useState(false);
+  const [editCreatedAt, setEditCreatedAt] = useState(null);
   const purchaseTime = useMemo(() => new Date().toLocaleString('vi-VN', {
     day: '2-digit',
     month: '2-digit',
@@ -508,17 +514,62 @@ export default function PurchaseOrderCreatePage() {
     hour: '2-digit',
     minute: '2-digit',
   }), []);
+  const detailUrl = useMemo(
+    () => (isEdit ? ROUTES.PURCHASE_ORDER_DETAIL.replace(':id', id) : ROUTES.PURCHASE_ORDERS),
+    [isEdit, id],
+  );
 
   useEffect(() => {
-    purchaseOrderApi.getFormOptions()
-      .then((options) => {
-        setOrderCode(options?.orderCode ?? '');
-        setWarehouse(options?.warehouse ?? null);
+    let ignore = false;
+    if (!isEdit) {
+      purchaseOrderApi.getFormOptions()
+        .then((options) => {
+          if (ignore) return;
+          setOrderCode(options?.orderCode ?? '');
+          setWarehouse(options?.warehouse ?? null);
+          setCatalog(options?.productGroups ?? []);
+        })
+        .catch(() => toast.error('Không thể tải dữ liệu tạo đơn đặt hàng.'))
+        .finally(() => { if (!ignore) setLoadingOptions(false); });
+      return () => { ignore = true; };
+    }
+
+    Promise.all([purchaseOrderApi.getById(id), purchaseOrderApi.getFormOptions()])
+      .then(([order, options]) => {
+        if (ignore) return;
+        if (!EDITABLE_STATUSES.includes(order.status)) {
+          setEditBlocked(true);
+          return;
+        }
+        setOrderCode(order.orderCode);
+        setSupplier(order.supplierId
+          ? { id: order.supplierId, name: order.supplierName ?? '', code: order.supplierCode ?? '' }
+          : null);
+        setExpectedDate(order.expectedReceiptDate ?? today);
+        setPaymentMethod(order.paymentMethod ?? 'COD');
+        setNotes(order.notes ?? '');
+        setEditCreatedAt(order.orderDate ?? order.createdAt ?? null);
+        setWarehouse(order.warehouseId
+          ? { id: order.warehouseId, name: order.warehouseName ?? '', address: order.warehouseAddress ?? '' }
+          : (options?.warehouse ?? null));
         setCatalog(options?.productGroups ?? []);
+        setItems((order.items ?? []).map((item) => ({
+          groupKey: `variant:${item.variantId}`,
+          variantId: item.variantId,
+          linkedVariantIds: [item.variantId],
+          sku: item.marketplaceSku || item.sku,
+          localSkus: [item.sku],
+          productName: item.productName,
+          variantName: item.variantName || 'Mặc định',
+          marketplaceSources: (item.platforms ?? []).map((platform) => ({ platform })),
+          quantity: item.quantity,
+          unitCost: Number(item.unitCost ?? 0),
+        })));
       })
-      .catch(() => toast.error('Không thể tải dữ liệu tạo đơn mua hàng.'))
-      .finally(() => setLoadingOptions(false));
-  }, []);
+      .catch(() => toast.error('Không thể tải đơn đặt hàng.'))
+      .finally(() => { if (!ignore) { setLoadingOptions(false); setLoadingEdit(false); } });
+    return () => { ignore = true; };
+  }, [id, isEdit, today]);
 
   const totalQuantity = useMemo(
     () => items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
@@ -527,10 +578,6 @@ export default function PurchaseOrderCreatePage() {
   const totalAmount = useMemo(
     () => items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitCost || 0), 0),
     [items],
-  );
-  const warehousePlatformCount = useMemo(
-    () => new Set((warehouse?.marketplaceWarehouses ?? []).map((mapping) => mapping.platform)).size,
-    [warehouse],
   );
 
   const addProducts = (groups) => {
@@ -574,7 +621,7 @@ export default function PurchaseOrderCreatePage() {
   ));
 
   const submit = async (isDraft) => {
-    if (!orderCode) return toast.error('Chưa tạo được mã đơn mua hàng.');
+    if (!orderCode) return toast.error('Chưa tạo được mã đơn đặt hàng.');
     if (!supplier?.id) return toast.error('Vui lòng chọn nhà cung cấp.');
     if (!expectedDate || expectedDate < today) return toast.error('Ngày dự kiến nhận không được trước hôm nay.');
     if (!items.length) return toast.error('Vui lòng thêm ít nhất một sản phẩm.');
@@ -586,7 +633,7 @@ export default function PurchaseOrderCreatePage() {
     if (!isDraft) {
       const confirmed = await confirm({
         title: 'Gửi đơn cho nhà cung cấp?',
-        message: `Đơn mua hàng ${orderCode} sẽ được gửi đến "${supplier.name}".\nSau khi gửi, đơn sẽ chuyển sang trạng thái Đã gửi NCC.`,
+        message: `Đơn đặt hàng ${orderCode} sẽ được gửi đến "${supplier.name}".\nSau khi gửi, đơn sẽ chuyển sang trạng thái Đã gửi NCC.`,
         confirmLabel: 'Gửi NCC',
         tone: 'warning',
       });
@@ -609,38 +656,97 @@ export default function PurchaseOrderCreatePage() {
         })),
       });
       toast.success(isDraft
-        ? 'Đã lưu nháp đơn mua hàng.'
+        ? 'Đã lưu nháp đơn đặt hàng.'
         : 'Đã gửi đơn cho nhà cung cấp. Đơn sẽ chuyển sang Đang giao hàng sau 10 giây.');
       navigate(ROUTES.PURCHASE_ORDERS);
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Không thể tạo đơn mua hàng.');
+      toast.error(error?.response?.data?.message || 'Không thể tạo đơn đặt hàng.');
     } finally {
       setSubmitting(false);
     }
     return undefined;
   };
 
+  const submitEdit = async () => {
+    if (!orderCode) return toast.error('Chưa có mã đơn đặt hàng.');
+    if (!supplier?.id) return toast.error('Vui lòng chọn nhà cung cấp.');
+    if (!expectedDate || expectedDate < today) return toast.error('Ngày dự kiến nhận không được trước hôm nay.');
+    if (!items.length) return toast.error('Vui lòng thêm ít nhất một sản phẩm.');
+    if (items.some((item) => Number(item.quantity) <= 0 || Number(item.unitCost) < 0)) {
+      return toast.error('Số lượng và đơn giá sản phẩm không hợp lệ.');
+    }
+    setSubmitting(true);
+    try {
+      await purchaseOrderApi.update(id, {
+        orderCode,
+        supplierId: supplier.id,
+        expectedReceiptDate: expectedDate,
+        paymentMethod,
+        notes: notes || null,
+        items: items.map((item) => ({
+          variantId: item.variantId,
+          quantity: Number(item.quantity),
+          unitCost: Number(item.unitCost),
+        })),
+      });
+      toast.success('Đã cập nhật đơn đặt hàng.');
+      navigate(detailUrl);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể cập nhật đơn đặt hàng.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <main className={`${styles.page} product-workspace`}>
       <div className={styles.header}>
         <div className={styles.titleGroup}>
-          <button type="button" className={styles.secondaryButton} onClick={() => navigate(ROUTES.PURCHASE_ORDERS)}>
+          <button type="button" className={styles.secondaryButton} onClick={() => navigate(detailUrl)}>
             <ArrowLeft size={18} /> Quay lại
           </button>
           <div className={styles.iconBox}><ShoppingBag size={22} /></div>
           <div>
-            <h1 className={styles.title}>Tạo đơn mua hàng</h1>
-            <p className={styles.subtitle}>Đặt hàng từ nhà cung cấp vào kho mặc định đa sàn</p>
+            <h1 className={styles.title}>{isEdit ? 'Sửa đơn đặt hàng' : 'Tạo đơn đặt hàng'}</h1>
+            <p className={styles.subtitle}>{isEdit
+              ? 'Chỉnh sửa hàng hóa và đơn giá khi đơn đang ở trạng thái Nháp hoặc Đã gửi NCC'
+              : 'Đặt hàng từ nhà cung cấp vào kho mặc định đa sàn'}</p>
           </div>
         </div>
         <div className={styles.actions}>
-          <button type="button" disabled={submitting || loadingOptions} className={styles.secondaryButton} onClick={() => submit(true)}>Lưu nháp</button>
-          <button type="button" disabled={submitting || loadingOptions} className={styles.primaryButton} onClick={() => submit(false)}>
-            {submitting && <Loader2 size={17} className={styles.spin} />} Gửi NCC
-          </button>
+          {isEdit ? (
+            <button type="button" disabled={submitting || loadingOptions} className={styles.primaryButton} onClick={submitEdit}>
+              {submitting ? <Loader2 size={17} className={styles.spin} /> : <Check size={17} />} Lưu thay đổi
+            </button>
+          ) : (
+            <>
+              <button type="button" disabled={submitting || loadingOptions} className={styles.secondaryButton} onClick={() => submit(true)}>Lưu nháp</button>
+              <button type="button" disabled={submitting || loadingOptions} className={styles.primaryButton} onClick={() => submit(false)}>
+                {submitting && <Loader2 size={17} className={styles.spin} />} Gửi NCC
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {loadingEdit && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, minHeight: 320, color: '#94a3b8' }}>
+          <Loader2 size={20} className={styles.spin} /> Đang tải đơn đặt hàng...
+        </div>
+      )}
+      {editBlocked && (
+        <div style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 12, padding: '24px', marginTop: 16, textAlign: 'center' }}>
+          <p style={{ fontWeight: 700, fontSize: 15, margin: '0 0 6px', color: '#b91c1c' }}>Không thể sửa đơn đặt hàng này</p>
+          <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+            Đơn chỉ có thể được sửa khi đang ở trạng thái Nháp hoặc Đã gửi NCC.
+          </p>
+          <button type="button" className={styles.secondaryButton} style={{ marginTop: 14 }} onClick={() => navigate(detailUrl)}>
+            Quay lại chi tiết đơn
+          </button>
+        </div>
+      )}
+
+      {!loadingEdit && !editBlocked && (
       <div className={styles.formLayout}>
         <div>
           <section className={styles.card}>
@@ -652,7 +758,9 @@ export default function PurchaseOrderCreatePage() {
               </div>
               <div className={styles.field}>
                 <label htmlFor="purchaseTime">Thời gian mua</label>
-                <input id="purchaseTime" className={styles.input} value={purchaseTime} readOnly aria-readonly="true" />
+                <input id="purchaseTime" className={styles.input} value={editCreatedAt
+                  ? new Date(editCreatedAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  : purchaseTime} readOnly aria-readonly="true" />
               </div>
               <div className={`${styles.field} ${styles.supplierField}`}>
                 <label htmlFor="supplier">Nhà cung cấp *</label>
@@ -780,6 +888,7 @@ export default function PurchaseOrderCreatePage() {
           <div className={`${styles.summaryLine} ${styles.total}`}><span>Tổng tiền</span><strong>{money(totalAmount)}</strong></div>
         </aside>
       </div>
+      )}
 
       {pickerOpen && (
         <ProductPickerModal
