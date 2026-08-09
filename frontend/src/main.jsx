@@ -5,6 +5,7 @@ import App from './App';
 import { AuthProvider } from './features/auth/context/AuthContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import NotificationProvider from './app/providers/NotificationProvider';
 
 // Bật mock API khi VITE_USE_MOCK=true (không cần chạy backend)
 if (import.meta.env.VITE_USE_MOCK === 'true') {
@@ -16,7 +17,9 @@ if (import.meta.env.VITE_USE_MOCK === 'true') {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <NotificationProvider>
+        <App />
+      </NotificationProvider>
       <ToastContainer 
         position="top-right"
         autoClose={3000}

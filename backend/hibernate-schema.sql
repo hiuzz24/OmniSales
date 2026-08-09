@@ -87,7 +87,8 @@ DROP TABLE IF EXISTS user_roles                   CASCADE;
 DROP TABLE IF EXISTS roles                        CASCADE;
 DROP TABLE IF EXISTS users                        CASCADE;
 DROP TABLE IF EXISTS backup_files                 CASCADE;
-
+DROP TABLE IF EXISTS order_returns                 CASCADE;
+DROP TABLE IF EXISTS order_return_items                 CASCADE;
 
 -- ─── 4. DROP ENUM TYPES ─────────────────────────────────────
 DROP TYPE IF EXISTS user_status        CASCADE;
@@ -738,15 +739,17 @@ CREATE TABLE system_settings (
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
-                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
+                               type        VARCHAR(40) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','ORDER_SHIPPED','ORDER_DELIVERED','ORDER_RETURN_REQUESTED','ORDER_RETURN_REJECTED','ORDER_RETURN_COMPLETED','ORDER_RETURN_ATTENTION','CHANNEL_DISCONNECTED','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
-                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE')),
+                               entity_type VARCHAR(20) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','RETURN','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE')),
                                entity_id   UUID,
                                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_notifications_unread ON notifications(user_id, read_at, created_at) WHERE read_at IS NULL;
+CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at DESC);
+CREATE INDEX idx_notifications_entity ON notifications(user_id, type, entity_type, entity_id);
 
 CREATE TABLE audit_logs (
                             id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1149,13 +1152,13 @@ ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_type_check
-        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
+        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','ORDER_SHIPPED','ORDER_DELIVERED','ORDER_RETURN_REQUESTED','ORDER_RETURN_REJECTED','ORDER_RETURN_COMPLETED','ORDER_RETURN_ATTENTION','CHANNEL_DISCONNECTED','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
 
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_entity_type_check;
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_entity_type_check
-        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE'));
+        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','RETURN','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE'));
 
 ALTER TABLE stock_transfers ADD COLUMN note TEXT;
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
@@ -1242,3 +1245,264 @@ ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE channels
     ADD COLUMN last_synced_application_at TIMESTAMPTZ;
+
+-- Add tax_code column to suppliers table
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS tax_code VARCHAR(50);
+
+-- Add NOT NULL constraint after backfilling existing rows
+UPDATE suppliers SET tax_code = '' WHERE tax_code IS NULL;
+
+-- ============================================================
+-- Migration: Purchase Order Inspection Flow
+-- status column is VARCHAR(30) with a CHECK constraint — just update it.
+-- Run this script against your PostgreSQL database (OSMS schema)
+-- ============================================================
+
+-- 1. Drop the old CHECK constraint and replace with one that includes
+--    INSPECTING and INSPECTED
+ALTER TABLE purchase_orders
+    DROP CONSTRAINT IF EXISTS purchase_orders_status_check;
+
+ALTER TABLE purchase_orders
+    ADD CONSTRAINT purchase_orders_status_check
+        CHECK (status IN (
+                          'DRAFT',
+                          'SENT_TO_SUPPLIER',
+                          'RECEIVING',
+                          'INSPECTING',
+                          'INSPECTED',
+                          'COMPLETED',
+                          'CANCELLED'
+            ));
+
+-- 2. Add actual_quantity and surplus_note to purchase_order_items
+ALTER TABLE purchase_order_items
+    ADD COLUMN IF NOT EXISTS actual_quantity INTEGER DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS surplus_note    TEXT    DEFAULT NULL;
+
+-- 3. Add inspection timestamps to purchase_orders
+ALTER TABLE purchase_orders
+    ADD COLUMN IF NOT EXISTS inspecting_at TIMESTAMPTZ DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS inspected_at  TIMESTAMPTZ DEFAULT NULL;
+
+-- Verify: check current constraint
+-- SELECT conname, pg_get_constraintdef(oid)
+-- FROM pg_constraint
+-- WHERE conrelid = 'purchase_orders'::regclass AND contype = 'c';
+
+ALTER TABLE order_items
+    ADD COLUMN external_item_id VARCHAR(200);
+
+CREATE UNIQUE INDEX uq_order_item_external
+    ON order_items(order_id, external_item_id)
+    WHERE external_item_id IS NOT NULL;
+
+CREATE TABLE order_returns (
+                               id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+                               order_id UUID NOT NULL
+                                   REFERENCES orders(id),
+
+                               channel_id UUID NOT NULL
+                                   REFERENCES channels(id),
+
+                               warehouse_id UUID
+                                   REFERENCES warehouses(id),
+
+                               platform platform_type NOT NULL,
+
+                               external_return_id VARCHAR(200) NOT NULL,
+                               platform_status VARCHAR(100),
+                               platform_updated_at TIMESTAMPTZ,
+                               last_webhook_event_id VARCHAR(200),
+
+                               status VARCHAR(40) NOT NULL,
+                               data_validation_state VARCHAR(20) NOT NULL,
+
+                               last_action VARCHAR(20),
+                               action_state VARCHAR(20) NOT NULL,
+                               action_request_id UUID,
+                               action_error TEXT,
+
+                               approved_at TIMESTAMPTZ,
+                               inspected_at TIMESTAMPTZ,
+                               refund_confirmed_at TIMESTAMPTZ,
+                               inventory_posted_at TIMESTAMPTZ,
+
+                               last_sync_error TEXT,
+                               metadata JSONB,
+
+                               version BIGINT NOT NULL DEFAULT 0,
+
+                               created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                               updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+                               CONSTRAINT uq_order_return_external
+                                   UNIQUE (channel_id, external_return_id),
+
+                               CONSTRAINT ck_order_return_status CHECK (
+                                   status IN (
+                                              'PENDING_APPROVAL',
+                                              'REJECTED',
+                                              'AWAITING_RETURN',
+                                              'RETURN_IN_TRANSIT',
+                                              'INSPECTED',
+                                              'PLATFORM_PROCESSING',
+                                              'PENDING_STOCK',
+                                              'COMPLETED',
+                                              'FAILED'
+                                       )
+                                   ),
+
+                               CONSTRAINT ck_order_return_validation CHECK (
+                                   data_validation_state IN ('VALID', 'INVALID')
+                                   ),
+
+                               CONSTRAINT ck_order_return_action_state CHECK (
+                                   action_state IN (
+                                                    'IDLE',
+                                                    'PROCESSING',
+                                                    'UNKNOWN',
+                                                    'FAILED'
+                                       )
+                                   ),
+
+                               CONSTRAINT ck_order_return_action CHECK (
+                                   last_action IS NULL
+                                       OR last_action IN (
+                                                          'APPROVE',
+                                                          'REJECT',
+                                                          'PROCESS'
+                                       )
+                                   )
+);
+
+CREATE TABLE order_return_items (
+                                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+                                    return_id UUID NOT NULL
+                                        REFERENCES order_returns(id)
+                                            ON DELETE CASCADE,
+
+                                    order_item_id UUID
+                                                   REFERENCES order_items(id)
+                                                       ON DELETE SET NULL,
+
+                                    variant_id UUID
+                                        REFERENCES product_variants(id),
+
+                                    external_order_item_id VARCHAR(200),
+                                    external_return_item_id VARCHAR(200),
+
+                                    external_identity_key VARCHAR(420) NOT NULL,
+
+                                    requested_quantity INTEGER NOT NULL,
+                                    approved_quantity INTEGER NOT NULL,
+
+                                    received_quantity INTEGER,
+                                    restockable_quantity INTEGER,
+                                    damaged_quantity INTEGER,
+                                    missing_quantity INTEGER,
+                                    refunded_quantity INTEGER,
+
+                                    snapshot_sku VARCHAR(100),
+                                    snapshot_name VARCHAR(500) NOT NULL,
+                                    snapshot_unit_price NUMERIC(12, 2),
+                                    snapshot_cost_price NUMERIC(12, 2),
+
+                                    CONSTRAINT uq_return_item_identity
+                                        UNIQUE (return_id, external_identity_key),
+
+                                    CONSTRAINT ck_return_item_quantities_nonnegative CHECK (
+                                        requested_quantity >= 0
+                                            AND approved_quantity >= 0
+                                            AND (
+                                            received_quantity IS NULL
+                                                OR received_quantity >= 0
+                                            )
+                                            AND (
+                                            restockable_quantity IS NULL
+                                                OR restockable_quantity >= 0
+                                            )
+                                            AND (
+                                            damaged_quantity IS NULL
+                                                OR damaged_quantity >= 0
+                                            )
+                                            AND (
+                                            missing_quantity IS NULL
+                                                OR missing_quantity >= 0
+                                            )
+                                            AND (
+                                            refunded_quantity IS NULL
+                                                OR refunded_quantity >= 0
+                                            )
+                                        ),
+
+                                    CONSTRAINT ck_return_item_inspection CHECK (
+                                        (
+                                            received_quantity IS NULL
+                                                AND restockable_quantity IS NULL
+                                                AND damaged_quantity IS NULL
+                                                AND missing_quantity IS NULL
+                                            )
+                                            OR
+                                        (
+                                            received_quantity =
+                                            restockable_quantity + damaged_quantity
+                                                AND received_quantity + missing_quantity =
+                                                    approved_quantity
+                                            )
+                                        )
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_returns_order
+    ON order_returns(order_id);
+
+CREATE INDEX IF NOT EXISTS idx_order_returns_status
+    ON order_returns(status);
+
+CREATE INDEX IF NOT EXISTS idx_order_return_items_order_item
+    ON order_return_items(order_item_id);
+
+ALTER TABLE inventory_issue_items
+    ADD COLUMN IF NOT EXISTS is_gift BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE inventory_transactions
+    DROP CONSTRAINT IF EXISTS inventory_transactions_reference_type_check;
+
+ALTER TABLE inventory_transactions
+    ADD CONSTRAINT inventory_transactions_reference_type_check
+        CHECK (
+            reference_type IS NULL
+                OR reference_type IN (
+                                      'ORDER',
+                                      'RECEIPT',
+                                      'ISSUE',
+                                      'ISSUE_GIFT',
+                                      'ADJUSTMENT',
+                                      'TRANSFER'
+                )
+            );
+-- ============================================================
+-- Migration: Stocktake detail page fields
+-- Run this script against your PostgreSQL database (OSMS schema)
+-- BEFORE starting the application (ddl-auto = validate)
+--
+-- NOTE: stocktake_items.difference stays a generated column
+-- (GENERATED ALWAYS AS (actual_quantity - system_quantity) STORED)
+-- and is mapped in the entity with insertable=false/updatable=false.
+-- ============================================================
+
+-- 1. stocktake_sessions: notes + status actors/timestamps
+ALTER TABLE stocktake_sessions
+    ADD COLUMN IF NOT EXISTS notes           TEXT,
+    ADD COLUMN IF NOT EXISTS started_by      UUID,
+    ADD COLUMN IF NOT EXISTS started_at      TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS completed_by    UUID,
+    ADD COLUMN IF NOT EXISTS completed_at    TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS cancelled_by    UUID,
+    ADD COLUMN IF NOT EXISTS cancelled_at    TIMESTAMPTZ;
+
+-- 2. stocktake_items: allow unchecked rows (actual_quantity NULL)
+ALTER TABLE stocktake_items
+    ALTER COLUMN actual_quantity DROP NOT NULL;

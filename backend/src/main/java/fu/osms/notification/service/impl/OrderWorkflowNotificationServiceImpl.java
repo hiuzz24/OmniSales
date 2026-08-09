@@ -48,4 +48,30 @@ public class OrderWorkflowNotificationServiceImpl implements OrderWorkflowNotifi
             }
         }
     }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifyRolesOnce(
+            Collection<String> roles,
+            String type,
+            String title,
+            String body,
+            String entityType,
+            UUID entityId
+    ) {
+        LinkedHashSet<UUID> userIds = new LinkedHashSet<>();
+        for (UserRole userRole : userRoleRepository.findByRoleNameIn(roles)) {
+            userIds.add(userRole.getUser().getId());
+        }
+
+        for (UUID userId : userIds) {
+            try {
+                notificationService.createNotificationIfAbsent(
+                        userId, type, title, body, entityType, entityId);
+            } catch (Exception exception) {
+                log.warn("Could not create notification userId={}, type={}, entityId={}: {}",
+                        userId, type, entityId, exception.getMessage());
+            }
+        }
+    }
 }

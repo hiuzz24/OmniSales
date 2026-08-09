@@ -13,4 +13,13 @@ public interface OrderWorkflowNotificationService {
             String entityType,
             UUID entityId
     );
+
+    void notifyRolesOnce(
+            Collection<String> roles,
+            String type,
+            String title,
+            String body,
+            String entityType,
+            UUID entityId
+    );
 }

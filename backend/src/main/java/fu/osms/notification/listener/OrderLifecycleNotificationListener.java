@@ -13,41 +13,38 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.List;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
-@Slf4j
-public class OrderFulfillmentNotificationListener {
-
-    private static final String TYPE = "ORDER_PICK_REQUIRED";
+public class OrderLifecycleNotificationListener {
 
     private final OrderRepository orderRepository;
     private final OrderWorkflowNotificationService notificationService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
-    public void onOrderStatusChanged(OrderStatusChangedEvent event) {
-        if (event.previousStatus() == OrderStatus.PROCESSING
-                || event.currentStatus() != OrderStatus.PROCESSING) {
+    public void onStatusChanged(OrderStatusChangedEvent event) {
+        if (event.currentStatus() != OrderStatus.SHIPPED
+                && event.currentStatus() != OrderStatus.DELIVERED) {
             return;
         }
-
         Order order = orderRepository.findById(event.orderId()).orElse(null);
-        if (order == null) {
-            return;
-        }
-        String orderCode = order.getExternalOrderId() != null
-                ? order.getExternalOrderId()
-                : order.getId().toString();
+        if (order == null) return;
+
+        String code = order.getExternalOrderId() != null
+                ? order.getExternalOrderId() : order.getId().toString();
+        boolean delivered = event.currentStatus() == OrderStatus.DELIVERED;
         try {
             notificationService.notifyRolesOnce(
-                    List.of("OWNER", "OPERATIONS"),
-                    TYPE,
-                    "Đơn hàng cần tạo phiếu xuất",
-                    "Đơn hàng " + orderCode + " đã chuyển sang Đang xử lý.",
+                    List.of("OWNER", "OPERATIONS", "SALES"),
+                    delivered ? "ORDER_DELIVERED" : "ORDER_SHIPPED",
+                    delivered ? "Đơn hàng đã giao thành công" : "Đơn hàng đã bàn giao vận chuyển",
+                    "Đơn hàng " + code + (delivered
+                            ? " đã được giao thành công."
+                            : " đã được bàn giao cho đơn vị vận chuyển."),
                     "ORDER",
-                    order.getId()
-            );
+                    order.getId());
         } catch (Exception exception) {
-            log.warn("Could not notify fulfillment roles for orderId={}: {}",
+            log.warn("Could not notify order lifecycle orderId={}: {}",
                     event.orderId(), exception.getMessage());
         }
     }

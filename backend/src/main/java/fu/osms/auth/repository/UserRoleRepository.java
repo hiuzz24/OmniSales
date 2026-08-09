@@ -19,7 +19,9 @@ public interface UserRoleRepository extends JpaRepository<UserRole, UUID> {
 
     void deleteByUserIdAndRoleId(UUID userId, UUID roleId);
 
-    @Query("SELECT ur FROM UserRole ur JOIN FETCH ur.user JOIN FETCH ur.role WHERE ur.role.name IN :roleNames")
+    @Query("SELECT ur FROM UserRole ur JOIN FETCH ur.user u JOIN FETCH ur.role " +
+            "WHERE ur.role.name IN :roleNames AND CAST(u.status AS string) = 'ACTIVE' " +
+            "AND u.deletedAt IS NULL")
     List<UserRole> findByRoleNameIn(@Param("roleNames") java.util.Collection<String> roleNames);
 
 }
