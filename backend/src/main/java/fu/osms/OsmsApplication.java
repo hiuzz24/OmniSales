@@ -7,6 +7,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.Statement;
 import java.time.ZoneId;
 import java.util.TimeZone;
@@ -17,28 +19,35 @@ import java.util.TimeZone;
 public class OsmsApplication {
 
 	/**
-	 * MAIN METHOD — chạy schema init TRƯỚC Spring Boot (fallback cho SchemaEnvironmentPostProcessor).
+	 * MAIN METHOD — Bootstrap thông minh: tự tạo database + schema nếu chưa có.
 	 *
-	 * Lý do fallback ở đây:
-	 *   1. SchemaEnvironmentPostProcessor (META-INF/spring.factories) CHỈ chạy nếu JAR
-	 *      có file spring.factories (có thể bị Maven plugin skip nếu empty).
-	 *   2. spring.sql.init cần Spring context sẵn sàng → chạy SAU Hibernate JPA
-	 *      EntityManagerFactory được tạo (không phải lúc nào cũng TRƯỚC Hibernate validate).
-	 *   3. main() chạy TRƯỚC tất cả → 100% chắc chắn chạy TRƯỚC Spring context.
+	 * VẤN ĐỀ LỊCH SỬ:
+	 *   1. SchemaEnvironmentPostProcessor (META-INF/spring.factories) chỉ chạy khi
+	 *      Spring Boot load file spring.factories → KHÔNG đáng tin cậy 100%.
+	 *   2. spring.sql.init chạy SAU Hibernate JPA → không ngăn được Hibernate
+	 *      generate DDL fail với ENUM types.
+	 *   3. main() chạy TRƯỚC tất cả → 100% chắc chắn chạy trước Spring.
+	 *   4. Database "osms" có thể KHÔNG TỒN TẠI nếu free tier expired hoặc
+	 *      render.yaml chưa apply → phải tự CREATE DATABASE.
 	 *
-	 * Flow:
-	 *   1. Set timezone
-	 *   2. Check env vars (DB_HOST, DB_USERNAME, DB_PASSWORD)
-	 *   3. Nếu có → connect PostgreSQL → check categories table
-	 *   4. Nếu categories KHÔNG tồn tại → chạy schema.sql raw JDBC
-	 *   5. Tiếp tục SpringApplication.run() bình thường
+	 * FLOW:
+	 *   1. Set timezone.
+	 *   2. Read env vars (DB_HOST, DB_PORT, DB_NAME, DB_USERNAME, DB_PASSWORD).
+	 *   3. Connect tới PostgreSQL "postgres" database (mặc định luôn tồn tại).
+	 *   4. Check database "osms" có tồn tại không → nếu không, CREATE DATABASE osms.
+	 *   5. Connect tới "osms", check schema đã init chưa.
+	 *   6. Nếu categories table KHÔNG tồn tại → chạy schema.sql qua raw JDBC.
+	 *   7. Verify lại tables tồn tại.
+	 *   8. SpringApplication.run() bình thường.
 	 *
 	 * KHÔNG throw exception để app vẫn boot được nếu schema init fail
 	 * (cho phép debug qua logs).
 	 */
 	public static void main(String[] args) {
 		TimeZone.setDefault(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
+		System.out.println("=================================================");
 		System.out.println("[main] Starting OSMS application, timezone=" + ZoneId.systemDefault());
+		System.out.println("=================================================");
 
 		// Read env vars DIRECTLY (placeholders chưa được resolve ở đây)
 		String dbHost = System.getenv("DB_HOST");
@@ -52,27 +61,43 @@ public class OsmsApplication {
 				", pass=" + (dbPass != null ? "***SET***" : "NULL"));
 
 		if (dbHost != null && dbUser != null && dbPass != null) {
-			// Default DB_NAME = "OSMS" nếu không có
-			if (dbName == null || dbName.isBlank()) dbName = "OSMS";
+			// Default values
+			if (dbName == null || dbName.isBlank()) dbName = "osms";
 			if (dbPort == null || dbPort.isBlank()) dbPort = "5432";
 
-			String url = "jdbc:postgresql://" + dbHost + ":" + dbPort + "/" + dbName;
-			System.out.println("[main] Attempting early schema init via raw JDBC: " + url);
+			// STEP 1: Connect tới "postgres" database (mặc định luôn tồn tại) để check/create target DB
+			String adminUrl = "jdbc:postgresql://" + dbHost + ":" + dbPort + "/postgres";
+			System.out.println("[main] STEP 1: Checking if database '" + dbName + "' exists...");
 
 			try {
 				Class.forName("org.postgresql.Driver");
+
+				boolean dbExists = checkDatabaseExists(adminUrl, dbUser, dbPass, dbName);
+				if (!dbExists) {
+					System.out.println("[main] Database '" + dbName + "' does NOT exist. Creating...");
+					createDatabase(adminUrl, dbUser, dbPass, dbName);
+					System.out.println("[main] ✅ Database '" + dbName + "' created.");
+				} else {
+					System.out.println("[main] ✅ Database '" + dbName + "' exists.");
+				}
+
+				// STEP 2: Connect tới target database và init schema
+				String url = "jdbc:postgresql://" + dbHost + ":" + dbPort + "/" + dbName;
+				System.out.println("[main] STEP 2: Connecting to target DB: " + url);
+
 				try (Connection conn = DriverManager.getConnection(url, dbUser, dbPass)) {
-					System.out.println("[main] ✅ DB connected");
+					System.out.println("[main] ✅ Connected to '" + dbName + "'");
 
 					if (isSchemaInitialized(conn)) {
-						System.out.println("[main] ✅ Categories table exists — SKIP schema init");
+						System.out.println("[main] ✅ categories table exists — SKIP schema init");
 					} else {
-						System.out.println("[main] Categories table missing — running schema.sql");
+						System.out.println("[main] categories table missing — running schema.sql");
 						runSchemaSql(conn);
 					}
 				}
+
 			} catch (Exception e) {
-				System.err.println("[main] ❌ Early schema init FAILED: " + e.getMessage());
+				System.err.println("[main] ❌ Early DB setup FAILED: " + e.getMessage());
 				e.printStackTrace();
 				// KHÔNG throw - để app boot tiếp
 			}
@@ -80,22 +105,61 @@ public class OsmsApplication {
 			System.out.println("[main] DB env vars missing — skipping early schema init (likely local dev)");
 		}
 
-		// Tiếp tục Spring Boot
+		// STEP 3: Tiếp tục Spring Boot
+		System.out.println("[main] STEP 3: Starting SpringApplication.run()...");
 		SpringApplication.run(OsmsApplication.class, args);
 	}
 
+	/**
+	 * Check database có tồn tại không bằng cách query pg_database.
+	 */
+	private static boolean checkDatabaseExists(String adminUrl, String user, String pass, String dbName) {
+		try (Connection conn = DriverManager.getConnection(adminUrl, user, pass);
+			 PreparedStatement ps = conn.prepareStatement(
+					 "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = ?)")) {
+			ps.setString(1, dbName);
+			try (ResultSet rs = ps.executeQuery()) {
+				return rs.next() && rs.getBoolean(1);
+			}
+		} catch (Exception e) {
+			System.err.println("[main] checkDatabaseExists error: " + e.getMessage());
+			return false;
+		}
+	}
+
+	/**
+	 * Tạo database mới. PostgreSQL KHÔNG support parameterized CREATE DATABASE.
+	 * Phải validate dbName chỉ chứa safe characters trước khi concat vào SQL.
+	 */
+	private static void createDatabase(String adminUrl, String user, String pass, String dbName) throws Exception {
+		// SECURITY: chỉ cho phép chữ cái, số, underscore
+		if (!dbName.matches("^[a-zA-Z0-9_]+$")) {
+			throw new IllegalArgumentException("Invalid database name: " + dbName);
+		}
+
+		try (Connection conn = DriverManager.getConnection(adminUrl, user, pass);
+			 Statement stmt = conn.createStatement()) {
+			stmt.executeUpdate("CREATE DATABASE \"" + dbName + "\"");
+		}
+	}
+
+	/**
+	 * Check categories table đã tồn tại chưa.
+	 */
 	private static boolean isSchemaInitialized(Connection conn) throws Exception {
 		try (Statement stmt = conn.createStatement();
-			 var rs = stmt.executeQuery(
+			 ResultSet rs = stmt.executeQuery(
 					 "SELECT EXISTS (SELECT 1 FROM information_schema.tables " +
 					 "WHERE table_schema = 'public' AND table_name = 'categories')")) {
 			return rs.next() && rs.getBoolean(1);
 		}
 	}
 
+	/**
+	 * Chạy schema.sql qua raw JDBC. Schema đã strip PL/pgSQL nên safe.
+	 */
 	private static void runSchemaSql(Connection conn) {
 		try {
-			// Đọc schema.sql từ classpath
 			var resource = OsmsApplication.class.getClassLoader().getResource("schema.sql");
 			if (resource == null) {
 				System.err.println("[main] ❌ schema.sql not found in classpath");
@@ -104,14 +168,14 @@ public class OsmsApplication {
 			String sql = new String(resource.openStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
 			System.out.println("[main] Read " + sql.length() + " bytes from schema.sql");
 
-			// Split theo ";"
 			String[] parts = sql.split(";");
 			int success = 0, errors = 0;
 			try (Statement stmt = conn.createStatement()) {
 				for (int i = 0; i < parts.length; i++) {
 					String s = parts[i].trim();
 					if (s.isEmpty() || s.startsWith("--")) continue;
-					// Skip comment lines
+
+					// Strip comment lines
 					StringBuilder sb = new StringBuilder();
 					for (String line : s.split("\n")) {
 						String trimmed = line.trim();
@@ -126,8 +190,8 @@ public class OsmsApplication {
 						success++;
 					} catch (Exception e) {
 						errors++;
-						String preview = clean.length() > 150 ? clean.substring(0, 150) + "..." : clean;
-						System.err.println("[main] ❌ stmt #" + (i+1) + " failed: " + e.getMessage() +
+						String preview = clean.length() > 200 ? clean.substring(0, 200) + "..." : clean;
+						System.err.println("[main] ❌ stmt #" + (i + 1) + " failed: " + e.getMessage() +
 								" | SQL: " + preview.replaceAll("\\s+", " "));
 					}
 				}
@@ -135,7 +199,6 @@ public class OsmsApplication {
 
 			System.out.println("[main] Schema init done: " + success + " success, " + errors + " errors");
 
-			// Verify lại
 			if (isSchemaInitialized(conn)) {
 				System.out.println("[main] ✅✅✅ VERIFIED: categories table now exists!");
 			} else {
