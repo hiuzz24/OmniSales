@@ -119,13 +119,41 @@ public class RenderDataSeeder implements CommandLineRunner {
     public void run(String... args) {
         log.info("[seeder] Starting Render environment data seeder...");
 
-        seedRoles();
-        seedAdminUser();
-        seedOwnerUser();
-        seedCountries();
-        seedCategories();
+        // Each seed step is wrapped in try-catch so one failure doesn't kill the app.
+        // This is critical for Render free tier: if a table is missing (DDL race condition),
+        // the app must still boot so we can diagnose via logs / DB.
 
-        log.info("[seeder] ✅ Seeding complete.");
+        try {
+            seedRoles();
+        } catch (Exception e) {
+            log.error("[seeder] ❌ seedRoles failed: {}", e.getMessage(), e);
+        }
+
+        try {
+            seedAdminUser();
+        } catch (Exception e) {
+            log.error("[seeder] ❌ seedAdminUser failed: {}", e.getMessage(), e);
+        }
+
+        try {
+            seedOwnerUser();
+        } catch (Exception e) {
+            log.error("[seeder] ❌ seedOwnerUser failed: {}", e.getMessage(), e);
+        }
+
+        try {
+            seedCountries();
+        } catch (Exception e) {
+            log.error("[seeder] ❌ seedCountries failed: {}", e.getMessage(), e);
+        }
+
+        try {
+            seedCategories();
+        } catch (Exception e) {
+            log.error("[seeder] ❌ seedCategories failed: {}", e.getMessage(), e);
+        }
+
+        log.info("[seeder] ✅ Seeding run complete (check above for any errors).");
     }
 
     // -------------------------------------------------------------------------

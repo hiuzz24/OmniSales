@@ -31,7 +31,7 @@ spring:
     hibernate:
       ddl-auto: create-drop  # DROP ALL tables mỗi lần restart + tạo lại từ entity. Tránh edge case khi DB có data cũ gây schema drift.
     show-sql: false
-    defer-datasource-initialization: true  # Hibernate KHÔNG cần schema init (để schema.sql chạy SAU)
+    defer-datasource-initialization: false  # KHÔNG defer — chạy schema-postgresql.sql TRƯỚC Hibernate để tạo ENUM types (category_status, ...) trước khi ddl-auto generate tables.
     properties:
       hibernate:
         # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
