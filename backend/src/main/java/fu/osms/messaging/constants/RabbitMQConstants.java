@@ -22,6 +22,7 @@ public final class RabbitMQConstants {
     public static final String SYNC_ORDER           = "sync.order";
     public static final String SYNC_PRODUCT         = "sync.product";
     public static final String PRODUCT_SYNC_PUSH    = "sync.product.push";
+    public static final String ORDER_PULL_REQUESTED = "sync.order.pull";
 
     public static final String NOTIFICATION_SEND    = "notification.send";
 
@@ -39,4 +40,5 @@ public final class RabbitMQConstants {
     public static final String QUEUE_WEBHOOK_SYNC_PRODUCT = "queue.webhook.sync-product";
     public static final String QUEUE_PRODUCT_PUSH         = "queue.product.push";
     public static final String QUEUE_INVENTORY_PUSH       = "queue.inventory.push";
+    public static final String QUEUE_ORDER_PULL            = "queue.order.pull";
 }
