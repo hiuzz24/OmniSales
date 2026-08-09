@@ -38,10 +38,10 @@ services:
     # <project> ở đây là "omnisales" (lowercase GitLab convention).
     # Nếu repo của bạn tên khác (vd "OmniSales"), đổi cho khớp.
     # Render docs (2024+) chấp nhận `image: { url: ... }` cho runtime:image.
-    # Tag cố định SHA (không dùng :latest) để Render KHÔNG cache image cũ.
-    # Mỗi deploy sẽ set tag mới qua Render API hoặc manual deploy trên Dashboard.
+    # Dùng :latest để Render luôn pull image mới nhất từ Docker Hub.
+    # GitLab CI push image :latest sau khi build thành công.
     image:
-      url: duydz1604/osms-backend:88004338
+      url: duydz1604/osms-backend:latest
     plan: free
     region: oregon
     autoDeploy: false  # GitLab CI sẽ trigger deploy qua Deploy Hook
@@ -67,8 +67,13 @@ services:
         fromDatabase:
           name: omnisales-db
           property: port
+      # QUAN TRỌNG: Render tự động append suffix vào database name (vd osms_i9cf)
+      # → KHÔNG hardcode DB_NAME, mà lấy từ Render auto-inject.
+      # Render property names: connectionString, host, port, user, password, database
       - key: DB_NAME
-        value: osms
+        fromDatabase:
+          name: omnisales-db
+          property: database
       - key: DB_USERNAME
         fromDatabase:
           name: omnisales-db
