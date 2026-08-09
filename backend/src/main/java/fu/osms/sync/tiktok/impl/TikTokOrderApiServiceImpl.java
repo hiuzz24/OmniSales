@@ -121,6 +121,27 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
     }
 
     @Override
+    public ShippingDocumentResult getPackageShippingDocument(Channel channel, String packageId) {
+        String response = tikTokApiClient.executeGet(channel.getId(),
+                "/fulfillment/202309/packages/" + packageId + "/shipping_documents",
+                Map.of(
+                        "shop_cipher", shopCipher(channel),
+                        "document_type", "SHIPPING_LABEL",
+                        "document_size", "A6",
+                        "document_format", "PDF"
+                )
+        );
+        Map<String, Object> root = WebhookPayloadUtils.parseObject(
+                response, "TikTok shipping document response is invalid");
+        Map<String, Object> data = WebhookPayloadUtils.copyMap(root.get("data"));
+        return new ShippingDocumentResult(
+                text(root.get("code")),
+                text(root.get("message")),
+                text(data.get("doc_url"))
+        );
+    }
+
+    @Override
     public Map<String, Object> cancelOrder(Channel channel, String orderId, String cancelReason) {
         String rawBody;
         try {
