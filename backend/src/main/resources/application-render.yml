@@ -31,11 +31,11 @@ spring:
     hibernate:
       ddl-auto: create-drop  # DROP ALL tables mỗi lần restart + tạo lại từ entity. Tránh edge case khi DB có data cũ gây schema drift.
     show-sql: false
-    defer-datasource-initialization: false  # KHÔNG defer — chạy schema-postgresql.sql TRƯỚC Hibernate để tạo ENUM types (category_status, ...) trước khi ddl-auto generate tables.
+    defer-datasource-initialization: true  # QUAN TRỌNG: defer datasource init SAU Hibernate để tránh "Unable to determine Dialect" race condition khi boot.
     properties:
       hibernate:
         # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
-        # chưa được Render inject (npm run delete DB). Vẫn dùng Postgres ở Render.
+        # chưa được Render inject. Vẫn dùng Postgres ở Render.
         dialect: org.hibernate.dialect.PostgreSQLDialect
         # KHÔNG tạo enum types tự động — Hibernate 6 không generate CREATE TYPE cho @JdbcTypeCode(NAMED_ENUM).
         # Phải tạo enum qua sql.init.mode: always → schema-postgresql.sql.
@@ -44,7 +44,7 @@ spring:
   main:
     banner-mode: off
 
-  # Init PostgreSQL enum types TRƯỚC khi Hibernate ddl-auto tạo tables.
+  # Init PostgreSQL enum types SAU khi Hibernate ddl-auto tạo tables.
   # Vì entity dùng @JdbcTypeCode(SqlTypes.NAMED_ENUM) cần type đã tồn tại.
   # File schema-postgresql.sql dùng DO $$ ... duplicate_object → idempotent.
   sql:
