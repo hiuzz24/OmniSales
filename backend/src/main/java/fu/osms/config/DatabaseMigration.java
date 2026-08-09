@@ -28,6 +28,7 @@ public class DatabaseMigration {
     @Order(1)
     public void migrate() {
         log.info("DatabaseMigration: starting migrations in background...");
+        try {
             jdbcTemplate.execute("""
                         ALTER TABLE customers
                         ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true
