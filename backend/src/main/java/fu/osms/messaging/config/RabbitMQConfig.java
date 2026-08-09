@@ -77,7 +77,11 @@ public class RabbitMQConfig {
                 new QueueSpec(RabbitMQConstants.QUEUE_WEBHOOK_SYNC_PRODUCT, RabbitMQConstants.SYNC_PRODUCT),
                 new QueueSpec(RabbitMQConstants.QUEUE_PRODUCT_PUSH, RabbitMQConstants.PRODUCT_SYNC_PUSH),
                 new QueueSpec(RabbitMQConstants.QUEUE_INVENTORY_PUSH, RabbitMQConstants.INVENTORY_UPDATED),
-                new QueueSpec(RabbitMQConstants.QUEUE_ORDER_PULL, RabbitMQConstants.ORDER_PULL_REQUESTED)
+                new QueueSpec(RabbitMQConstants.QUEUE_ORDER_PULL, RabbitMQConstants.ORDER_PULL_REQUESTED),
+                new QueueSpec(RabbitMQConstants.QUEUE_ORDER_STOCK_DELIVERY_LIFECYCLE,
+                        RabbitMQConstants.ORDER_STOCK_DELIVERY_LIFECYCLE),
+                new QueueSpec(RabbitMQConstants.QUEUE_ORDER_RETURN_WORKFLOW,
+                        RabbitMQConstants.ORDER_RETURN_WORKFLOW)
         };
     }
 

@@ -226,6 +226,8 @@ export default function MainLayout() {
           if (!notification.id || seenNotificationIdsRef.current.has(notification.id)) return;
           const isWorkflowNotification = [
             'ORDER_READY_SHIP',
+            'SYNC',
+            'SYNC_FAILED',
           ].includes(notification.type);
           if (!isWorkflowNotification || notification.readAt) {
             seenNotificationIdsRef.current.add(notification.id);
@@ -234,7 +236,9 @@ export default function MainLayout() {
           if (document.hidden) return;
 
           seenNotificationIdsRef.current.add(notification.id);
-          const actionLabel = 'Mở chi tiết đơn hàng';
+          const actionLabel = notification.entityType === 'SYNC'
+            ? 'Mở lịch sử đồng bộ'
+            : 'Mở chi tiết đơn hàng';
           toast.info(
             <div style={{ display: 'grid', gap: 5, cursor: 'pointer' }}>
               <strong style={{ color: '#0f172a' }}>{notification.title}</strong>

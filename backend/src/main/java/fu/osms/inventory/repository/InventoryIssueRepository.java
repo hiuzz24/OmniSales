@@ -1,16 +1,20 @@
 package fu.osms.inventory.repository;
 
 import fu.osms.inventory.entity.InventoryIssue;
+import fu.osms.inventory.enums.InvTxnType;
+import fu.osms.order.enums.OrderStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.persistence.LockModeType;
@@ -32,6 +36,19 @@ public interface InventoryIssueRepository extends JpaRepository<InventoryIssue, 
 
     Optional<InventoryIssue> findFirstByReferenceIdAndIssueTypeAndStatus(
             UUID referenceId, String issueType, String status);
+
+    @Query("SELECT issue FROM InventoryIssue issue, Order o "
+            + "WHERE issue.referenceId = o.id "
+            + "AND issue.issueType = 'ORDER' "
+            + "AND issue.status = 'DRAFT' "
+            + "AND o.status IN :statuses "
+            + "AND NOT EXISTS (SELECT tx.id FROM InventoryTransaction tx "
+            + "WHERE tx.referenceType = 'ISSUE' AND tx.referenceId = issue.id AND tx.type = :outboundType) "
+            + "ORDER BY issue.updatedAt ASC")
+    List<InventoryIssue> findOrderLifecycleRecoveryCandidates(
+            @Param("statuses") Collection<OrderStatus> statuses,
+            @Param("outboundType") InvTxnType outboundType,
+            Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT ii FROM InventoryIssue ii LEFT JOIN FETCH ii.items WHERE ii.id = :id")

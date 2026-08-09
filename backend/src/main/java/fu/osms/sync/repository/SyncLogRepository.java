@@ -7,8 +7,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +25,29 @@ public interface SyncLogRepository extends JpaRepository<SyncLog, UUID>, JpaSpec
     Page<SyncLog> findByStatus(SyncStatus status, Pageable pageable);
 
     Optional<SyncLog> findByIdempotencyKey(String idempotencyKey);
+
+    @EntityGraph(attributePaths = {"triggeredBy", "product", "channel"})
+    @Query("select s from SyncLog s where s.id = :id")
+    Optional<SyncLog> findRequestDetailsById(@Param("id") UUID id);
+
+    @EntityGraph(attributePaths = {"triggeredBy", "product"})
+    @Query("select s from SyncLog s where s.jobType = :jobType and s.status = :status "
+            + "and s.startedAt < :cutoff order by s.startedAt asc")
+    List<SyncLog> findStaleRequests(@Param("jobType") String jobType,
+                                    @Param("status") SyncStatus status,
+                                    @Param("cutoff") OffsetDateTime cutoff,
+                                    Pageable pageable);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Transactional
+    @Query("update SyncLog s set s.status = :failedStatus, s.failCount = 1, "
+            + "s.errorSummary = :error, s.completedAt = :completedAt "
+            + "where s.id = :id and s.status = :pendingStatus")
+    int failPendingRequest(@Param("id") UUID id,
+                           @Param("pendingStatus") SyncStatus pendingStatus,
+                           @Param("failedStatus") SyncStatus failedStatus,
+                           @Param("error") String error,
+                           @Param("completedAt") OffsetDateTime completedAt);
 
     Page<SyncLog> findAllByOrderByStartedAtDesc(Pageable pageable);
 

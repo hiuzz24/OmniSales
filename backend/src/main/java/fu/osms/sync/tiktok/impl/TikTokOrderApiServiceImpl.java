@@ -68,11 +68,12 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
         query.put("shop_cipher", shopCipher(channel));
         query.put("page_size", "100");
         if (pageToken != null && !pageToken.isBlank()) query.put("page_token", pageToken);
+        OffsetDateTime exclusiveTo = exclusiveUpperBound(to);
         String body;
         try {
             body = objectMapper.writeValueAsString(Map.of(
                     "create_time_ge", from.toEpochSecond(),
-                    "create_time_lt", to.toEpochSecond()));
+                    "create_time_lt", exclusiveTo.toEpochSecond()));
         } catch (Exception e) {
             throw new IllegalStateException("Cannot serialize TikTok order search request", e);
         }
@@ -85,6 +86,13 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
                 .map(order -> text(WebhookPayloadUtils.firstPresent(order, "id", "order_id")))
                 .filter(value -> value != null && !value.isBlank()).toList() : List.of();
         return new OrderSearchPage(ids, text(data.get("next_page_token")));
+    }
+
+    private OffsetDateTime exclusiveUpperBound(OffsetDateTime to) {
+        if (to.getSecond() == 0 && to.getNano() == 0) {
+            return to.plusMinutes(1);
+        }
+        return to.plusSeconds(1).withNano(0);
     }
 
     @Override

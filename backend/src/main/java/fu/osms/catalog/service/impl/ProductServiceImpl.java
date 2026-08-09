@@ -4,6 +4,7 @@ import fu.osms.catalog.dto.request.ProductRequest;
 import fu.osms.catalog.dto.request.ChannelConfigRequest;
 import fu.osms.catalog.dto.request.ProductVariantRequest;
 import fu.osms.catalog.dto.response.ProductResponse;
+import fu.osms.catalog.dto.response.ProductSyncQueuedResponse;
 import fu.osms.catalog.entity.Category;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
@@ -56,7 +57,10 @@ import fu.osms.sync.dto.SyncResult;
 import fu.osms.sync.service.ProductSyncOrchestratorService;
 import fu.osms.messaging.constants.RabbitMQConstants;
 import fu.osms.messaging.dto.ProductSyncMessage;
+import fu.osms.messaging.handler.ProductSyncRequestHandler;
 import fu.osms.messaging.publisher.EventPublisher;
+import fu.osms.sync.entity.SyncLog;
+import fu.osms.sync.repository.SyncLogRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -89,6 +93,8 @@ public class ProductServiceImpl implements ProductService {
     private final OrderItemRepository orderItemRepository;
     private final ProductLogRepository productLogRepository;
     private final ProductSyncOrchestratorService productSyncOrchestratorService;
+    private final ProductSyncRequestHandler productSyncRequestHandler;
+    private final SyncLogRepository syncLogRepository;
     private final ProductChannelConfigService productChannelConfigService;
     private final EventPublisher eventPublisher;
     private final WarehouseRepository warehouseRepository;
@@ -389,19 +395,74 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public void syncProductToAllChannelsAsync(UUID productId) {
-        eventPublisher.publish(
-                RabbitMQConstants.PRODUCT_SYNC_PUSH,
-                new ProductSyncMessage(productId, null),
-                () -> productSyncOrchestratorService.syncProductToAllChannels(productId));
+    public ProductSyncQueuedResponse syncProductToAllChannelsAsync(UUID productId) {
+        return queueProductSync(productId, null);
     }
 
     @Override
-    public void syncProductToChannelAsync(UUID productId, UUID channelId) {
+    public ProductSyncQueuedResponse syncProductToChannelAsync(UUID productId, UUID channelId) {
+        return queueProductSync(productId, channelId);
+    }
+
+    private ProductSyncQueuedResponse queueProductSync(UUID productId, UUID channelId) {
+        Product product = productRepository.findById(productId)
+                .filter(candidate -> candidate.getDeletedAt() == null)
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+        Channel channel = null;
+        int totalItems;
+        if (channelId == null) {
+            List<ChannelProduct> activeMappings = channelProductRepository
+                    .findByProductIdAndMappingState(productId, "ACTIVE");
+            if (activeMappings.isEmpty()) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Product is not linked to any active channel");
+            }
+            List<String> blockedChannels = activeMappings.stream()
+                    .filter(mapping -> !productChannelConfigService.isReady(mapping))
+                    .map(mapping -> mapping.getChannel().getDisplayName() + ": "
+                            + Objects.toString(
+                            productChannelConfigService.configurationError(mapping),
+                            "Missing required platform configuration"))
+                    .toList();
+            if (!blockedChannels.isEmpty()) {
+                throw new AppException(ErrorCode.INVALID_REQUEST,
+                        "Cannot sync all channels. " + String.join("; ", blockedChannels));
+            }
+            totalItems = activeMappings.size();
+        } else {
+            ChannelProduct mapping = channelProductRepository.findByProductIdAndChannelId(productId, channelId)
+                    .filter(candidate -> "ACTIVE".equals(candidate.getMappingState()))
+                    .orElseThrow(() -> new AppException(
+                            ErrorCode.RESOURCE_NOT_FOUND, "Active product channel mapping not found"));
+            if (!productChannelConfigService.isReady(mapping)) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, Objects.toString(
+                        productChannelConfigService.configurationError(mapping),
+                        "Missing required platform configuration"));
+            }
+            channel = channelRepository.findById(channelId)
+                    .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+            totalItems = 1;
+        }
+
+        UUID messageId = UUID.randomUUID();
+        SyncLog requestLog = syncLogRepository.save(SyncLog.builder()
+                .product(product)
+                .channel(channel)
+                .jobType("PRODUCT_SYNC_REQUEST")
+                .idempotencyKey("PRODUCT_SYNC_REQUEST:" + messageId)
+                .status(SyncStatus.PENDING)
+                .totalItems(totalItems)
+                .successCount(0)
+                .failCount(0)
+                .triggeredBy(SecurityUtils.getCurrentUser().orElse(null))
+                .startedAt(OffsetDateTime.now())
+                .build());
+        ProductSyncMessage message = new ProductSyncMessage(
+                messageId, requestLog.getId(), productId, channelId);
         eventPublisher.publish(
                 RabbitMQConstants.PRODUCT_SYNC_PUSH,
-                new ProductSyncMessage(productId, channelId),
-                () -> productSyncOrchestratorService.syncProductToChannel(productId, channelId));
+                message,
+                () -> productSyncRequestHandler.handle(message));
+        return new ProductSyncQueuedResponse(requestLog.getId());
     }
 
     private ProductInventoryInitializer inventoryInitializer() {
