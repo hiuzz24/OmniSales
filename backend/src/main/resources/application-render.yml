@@ -20,7 +20,9 @@
 
 server:
   # Render set PORT env (thường là 10000 cho web service). Bind theo env.
-  port: ${PORT:8080}
+  port: ${PORT:10000}
+  # Bind trên 0.0.0.0 để Render health check detect được (mặc định localhost).
+  address: 0.0.0.0
 
 spring:
   # datasource: KHÔNG override ở đây — để application.yaml xử lý.
@@ -29,7 +31,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create-drop  # DROP ALL tables mỗi lần restart + tạo lại từ entity. Tránh edge case khi DB có data cũ gây schema drift.
+      ddl-auto: update  # Update schema nếu thiếu table/column, KHÔNG DROP → tránh "relation does not exist" crash khi restart với DB đã có schema.
     show-sql: false
     defer-datasource-initialization: true  # QUAN TRỌNG: defer datasource init SAU Hibernate để tránh "Unable to determine Dialect" race condition khi boot.
     properties:
