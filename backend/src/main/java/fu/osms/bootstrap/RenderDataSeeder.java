@@ -14,8 +14,10 @@ import fu.osms.address.entity.Country;
 import fu.osms.address.repository.CountryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,8 +30,11 @@ import java.util.Map;
  * Render.com environment data seeder.
  *
  * Run automatically on every Render deployment via Spring Boot's
- * {@link CommandLineRunner} mechanism — <b>only when the {@code render} profile
+ * {@link ApplicationReadyEvent} — <b>only when the {@code render} profile
  * is active</b> (enforced by {@code @Profile("render")}).
+ *
+ * <p>Runs AFTER Tomcat binds port → app ready first, seeder second (async).
+ * This avoids Render's port-scan-timeout when seed takes >30s.
  *
  * <h3>Idempotency</h3>
  * This seeder is fully idempotent. It checks whether each entity already exists
@@ -55,7 +60,7 @@ import java.util.Map;
 @Component
 @Profile("render")
 @RequiredArgsConstructor
-public class RenderDataSeeder implements CommandLineRunner {
+public class RenderDataSeeder {
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
@@ -110,14 +115,16 @@ public class RenderDataSeeder implements CommandLineRunner {
     private static final String DEFAULT_OWNER_FULL_NAME = "Owner One";
 
     // -------------------------------------------------------------------------
-    // CommandLineRunner — Spring calls this once after the application context
-    // is fully initialised.
+    // ApplicationReadyEvent listener — fires AFTER Tomcat binds port and app is
+    // ready to accept traffic. @Async ensures the seeding runs in a background
+    // thread so it does NOT block the readiness probe.
     // -------------------------------------------------------------------------
 
-    @Override
+    @Async
+    @EventListener(ApplicationReadyEvent.class)
     @Transactional
-    public void run(String... args) {
-        log.info("[seeder] Starting Render environment data seeder...");
+    public void onApplicationReady() {
+        log.info("[seeder] Starting Render environment data seeder (async)...");
 
         // Each seed step is wrapped in try-catch so one failure doesn't kill the app.
         // This is critical for Render free tier: if a table is missing (DDL race condition),

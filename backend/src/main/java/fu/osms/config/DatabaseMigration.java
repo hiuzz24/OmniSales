@@ -1,9 +1,12 @@
 package fu.osms.config;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -13,9 +16,18 @@ public class DatabaseMigration {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @PostConstruct
+    /**
+     * Chạy migrations SAU khi Tomcat đã bind port và app ready.
+     * Dùng @EventListener(ApplicationReadyEvent.class) thay vì @PostConstruct để:
+     *   1. Tránh block Tomcat startup (Render port scan timeout 30s)
+     *   2. Cho phép app accept traffic NGAY khi ready, migration chạy nền
+     * @Async để không block main thread sau khi ready event.
+     */
+    @Async
+    @EventListener(ApplicationReadyEvent.class)
+    @Order(1)
     public void migrate() {
-        try {
+        log.info("DatabaseMigration: starting migrations in background...");
             jdbcTemplate.execute("""
                         ALTER TABLE customers
                         ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true

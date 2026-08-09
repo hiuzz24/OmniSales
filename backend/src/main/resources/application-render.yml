@@ -33,7 +33,7 @@ spring:
     hibernate:
       ddl-auto: update  # Update schema nếu thiếu table/column, KHÔNG DROP → tránh "relation does not exist" crash khi restart với DB đã có schema.
     show-sql: false
-    defer-datasource-initialization: true  # QUAN TRỌNG: defer datasource init SAU Hibernate để tránh "Unable to determine Dialect" race condition khi boot.
+    defer-datasource-initialization: false  # QUAN TRỌNG: sql.init chạy TRƯỚC Hibernate ddl-auto để tạo ENUM types (category_status, user_status, ...) trước khi Hibernate tạo tables dùng các type này.
     properties:
       hibernate:
         # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
@@ -46,14 +46,14 @@ spring:
   main:
     banner-mode: off
 
-  # Init PostgreSQL enum types SAU khi Hibernate ddl-auto tạo tables.
+  # Init PostgreSQL enum types TRƯỚC khi Hibernate ddl-auto tạo tables.
   # Vì entity dùng @JdbcTypeCode(SqlTypes.NAMED_ENUM) cần type đã tồn tại.
   # File schema-postgresql.sql dùng DO $$ ... duplicate_object → idempotent.
   sql:
     init:
-      mode: always
+      mode: always  # BẬT sql.init để tạo ENUM types TRƯỚC Hibernate ddl-auto.
       platform: postgresql
-      continue-on-error: true   # type đã tồn tại → skip, không crash app
+      continue-on-error: true   # type đã tồn tại → skip, không crash app.
       # schema-locations mặc định: classpath:schema-${platform}.sql
 
 logging:
