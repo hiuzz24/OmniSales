@@ -23,9 +23,13 @@ server:
   port: ${PORT:8080}
 
 spring:
+  # datasource: KHÔNG override ở đây — để application.yaml xử lý.
+  # Render env inject DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_NAME từ Database resource.
+  # Nếu env thiếu, Spring Boot dùng default localhost:5432/osms (sẽ fail connect).
+
   jpa:
     hibernate:
-      ddl-auto: create  # HARDCODED CREATE for bootstrap. Đổi sang 'update' sau khi DB có tables + data.
+      ddl-auto: update  # HARDCODED UPDATE for bootstrap. Tạo CREATE TABLE cho entity mới, ALTER TABLE cho schema thay đổi. Đổi sang 'none' sau khi schema ổn định nếu muốn dùng Flyway.
     show-sql: false
     defer-datasource-initialization: true  # Hibernate KHÔNG cần schema init (để schema.sql chạy SAU)
     properties:
