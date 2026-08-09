@@ -34,12 +34,10 @@ services:
   - type: web
     name: api-osms
     runtime: image
-    # Image path đầy đủ: registry.gitlab.com/<group>/<project>/<image>:<tag>
-    # <project> ở đây là "omnisales" (lowercase GitLab convention).
-    # Nếu repo của bạn tên khác (vd "OmniSales"), đổi cho khớp.
-    # Render docs (2024+) chấp nhận `image: { url: ... }` cho runtime:image.
-    # Dùng :latest để Render luôn pull image mới nhất từ Docker Hub.
-    # GitLab CI push image :latest sau khi build thành công.
+    # Image path: docker.io/$DOCKERHUB_USERNAME/osms-backend:latest
+    # GitLab CI push image này với tag :latest tới Docker Hub (PUBLIC).
+    # Render pull từ Docker Hub public → KHÔNG CẦN Secret File / PAT.
+    # Lưu ý: Docker Hub repo phải PUBLIC (default khi push lần đầu).
     image:
       url: duydz1604/osms-backend:latest
     plan: free
