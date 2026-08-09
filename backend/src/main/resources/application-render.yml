@@ -7,14 +7,12 @@
 #
 # Khác biệt chính so với application.yaml:
 #   * server.port  : dùng ${PORT} (Render inject, mặc định 10000) thay vì hardcode 8080
-#   * ddl-auto     : 'update' — Hibernate so sánh entity ↔ DB, CREATE TABLE nếu thiếu,
-#                    ALTER TABLE nếu schema thay đổi. Phù hợp cho môi trường Render
-#                    Postgres free tier (DB có thể bị reset, cần tạo lại tables).
-#                    Lần deploy đầu vào DB trống sẽ tự tạo đủ 49 tables.
-#                    Đổi sang 'none' sau khi schema ổn định nếu muốn dùng Flyway.
-#   * banner-mode  : tắt banner cho log gọn (Render logs dễ đọc hơn)
-#   * sql.init.mode: KHÔNG bật — schema/data đã được seed qua DatabaseMigration class
-#                    (tránh Spring Boot tự load schema.sql gây conflict với Hibernate).
+#   * ddl-auto     : 'none' — KHÔNG để Hibernate sinh DDL. Dùng schema-postgresql.sql
+#                    qua Spring Boot sql.init → DataSourceScriptDatabaseInitializer
+#                    (Spring Boot 3.5 tự động chạy TRƯỚC Hibernate JPA).
+#   * sql.init     : 'always' + schema-locations classpath:schema-postgresql.sql
+#                    → chạy full schema dump (49 tables, ENUMs, indexes, FKs).
+#                    Idempotent (DROP IF EXISTS ở đầu file).
 #   * multipart    : giữ nguyên 20MB từ application.yaml (đủ cho catalog import)
 # =============================================================================
 
@@ -31,23 +29,46 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none  # Schema do SchemaInitializerConfig + schema-postgresql.sql tạo. Hibernate KHÔNG tự generate DDL (tránh ENUM/fk/index sai).
+      ddl-auto: none  # TẮT Hibernate DDL. Schema do schema-postgresql.sql tạo.
     show-sql: false
-    defer-datasource-initialization: true  # QUAN TRỌNG: chạy DataSourceInitializer bean TRƯỚC Hibernate JPA.
+    defer-datasource-initialization: false  # ĐỂ SPRING BOOT chạy sql.init TRƯỚC Hibernate JPA (mặc định).
     properties:
       hibernate:
         # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
         # chưa được Render inject. Vẫn dùng Postgres ở Render.
         dialect: org.hibernate.dialect.PostgreSQLDialect
         # KHÔNG tạo enum types tự động — Hibernate 6 không generate CREATE TYPE cho @JdbcTypeCode(NAMED_ENUM).
-        # Phải tạo enum qua SchemaInitializerConfig → schema-postgresql.sql.
+        # Phải tạo enum qua schema-postgresql.sql.
         # format_sql: false
 
   main:
     banner-mode: off
 
-  # KHÔNG dùng spring.sql.init ở đây — dùng SchemaInitializerConfig tạo DataSourceInitializer bean,
-  # Spring Boot auto-config sẽ chạy nó TRƯỚC Hibernate JPA.
+  # ====================================================================
+  # Spring Boot 3.5 sql.init → DataSourceScriptDatabaseInitializer
+  # ====================================================================
+  # Spring Boot TỰ ĐỘNG detect file schema-postgresql.sql ở classpath root
+  # và chạy nó TRƯỚC khi Hibernate JPA tạo EntityManagerFactory.
+  #
+  # File schema-postgresql.sql (full schema dump từ hibernate-schema.sql):
+  #   - DROP TABLE IF EXISTS ... (idempotent)
+  #   - DROP TYPE IF EXISTS ... (idempotent)
+  #   - CREATE TYPE ... ENUM (user_status, category_status, ...)
+  #   - CREATE TABLE ... (49 tables với PK, FK, indexes)
+  #   - CREATE OR REPLACE FUNCTION ... (triggers)
+  #   - CREATE TRIGGER ...
+  #   - INSERT ... (seed data) -- có thể bị sai pass nếu đã chạy trước
+  #
+  # continue-on-error: true → ON CONFLICT DO NOTHING / CREATE TABLE đã tồn tại OK.
+  # mode: always → chạy mỗi lần deploy (Render có thể reset DB free tier).
+  # ====================================================================
+  sql:
+    init:
+      mode: always
+      platform: postgresql
+      schema-locations: classpath:schema-postgresql.sql
+      data-locations:   # tắt data.sql mặc định
+      continue-on-error: true
 
 logging:
   level:
@@ -55,3 +76,6 @@ logging:
     org.springframework: INFO
     org.hibernate.SQL: WARN
     fu.osms: INFO
+    # Log SQL script execution để dễ debug khi schema init fail
+    org.springframework.jdbc.datasource.init: INFO
+    org.springframework.boot.sql.init: INFO
