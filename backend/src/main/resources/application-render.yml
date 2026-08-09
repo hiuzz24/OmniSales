@@ -31,30 +31,28 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update  # Update schema nếu thiếu table/column, KHÔNG DROP → tránh "relation does not exist" crash khi restart với DB đã có schema.
+      ddl-auto: none  # Schema do SchemaInitializer + schema-postgresql.sql tạo. Hibernate KHÔNG tự generate DDL (tránh ENUM/fk/index sai).
     show-sql: false
-    defer-datasource-initialization: false  # QUAN TRỌNG: sql.init chạy TRƯỚC Hibernate ddl-auto để tạo ENUM types (category_status, user_status, ...) trước khi Hibernate tạo tables dùng các type này.
+    defer-datasource-initialization: false  # Spring Boot's sql.init TẮT, dùng SchemaInitializer.java.
     properties:
       hibernate:
         # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
         # chưa được Render inject. Vẫn dùng Postgres ở Render.
         dialect: org.hibernate.dialect.PostgreSQLDialect
         # KHÔNG tạo enum types tự động — Hibernate 6 không generate CREATE TYPE cho @JdbcTypeCode(NAMED_ENUM).
-        # Phải tạo enum qua sql.init.mode: always → schema-postgresql.sql.
+        # Phải tạo enum qua SchemaInitializer → schema-postgresql.sql.
         # format_sql: false
 
   main:
     banner-mode: off
 
-  # Init PostgreSQL enum types TRƯỚC khi Hibernate ddl-auto tạo tables.
-  # Vì entity dùng @JdbcTypeCode(SqlTypes.NAMED_ENUM) cần type đã tồn tại.
-  # File schema-postgresql.sql dùng DO $$ ... duplicate_object → idempotent.
+  # sql.init TẮT hoàn toàn — dùng SchemaInitializer.java để chạy schema-postgresql.sql JDBC
+  # với đầy đủ 49 tables, indexes, FKs, ENUMs TRƯỚC Hibernate boot.
   sql:
     init:
-      mode: always  # BẬT sql.init để tạo ENUM types TRƯỚC Hibernate ddl-auto.
+      mode: never
       platform: postgresql
-      continue-on-error: true   # type đã tồn tại → skip, không crash app.
-      # schema-locations mặc định: classpath:schema-${platform}.sql
+      continue-on-error: false
 
 logging:
   level:
