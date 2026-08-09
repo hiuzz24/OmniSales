@@ -31,28 +31,23 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none  # Schema do SchemaInitializer + schema-postgresql.sql tạo. Hibernate KHÔNG tự generate DDL (tránh ENUM/fk/index sai).
+      ddl-auto: none  # Schema do SchemaInitializerConfig + schema-postgresql.sql tạo. Hibernate KHÔNG tự generate DDL (tránh ENUM/fk/index sai).
     show-sql: false
-    defer-datasource-initialization: false  # Spring Boot's sql.init TẮT, dùng SchemaInitializer.java.
+    defer-datasource-initialization: true  # QUAN TRỌNG: chạy DataSourceInitializer bean TRƯỚC Hibernate JPA.
     properties:
       hibernate:
         # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
         # chưa được Render inject. Vẫn dùng Postgres ở Render.
         dialect: org.hibernate.dialect.PostgreSQLDialect
         # KHÔNG tạo enum types tự động — Hibernate 6 không generate CREATE TYPE cho @JdbcTypeCode(NAMED_ENUM).
-        # Phải tạo enum qua SchemaInitializer → schema-postgresql.sql.
+        # Phải tạo enum qua SchemaInitializerConfig → schema-postgresql.sql.
         # format_sql: false
 
   main:
     banner-mode: off
 
-  # sql.init TẮT hoàn toàn — dùng SchemaInitializer.java để chạy schema-postgresql.sql JDBC
-  # với đầy đủ 49 tables, indexes, FKs, ENUMs TRƯỚC Hibernate boot.
-  sql:
-    init:
-      mode: never
-      platform: postgresql
-      continue-on-error: false
+  # KHÔNG dùng spring.sql.init ở đây — dùng SchemaInitializerConfig tạo DataSourceInitializer bean,
+  # Spring Boot auto-config sẽ chạy nó TRƯỚC Hibernate JPA.
 
 logging:
   level:
