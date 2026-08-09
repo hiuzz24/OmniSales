@@ -22,7 +22,7 @@ public class OrderStockDeliveryCreatedNotificationListener {
     private final OrderRepository orderRepository;
     private final OrderWorkflowNotificationService notificationService;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onStockDeliveryCreated(OrderStockDeliveryCreatedEvent event) {
         Order order = orderRepository.findById(event.orderId()).orElse(null);
         if (order == null) {
@@ -32,7 +32,7 @@ public class OrderStockDeliveryCreatedNotificationListener {
                 ? order.getExternalOrderId()
                 : order.getId().toString();
         try {
-            notificationService.notifyRoles(
+            notificationService.notifyRolesOnce(
                     List.of("OWNER", "SALES"),
                     TYPE,
                     "Đơn hàng đã sẵn sàng giao",

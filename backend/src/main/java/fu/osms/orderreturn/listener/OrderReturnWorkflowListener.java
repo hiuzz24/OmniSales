@@ -1,11 +1,13 @@
 package fu.osms.orderreturn.listener;
 
 import fu.osms.orderreturn.event.OrderReturnChangedEvent;
+import fu.osms.orderreturn.event.OrderReturnProcessedEvent;
 import fu.osms.orderreturn.service.OrderReturnInventoryPostingService;
 import fu.osms.orderreturn.service.OrderReturnPaymentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -16,6 +18,7 @@ public class OrderReturnWorkflowListener {
 
     private final OrderReturnPaymentService paymentService;
     private final OrderReturnInventoryPostingService inventoryPostingService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onChanged(OrderReturnChangedEvent event) {
@@ -35,6 +38,7 @@ public class OrderReturnWorkflowListener {
                         event.returnId(), pendingException);
             }
         }
+        eventPublisher.publishEvent(new OrderReturnProcessedEvent(event.returnId()));
     }
 
     private String rootMessage(Throwable throwable) {

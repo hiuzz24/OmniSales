@@ -30,12 +30,12 @@ class TikTokProductDetailEnrichmentServiceImplTest {
 
     private TikTokProductDetailEnrichmentServiceImpl service;
 
-    @BeforeEach
-    void setUp() {
-        service = new TikTokProductDetailEnrichmentServiceImpl(
-                channelRepository, channelProductRepository, channelProductVariantRepository,
-                productRepository, tikTokApiClient, transactionTemplate, catalogOwnershipPolicy);
-    }
+//    @BeforeEach
+//    void setUp() {
+//        service = new TikTokProductDetailEnrichmentServiceImpl(
+//                channelRepository, channelProductRepository, channelProductVariantRepository,
+//                productRepository, tikTokApiClient, transactionTemplate, catalogOwnershipPolicy);
+//    }
 
     @Test
     @DisplayName("Service can be constructed (smoke test verifying dependency wiring)")

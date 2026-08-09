@@ -18,6 +18,10 @@ public interface OrderReturnRepository extends JpaRepository<OrderReturn, UUID> 
     @Query("select r from OrderReturn r where r.id = :id")
     Optional<OrderReturn> findForUpdateById(@Param("id") UUID id);
 
+    @Query("select r from OrderReturn r join fetch r.order join fetch r.channel left join fetch r.warehouse " +
+            "where r.id = :id")
+    Optional<OrderReturn> findWithDetailsById(@Param("id") UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from OrderReturn r "
             + "where r.channel.id = :channelId and r.externalReturnId = :externalReturnId")

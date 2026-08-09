@@ -21,7 +21,12 @@ public interface NotificationService {
 
     void markAsRead(UUID id);
 
+    void markAsRead(UUID id, UUID userId);
+
     int markAllAsRead(UUID userId);
 
     void createNotification(UUID userId, String type, String title, String body, String entityType, UUID entityId);
+
+    boolean createNotificationIfAbsent(UUID userId, String type, String title, String body,
+                                       String entityType, UUID entityId);
 }

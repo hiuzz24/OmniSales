@@ -185,12 +185,6 @@ const LoginForm = () => {
 
 
 
-        <p className={styles.signupRow}>
-          Chưa có tài khoản?
-          <a href="/register" className={styles.signupLink}>
-            Đăng ký miễn phí
-          </a>
-        </p>
 
         <div className={styles.trustBadges}>
           <span className={styles.trustBadge}>

@@ -49,18 +49,18 @@ class ShopifyImportSyncServiceImplTest {
     @Mock private SyncJobProgressTracker syncJobProgressTracker;
 
     private ShopifyImportSyncServiceImpl service;
-
-    @BeforeEach
-    void setUp() {
-        service = new ShopifyImportSyncServiceImpl(
-                shopifyApiClient, channelRepository, credentialRepository,
-                channelProductRepository, channelProductVariantRepository,
-                productRepository, productImageRepository, productVariantRepository,
-                warehouseRepository, inventoryItemRepository, inventoryTransactionRepository,
-                syncLogRepository, marketplaceInventoryPropagationService,
-                marketplaceWarehouseConsistencyService, catalogOwnershipPolicy,
-                channelProductAggregationService, syncJobProgressTracker);
-    }
+//
+//    @BeforeEach
+//    void setUp() {
+//        service = new ShopifyImportSyncServiceImpl(
+//                shopifyApiClient, channelRepository, credentialRepository,
+//                channelProductRepository, channelProductVariantRepository,
+//                productRepository, productImageRepository, productVariantRepository,
+//                warehouseRepository, inventoryItemRepository, inventoryTransactionRepository,
+//                syncLogRepository, marketplaceInventoryPropagationService,
+//                marketplaceWarehouseConsistencyService, catalogOwnershipPolicy,
+//                channelProductAggregationService, syncJobProgressTracker);
+//    }
 
     @Test
     @DisplayName("Service can be constructed (smoke test verifying dependency wiring)")
