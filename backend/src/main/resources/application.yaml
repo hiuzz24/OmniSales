@@ -12,6 +12,9 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
+        # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
+        # chưa được Render inject (vd: sau khi delete DB, env vẫn còn host cũ).
+        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
         jdbc:
           batch_size: 1000
