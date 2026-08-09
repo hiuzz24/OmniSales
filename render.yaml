@@ -54,8 +54,10 @@ services:
       # JVM heap tune cho Render Free (512MB).
       # Native + metaspace + Spring Boot 3.5 vượt 512MB nếu để mặc định → OOM boot.
       # JAVA_TOOL_OPTIONS được JVM tự đọc, ghi đè lên Dockerfile.ci.
+      # QUAN TRỌNG: -Dspring.jpa.hibernate.ddl-auto=none để KHÔNG để Hibernate
+      # tự generate DDL. Schema do SchemaEnvironmentPostProcessor tạo TRƯỚC Spring Boot.
       - key: JAVA_TOOL_OPTIONS
-        value: "-Xmx180m -Xms128m -XX:MaxRAMPercentage=35.0 -XX:MaxMetaspaceSize=180m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
+        value: "-Xmx180m -Xms128m -XX:MaxRAMPercentage=35.0 -XX:MaxMetaspaceSize=180m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom -Dspring.jpa.hibernate.ddl-auto=none"
       # ----- Database (auto-fill từ database resource phía trên) -----
       - key: DB_HOST
         fromDatabase:

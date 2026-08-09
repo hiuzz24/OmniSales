@@ -8,8 +8,8 @@
 # Khác biệt chính so với application.yaml:
 #   * server.port  : dùng ${PORT} (Render inject, mặc định 10000)
 #   * ddl-auto     : 'none' — KHÔNG để Hibernate generate/validate DDL
-#   * Schema init  : SchemaEnvironmentPostProcessor (registered in spring.factories)
-#                    chạy TRƯỚC Spring Boot, qua raw JDBC — robust nhất.
+#   * sql.init     : Dùng SchemaEnvironmentPostProcessor (TRƯỚC Spring Boot)
+#                    + spring.sql.init (sau Spring context) cho safety net
 #   * multipart    : giữ nguyên 20MB từ application.yaml
 # =============================================================================
 
@@ -25,7 +25,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none  # TẮT Hibernate DDL. Schema do SchemaEnvironmentPostProcessor tạo.
+      ddl-auto: none  # TẮT Hibernate DDL. Schema do SQL scripts tạo.
     show-sql: false
     properties:
       hibernate:
@@ -35,12 +35,20 @@ spring:
   main:
     banner-mode: off
 
-  # KHÔNG dùng spring.sql.init — SchemaEnvironmentPostProcessor đã chạy schema
-  # TRƯỚC Spring Boot qua raw JDBC (xem META-INF/spring.factories).
-  # Tắt hẳn để tránh duplicate execution.
+  # ====================================================================
+  # spring.sql.init: SAFETY NET — chạy schema.sql SAU context init
+  # ====================================================================
+  # SchemaEnvironmentPostProcessor chạy TRƯỚC Spring Boot (preferred),
+  # nhưng nếu nó fail, spring.sql.init sẽ là safety net chạy SAU.
+  # Schema đã strip PL/pgSQL → ScriptUtils split theo ";" OK.
+  # Mode=always → idempotent (DROP IF EXISTS + ON CONFLICT).
+  # ====================================================================
   sql:
     init:
-      mode: never
+      mode: always
+      platform: postgresql
+      schema-locations: classpath:schema.sql
+      continue-on-error: true
 
 logging:
   level:
@@ -48,5 +56,7 @@ logging:
     org.springframework: INFO
     org.hibernate.SQL: WARN
     fu.osms: INFO
-    # Log schema init để debug
-    fu.osms.config.SchemaEnvironmentPostProcessor: INFO
+    # Debug schema init
+    org.springframework.jdbc.datasource.init: DEBUG
+    org.springframework.boot.sql.init: DEBUG
+    fu.osms.config.SchemaEnvironmentPostProcessor: DEBUG

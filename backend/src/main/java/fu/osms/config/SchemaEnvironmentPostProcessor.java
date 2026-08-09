@@ -13,28 +13,22 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+
 /**
  * SCHEMA ENVIRONMENT POST PROCESSOR — chạy schema TRƯỚC Spring Boot!
  *
- * Đây là ENVIRONMENT POST PROCESSOR đăng ký qua META-INF/spring.factories.
- * SpringApplication gọi TẤT CẢ EnvironmentPostProcessor TRƯỚC khi tạo
- * ApplicationContext. Tại thời điểm này, chưa có bean nào được tạo cả.
+ * Đăng ký qua META-INF/spring.factories. SpringApplication gọi TẤT CẢ
+ * EnvironmentPostProcessor TRƯỚC khi tạo ApplicationContext.
  *
- * Đây là approach MẠNH NHẤT để chạy schema init:
- *   - Không phụ thuộc vào Spring Boot's DataSourceScriptDatabaseInitializer
- *   - Không phụ thuộc vào spring.sql.init config
- *   - Không phụ thuộc vào bean ordering của Spring
- *   - Chạy RAW JDBC ngay khi env đã load xong
+ * WORKFLOW:
+ *   1. SpringApplication.prepareEnvironment() → load application.yaml + render profile + env vars
+ *   2. environment.resolvePlaceholders() để interpolate ${DB_HOST:...}
+ *   3. Connect trực tiếp PostgreSQL, check tables tồn tại chưa
+ *   4. Nếu chưa → chạy schema.sql qua raw JDBC
+ *   5. Nếu có lỗi → log FATAL nhưng KHÔNG throw (app vẫn boot để debug)
  *
- * CÁCH HOẠT ĐỘNG:
- *   1. SpringApplication gọi postProcessEnvironment() TRƯỚC khi tạo context.
- *   2. Read spring.datasource.url/username/password từ env.
- *   3. Connect thẳng tới PostgreSQL.
- *   4. Đọc classpath:schema.sql.
- *   5. Parse SQL thông minh (handle $$ ... $$ blocks bằng cách execute từng statement).
- *   6. Skip nếu tables đã tồn tại (idempotent).
- *
- * Chỉ chạy khi profile=render (check SPRING_PROFILES_ACTIVE env).
+ * Quan trọng: profile render phải được check từ environment.getActiveProfiles()
+ * SAU KHI Spring load xong application-render.yml.
  */
 public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
@@ -42,8 +36,12 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        // Chỉ chạy khi profile=render active
+        log.info("==== SchemaEnvironmentPostProcessor START ====");
+
+        // 1. Check profile
         String[] activeProfiles = environment.getActiveProfiles();
+        log.info("SchemaEnvironmentPostProcessor: active profiles = {}", String.join(",", activeProfiles));
+
         boolean isRender = false;
         for (String p : activeProfiles) {
             if ("render".equalsIgnoreCase(p)) {
@@ -52,10 +50,11 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
             }
         }
         if (!isRender) {
-            log.debug("SchemaEnvironmentPostProcessor: not render profile, skipping schema init");
+            log.info("SchemaEnvironmentPostProcessor: not render profile, skipping schema init");
             return;
         }
 
+        // 2. Resolve datasource config từ env
         String url = environment.resolvePlaceholders(
                 environment.getProperty("spring.datasource.url"));
         String username = environment.resolvePlaceholders(
@@ -63,30 +62,31 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
         String password = environment.resolvePlaceholders(
                 environment.getProperty("spring.datasource.password"));
 
+        log.info("SchemaEnvironmentPostProcessor: url={}, username={}, password={}",
+                url, username, password != null ? "***SET***" : "NULL");
+
         if (url == null || username == null || password == null) {
-            log.warn("SchemaEnvironmentPostProcessor: datasource config missing, skipping");
+            log.error("SchemaEnvironmentPostProcessor: ❌ datasource config missing! url={}, username={}, password={}",
+                    url, username, password != null ? "***SET***" : "NULL");
             return;
         }
 
-        log.info("SchemaEnvironmentPostProcessor: connecting to {} as {}", url, username);
-
+        // 3. Connect + check schema + init
         try {
             Class.forName("org.postgresql.Driver");
             try (Connection conn = DriverManager.getConnection(url, username, password)) {
+                log.info("SchemaEnvironmentPostProcessor: ✅ DB connected");
 
-                // Check schema đã có chưa (categories table)
                 if (isSchemaInitialized(conn)) {
                     log.info("SchemaEnvironmentPostProcessor: tables already exist — SKIP schema init");
                     return;
                 }
 
-                // Đọc schema.sql
                 String sql = readSqlFile();
                 log.info("SchemaEnvironmentPostProcessor: read {} bytes from schema.sql", sql.length());
 
-                // Parse + execute
                 List<String> statements = splitSqlStatements(sql);
-                log.info("SchemaEnvironmentPostProcessor: parsed {} statements", statements.size());
+                log.info("SchemaEnvironmentPostProcessor: parsed {} SQL statements", statements.size());
 
                 int success = 0, errors = 0;
                 try (Statement stmt = conn.createStatement()) {
@@ -99,32 +99,33 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
                             success++;
                         } catch (Exception e) {
                             errors++;
-                            String preview = s.length() > 200 ? s.substring(0, 200) + "..." : s;
-                            log.error("SchemaEnvironmentPostProcessor: statement #{} failed: {} | SQL: {}",
+                            String preview = s.length() > 150 ? s.substring(0, 150) + "..." : s;
+                            log.error("SchemaEnvironmentPostProcessor: ❌ stmt #{} failed: {} | SQL: {}",
                                     i + 1, e.getMessage(), preview.replaceAll("\\s+", " "));
                         }
                     }
                 }
 
-                log.info("SchemaEnvironmentPostProcessor: ✅ done — {} success, {} errors", success, errors);
+                log.info("SchemaEnvironmentPostProcessor: ✅ DONE — {} success, {} errors", success, errors);
 
                 if (errors > 0 && success == 0) {
-                    throw new IllegalStateException(
-                            "Schema init failed completely: " + errors + " errors, 0 successes. " +
-                            "App cannot start without schema.");
+                    log.error("SchemaEnvironmentPostProcessor: ❌❌❌ ALL statements FAILED. App sẽ fail khi query.");
+                } else if (success > 0) {
+                    // Verify lại tables đã tồn tại chưa
+                    if (isSchemaInitialized(conn)) {
+                        log.info("SchemaEnvironmentPostProcessor: ✅✅✅ VERIFIED: categories table exists!");
+                    } else {
+                        log.error("SchemaEnvironmentPostProcessor: ❌ categories table STILL missing!");
+                    }
                 }
             }
         } catch (Exception e) {
             log.error("SchemaEnvironmentPostProcessor: ❌ FATAL: {}", e.getMessage(), e);
-            // KHÔNG throw - để app tiếp tục boot, sẽ fail tự nhiên ở các query sau.
-            // Alternative: throw để fail-fast (uncomment nếu muốn)
-            // throw new IllegalStateException("Schema init failed", e);
         }
+
+        log.info("==== SchemaEnvironmentPostProcessor END ====");
     }
 
-    /**
-     * Check categories table đã tồn tại chưa.
-     */
     private boolean isSchemaInitialized(Connection conn) throws Exception {
         try (Statement stmt = conn.createStatement();
              var rs = stmt.executeQuery(
@@ -134,9 +135,6 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
         }
     }
 
-    /**
-     * Đọc schema.sql từ classpath.
-     */
     private String readSqlFile() throws Exception {
         var resource = new ClassPathResource("schema.sql");
         try (var is = resource.getInputStream()) {
@@ -144,14 +142,9 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
         }
     }
 
-    /**
-     * Parse SQL thành list statements, skip comments.
-     * KHÔNG support PL/pgSQL (file schema.sql đã strip sẵn).
-     */
     private List<String> splitSqlStatements(String sql) {
         List<String> statements = new ArrayList<>();
 
-        // Remove SQL line comments (giữ newline structure)
         StringBuilder cleaned = new StringBuilder();
         for (String line : sql.split("\n")) {
             String trimmed = line.trim();
@@ -164,7 +157,6 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
             }
         }
 
-        // Split theo ";" — schema.sql không có PL/pgSQL nên OK
         String[] parts = cleaned.toString().split(";");
         for (String p : parts) {
             String trimmed = p.trim();
@@ -173,9 +165,6 @@ public class SchemaEnvironmentPostProcessor implements EnvironmentPostProcessor 
         return statements;
     }
 
-    /**
-     * Tìm vị trí bắt đầu "--" inline comment, skip string literals.
-     */
     private int findInlineCommentStart(String line) {
         boolean inSingleQuote = false;
         boolean inDoubleQuote = false;
