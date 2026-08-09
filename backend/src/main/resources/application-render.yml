@@ -28,6 +28,11 @@ spring:
       ddl-auto: create  # HARDCODED CREATE for bootstrap. Đổi sang 'update' sau khi DB có tables + data.
     show-sql: false
     defer-datasource-initialization: true  # Hibernate KHÔNG cần schema init (để schema.sql chạy SAU)
+    properties:
+      hibernate:
+        # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
+        # chưa được Render inject (npm run delete DB). Vẫn dùng Postgres ở Render.
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
   main:
     banner-mode: off
