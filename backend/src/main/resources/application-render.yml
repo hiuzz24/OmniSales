@@ -36,19 +36,16 @@ spring:
     banner-mode: off
 
   # ====================================================================
-  # spring.sql.init: SAFETY NET — chạy schema.sql SAU context init
-  # ====================================================================
-  # SchemaEnvironmentPostProcessor chạy TRƯỚC Spring Boot (preferred),
-  # nhưng nếu nó fail, spring.sql.init sẽ là safety net chạy SAU.
-  # Schema đã strip PL/pgSQL → ScriptUtils split theo ";" OK.
-  # Mode=always → idempotent (DROP IF EXISTS + ON CONFLICT).
+  # spring.sql.init: TẮT trên render profile.
+  # SchemaEnvironmentPostProcessor + main() đã chạy schema.sql TRƯỚC Spring Boot.
+  # Nếu bật mode: always, Spring Boot sẽ chạy LẠI schema.sql mỗi lần restart
+  # → file có DROP TABLE IF EXISTS → MẤT DATA!
+  # mode: never → Spring Boot KHÔNG chạy schema.sql.
+  # main() check categories table EXISTS → skip schema.sql nếu có.
   # ====================================================================
   sql:
     init:
-      mode: always
-      platform: postgresql
-      schema-locations: classpath:schema.sql
-      continue-on-error: true
+      mode: never
 
 logging:
   level:
