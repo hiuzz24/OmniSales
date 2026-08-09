@@ -29,7 +29,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update  # HARDCODED UPDATE for bootstrap. Tạo CREATE TABLE cho entity mới, ALTER TABLE cho schema thay đổi. Đổi sang 'none' sau khi schema ổn định nếu muốn dùng Flyway.
+      ddl-auto: create-drop  # DROP ALL tables mỗi lần restart + tạo lại từ entity. Tránh edge case khi DB có data cũ gây schema drift.
     show-sql: false
     defer-datasource-initialization: true  # Hibernate KHÔNG cần schema init (để schema.sql chạy SAU)
     properties:
@@ -37,6 +37,9 @@ spring:
         # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
         # chưa được Render inject (npm run delete DB). Vẫn dùng Postgres ở Render.
         dialect: org.hibernate.dialect.PostgreSQLDialect
+        # KHÔNG tạo enum types tự động — Hibernate 6 không generate CREATE TYPE cho @JdbcTypeCode(NAMED_ENUM).
+        # Phải tạo enum qua sql.init.mode: always → schema-postgresql.sql.
+        # format_sql: false
 
   main:
     banner-mode: off
