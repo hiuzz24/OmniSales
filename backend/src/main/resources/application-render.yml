@@ -6,11 +6,11 @@
 # cho môi trường Render (free tier, ephemeral, no local DB).
 #
 # Khác biệt chính so với application.yaml:
-#   * server.port  : dùng ${PORT} (Render inject, mặc định 10000) thay vì hardcode 8080
-#   * ddl-auto     : 'none' — KHÔNG để Hibernate sinh DDL. Schema do SchemaInitializerConfig
-#                    tạo DataSourceScriptDatabaseInitializer bean → Spring Boot 3.5
-#                    tự động chạy TRƯỚC Hibernate JPA.
-#   * multipart    : giữ nguyên 20MB từ application.yaml (đủ cho catalog import)
+#   * server.port  : dùng ${PORT} (Render inject, mặc định 10000)
+#   * ddl-auto     : 'none' — KHÔNG để Hibernate generate/validate DDL
+#   * Schema init  : SchemaEnvironmentPostProcessor (registered in spring.factories)
+#                    chạy TRƯỚC Spring Boot, qua raw JDBC — robust nhất.
+#   * multipart    : giữ nguyên 20MB từ application.yaml
 # =============================================================================
 
 server:
@@ -22,28 +22,25 @@ server:
 spring:
   # datasource: KHÔNG override ở đây — để application.yaml xử lý.
   # Render env inject DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_NAME từ Database resource.
-  # Nếu env thiếu, Spring Boot dùng default localhost:5432/osms (sẽ fail connect).
 
   jpa:
     hibernate:
-      ddl-auto: none  # TẮT Hibernate DDL. Schema do SchemaInitializerConfig bean tạo.
+      ddl-auto: none  # TẮT Hibernate DDL. Schema do SchemaEnvironmentPostProcessor tạo.
     show-sql: false
-    defer-datasource-initialization: false  # Để Spring Boot auto-detect DataSourceScriptDatabaseInitializer bean.
     properties:
       hibernate:
-        # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
-        # chưa được Render inject. Vẫn dùng Postgres ở Render.
+        # Hardcode dialect để tránh "Unable to determine Dialect".
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        # KHÔNG tạo enum types tự động — Hibernate 6 không generate CREATE TYPE cho @JdbcTypeCode(NAMED_ENUM).
-        # Phải tạo enum qua schema-postgresql.sql.
-        # format_sql: false
 
   main:
     banner-mode: off
 
-  # KHÔNG dùng spring.sql.init ở đây — SchemaInitializerConfig tạo DataSourceScriptDatabaseInitializer
-  # bean → Spring Boot 3.5 auto-detect và chạy TRƯỚC Hibernate JPA.
-  # Tách biệt config để tránh conflict giữa Spring Boot native và custom bean.
+  # KHÔNG dùng spring.sql.init — SchemaEnvironmentPostProcessor đã chạy schema
+  # TRƯỚC Spring Boot qua raw JDBC (xem META-INF/spring.factories).
+  # Tắt hẳn để tránh duplicate execution.
+  sql:
+    init:
+      mode: never
 
 logging:
   level:
@@ -51,7 +48,5 @@ logging:
     org.springframework: INFO
     org.hibernate.SQL: WARN
     fu.osms: INFO
-    # Log SQL script execution để dễ debug khi schema init fail
-    org.springframework.jdbc.datasource.init: INFO
-    org.springframework.boot.sql.init: INFO
-    org.springframework.boot.jdbc.init: INFO
+    # Log schema init để debug
+    fu.osms.config.SchemaEnvironmentPostProcessor: INFO

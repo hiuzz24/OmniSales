@@ -1,2 +1,3 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
-  fu.osms.config.EarlyMigrationProcessor
+  fu.osms.config.EarlyMigrationProcessor,\
+  fu.osms.config.SchemaEnvironmentPostProcessor
