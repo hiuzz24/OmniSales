@@ -39,6 +39,91 @@ public class AdminMigrationController {
     private EntityManager em;
 
     /**
+     * DEBUG endpoint: trả về thông tin DB mà service đang nối tới:
+     *  - current_database()
+     *  - current_schema(), current_schemas()
+     *  - schema của webhook_events (search_path thực tế dùng để resolve name)
+     *  - schema của order_pull_jobs
+     *  - Có column retry_count trên webhook_events (qualified vs unqualified).
+     *
+     *  Dùng khi service log lỗi "column does not exist" trong khi
+     *  AdminMigrationController verify thấy "EXISTS" — để xác định xem
+     *  service có đang nối DB khác, schema khác, hay column đang thực sự thiếu.
+     */
+    @PostMapping("/debug-schema-info")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> debugSchemaInfo(
+            @RequestHeader(value = "X-Admin-Migration-Key", required = false) String headerKey) {
+        // Same security gate as the main migration endpoint.
+        if (configuredKey == null || configuredKey.isBlank()) {
+            return ResponseEntity.status(503).body(Map.of(
+                    "status", "DISABLED",
+                    "message", "ADMIN_MIGRATION_KEY env var is not set."));
+        }
+        if (headerKey == null || !headerKey.equals(configuredKey)) {
+            return ResponseEntity.status(403).body(Map.of("status", "FORBIDDEN"));
+        }
+
+        Map<String, Object> info = new LinkedHashMap<>();
+        try {
+            info.put("current_database", scalarString(
+                    "SELECT current_database()"));
+            info.put("current_schema", scalarString(
+                    "SELECT current_schema()"));
+            info.put("current_user", scalarString(
+                    "SELECT current_user"));
+            info.put("search_path", scalarString(
+                    "SHOW search_path"));
+            info.put("server_version", scalarString(
+                    "SHOW server_version"));
+
+            // Where does PostgreSQL resolve 'webhook_events' to?
+            info.put("webhook_events.resolved_schema", scalarString(
+                    "SELECT schemaname FROM pg_tables WHERE tablename = 'webhook_events'"));
+            info.put("webhook_events.schema_multiple", listStrings(
+                    "SELECT schemaname || '.' || tablename " +
+                    "FROM pg_tables WHERE tablename = 'webhook_events'"));
+
+            // Same for order_pull_jobs
+            info.put("order_pull_jobs.schema_multiple", listStrings(
+                    "SELECT schemaname || '.' || tablename " +
+                    "FROM pg_tables WHERE tablename = 'order_pull_jobs'"));
+
+            // Does the resolved table have retry_count?
+            info.put("webhook_events.has_retry_count", listStrings(
+                    "SELECT table_schema || '.' || table_name || '.' || column_name " +
+                    "FROM information_schema.columns " +
+                    "WHERE column_name = 'retry_count' AND table_name = 'webhook_events'"));
+
+            // Diagnose: count webhook_events rows
+            info.put("webhook_events_row_count", scalarString(
+                    "SELECT COUNT(*) FROM webhook_events"));
+
+            // Same for purchase_orders.evidence_url
+            info.put("purchase_orders_evidence_url_locations", listStrings(
+                    "SELECT table_schema || '.' || table_name || '.' || column_name " +
+                    "FROM information_schema.columns " +
+                    "WHERE column_name = 'evidence_url' AND table_name = 'purchase_orders'"));
+
+            info.put("ok", true);
+        } catch (Exception e) {
+            info.put("ok", false);
+            info.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+        return ResponseEntity.ok(info);
+    }
+
+    private String scalarString(String sql) {
+        Object r = em.createNativeQuery(sql).getSingleResult();
+        return r == null ? null : r.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> listStrings(String sql) {
+        return (List<String>) (List<?>) em.createNativeQuery(sql).getResultList();
+    }
+
+    /**
      * Apply migration 20260810_webhook_retry_and_order_pull_jobs.
      *
      * <p>Idempotent — có thể gọi nhiều lần (dùng {@code IF NOT EXISTS}, {@code DROP TABLE IF EXISTS}).
