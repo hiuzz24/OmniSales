@@ -7,6 +7,7 @@ import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.mapper.SyncLogMapper;
+import fu.osms.sync.order.pull.OrderPullJobStore;
 import fu.osms.sync.order.pull.OrderPullRequestedEvent;
 import fu.osms.sync.order.pull.dto.OrderPullRequest;
 import fu.osms.sync.repository.SyncLogRepository;
@@ -43,6 +44,7 @@ class OrderPullServiceImplTest {
     @Mock private ChannelConnectionValidator connectionValidator;
     @Mock private SyncLogRepository syncLogRepository;
     @Mock private SyncLogMapper syncLogMapper;
+    @Mock private OrderPullJobStore orderPullJobStore;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private OrderPullServiceImpl service;
@@ -50,7 +52,7 @@ class OrderPullServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new OrderPullServiceImpl(channelRepository, connectionValidator,
-                syncLogRepository, syncLogMapper, eventPublisher);
+                syncLogRepository, syncLogMapper, orderPullJobStore, eventPublisher);
     }
 
     private Channel channel(UUID id, PlatformType platform, Map<String, Object> metadata) {
