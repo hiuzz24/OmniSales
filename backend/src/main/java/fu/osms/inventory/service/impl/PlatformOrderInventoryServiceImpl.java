@@ -56,6 +56,12 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
             return;
         }
 
+        if (order.getStatus() != OrderStatus.CONFIRMED) {
+            log.debug("Skipping inventory reservation for order {} because its status is {} instead of CONFIRMED",
+                    order.getId(), order.getStatus());
+            return;
+        }
+
         if (hasOrderDeductTransactions(order.getId())) {
             log.debug("Skipping inventory reservation for order {} because it was already reserved", order.getId());
             return;

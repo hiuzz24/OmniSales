@@ -606,6 +606,7 @@
 .actionGroup {
   display: flex;
   justify-content: center;
+  gap: 6px;
 }
 
 .detailBtn {
@@ -627,6 +628,34 @@
   color: #35669b;
   background: #eef6fb;
   box-shadow: 0 2px 7px rgba(51, 78, 111, 0.06);
+}
+
+.printBtn {
+  color: #287969;
+  border-color: #c7ded8;
+  background: #f1faf7;
+}
+
+.printBtn:hover:not(:disabled) {
+  color: #176253;
+  border-color: #9ec9bd;
+  background: #e4f6f1;
+}
+
+.detailBtn:disabled {
+  color: #a7b1bc;
+  border-color: #e1e7ec;
+  background: #f7f9fa;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.buttonSpinner {
+  animation: shippingLabelSpin 0.8s linear infinite;
+}
+
+@keyframes shippingLabelSpin {
+  to { transform: rotate(360deg); }
 }
 
 .emptyCell {

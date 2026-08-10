@@ -210,8 +210,17 @@ export default function MainLayout() {
 
   useEffect(() => {
     const showNewNotifications = (event) => {
-      (event.detail ?? []).filter((notification) => !notification.readAt).forEach((notification) => {
-          const actionLabel = 'Mở chi tiết';
+      (event.detail ?? [])
+        .filter((notification) => !notification.readAt)
+        .filter((notification) => [
+            'ORDER_READY_SHIP',
+            'SYNC',
+            'SYNC_FAILED',
+          ].includes(notification.type))
+        .forEach((notification) => {
+          const actionLabel = notification.entityType === 'SYNC'
+            ? 'Mở lịch sử đồng bộ'
+            : 'Mở chi tiết đơn hàng';
           toast.info(
             <div style={{ display: 'grid', gap: 5, cursor: 'pointer' }}>
               <strong style={{ color: '#0f172a' }}>{notification.title}</strong>
@@ -237,7 +246,7 @@ export default function MainLayout() {
               onClick: () => handleNotificationClick(notification),
             },
           );
-      });
+        });
     };
     window.addEventListener('notifications:new', showNewNotifications);
     return () => window.removeEventListener('notifications:new', showNewNotifications);

@@ -3,6 +3,7 @@ package fu.osms.catalog.controller;
 import fu.osms.catalog.dto.request.ProductRequest;
 import fu.osms.catalog.dto.response.ProductImportResult;
 import fu.osms.catalog.dto.response.ProductResponse;
+import fu.osms.catalog.dto.response.ProductSyncQueuedResponse;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.service.ProductImportService;
 import fu.osms.catalog.service.ProductService;
@@ -115,17 +116,18 @@ public class ProductController {
     }
 
     @PostMapping("/{productId}/sync/async")
-    public ResponseEntity<ApiResponse<Void>> syncProductToAllChannelsAsync(@PathVariable UUID productId) {
-        productService.syncProductToAllChannelsAsync(productId);
-        return ResponseEntity.accepted().body(ApiResponse.success("Sync queued", null));
+    public ResponseEntity<ApiResponse<ProductSyncQueuedResponse>> syncProductToAllChannelsAsync(
+            @PathVariable UUID productId) {
+        ProductSyncQueuedResponse response = productService.syncProductToAllChannelsAsync(productId);
+        return ResponseEntity.accepted().body(ApiResponse.success("Sync queued", response));
     }
 
     @PostMapping("/{productId}/channels/{channelId}/sync/async")
-    public ResponseEntity<ApiResponse<Void>> syncProductToChannelAsync(
+    public ResponseEntity<ApiResponse<ProductSyncQueuedResponse>> syncProductToChannelAsync(
             @PathVariable UUID productId,
             @PathVariable UUID channelId) {
-        productService.syncProductToChannelAsync(productId, channelId);
-        return ResponseEntity.accepted().body(ApiResponse.success("Channel sync queued", null));
+        ProductSyncQueuedResponse response = productService.syncProductToChannelAsync(productId, channelId);
+        return ResponseEntity.accepted().body(ApiResponse.success("Channel sync queued", response));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

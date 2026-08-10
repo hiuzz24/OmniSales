@@ -127,7 +127,7 @@ const ProductEditPage = () => {
       await productApi.update(id, buildProductRequest(values, { mode: 'edit', existingAttributes }));
       if (shouldSync) {
         await productApi.sync(id);
-        toast.success('Đã cập nhật và đồng bộ sản phẩm lên các sàn đang liên kết.');
+        toast.success('Đã cập nhật sản phẩm và đưa yêu cầu đồng bộ vào hàng đợi.');
       } else {
         toast.success('Cập nhật sản phẩm thành công!');
       }

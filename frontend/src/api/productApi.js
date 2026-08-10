@@ -35,12 +35,12 @@ const productApi = {
     },
 
     sync: async (productId) => {
-        const response = await axiosClient.post(`/products/${productId}/sync`);
+        const response = await axiosClient.post(`/products/${productId}/sync/async`);
         return response;
     },
 
     syncChannel: async (productId, channelId) => {
-        const response = await axiosClient.post(`/products/${productId}/channels/${channelId}/sync`);
+        const response = await axiosClient.post(`/products/${productId}/channels/${channelId}/sync/async`);
         return response;
     },
 

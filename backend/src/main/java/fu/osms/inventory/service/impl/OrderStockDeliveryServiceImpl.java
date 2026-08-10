@@ -144,8 +144,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeForOrder(UUID orderId) {
         Order order = orderRepository.findForUpdateById(orderId).orElse(null);
-        if (order == null || (order.getStatus() != OrderStatus.IN_TRANSIT
-                && order.getStatus() != OrderStatus.DELIVERED)) {
+        if (order == null || order.getStatus() != OrderStatus.DELIVERED) {
             return;
         }
         InventoryIssue issue = issueRepository
