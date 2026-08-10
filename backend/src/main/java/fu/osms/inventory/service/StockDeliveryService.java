@@ -1,5 +1,6 @@
 package fu.osms.inventory.service;
 
+import fu.osms.inventory.dto.request.StockDeliveryFromReceiptRequest;
 import fu.osms.inventory.dto.request.StockDeliveryRequest;
 import fu.osms.inventory.dto.response.StockDeliveryResponse;
 import org.springframework.data.domain.Page;
@@ -16,6 +17,15 @@ public interface StockDeliveryService {
      * @return Created stock delivery response
      */
     StockDeliveryResponse createStockDelivery(StockDeliveryRequest request);
+
+    /**
+     * Create a new stock delivery document based on the items of a confirmed stock receipt.
+     * Used for the "return goods to supplier" (Trả hàng NCC) flow.
+     * @param receiptId Receipt ID the delivery is created from
+     * @param request Optional recipient, note and per-item quantity overrides
+     * @return Created stock delivery response
+     */
+    StockDeliveryResponse createStockDeliveryFromReceipt(UUID receiptId, StockDeliveryFromReceiptRequest request);
 
     /**
      * Update a draft stock delivery document

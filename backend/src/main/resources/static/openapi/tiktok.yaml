@@ -1,0 +1,410 @@
+openapi: 3.0.1
+info:
+  title: TikTok Shop Open API (subset used by OSMS)
+  description: >
+    Các endpoint TikTok Shop mà hệ thống OSMS gọi ra (outbound). Spec mức tài liệu.
+    Base URL: https://open-api.tiktokglobalshop.com  (auth: https://auth.tiktok-shops.com)
+  version: "1.0.0"
+servers:
+  - url: https://open-api.tiktokglobalshop.com
+    description: TikTok Shop Open API
+security:
+  - TtsAccessToken: []
+paths:
+  /api/v2/token/get:
+    get:
+      summary: Đổi OAuth code lấy access token (auth.tiktok-shops.com)
+      operationId: tiktokTokenGet
+      parameters:
+        - name: app_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: app_secret
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: auth_code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: access_token + refresh_token
+  /api/v2/token/refresh:
+    get:
+      summary: Refresh access token (auth.tiktok-shops.com)
+      operationId: tiktokTokenRefresh
+      parameters:
+        - name: app_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: refresh_token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: access_token mới
+  /authorization/202309/shops:
+    get:
+      summary: Lấy danh sách shop được ủy quyền (resolve shop cipher)
+      operationId: tiktokShops
+      responses:
+        "200":
+          description: Danh sách shop (shop_cipher, shop_region, seller_name)
+  /product/202502/products/search:
+    post:
+      summary: Tìm kiếm sản phẩm (import, phân trang 100)
+      operationId: tiktokProductSearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                page_size:
+                  type: integer
+                page_token:
+                  type: string
+                create_time_from:
+                  type: integer
+                create_time_to:
+                  type: integer
+                update_time_from:
+                  type: integer
+                update_time_to:
+                  type: integer
+      responses:
+        "200":
+          description: Danh sách product
+  /product/202309/products/{product_id}:
+    get:
+      summary: Lấy chi tiết sản phẩm
+      operationId: tiktokProductDetail
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product detail
+    put:
+      summary: Cập nhật sản phẩm
+      operationId: tiktokProductUpdate
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Kết quả update
+    post:
+      summary: Cập nhật tồn kho theo SKU / warehouse
+      operationId: tiktokProductInventoryUpdate
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                skus:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      warehouse_stocks:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            warehouse_id:
+                              type: string
+                            available:
+                              type: integer
+      responses:
+        "200":
+          description: Kết quả update tồn
+  /product/202309/products:
+    post:
+      summary: Tạo sản phẩm
+      operationId: tiktokProductCreate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: product_id tạo được
+  /product/202309/products/{product_id}/prices/update:
+    post:
+      summary: Cập nhật giá các variant
+      operationId: tiktokProductPricesUpdate
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                skus:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      price:
+                        type: object
+                        properties:
+                          amount:
+                            type: string
+                          currency:
+                            type: string
+      responses:
+        "200":
+          description: Kết quả update giá
+  /product/202309/inventory/search:
+    post:
+      summary: Tra tồn kho theo product ids hoặc sku ids
+      operationId: tiktokInventorySearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_ids:
+                  type: array
+                  items:
+                    type: string
+                sku_ids:
+                  type: array
+                  items:
+                    type: string
+                page_size:
+                  type: integer
+                page_token:
+                  type: string
+      responses:
+        "200":
+          description: Inventory items (available quantity)
+  /product/202309/images/upload:
+    post:
+      summary: Upload ảnh sản phẩm (multipart)
+      operationId: tiktokImageUpload
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                scenario:
+                  type: string
+      responses:
+        "200":
+          description: image_url đã upload
+  /logistics/202309/warehouses:
+    get:
+      summary: Lấy danh sách kho TikTok
+      operationId: tiktokWarehouses
+      responses:
+        "200":
+          description: Danh sách warehouse (warehouse_id, name, region)
+  /order/202309/orders:
+    get:
+      summary: Lấy chi tiết đơn hàng theo ids (tối đa 50)
+      operationId: tiktokOrderGet
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated order ids
+      responses:
+        "200":
+          description: Order details
+  /order/202309/orders/search:
+    post:
+      summary: Tìm kiếm đơn hàng theo khoảng thời gian (phân trang)
+      operationId: tiktokOrderSearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                create_time_from:
+                  type: integer
+                create_time_to:
+                  type: integer
+                page_size:
+                  type: integer
+                page_token:
+                  type: string
+      responses:
+        "200":
+          description: Danh sách order
+  /return_refund/202602/orders/{order_id}/aftersale_eligibility:
+    get:
+      summary: Kiểm tra khả năng hủy đơn của seller (kèm lý do)
+      operationId: tiktokAftersaleEligibility
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Eligibility + cancel reasons
+  /fulfillment/202309/packages/{package_id}/ship:
+    post:
+      summary: Ship một package
+      operationId: tiktokPackageShip
+      parameters:
+        - name: package_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_number:
+                  type: string
+                provider_code:
+                  type: string
+      responses:
+        "200":
+          description: Kết quả ship
+  /return_refund/202602/cancellations:
+    post:
+      summary: Hủy đơn hàng
+      operationId: tiktokOrderCancel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                order_id:
+                  type: string
+                cancel_reason_id:
+                  type: string
+                cancel_reason_detail:
+                  type: string
+      responses:
+        "200":
+          description: Kết quả hủy đơn
+  /return_refund/202309/returns/search:
+    post:
+      summary: Tìm kiếm trả hàng theo return ids
+      operationId: tiktokReturnsSearch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                return_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Return details
+  /return_refund/202601/decision_eligibility:
+    get:
+      summary: Kiểm tra quyền duyệt / từ chối trả hàng
+      operationId: tiktokDecisionEligibility
+      parameters:
+        - name: return_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Decision eligibility
+  /return_refund/202309/returns/{return_id}/approve:
+    post:
+      summary: Duyệt trả hàng
+      operationId: tiktokReturnApprove
+      parameters:
+        - name: return_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Kết quả duyệt
+  /return_refund/202309/returns/{return_id}/reject:
+    post:
+      summary: Từ chối trả hàng
+      operationId: tiktokReturnReject
+      parameters:
+        - name: return_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reject_reason_id:
+                  type: string
+                reject_reason_detail:
+                  type: string
+      responses:
+        "200":
+          description: Kết quả từ chối
+components:
+  securitySchemes:
+    TtsAccessToken:
+      type: apiKey
+      name: x-tts-access-token
+      in: header
+      description: >
+        Access token (Bearer-less) header. Mọi request còn được ký bằng app_key + sign;
+        OSMS ký tự động trong TikTokApiClientImpl.

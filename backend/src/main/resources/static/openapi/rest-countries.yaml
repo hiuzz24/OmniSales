@@ -1,0 +1,48 @@
+openapi: 3.0.1
+info:
+  title: RestCountries v3.1 API (subset used by OSMS)
+  description: >
+    Endpoint RestCountries mà hệ thống OSMS gọi để lấy danh sách quốc gia châu Á
+    (tên, mã alpha-3, cờ) cho sổ địa chỉ. Spec mức tài liệu.
+  version: "1.0.0"
+servers:
+  - url: https://api.restcountries.com/countries/v5
+    description: RestCountries v5
+security:
+  - ApiKey: []
+paths:
+  /countries/v5:
+    get:
+      summary: Lấy danh sách quốc gia châu Á (phân trang)
+      operationId: restCountriesAsia
+      parameters:
+        - name: region
+          in: query
+          required: true
+          schema:
+            type: string
+            default: Asia
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+        - name: response_fields
+          in: query
+          schema:
+            type: string
+            default: names.common,codes.alpha_3,flag.emoji
+      responses:
+        "200":
+          description: Danh sách quốc gia
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      name: Authorization
+      in: header
+      description: Bearer API key (rest-countries.api-key)

@@ -1,6 +1,7 @@
 package fu.osms.inventory.controller;
 
 import fu.osms.common.dto.ApiResponse;
+import fu.osms.inventory.dto.request.StockDeliveryFromReceiptRequest;
 import fu.osms.inventory.dto.request.StockDeliveryRequest;
 import fu.osms.inventory.dto.request.OrderStockDeliveryBatchRequest;
 import fu.osms.inventory.dto.response.OrderStockDeliveryBatchResponse;
@@ -78,6 +79,21 @@ public class StockDeliveryController {
         StockDeliveryResponse response = stockDeliveryService.createStockDelivery(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Stock delivery created successfully", response));
+    }
+
+    /**
+     * Create a stock delivery document based on a confirmed stock receipt
+     * (return goods to supplier flow)
+     */
+    @PostMapping("/from-receipt/{receiptId}")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<StockDeliveryResponse>> createStockDeliveryFromReceipt(
+            @PathVariable UUID receiptId,
+            @RequestBody(required = false) @Valid StockDeliveryFromReceiptRequest request) {
+
+        StockDeliveryResponse response = stockDeliveryService.createStockDeliveryFromReceipt(receiptId, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Stock delivery created from receipt successfully", response));
     }
 
     /**

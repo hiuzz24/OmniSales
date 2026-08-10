@@ -23,6 +23,7 @@ import fu.osms.notification.service.NotificationService;
 import fu.osms.purchase.dto.*;
 import fu.osms.purchase.entity.PurchaseOrder;import fu.osms.purchase.entity.PurchaseOrderItem;
 import fu.osms.purchase.enums.PurchaseOrderStatus;
+import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.purchase.repository.PurchaseOrderRepository;
 import fu.osms.purchase.service.PurchaseOrderService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
@@ -49,6 +50,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     );
 
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PurchaseOrderItemRepository purchaseOrderItemRepository;
     private final SupplierRepository supplierRepository;
     private final ProductVariantRepository variantRepository;
     private final InventoryItemRepository inventoryItemRepository;
@@ -95,6 +97,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         order.setPaymentMethod(request.getPaymentMethod());
         order.setNotes(request.getNotes());
         order.getItems().clear();
+        purchaseOrderItemRepository.deleteByPurchaseOrderId(order.getId());
         replaceItems(order, request.getItems());
         return toResponse(purchaseOrderRepository.save(order));
     }
@@ -103,7 +106,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional
     public PurchaseOrderResponse sendToSupplier(UUID id) {
         PurchaseOrder order = requireOrder(id);
-        requireStatus(order, PurchaseOrderStatus.DRAFT, "Chỉ đơn Nháp mới có thể gửi nhà cung cấp.");
+        if (order.getStatus() != PurchaseOrderStatus.DRAFT
+                && order.getStatus() != PurchaseOrderStatus.SENT_TO_SUPPLIER) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ đơn Nháp hoặc Đã gửi NCC mới có thể gửi nhà cung cấp.");
+        }
         order.setStatus(PurchaseOrderStatus.SENT_TO_SUPPLIER);
         order.setSentAt(OffsetDateTime.now());
         return toResponse(purchaseOrderRepository.save(order));

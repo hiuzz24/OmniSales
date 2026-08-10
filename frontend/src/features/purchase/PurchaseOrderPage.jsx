@@ -269,7 +269,20 @@ export default function PurchaseOrderPage() {
                         </span>
                       </td>
                       <td style={{ maxWidth: 180 }}>
-                        <span style={{ fontSize: 11, color: order.notes ? '#475569' : '#cbd5e1' }}>
+                        <span
+                          style={{
+                            display: 'block',
+                            width: '100%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            fontSize: 11,
+                            color: order.notes ? '#475569' : '#cbd5e1',
+                            cursor: order.notes ? 'help' : 'default',
+                          }}
+                          onMouseEnter={order.notes ? (e) => show(e, order.notes) : undefined}
+                          onMouseLeave={hide}
+                        >
                           {order.notes || '—'}
                         </span>
                       </td>
@@ -313,6 +326,16 @@ export default function PurchaseOrderPage() {
                                 catch (e) { toast.error(e?.response?.data?.message || 'Không thể xác nhận.'); }
                               }}>
                               <Truck size={15} />
+                            </TipButton>
+                          )}
+                          {canCreate && order.status === 'SENT_TO_SUPPLIER' && (
+                            <TipButton
+                              label="Gửi lại NCC"
+                              style={{ color: '#7c3aed', borderColor: '#ddd6fe' }}
+                              showTip={show}
+                              hideTip={hide}
+                              onClick={() => navigate(ROUTES.PURCHASE_ORDER_EDIT.replace(':id', order.id))}>
+                              <Send size={15} />
                             </TipButton>
                           )}
                           {canReceive && order.status === 'RECEIVING' && (
@@ -373,7 +396,14 @@ export default function PurchaseOrderPage() {
         createPortal(
           <span
             className={styles.tooltip}
-            style={{ left: tip.x, top: tip.y, transform: tip.above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)' }}
+            style={{
+              left: tip.x,
+              top: tip.y,
+              transform: tip.above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+              ...(tip.text.length > 40
+                ? { whiteSpace: 'normal', maxWidth: 320, textAlign: 'left' }
+                : {}),
+            }}
             role="tooltip"
           >
             {tip.text}

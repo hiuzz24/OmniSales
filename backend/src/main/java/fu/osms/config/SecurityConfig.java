@@ -58,6 +58,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/webhooks/**").permitAll()
                         .requestMatchers("/api/products/**").authenticated()
                         .requestMatchers("/api/address/**").permitAll()
+                        // OpenAPI / Swagger UI
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // Static OpenAPI specs của các sàn
+                        .requestMatchers("/openapi/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
