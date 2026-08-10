@@ -54,6 +54,7 @@ export const ROUTES = {
   SUPPLIERS: '/inventory/suppliers',
   PURCHASE_ORDERS: '/purchases',
   PURCHASE_ORDER_CREATE: '/purchases/create',
+  PURCHASE_ORDER_EDIT: '/purchases/:id/edit',
   PURCHASE_ORDER_DETAIL: '/purchases/:id',
   USERS: '/users',
   USER_INVITATIONS: '/users/invitations',

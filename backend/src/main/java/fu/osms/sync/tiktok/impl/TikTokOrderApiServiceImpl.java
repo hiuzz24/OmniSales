@@ -68,11 +68,12 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
         query.put("shop_cipher", shopCipher(channel));
         query.put("page_size", "100");
         if (pageToken != null && !pageToken.isBlank()) query.put("page_token", pageToken);
+        OffsetDateTime exclusiveTo = exclusiveUpperBound(to);
         String body;
         try {
             body = objectMapper.writeValueAsString(Map.of(
                     "create_time_ge", from.toEpochSecond(),
-                    "create_time_lt", to.toEpochSecond()));
+                    "create_time_lt", exclusiveTo.toEpochSecond()));
         } catch (Exception e) {
             throw new IllegalStateException("Cannot serialize TikTok order search request", e);
         }
@@ -85,6 +86,13 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
                 .map(order -> text(WebhookPayloadUtils.firstPresent(order, "id", "order_id")))
                 .filter(value -> value != null && !value.isBlank()).toList() : List.of();
         return new OrderSearchPage(ids, text(data.get("next_page_token")));
+    }
+
+    private OffsetDateTime exclusiveUpperBound(OffsetDateTime to) {
+        if (to.getSecond() == 0 && to.getNano() == 0) {
+            return to.plusMinutes(1);
+        }
+        return to.plusSeconds(1).withNano(0);
     }
 
     @Override
@@ -110,6 +118,27 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
                 "{}"
         );
         return parseSuccess(response, "TikTok ship package");
+    }
+
+    @Override
+    public ShippingDocumentResult getPackageShippingDocument(Channel channel, String packageId) {
+        String response = tikTokApiClient.executeGet(channel.getId(),
+                "/fulfillment/202309/packages/" + packageId + "/shipping_documents",
+                Map.of(
+                        "shop_cipher", shopCipher(channel),
+                        "document_type", "SHIPPING_LABEL",
+                        "document_size", "A6",
+                        "document_format", "PDF"
+                )
+        );
+        Map<String, Object> root = WebhookPayloadUtils.parseObject(
+                response, "TikTok shipping document response is invalid");
+        Map<String, Object> data = WebhookPayloadUtils.copyMap(root.get("data"));
+        return new ShippingDocumentResult(
+                text(root.get("code")),
+                text(root.get("message")),
+                text(data.get("doc_url"))
+        );
     }
 
     @Override

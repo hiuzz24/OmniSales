@@ -197,6 +197,9 @@ public class OrderServiceImpl implements OrderService {
         order.setStatusChangedAt(OffsetDateTime.now());
 
         Order savedOrder = orderRepository.save(order);
+        if (status == OrderStatus.CONFIRMED && statusTransitionPolicy().isPlatformOrder(savedOrder)) {
+            platformOrderInventoryService.syncReservations(savedOrder);
+        }
 
         var userOpt = SecurityUtils.getCurrentUser();
         UUID actorId = userOpt.map(User::getId).orElse(null);

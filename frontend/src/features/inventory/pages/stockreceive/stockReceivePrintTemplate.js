@@ -166,14 +166,12 @@ export const buildStockReceivePrintHtml = (receipt) => {
       font-weight: 700;
       letter-spacing: 0;
     }
-    .subtitle { text-align: center; margin-bottom: 8px; }
     .debit-credit {
       width: 210px;
       margin-left: auto;
       margin-bottom: 8px;
       line-height: 1.6;
     }
-    .receipt-number { text-align: right; margin-top: -18px; margin-bottom: 8px; }
     .line { margin: 7px 0; }
     .form-line {
       display: flex;
@@ -257,8 +255,6 @@ export const buildStockReceivePrintHtml = (receipt) => {
     </section>
 
     <h1>PHIẾU NHẬP KHO</h1>
-    <div class="subtitle">Ngày ${date.day} tháng ${date.month} năm ${date.year}</div>
-    <div class="receipt-number">Số: <span class="dots">${escapeHtml(receipt?.receiptCode ?? '')}</span></div>
     <div class="debit-credit">
       <div>Nợ <span class="dots">${escapeHtml(receipt?.debitAccount ?? '')}</span></div>
       <div>Có <span class="dots">${escapeHtml(receipt?.creditAccount ?? '')}</span></div>

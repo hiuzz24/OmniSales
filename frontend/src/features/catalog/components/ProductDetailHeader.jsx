@@ -1,7 +1,16 @@
 import { ArrowLeft, RefreshCw, Edit, Trash2 } from 'lucide-react';
 import styles from './ProductDetailHeader.module.css';
 
-const ProductDetailHeader = ({ product, onBack, onDelete, onEdit, onSync, isSyncing }) => {
+const ProductDetailHeader = ({
+  product,
+  onBack,
+  onDelete,
+  onEdit,
+  onSync,
+  isSyncing,
+  syncAllDisabled,
+  syncAllDisabledReason,
+}) => {
   const primaryImage = product.images?.find(img => img.isPrimary)?.url || 'https://via.placeholder.com/40';
 
   return (
@@ -30,8 +39,8 @@ const ProductDetailHeader = ({ product, onBack, onDelete, onEdit, onSync, isSync
         <button
           className={styles.btnSecondary}
           onClick={onSync}
-          disabled={isSyncing}
-          title="Đồng bộ sản phẩm lên tất cả kênh đang liên kết"
+          disabled={isSyncing || syncAllDisabled}
+          title={syncAllDisabledReason || 'Đồng bộ sản phẩm lên tất cả kênh đang liên kết'}
         >
           <RefreshCw className={`${styles.btnIcon} ${isSyncing ? styles.spin : ''}`} />
           {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ tất cả'}

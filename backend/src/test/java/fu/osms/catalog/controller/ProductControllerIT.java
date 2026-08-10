@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -44,13 +44,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ProductControllerIT {
 
     @Autowired MockMvc mvc;
-    @MockBean ProductService productService;
-    @MockBean ProductImportService productImportService;
-    @MockBean JwtService jwtService;
-    @MockBean UserRepository userRepository;
-    @MockBean UserService userService;
-    @MockBean AuthService authService;
-    @MockBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
+    @MockitoBean ProductService productService;
+    @MockitoBean ProductImportService productImportService;
+    @MockitoBean JwtService jwtService;
+    @MockitoBean UserRepository userRepository;
+    @MockitoBean UserService userService;
+    @MockitoBean AuthService authService;
+    @MockitoBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
 
     private ProductResponse sampleProduct(UUID id) {
         return ProductResponse.builder()

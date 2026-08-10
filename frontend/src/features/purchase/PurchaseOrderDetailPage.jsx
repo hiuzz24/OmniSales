@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCheck, Loader2, Plus, Printer, ShoppingBag, Send, Truck, PackagePlus, TrendingUp, TrendingDown, XCircle } from 'lucide-react';
+import { useEffect, useCallback, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ImagePlus, Loader2, PackageCheck, PenLine, Plus, Printer, Send, ShoppingBag, Truck, X, XCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import purchaseOrderApi from '../../api/purchaseOrderApi';
+import { uploadImageToCloudinary } from '../../api/cloudinaryApi';
 import { ROUTES } from '../../app/router/routes';
 import { ROLES } from '../auth/constants/roles';
 import useAuth from '../auth/hooks/useAuth';
@@ -13,8 +14,6 @@ const STATUS = {
   DRAFT: { label: 'Nháp', className: styles.draft },
   SENT_TO_SUPPLIER: { label: 'Đã gửi NCC', className: styles.sent },
   RECEIVING: { label: 'Đang giao hàng', className: styles.receiving },
-  INSPECTING: { label: 'Đang kiểm tra', className: styles.inspecting },
-  INSPECTED: { label: 'Đã kiểm tra', className: styles.inspected },
   COMPLETED: { label: 'Hoàn thành', className: styles.completed },
   CANCELLED: { label: 'Đã hủy', className: styles.cancelled },
 };
@@ -33,7 +32,6 @@ function printOrder(order) {
     <td style="text-align:center;padding:6px 8px;border:1px solid #cbd5e1">${item.marketplaceSku ?? item.sku ?? ''}</td>
     <td style="text-align:center;padding:6px 8px;border:1px solid #cbd5e1">cái</td>
     <td style="text-align:right;padding:6px 8px;border:1px solid #cbd5e1">${num(item.quantity)}</td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #cbd5e1">${item.actualQuantity != null ? num(item.actualQuantity) : '—'}</td>
     <td style="text-align:right;padding:6px 8px;border:1px solid #cbd5e1">${new Intl.NumberFormat('vi-VN').format(item.unitCost ?? 0)}</td>
     <td style="text-align:right;padding:6px 8px;border:1px solid #cbd5e1">${new Intl.NumberFormat('vi-VN').format(item.totalCost ?? 0)}</td>
   </tr>`).join('');
@@ -46,14 +44,13 @@ function printOrder(order) {
     <p style="text-align:center;font-size:12px;margin:0">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
     <p style="text-align:center;font-size:12px;margin:0;margin-bottom:16px">Độc lập – Tự do – Hạnh phúc</p>
     <h2>PHIẾU ĐẶT HÀNG</h2>
-    <p style="text-align:center;color:#64748b;margin-bottom:16px">Mã đơn: <strong>${order.orderCode}</strong></p>
     <table class="hi"><tbody>
       <tr><td><strong>Kính gửi:</strong> ${order.supplierName ?? ''}</td><td><strong>Ngày lập:</strong> ${dt(order.orderDate ?? order.createdAt)}</td></tr>
       <tr><td><strong>Kho nhận hàng:</strong> ${order.warehouseName ?? ''}${order.warehouseAddress ? ` — ${order.warehouseAddress}` : ''}</td><td><strong>Dự kiến nhận:</strong> ${dateOnly(order.expectedReceiptDate)}</td></tr>
       <tr><td><strong>Người lập:</strong> ${order.createdByName ?? ''}</td><td><strong>Thanh toán:</strong> ${order.paymentMethod ?? '—'}</td></tr>
       ${order.notes ? `<tr><td colspan="2"><strong>Ghi chú:</strong> ${order.notes}</td></tr>` : ''}
     </tbody></table>
-    <table class="it"><thead><tr><th>STT</th><th>Tên hàng hóa</th><th>SKU</th><th>ĐVT</th><th>SL đặt</th><th>SL thực</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
+    <table class="it"><thead><tr><th>STT</th><th>Tên hàng hóa</th><th>SKU</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
     <tbody>${rows}</tbody></table>
     <p style="text-align:right;font-weight:700">Tổng cộng: ${new Intl.NumberFormat('vi-VN').format(order.totalAmount ?? 0)} VNĐ</p>
     <div class="sr"><div><p>Người lập phiếu</p><small>(Ký, ghi rõ họ tên)</small><br/><br/><br/></div>
@@ -67,116 +64,29 @@ function printOrder(order) {
 export default function PurchaseOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { user } = useAuth();
-
-  // inspect=true means we're in inspection mode (came from "Kiểm tra" button)
-  const inspectMode = searchParams.get('inspect') === 'true';
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [actualQty, setActualQty] = useState({});
-  const [notes, setNotes] = useState({});
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
 
-  const canInspect = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
   const canAct = [ROLES.SALES, ROLES.OWNER].includes(user?.role);
+  const canReceive = [ROLES.OPERATIONS, ROLES.OWNER].includes(user?.role);
   const { confirm, ConfirmDialog } = useConfirmDialog();
-  // Show inspection UI only when explicitly in inspect mode AND order is in an inspectable state
-  const isInspectable = inspectMode && canInspect && order &&
-    (order.status === 'RECEIVING' || order.status === 'INSPECTING');
-  const isCompleted = order?.status === 'COMPLETED' || order?.status === 'INSPECTED';
 
-  const reload = () => {
+  const reload = useCallback(() => {
     setLoading(true);
     purchaseOrderApi.getById(id)
-      .then((data) => {
-        setOrder(data);
-        const init = {};
-        const initNotes = {};
-        (data.items ?? []).forEach((item) => {
-          if (item.actualQuantity != null) init[item.variantId] = item.actualQuantity;
-          else init[item.variantId] = item.quantity; // default = ordered qty
-          initNotes[item.variantId] = item.surplusNote ?? '';
-        });
-        setActualQty(init);
-        setNotes(initNotes);
-
-        // Auto-transition RECEIVING → INSPECTING as soon as user opens the inspect page
-        if (inspectMode && canInspect && data.status === 'RECEIVING') {
-          const payload = (data.items ?? []).map((item) => ({
-            variantId: item.variantId,
-            actualQuantity: item.actualQuantity != null ? item.actualQuantity : item.quantity,
-            surplusNote: null,
-          }));
-          purchaseOrderApi.saveInspection(id, payload)
-            .then((updated) => setOrder(updated))
-            .catch(() => {}); // silent — status shown will auto-refresh
-        }
-      })
-      .catch(() => toast.error('Không thể tải thông tin đơn mua hàng.'))
+      .then((data) => setOrder(data))
+      .catch(() => toast.error('Không thể tải thông tin đơn đặt hàng.'))
       .finally(() => setLoading(false));
-  };
+  }, [id]);
 
-  useEffect(() => { reload(); }, [id]);
-
-  const buildPayload = () =>
-    (order?.items ?? []).map((item) => {
-      const actual = actualQty[item.variantId] != null ? Number(actualQty[item.variantId]) : item.quantity;
-      const diff = actual - item.quantity;
-      // Auto-generate note if user hasn't typed one
-      let autoNote = notes[item.variantId] ?? '';
-      if (!autoNote) {
-        if (diff > 0) autoNote = `[THỪA] Thực nhận ${actual}, đặt ${item.quantity} — thừa ${diff} sản phẩm`;
-        else if (diff < 0) autoNote = `[THIẾU] Thực nhận ${actual}, đặt ${item.quantity} — thiếu ${Math.abs(diff)} sản phẩm`;
-      }
-      return {
-        variantId: item.variantId,
-        actualQuantity: actual,
-        surplusNote: autoNote || null,
-      };
-    });
-
-  // "Tiếp tục kiểm tra" — save draft, stay in INSPECTING, then go back to list
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await purchaseOrderApi.saveInspection(id, buildPayload());
-      toast.success('Đã lưu tiến độ kiểm tra. Trạng thái: Đang kiểm tra.');
-      navigate(ROUTES.PURCHASE_ORDERS);
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Không thể lưu kiểm tra.');
-    } finally { setSaving(false); }
-  };
-
-  // "Hoàn thành kiểm tra" — confirm → finalize → INSPECTED
-  const handleComplete = async () => {
-    const items = order?.items ?? [];
-    const empty = items.find((item) => {
-      const value = actualQty[item.variantId] ?? item.actualQuantity ?? item.quantity;
-      return value === '' || value === null || value === undefined;
-    });
-    if (empty) {
-      toast.error(`Phải nhập số lượng thực tế cho "${empty.productName}" trước khi hoàn thành kiểm tra.`);
-      return;
-    }
-    const confirmed = await confirm({
-      title: 'Hoàn thành kiểm tra?',
-      message: 'Sau khi hoàn thành kiểm tra, đơn sẽ chuyển sang trạng thái Chờ nhập kho. Thông tin thừa/thiếu đã ghi chú sẽ được lưu lại.',
-      confirmLabel: 'Hoàn thành kiểm tra',
-      tone: 'warning',
-    });
-    if (!confirmed) return;
-
-    setSaving(true);
-    try {
-      await purchaseOrderApi.completeInspection(id, buildPayload());
-      toast.success('Hoàn thành kiểm tra. Trạng thái: Chờ nhập kho.');
-      reload();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Không thể hoàn thành kiểm tra.');
-    } finally { setSaving(false); }
-  };
+  useEffect(() => {
+    const timer = window.setTimeout(reload, 0);
+    return () => window.clearTimeout(timer);
+  }, [reload]);
 
   // Gửi NCC
   const handleSend = async () => {
@@ -197,29 +107,57 @@ export default function PurchaseOrderDetailPage() {
     } finally { setSaving(false); }
   };
 
-  // Xác nhận nhận hàng
-  const handleConfirmReceiving = async () => {
+  // Xác nhận bên NCC đang giao hàng
+  const handleConfirmShipping = async () => {
     const confirmed = await confirm({
-      title: 'Xác nhận đang nhận hàng?',
-      message: 'Đơn sẽ chuyển sang trạng thái "Đang giao hàng". Thao tác này cho phép bắt đầu quá trình kiểm tra hàng hóa.',
-      confirmLabel: 'Xác nhận nhận hàng',
+      title: 'Xác nhận bên NCC đang giao hàng?',
+      message: 'Đơn sẽ chuyển sang trạng thái "Đang giao hàng".',
+      confirmLabel: 'Xác nhận',
       tone: 'warning',
     });
     if (!confirmed) return;
     setSaving(true);
     try {
-      await purchaseOrderApi.confirmReceiving(id);
-      toast.success('Đã xác nhận nhận hàng.');
+      await purchaseOrderApi.confirmShipping(id);
+      toast.success('Đã xác nhận bên NCC đang giao hàng.');
       reload();
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Không thể xác nhận nhận hàng.');
+      toast.error(e?.response?.data?.message || 'Không thể xác nhận.');
     } finally { setSaving(false); }
+  };
+
+  // Upload chứng từ (ảnh phiếu giao/phiếu nhập từ NCC)
+  const handleUploadEvidence = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingEvidence(true);
+    try {
+      const url = await uploadImageToCloudinary(file);
+      await purchaseOrderApi.updateEvidence(id, url);
+      toast.success('Đã lưu chứng từ.');
+      reload();
+    } catch (err) {
+      toast.error(err?.message || 'Không thể upload chứng từ.');
+    } finally { setUploadingEvidence(false); }
+  };
+
+  // Xóa chứng từ
+  const handleRemoveEvidence = async () => {
+    setUploadingEvidence(true);
+    try {
+      await purchaseOrderApi.updateEvidence(id, null);
+      toast.success('Đã xóa chứng từ.');
+      reload();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Không thể xóa chứng từ.');
+    } finally { setUploadingEvidence(false); }
   };
 
   // Hủy đơn
   const handleCancel = async () => {
     const confirmed = await confirm({
-      title: 'Hủy đơn mua hàng?',
+      title: 'Hủy đơn đặt hàng?',
       message: `Bạn chắc chắn muốn hủy đơn ${order?.orderCode}?\nThao tác này không thể hoàn tác.`,
       confirmLabel: 'Hủy đơn',
       tone: 'danger',
@@ -228,60 +166,10 @@ export default function PurchaseOrderDetailPage() {
     setSaving(true);
     try {
       await purchaseOrderApi.cancel(id);
-      toast.success('Đã hủy đơn mua hàng.');
+      toast.success('Đã hủy đơn đặt hàng.');
       navigate(ROUTES.PURCHASE_ORDERS);
     } catch (e) {
       toast.error(e?.response?.data?.message || 'Không thể hủy đơn.');
-    } finally { setSaving(false); }
-  };
-
-  // Tạo đơn thặng dư (thừa)
-  const handleCreateSurplus = async () => {
-    const surplusItems = (order?.items ?? []).filter(
-      (item) => item.actualQuantity != null && item.actualQuantity > item.quantity
-    );
-    const itemDesc = surplusItems.map((item) =>
-      `• ${item.productName}${item.variantName ? ` (${item.variantName})` : ''}: thừa ${item.actualQuantity - item.quantity} sản phẩm`
-    ).join('\n');
-    const confirmed = await confirm({
-      title: 'Tạo đơn thặng dư?',
-      message: `Sẽ tạo đơn mua hàng mới ở trạng thái Đã kiểm tra cho số lượng thừa:\n\n${itemDesc}\n\nGhi chú sẽ được tự động điền.`,
-      confirmLabel: 'Tạo đơn thặng dư',
-      tone: 'warning',
-    });
-    if (!confirmed) return;
-    setSaving(true);
-    try {
-      const newOrder = await purchaseOrderApi.createSurplusOrder(id);
-      toast.success(`Đã tạo đơn thặng dư ${newOrder.orderCode}.`);
-      reload();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Không thể tạo đơn thặng dư.');
-    } finally { setSaving(false); }
-  };
-
-  // Tạo đơn bổ sung (thiếu)
-  const handleCreateShortage = async () => {
-    const shortageItems = (order?.items ?? []).filter(
-      (item) => item.actualQuantity != null && item.actualQuantity < item.quantity
-    );
-    const itemDesc = shortageItems.map((item) =>
-      `• ${item.productName}${item.variantName ? ` (${item.variantName})` : ''}: thiếu ${item.quantity - item.actualQuantity} sản phẩm`
-    ).join('\n');
-    const confirmed = await confirm({
-      title: 'Tạo đơn bổ sung hàng thiếu?',
-      message: `Sẽ tạo đơn mua hàng mới ở trạng thái Đã kiểm tra cho số lượng còn thiếu:\n\n${itemDesc}\n\nGhi chú bổ sung sẽ được tự động điền.`,
-      confirmLabel: 'Tạo đơn bổ sung',
-      tone: 'warning',
-    });
-    if (!confirmed) return;
-    setSaving(true);
-    try {
-      const newOrder = await purchaseOrderApi.createShortageOrder(id);
-      toast.success(`Đã tạo đơn bổ sung ${newOrder.orderCode}.`);
-      reload();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Không thể tạo đơn bổ sung.');
     } finally { setSaving(false); }
   };
 
@@ -307,13 +195,13 @@ export default function PurchaseOrderDetailPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <h1 className={styles.title} style={{ fontSize: 19 }}>
-                {inspectMode ? 'Kiểm tra đơn mua hàng' : 'Chi tiết đơn mua hàng'}
+                Chi tiết đơn đặt hàng
               </h1>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 15, color: '#2563eb' }}>{order.orderCode}</span>
               <span className={`${styles.badge} ${statusCfg.className}`}>{statusCfg.label}</span>
             </div>
             <p className={styles.subtitle}>
-              {inspectMode ? 'Nhập số lượng thực tế nhận được từ nhà cung cấp' : 'Xem và kiểm tra đơn đặt hàng từ nhà cung cấp'}
+              Xem và kiểm tra đơn đặt hàng từ nhà cung cấp
             </p>
           </div>
         </div>
@@ -323,6 +211,15 @@ export default function PurchaseOrderDetailPage() {
             style={{ minHeight: 36, paddingInline: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Printer size={15} /> In phiếu
           </button>
+          {/* Sửa đơn / Gửi lại NCC — DRAFT / SENT_TO_SUPPLIER */}
+          {canAct && ['DRAFT', 'SENT_TO_SUPPLIER'].includes(order.status) && (
+            <button className={styles.secondaryButton}
+              onClick={() => navigate(`${ROUTES.PURCHASE_ORDER_EDIT.replace(':id', order.id)}`)}
+              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0369a1', borderColor: '#bae6fd' }}>
+              {order.status === 'SENT_TO_SUPPLIER' ? <Send size={15} /> : <PenLine size={15} />}
+              {order.status === 'SENT_TO_SUPPLIER' ? 'Gửi lại NCC' : 'Sửa đơn'}
+            </button>
+          )}
           {/* Gửi NCC — DRAFT */}
           {canAct && order.status === 'DRAFT' && (
             <button className={styles.actionButton} disabled={saving} onClick={handleSend}
@@ -330,37 +227,23 @@ export default function PurchaseOrderDetailPage() {
               <Send size={15} /> Gửi NCC
             </button>
           )}
-          {/* Xác nhận nhận hàng — SENT_TO_SUPPLIER */}
+          {/* Xác nhận đang giao hàng — SENT_TO_SUPPLIER */}
           {canAct && order.status === 'SENT_TO_SUPPLIER' && (
-            <button className={styles.actionButton} disabled={saving} onClick={handleConfirmReceiving}
+            <button className={styles.actionButton} disabled={saving} onClick={handleConfirmShipping}
               style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0369a1', borderColor: '#bae6fd' }}>
-              <Truck size={15} /> Xác nhận nhận hàng
+              <Truck size={15} /> Xác nhận bên NCC đang giao hàng
             </button>
           )}
-          {/* Tạo phiếu nhập kho — INSPECTED */}
-          {order.status === 'INSPECTED' && !order.receiptId && (
+          {/* Tạo phiếu nhập kho — RECEIVING */}
+          {canReceive && order.status === 'RECEIVING' && (
             <button className={styles.primaryButton}
               onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}
               style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Plus size={15} /> Tạo phiếu nhập kho
             </button>
           )}
-          {/* Tạo đơn bổ sung (thiếu) — INSPECTED với hasShortage */}
-          {canAct && order.status === 'INSPECTED' && order.hasShortage && (
-            <button className={styles.actionButton} disabled={saving} onClick={handleCreateShortage}
-              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#c2410c', borderColor: '#fed7aa', background: '#fff7ed' }}>
-              <TrendingDown size={15} /> Tạo đơn bổ sung
-            </button>
-          )}
-          {/* Tạo đơn thặng dư (thừa) — INSPECTED với hasSurplus */}
-          {canAct && order.status === 'INSPECTED' && order.hasSurplus && (
-            <button className={styles.actionButton} disabled={saving} onClick={handleCreateSurplus}
-              style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#7c3aed', borderColor: '#ddd6fe', background: '#fdf4ff' }}>
-              <TrendingUp size={15} /> Tạo đơn thặng dư
-            </button>
-          )}
           {/* Hủy đơn */}
-          {canAct && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
+          {canAct && order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && order.status !== 'RECEIVING' && (
             <button className={styles.actionButton} disabled={saving} onClick={handleCancel}
               style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#b91c1c', borderColor: '#fecaca' }}>
               <XCircle size={15} /> Hủy đơn
@@ -381,10 +264,8 @@ export default function PurchaseOrderDetailPage() {
             ['Hình thức thanh toán', order.paymentMethod ?? '—'],
             ...(order.sentAt ? [['Đã gửi NCC', dt(order.sentAt)]] : []),
             ...(order.receivingAt ? [['Bắt đầu giao hàng', dt(order.receivingAt)]] : []),
-            ...(order.inspectingAt ? [['Bắt đầu kiểm tra', dt(order.inspectingAt)]] : []),
-            ...(order.inspectedAt ? [['Hoàn thành kiểm tra', dt(order.inspectedAt)]] : []),
             ...(order.completedAt ? [['Hoàn thành', dt(order.completedAt)]] : []),
-            ...(order.receiptCode ? [['Phiếu nhập kho', order.receiptCode]] : []),
+            ...(order.receipts?.length ? [['Số phiếu nhập', `${order.receipts.length} phiếu`]] : []),
             ...(order.notes ? [['Ghi chú', order.notes]] : []),
           ].map(([label, val]) => (
             <div key={label} style={{ display: 'flex', gap: 8, fontSize: 13, marginBottom: 5 }}>
@@ -406,101 +287,115 @@ export default function PurchaseOrderDetailPage() {
             </div>
           ))}
         </div>
+        {/* Chứng từ đơn hàng */}
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 20px', gridColumn: '1 / -1', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em', paddingTop: 4, minWidth: 120 }}>Chứng từ</div>
+          <div style={{ flex: 1 }}>
+            {order.evidenceUrl ? (
+              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <a href={order.evidenceUrl} target="_blank" rel="noreferrer" title="Mở ảnh chứng từ">
+                  <img src={order.evidenceUrl} alt="Chứng từ" style={{ width: 220, maxHeight: 150, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff' }} />
+                </a>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 12, color: '#64748b' }}>Ảnh phiếu giao hàng / phiếu nhập từ nhà cung cấp.</span>
+                  {canAct && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <label className={styles.secondaryButton} style={{ minHeight: 34, paddingInline: 12, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: uploadingEvidence ? 'not-allowed' : 'pointer', opacity: uploadingEvidence ? .6 : 1 }}>
+                        <input type="file" accept="image/*" hidden onChange={handleUploadEvidence} disabled={uploadingEvidence} />
+                        {uploadingEvidence ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <ImagePlus size={14} />}
+                        {uploadingEvidence ? 'Đang tải...' : 'Thay ảnh khác'}
+                      </label>
+                      <button className={styles.actionButton} disabled={uploadingEvidence} onClick={handleRemoveEvidence}
+                        style={{ minHeight: 34, paddingInline: 12, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#b91c1c', borderColor: '#fecaca' }}>
+                        <X size={14} /> Xóa
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : canAct ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>Chưa có chứng từ. Tải lên ảnh phiếu giao hàng / phiếu nhập từ nhà cung cấp để lưu hồ sơ đơn hàng.</span>
+                <label className={styles.secondaryButton} style={{ minHeight: 34, paddingInline: 12, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: uploadingEvidence ? 'not-allowed' : 'pointer', opacity: uploadingEvidence ? .6 : 1 }}>
+                  <input type="file" accept="image/*" hidden onChange={handleUploadEvidence} disabled={uploadingEvidence} />
+                  {uploadingEvidence ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <ImagePlus size={14} />}
+                  {uploadingEvidence ? 'Đang tải...' : 'Tải lên chứng từ'}
+                </label>
+              </div>
+            ) : (
+              <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>Chưa có chứng từ.</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Phiếu nhập kho ── */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
+        <div style={{ padding: '13px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Phiếu nhập kho
+            {order.receipts?.length > 0 && <span style={{ fontWeight: 400, fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>{order.receipts.length} phiếu</span>}
+          </span>
+          {canReceive && order.status === 'RECEIVING' && (
+            <button className={styles.secondaryButton}
+              onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${order.id}`)}
+              style={{ minHeight: 32, paddingInline: 12, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0369a1', borderColor: '#bae6fd' }}>
+              <Plus size={14} /> Tạo thêm phiếu nhập
+            </button>
+          )}
+        </div>
+        <div style={{ padding: 14 }}>
+          {order.receipts?.length ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {order.receipts.map((receipt) => (
+                <button key={receipt.id} className={styles.secondaryButton}
+                  onClick={() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL.replace(':id', receipt.id))}
+                  style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontWeight: 700, fontSize: 12.5, color: '#2563eb', borderColor: '#bfdbfe' }}>
+                  <PackageCheck size={15} style={{ color: '#2563eb' }} /> {receipt.receiptCode}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '14px 4px', color: '#94a3b8', fontSize: 13, fontStyle: 'italic' }}>
+              Đơn này chưa có phiếu nhập kho.
+              {canReceive && order.status === 'RECEIVING' && ' Ấn "Tạo phiếu nhập kho" để tạo phiếu đầu tiên.'}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Items table ── */}
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ padding: '13px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>Danh sách sản phẩm <span style={{ fontWeight: 400, fontSize: 12, color: '#94a3b8', marginLeft: 6 }}>{order.items?.length ?? 0} sản phẩm</span></span>
-          {isInspectable && <span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>✏️ Nhập số lượng thực tế nhận được từ NCC</span>}
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#f8fafc' }}>
-                {['STT','Tên sản phẩm','SKU','Đơn vị','SL đặt','SL thực tế','Ghi chú','Đơn giá (₫)','Thành tiền (₫)'].map((h, i) => (
-                  <th key={h} style={{ padding: '9px 10px', textAlign: i >= 4 && i <= 5 ? 'right' : i === 0 ? 'center' : 'left', border: '1px solid #e2e8f0', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{h}</th>
+                {['STT','Tên sản phẩm','SKU','Đơn vị','Số lượng','Đơn giá (₫)','Thành tiền (₫)'].map((h, i) => (
+                  <th key={h} style={{ padding: '9px 10px', textAlign: i >= 4 ? 'right' : i === 0 ? 'center' : 'left', border: '1px solid #e2e8f0', fontWeight: 700, color: '#334155', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {(order.items ?? []).map((item, i) => {
-                const currentActual = actualQty[item.variantId] != null ? actualQty[item.variantId] : (item.actualQuantity ?? item.quantity);
-                const displayActual = isInspectable ? currentActual : (item.actualQuantity ?? null);
-                const actualNum = displayActual != null ? Number(displayActual) : null;
-                const isSurplus = actualNum != null && actualNum > item.quantity;
-                const isShort = actualNum != null && actualNum < item.quantity;
-                return (
-                  <tr key={item.id ?? i} style={{ borderBottom: '1px solid #f1f5f9', background: isSurplus ? '#fdf4ff' : isShort ? '#fff7ed' : undefined }}>
-                    <td style={{ padding: '9px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#64748b' }}>{i + 1}</td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontWeight: 600 }}>{item.productName}</div>
-                      {item.variantName && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{item.variantName}</div>}
-                      {item.surplusNote && <div style={{ fontSize: 11, color: '#d97706', marginTop: 2 }}>📝 {item.surplusNote}</div>}
-                    </td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', fontFamily: 'monospace', fontSize: 12, color: '#0369a1' }}>{item.marketplaceSku ?? item.sku ?? '—'}</td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'center', color: '#64748b' }}>cái</td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 700 }}>{num(item.quantity)}</td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'right' }}>
-                      {isInspectable ? (
-                        <input type="number" min="0" step="1"
-                          value={actualQty[item.variantId] ?? (item.actualQuantity ?? item.quantity)}
-                          onChange={(e) => setActualQty((prev) => ({ ...prev, [item.variantId]: e.target.value }))}
-                          style={{ width: 80, padding: '4px 8px', borderRadius: 6, textAlign: 'right', fontSize: 13, fontWeight: 700,
-                            border: `1px solid ${isSurplus ? '#a855f7' : isShort ? '#f97316' : '#cbd5e1'}` }} />
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
-                          <span style={{ fontWeight: 700, color: isSurplus ? '#7c3aed' : isShort ? '#dc2626' : '#059669' }}>
-                            {displayActual != null ? num(displayActual) : '—'}
-                          </span>
-                          {displayActual != null && (
-                            isSurplus ? (
-                              <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: '#f3e8ff', color: '#7c3aed', border: '1px solid #ddd6fe', whiteSpace: 'nowrap' }}>
-                                ▲ THỪA +{Number(displayActual) - item.quantity}
-                              </span>
-                            ) : isShort ? (
-                              <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 4, background: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca', whiteSpace: 'nowrap' }}>
-                                ▼ THIẾU -{item.quantity - Number(displayActual)}
-                              </span>
-                            ) : (
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#dcfce7', color: '#16a34a', border: '1px solid #bbf7d0', whiteSpace: 'nowrap' }}>
-                                ✓ ĐỦ
-                              </span>
-                            )
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', minWidth: 180 }}>
-                      {isInspectable ? (
-                        <input
-                          type="text"
-                          value={notes[item.variantId] ?? ''}
-                          onChange={(e) => setNotes((prev) => ({ ...prev, [item.variantId]: e.target.value }))}
-                          placeholder={
-                            isSurplus ? `[THỪA] thừa ${Number(actualQty[item.variantId] ?? item.quantity) - item.quantity} sp...` :
-                            isShort  ? `[THIẾU] thiếu ${item.quantity - Number(actualQty[item.variantId] ?? item.quantity)} sp...` :
-                            'Ghi chú...'
-                          }
-                          style={{ width: '100%', padding: '4px 8px', borderRadius: 6, fontSize: 12,
-                            border: `1px solid ${isSurplus ? '#ddd6fe' : isShort ? '#fed7aa' : '#e2e8f0'}`,
-                            background: isSurplus ? '#fdf4ff' : isShort ? '#fff7ed' : '#fff' }}
-                        />
-                      ) : (
-                        <span style={{ fontSize: 12, color: item.surplusNote ? '#d97706' : '#94a3b8', fontStyle: item.surplusNote ? 'normal' : 'italic' }}>
-                          {item.surplusNote || '—'}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'right' }}>{money(item.unitCost)}</td>
-                    <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>{money(item.totalCost)}</td>
-                  </tr>
-                );
-              })}
+              {(order.items ?? []).map((item, i) => (
+                <tr key={item.id ?? i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '9px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#64748b' }}>{i + 1}</td>
+                  <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontWeight: 600 }}>{item.productName}</div>
+                    {item.variantName && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{item.variantName}</div>}
+                  </td>
+                  <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', fontFamily: 'monospace', fontSize: 12, color: '#0369a1' }}>{item.marketplaceSku ?? item.sku ?? '—'}</td>
+                  <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'center', color: '#64748b' }}>cái</td>
+                  <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 700 }}>{num(item.quantity)}</td>
+                  <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'right' }}>{money(item.unitCost)}</td>
+                  <td style={{ padding: '9px 10px', border: '1px solid #e2e8f0', textAlign: 'right', fontWeight: 700, color: '#2563eb' }}>{money(item.totalCost)}</td>
+                </tr>
+              ))}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={8} style={{ padding: 10, textAlign: 'right', fontWeight: 700, fontSize: 14, border: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', color: '#334155' }}>Tổng cộng:</td>
+                <td colSpan={6} style={{ padding: 10, textAlign: 'right', fontWeight: 700, fontSize: 14, border: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', color: '#334155' }}>Tổng cộng:</td>
                 <td style={{ padding: 10, textAlign: 'right', fontWeight: 800, fontSize: 15, border: '1px solid #e2e8f0', borderTop: '2px solid #e2e8f0', color: '#2563eb' }}>{money(total)}</td>
               </tr>
             </tfoot>
@@ -508,21 +403,6 @@ export default function PurchaseOrderDetailPage() {
         </div>
       </div>
 
-      {/* ── Inspection action buttons (only in inspect mode) ── */}
-      {isInspectable && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '8px 0 16px' }}>
-          <button className={styles.secondaryButton} disabled={saving} onClick={handleSave}
-            style={{ minHeight: 40, paddingInline: 18, display: 'inline-flex', alignItems: 'center', gap: 6, borderColor: '#7c3aed', color: '#7c3aed' }}>
-            {saving ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <ClipboardCheck size={15} />}
-            {saving ? 'Đang lưu...' : 'Tiếp tục kiểm tra'}
-          </button>
-          <button className={styles.primaryButton} disabled={saving} onClick={handleComplete}
-            style={{ minHeight: 40, paddingInline: 20, display: 'inline-flex', alignItems: 'center', gap: 6, background: '#7c3aed', boxShadow: '0 4px 14px rgba(124,58,237,0.25)' }}>
-            {saving ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <ClipboardCheck size={15} />}
-            {saving ? 'Đang xử lý...' : 'Hoàn thành kiểm tra'}
-          </button>
-        </div>
-      )}
       {ConfirmDialog}
     </main>
   );

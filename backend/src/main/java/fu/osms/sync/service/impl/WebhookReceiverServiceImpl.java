@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.channel.entity.Channel;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.PlatformType;
+import fu.osms.messaging.constants.RabbitMQConstants;
+import fu.osms.messaging.dto.WebhookEventMessage;
+import fu.osms.messaging.publisher.EventPublisher;
 import fu.osms.sync.dto.WebhookEventResponse;
 import fu.osms.sync.dto.WebhookReceiveResult;
 import fu.osms.sync.entity.WebhookEvent;
@@ -45,6 +48,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
     private final WebhookEventRepository webhookEventRepository;
     private final WebhookEventMapper webhookEventMapper;
     private final WebhookEventProcessingService webhookEventProcessingService;
+    private final EventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -107,7 +111,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                     .build();
         }
 
-        processAsyncAfterCommit(event.getId());
+        processAsyncAfterCommit(event.getId(), eventType);
         return WebhookReceiveResult.builder()
                 .webhookEventId(event.getId())
                 .status(event.getStatus())
@@ -115,17 +119,30 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
                 .build();
     }
 
-    private void processAsyncAfterCommit(UUID eventId) {
+    private void processAsyncAfterCommit(UUID eventId, String eventType) {
+        Runnable dispatch = () -> eventPublisher.publish(
+                routingKeyFor(eventType),
+                new WebhookEventMessage(eventId),
+                () -> webhookEventProcessingService.processAsync(eventId));
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            webhookEventProcessingService.processAsync(eventId);
+            dispatch.run();
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                webhookEventProcessingService.processAsync(eventId);
+                dispatch.run();
             }
         });
+    }
+
+    private String routingKeyFor(String eventType) {
+        String type = eventType == null ? "" : eventType.toUpperCase();
+        if (type.contains("ORDER") || type.contains("TRADE")
+                || type.contains("RETURN") || type.contains("REVERSE")) {
+            return RabbitMQConstants.SYNC_ORDER;
+        }
+        return RabbitMQConstants.SYNC_PRODUCT;
     }
 
     @Override

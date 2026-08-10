@@ -64,6 +64,8 @@ class LazadaOrderPersistenceServiceImplTest {
                 .build();
     }
 
+    private static final OffsetDateTime CREATED_AT = OffsetDateTime.parse("2026-08-01T10:00:00+07:00");
+
     private LazadaOrderWriteModel model(String extOrderId, String extVariantId) {
         return new LazadaOrderWriteModel(
                 extOrderId,

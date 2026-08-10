@@ -23,7 +23,7 @@ public class OrderFulfillmentNotificationListener {
     private final OrderRepository orderRepository;
     private final OrderWorkflowNotificationService notificationService;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onOrderStatusChanged(OrderStatusChangedEvent event) {
         if (event.previousStatus() == OrderStatus.PROCESSING
                 || event.currentStatus() != OrderStatus.PROCESSING) {
@@ -38,7 +38,7 @@ public class OrderFulfillmentNotificationListener {
                 ? order.getExternalOrderId()
                 : order.getId().toString();
         try {
-            notificationService.notifyRoles(
+            notificationService.notifyRolesOnce(
                     List.of("OWNER", "OPERATIONS"),
                     TYPE,
                     "Đơn hàng cần tạo phiếu xuất",

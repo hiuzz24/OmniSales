@@ -6,6 +6,9 @@ import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.messaging.constants.RabbitMQConstants;
+import fu.osms.messaging.dto.InventoryPushMessage;
+import fu.osms.messaging.publisher.EventPublisher;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
 import fu.osms.sync.service.InventoryAutoPushSyncLogService;
@@ -16,6 +19,8 @@ import fu.osms.sync.shopify.ShopifyInventoryUpdateService;
 import fu.osms.sync.tiktok.TikTokInventoryUpdateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -27,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 @Slf4j
 @Service
@@ -42,6 +48,9 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
     private final TikTokInventoryUpdateService tikTokInventoryUpdateService;
     private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
     private final InventoryAutoPushSyncLogService inventoryAutoPushSyncLogService;
+    private final EventPublisher eventPublisher;
+    @Qualifier("syncJobExecutor")
+    private final Executor syncJobExecutor;
 
     @Override
     public void schedulePushAvailableStock(Collection<UUID> variantIds) {
@@ -65,14 +74,33 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                try {
-                    pushAvailableStock(scopedVariantIds, excludedChannelId);
-                } catch (Exception e) {
-                    log.error("[MarketplaceInventoryPropagation] Failed to push stock after commit variantIds={}",
-                            scopedVariantIds, e);
-                }
+                eventPublisher.publish(
+                        RabbitMQConstants.INVENTORY_UPDATED,
+                        new InventoryPushMessage(scopedVariantIds, excludedChannelId),
+                        () -> scheduleAsyncPush(scopedVariantIds, excludedChannelId));
             }
         });
+    }
+
+    private void scheduleAsyncPush(Set<UUID> variantIds, UUID excludedChannelId) {
+        try {
+            syncJobExecutor.execute(() -> {
+                try {
+                    pushAvailableStock(variantIds, excludedChannelId);
+                } catch (Exception e) {
+                    log.error("[MarketplaceInventoryPropagation] Async push failed after commit variantIds={}",
+                            variantIds, e);
+                }
+            });
+        } catch (TaskRejectedException e) {
+            log.warn("[MarketplaceInventoryPropagation] Async queue full, pushing inline variantIds={}", variantIds);
+            try {
+                pushAvailableStock(variantIds, excludedChannelId);
+            } catch (Exception inlineException) {
+                log.error("[MarketplaceInventoryPropagation] Inline fallback push failed variantIds={}",
+                        variantIds, inlineException);
+            }
+        }
     }
 
     @Override

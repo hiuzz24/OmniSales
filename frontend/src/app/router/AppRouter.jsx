@@ -126,6 +126,7 @@ const AppRouter = () => {
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
               <Route path={ROUTES.PURCHASE_ORDER_CREATE} element={<PurchaseOrderCreatePage />} />
+              <Route path={ROUTES.PURCHASE_ORDER_EDIT} element={<PurchaseOrderCreatePage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS]} />}>

@@ -57,6 +57,8 @@ class ShopifyOrderPersistenceServiceImplTest {
                 .build();
     }
 
+    private static final OffsetDateTime CREATED_AT = OffsetDateTime.parse("2026-08-01T10:00:00+07:00");
+
     private ShopifyOrderWriteModel model(String externalOrderId, OrderStatus status, String paymentStatus) {
         return new ShopifyOrderWriteModel(
                 externalOrderId, null, status, paymentStatus,

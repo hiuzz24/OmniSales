@@ -11,5 +11,5 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 public class PurchaseOrderScheduler {
-    // Scheduler disabled — transition is now manual (confirmReceiving endpoint).
+    // Scheduler disabled — transition is now manual (confirmShipping endpoint).
 }

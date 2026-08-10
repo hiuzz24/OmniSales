@@ -18,7 +18,7 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.context.TestPropertySource;
@@ -52,28 +52,28 @@ class LazadaOAuthControllerIT {
     @Autowired
     MockMvc mvc;
 
-    @MockBean
+    @MockitoBean
     LazadaOAuthService lazadaOAuthService;
 
-    @MockBean
+    @MockitoBean
     ChannelService channelService;
 
-    @MockBean
+    @MockitoBean
     ChannelConnectionLogService channelConnectionLogService;
 
-    @MockBean
+    @MockitoBean
     JwtService jwtService;
 
-    @MockBean
+    @MockitoBean
     UserRepository userRepository;
 
-    @MockBean
+    @MockitoBean
     UserService userService;
 
-    @MockBean
+    @MockitoBean
     AuthService authService;
 
-    @MockBean
+    @MockitoBean
     org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
 
     @Test

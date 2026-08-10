@@ -19,11 +19,16 @@ public interface TikTokOrderApiService {
 
     Map<String, Object> shipPackage(Channel channel, String packageId);
 
+    ShippingDocumentResult getPackageShippingDocument(Channel channel, String packageId);
+
     Map<String, Object> cancelOrder(Channel channel, String orderId, String cancelReason);
 
     record Eligibility(boolean eligible, Set<String> reasonNames, String warningMessage) {
     }
 
     record OrderSearchPage(List<String> orderIds, String nextPageToken) {
+    }
+
+    record ShippingDocumentResult(String code, String message, String documentUrl) {
     }
 }

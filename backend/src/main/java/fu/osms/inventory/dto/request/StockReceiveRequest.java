@@ -23,7 +23,7 @@ public class StockReceiveRequest {
 
     private UUID supplierId;
 
-    @NotNull(message = "Đơn mua hàng là bắt buộc")
+    @NotNull(message = "Đơn đặt hàng là bắt buộc")
     private UUID purchaseOrderId;
 
     @Size(max = 100)

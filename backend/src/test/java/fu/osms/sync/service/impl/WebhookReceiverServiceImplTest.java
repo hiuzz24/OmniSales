@@ -10,6 +10,7 @@ import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.mapper.WebhookEventMapper;
 import fu.osms.sync.repository.WebhookEventRepository;
 import fu.osms.sync.webhook.PlatformWebhookHandler;
+import fu.osms.messaging.publisher.EventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,9 @@ class WebhookReceiverServiceImplTest {
     @Mock
     private WebhookEventProcessingService webhookEventProcessingService;
 
+    @Mock
+    private EventPublisher eventPublisher;
+
     private ObjectMapper objectMapper;
 
     private UUID eventId;
@@ -69,6 +73,7 @@ class WebhookReceiverServiceImplTest {
                 webhookEventRepository,
                 webhookEventMapper,
                 webhookEventProcessingService,
+                eventPublisher,
                 objectMapper
         );
 
@@ -154,6 +159,12 @@ class WebhookReceiverServiceImplTest {
             e.setId(eventId);
             return e;
         });
+        // Simulate local fallback: the publisher runs the in-process async dispatch
+        doAnswer(inv -> {
+            Runnable fallback = inv.getArgument(2);
+            fallback.run();
+            return null;
+        }).when(eventPublisher).publish(any(), any(), any());
 
         WebhookReceiveResult result = webhookReceiverService.receive(PlatformType.SHOPIFY, headers, rawBody);
 
@@ -177,6 +188,7 @@ class WebhookReceiverServiceImplTest {
                 webhookEventRepository,
                 webhookEventMapper,
                 webhookEventProcessingService,
+                eventPublisher,
                 objectMapper
         );
 

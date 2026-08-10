@@ -5,7 +5,7 @@ import { ROUTES } from '../../../app/router/routes';
 import {
   ShoppingCart, FileDown, Eye, Search,
   TrendingUp, Clock, CheckCircle, Package, Truck, XCircle,
-  Store, ShoppingBag, PenTool, History, CloudDownload,
+  Store, ShoppingBag, PenTool, History, CloudDownload, Printer, Loader2,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import Pagination from '../../../shared/components/Pagination';
@@ -56,6 +56,20 @@ const PAYMENT_CONFIG = {
   PAID:    { label: 'Đã thanh toán',   className: 'payPaid'    },
 };
 
+const getShippingLabelAvailability = (order) => {
+  if (order?.platform === 'TIKTOK') {
+    return order.status === 'SHIPPED'
+      ? { enabled: true, title: 'In phiếu vận chuyển TikTok' }
+      : { enabled: false, title: 'Đơn chưa sẵn sàng in phiếu' };
+  }
+  if (order?.platform === 'LAZADA') {
+    return order.status === 'SHIPPED'
+      ? { enabled: true, title: 'In phiếu vận chuyển Lazada' }
+      : { enabled: false, title: 'Đơn chưa sẵn sàng in phiếu' };
+  }
+  return { enabled: false, title: 'V1 chưa hỗ trợ in phiếu cho kênh này' };
+};
+
 const OrderListPage = () => {
   const navigate = useNavigate();
 
@@ -77,6 +91,7 @@ const OrderListPage = () => {
   const [isPullModalOpen, setIsPullModalOpen] = useState(false);
   const [isStartingPull, setIsStartingPull] = useState(false);
   const [pullJobs, setPullJobs] = useState([]);
+  const [printingOrderIds, setPrintingOrderIds] = useState(() => new Set());
   const pullFailuresRef = useRef(0);
   const pullStartedAtRef = useRef(Date.now());
 
@@ -209,6 +224,39 @@ const OrderListPage = () => {
     setFromDate('');
     setToDate('');
     setPage(0);
+  };
+
+  const handlePrintShippingLabel = async (order) => {
+    const availability = getShippingLabelAvailability(order);
+    if (!availability.enabled || printingOrderIds.has(order.id)) return;
+
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) {
+      toast.error('Trình duyệt đã chặn tab xem phiếu. Vui lòng cho phép mở cửa sổ mới.');
+      return;
+    }
+    previewWindow.opener = null;
+    previewWindow.document.title = 'Đang chuẩn bị phiếu vận chuyển';
+    previewWindow.document.body.innerHTML = '<p style="font-family:Arial,sans-serif;padding:24px;color:#334155">Đang chuẩn bị phiếu vận chuyển...</p>';
+
+    setPrintingOrderIds((current) => new Set(current).add(order.id));
+    try {
+      const label = await orderService.createShippingLabel(order.id);
+      const documentUrl = new URL(label.documentUrl);
+      if (documentUrl.protocol !== 'https:') {
+        throw new Error('Invalid shipping label URL');
+      }
+      previewWindow.location.replace(documentUrl.toString());
+    } catch (error) {
+      if (!previewWindow.closed) previewWindow.close();
+      toast.error(error?.response?.data?.message || 'Không thể lấy phiếu vận chuyển từ sàn');
+    } finally {
+      setPrintingOrderIds((current) => {
+        const next = new Set(current);
+        next.delete(order.id);
+        return next;
+      });
+    }
   };
 
   const formatCurrency = (amount) => {
@@ -394,6 +442,8 @@ const OrderListPage = () => {
                 const sc = getStatusConfig(order.status);
                 const pc = getPaymentConfig(order.paymentStatus);
                 const StatusIcon = sc.icon;
+                const shippingLabel = getShippingLabelAvailability(order);
+                const isPrintingLabel = printingOrderIds.has(order.id);
                 return (
                   <tr key={order.id} className={styles.tableRow}>
                     <td className={styles.thPl}>
@@ -450,6 +500,18 @@ const OrderListPage = () => {
                     </td>
                     <td className={styles.tdAction}>
                       <div className={styles.actionGroup}>
+                        <button
+                          type="button"
+                          onClick={() => handlePrintShippingLabel(order)}
+                          title={shippingLabel.title}
+                          aria-label={shippingLabel.title}
+                          disabled={!shippingLabel.enabled || isPrintingLabel}
+                          className={`${styles.detailBtn} ${styles.printBtn}`}
+                        >
+                          {isPrintingLabel
+                            ? <Loader2 size={16} className={styles.buttonSpinner} />
+                            : <Printer size={16} />}
+                        </button>
                         <button
                           type="button"
                           onClick={() => navigate(ROUTES.ORDER_DETAIL.replace(':id', order.id))}

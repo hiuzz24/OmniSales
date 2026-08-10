@@ -17,6 +17,7 @@ const JOB_TYPE_LABELS = {
   MARKETPLACE_INVENTORY_AUTO_PUSH: 'Tự động đồng bộ tồn kho lên sàn',
   MARKETPLACE_INVENTORY_RECONCILE: 'Đối soát tồn kho với sàn',
   PRODUCT_SYNC: 'Đồng bộ sản phẩm',
+  PRODUCT_SYNC_REQUEST: 'Yêu cầu đồng bộ sản phẩm',
 };
 
 const SyncHistoryPage = () => {

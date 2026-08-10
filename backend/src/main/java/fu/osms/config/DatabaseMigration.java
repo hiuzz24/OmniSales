@@ -146,6 +146,10 @@ public class DatabaseMigration {
             jdbcTemplate.execute("""
                         ALTER TABLE notifications
                         DROP CONSTRAINT IF EXISTS notifications_type_check,
+                        DROP CONSTRAINT IF EXISTS notifications_entity_type_check;
+                        ALTER TABLE notifications ALTER COLUMN type TYPE VARCHAR(40);
+                        ALTER TABLE notifications ALTER COLUMN entity_type TYPE VARCHAR(20);
+                        ALTER TABLE notifications
                         ADD CONSTRAINT notifications_type_check
                         CHECK (type IN (
                             'LOW_STOCK',
@@ -155,6 +159,13 @@ public class DatabaseMigration {
                             'ORDER_PAID',
                             'ORDER_PICK_REQUIRED',
                             'ORDER_READY_SHIP',
+                            'ORDER_SHIPPED',
+                            'ORDER_DELIVERED',
+                            'ORDER_RETURN_REQUESTED',
+                            'ORDER_RETURN_REJECTED',
+                            'ORDER_RETURN_COMPLETED',
+                            'ORDER_RETURN_ATTENTION',
+                            'CHANNEL_DISCONNECTED',
                             'STOCK_TRANSFER',
                             'STOCKTAKE',
                             'SYNC',
@@ -164,26 +175,6 @@ public class DatabaseMigration {
             log.info("Migration: notifications_type_check updated with order workflow notification types");
         } catch (Exception e) {
             log.error("Migration error updating notifications type constraint: {}", e.getMessage());
-        }
-
-        try {
-            jdbcTemplate.execute("""
-                        ALTER TABLE stocktake_sessions
-                        ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ
-                    """);
-            log.info("Migration: added cancelled_at column to stocktake_sessions table");
-        } catch (Exception e) {
-            log.warn("Migration skipped or already applied for stocktake_sessions.cancelled_at: {}", e.getMessage());
-        }
-
-        try {
-            jdbcTemplate.execute("""
-                        ALTER TABLE inventory_issue_items
-                        ADD COLUMN IF NOT EXISTS is_gift BOOLEAN NOT NULL DEFAULT false
-                    """);
-            log.info("Migration: added is_gift column to inventory_issue_items table");
-        } catch (Exception e) {
-            log.warn("Migration skipped or already applied for inventory_issue_items.is_gift: {}", e.getMessage());
         }
 
         try {

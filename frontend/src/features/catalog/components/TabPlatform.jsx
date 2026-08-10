@@ -86,10 +86,9 @@ const TabPlatform = ({ product, onRefresh }) => {
     try {
       setSyncing((previous) => ({ ...previous, [mapping.channelId]: true }));
       await productApi.syncChannel(product.id, mapping.channelId);
-      toast.success(`Đã đồng bộ ${mapping.channelName || mapping.platform}`);
-      await onRefresh?.();
+      toast.success(`Đã đưa yêu cầu đồng bộ ${mapping.channelName || mapping.platform} vào hàng đợi.`);
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Đồng bộ channel thất bại');
+      toast.error(error.response?.data?.message || 'Không thể đưa yêu cầu đồng bộ vào hàng đợi');
     } finally {
       setSyncing((previous) => ({ ...previous, [mapping.channelId]: false }));
     }
