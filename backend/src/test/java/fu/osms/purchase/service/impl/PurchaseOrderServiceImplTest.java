@@ -23,6 +23,7 @@ import fu.osms.purchase.dto.*;
 import fu.osms.purchase.entity.PurchaseOrder;
 import fu.osms.purchase.entity.PurchaseOrderItem;
 import fu.osms.purchase.enums.PurchaseOrderStatus;
+import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.purchase.repository.PurchaseOrderRepository;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,8 @@ class PurchaseOrderServiceImplTest {
 
     @Mock
     private PurchaseOrderRepository purchaseOrderRepository;
+    @Mock
+    private PurchaseOrderItemRepository purchaseOrderItemRepository;
     @Mock
     private SupplierRepository supplierRepository;
     @Mock
@@ -384,15 +387,30 @@ class PurchaseOrderServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should throw when sending non-DRAFT order")
-        void shouldThrowWhenSendingNonDraftOrder() {
+        @DisplayName("Should resend SENT_TO_SUPPLIER order (cập nhật thời gian gửi)")
+        void shouldResendSentOrderToSupplierSuccessfully() {
             purchaseOrder.setStatus(PurchaseOrderStatus.SENT_TO_SUPPLIER);
+
+            when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
+            when(purchaseOrderRepository.save(any(PurchaseOrder.class))).thenReturn(purchaseOrder);
+
+            PurchaseOrderResponse result = purchaseOrderService.sendToSupplier(orderId);
+
+            assertThat(result).isNotNull();
+            assertThat(purchaseOrder.getStatus()).isEqualTo(PurchaseOrderStatus.SENT_TO_SUPPLIER);
+            verify(purchaseOrderRepository).save(any(PurchaseOrder.class));
+        }
+
+        @Test
+        @DisplayName("Should throw when sending RECEIVING order")
+        void shouldThrowWhenSendingReceivingOrder() {
+            purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
 
             when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
 
             assertThatThrownBy(() -> purchaseOrderService.sendToSupplier(orderId))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Chỉ đơn Nháp mới có thể gửi nhà cung cấp");
+                    .hasMessageContaining("Chỉ đơn Nháp hoặc Đã gửi NCC mới có thể gửi nhà cung cấp");
         }
 
         @Test

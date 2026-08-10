@@ -1,0 +1,244 @@
+openapi: 3.0.1
+info:
+  title: Shopify Admin API (subset used by OSMS)
+  description: >
+    Các endpoint Shopify (REST + GraphQL) mà hệ thống OSMS gọi ra (outbound). Spec mức tài liệu.
+    Base URL: https://{shop}.myshopify.com  — API version 2026-07.
+  version: "1.0.0"
+servers:
+  - url: https://{shop}.myshopify.com
+    description: Shopify Admin API
+    variables:
+      shop:
+        default: your-shop
+        description: Tên shop (được normal về {shop}.myshopify.com)
+security:
+  - ShopifyAccessToken: []
+paths:
+  /admin/oauth/access_token:
+    post:
+      summary: Đổi OAuth code lấy access token
+      operationId: shopifyAuthTokenCreate
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: client_secret
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: access_token
+  /admin/oauth/access_scopes.json:
+    get:
+      summary: Liệt kê scopes đã cấp (kiểm tra read_locations)
+      operationId: shopifyAccessScopes
+      responses:
+        "200":
+          description: granted_scopes
+  /admin/api/2026-07/products.json:
+    post:
+      summary: Tạo sản phẩm
+      operationId: shopifyProductCreate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Product created
+  /admin/api/2026-07/products/{product_id}.json:
+    put:
+      summary: Cập nhật sản phẩm
+      operationId: shopifyProductUpdate
+      parameters:
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Product updated
+  /admin/api/2026-07/webhooks.json:
+    post:
+      summary: Đăng ký webhook REST
+      operationId: shopifyWebhookCreate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                webhook:
+                  type: object
+                  properties:
+                    topic:
+                      type: string
+                    address:
+                      type: string
+                    format:
+                      type: string
+      responses:
+        "201":
+          description: Webhook created
+    get:
+      summary: Liệt kê webhook REST
+      operationId: shopifyWebhookList
+      responses:
+        "200":
+          description: webhooks
+  /admin/api/2026-07/webhooks/{webhook_id}.json:
+    delete:
+      summary: Xóa webhook REST
+      operationId: shopifyWebhookDelete
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+  /admin/api/2026-07/orders.json:
+    get:
+      summary: Lấy danh sách đơn (phân trang 250, filter updated_at)
+      operationId: shopifyOrderList
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            default: any
+        - name: updated_at_min
+          in: query
+          schema:
+            type: string
+        - name: updated_at_max
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 250
+        - name: page_info
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: orders
+  /admin/api/2026-07/orders/{order_id}/fulfillment_orders.json:
+    get:
+      summary: Lấy fulfillment orders của đơn (chuẩn bị ship)
+      operationId: shopifyFulfillmentOrders
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: fulfillment_orders
+  /admin/api/2026-07/fulfillments.json:
+    post:
+      summary: Tạo fulfillment (đánh dấu đơn đã ship)
+      operationId: shopifyFulfillmentCreate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fulfillment:
+                  type: object
+                  properties:
+                    line_items_by_fulfillment_order:
+                      type: array
+                      items:
+                        type: object
+                    tracking_company:
+                      type: string
+                    tracking_number:
+                      type: string
+                    tracking_url:
+                      type: string
+      responses:
+        "201":
+          description: Fulfillment created
+  /admin/api/2026-07/orders/{order_id}/cancel.json:
+    post:
+      summary: Hủy đơn (kèm lý do, refund, restock)
+      operationId: shopifyOrderCancel
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                email:
+                  type: boolean
+                refund:
+                  type: object
+                restock:
+                  type: boolean
+      responses:
+        "200":
+          description: Order cancelled
+  /admin/api/2026-07/graphql.json:
+    post:
+      summary: GraphQL Admin API (mọi mutation/query đều gọi endpoint này)
+      operationId: shopifyGraphql
+      description: >
+        Các operation được OSMS dùng:
+        - query locations / inventoryAvailable / ShopifyProductVariants / ReturnDetail / SuggestedReturnOutcome / webhookSubscriptions
+        - mutation inventorySetQuantities (@idempotent) / inventoryActivate / locationEdit / productVariantsBulkUpdate / inventoryItemUpdate
+        - mutation returnApproveRequest / returnDeclineRequest / returnProcess
+        - mutation webhookSubscriptionCreate / webhookSubscriptionDelete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                variables:
+                  type: object
+      responses:
+        "200":
+          description: GraphQL response
+components:
+  securitySchemes:
+    ShopifyAccessToken:
+      type: apiKey
+      name: X-Shopify-Access-Token
+      in: header
+      description: Admin API access token (header X-Shopify-Access-Token)

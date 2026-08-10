@@ -506,6 +506,7 @@ export default function PurchaseOrderCreatePage() {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [loadingEdit, setLoadingEdit] = useState(isEdit);
   const [editBlocked, setEditBlocked] = useState(false);
+  const [editStatus, setEditStatus] = useState(null);
   const [editCreatedAt, setEditCreatedAt] = useState(null);
   const purchaseTime = useMemo(() => new Date().toLocaleString('vi-VN', {
     day: '2-digit',
@@ -541,6 +542,7 @@ export default function PurchaseOrderCreatePage() {
           setEditBlocked(true);
           return;
         }
+        setEditStatus(order.status);
         setOrderCode(order.orderCode);
         setSupplier(order.supplierId
           ? { id: order.supplierId, name: order.supplierName ?? '', code: order.supplierCode ?? '' }
@@ -689,7 +691,12 @@ export default function PurchaseOrderCreatePage() {
           unitCost: Number(item.unitCost),
         })),
       });
-      toast.success('Đã cập nhật đơn đặt hàng.');
+      if (editStatus === 'SENT_TO_SUPPLIER') {
+        await purchaseOrderApi.send(id);
+        toast.success('Đã cập nhật và gửi lại đơn cho nhà cung cấp.');
+      } else {
+        toast.success('Đã cập nhật đơn đặt hàng.');
+      }
       navigate(detailUrl);
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Không thể cập nhật đơn đặt hàng.');
@@ -716,7 +723,7 @@ export default function PurchaseOrderCreatePage() {
         <div className={styles.actions}>
           {isEdit ? (
             <button type="button" disabled={submitting || loadingOptions} className={styles.primaryButton} onClick={submitEdit}>
-              {submitting ? <Loader2 size={17} className={styles.spin} /> : <Check size={17} />} Lưu thay đổi
+              {submitting ? <Loader2 size={17} className={styles.spin} /> : <Check size={17} />} {editStatus === 'SENT_TO_SUPPLIER' ? 'Gửi lại NCC' : 'Lưu thay đổi'}
             </button>
           ) : (
             <>

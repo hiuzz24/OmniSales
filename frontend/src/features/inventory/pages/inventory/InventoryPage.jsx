@@ -987,7 +987,7 @@ const InventoryPage = () => {
                     <th className={`${styles.th} ${styles.thRight}`} title="Hàng đang xuất kho (phiếu xuất chưa hoàn thành)">Đang xuất</th>
                     <th className={`${styles.th} ${styles.thRight}`} title="Hàng đang được giữ cho đơn hàng">Giữ hàng</th>
                     <th className={`${styles.th} ${styles.thRight}`} title="Số lượng có thể bán = Trong kho - Giữ hàng">Có thể bán</th>
-                    <th className={`${styles.th} ${styles.thRight}`} title="Ngưỡng cảnh báo sắp hết hàng">Tồn min</th>
+                    <th className={`${styles.th} ${styles.thRight}`} title="Ngưỡng cảnh báo sắp hết hàng">Tồn kho tối thiểu</th>
                     <th className={styles.th}>Trạng thái</th>
                     <th className={styles.th}></th>
                   </tr>

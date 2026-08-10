@@ -523,6 +523,9 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         StockReceiveResponse response = receiptMapper.toResponse(receipt);
         List<StockReceiveItemResponse> itemResponses = toItemResponses(items);
         response.setItems(itemResponses);
+        if (receipt.getPurchaseOrder() != null) {
+            response.setPoCompleted(isPurchaseOrderCompleted(receipt.getPurchaseOrder().getId()));
+        }
         
         ReceiptGroupSummary summary = summarizeReceiptItems(items);
         response.setTotalSkuCount(summary.skuCount());

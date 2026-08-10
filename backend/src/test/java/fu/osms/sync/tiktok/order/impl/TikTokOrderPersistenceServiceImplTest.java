@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -68,9 +69,11 @@ class TikTokOrderPersistenceServiceImplTest {
                 .build();
     }
 
+    private static final OffsetDateTime CREATED_AT = OffsetDateTime.parse("2026-08-01T10:00:00+07:00");
+
     private TikTokOrderWriteModel model(String extId, OrderStatus status, String paymentStatus) {
         return new TikTokOrderWriteModel(
-                extId, status, "RAW_STATUS",
+                extId, CREATED_AT, status, "RAW_STATUS",
                 paymentStatus,
                 "Buyer", "0901", Map.of("city", "HCMC"),
                 BigDecimal.valueOf(100), BigDecimal.ZERO, BigDecimal.ZERO,

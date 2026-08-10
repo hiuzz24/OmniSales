@@ -1,0 +1,294 @@
+openapi: 3.0.1
+info:
+  title: Lazada Open Platform API (subset used by OSMS)
+  description: >
+    Các endpoint Lazada mà hệ thống OSMS gọi ra (outbound). Spec mức tài liệu:
+    liệt kê method, path và mục đích sử dụng của từng endpoint trong codebase.
+    Base URL production: https://api.lazada.vn/rest  (auth: https://auth.lazada.com/rest)
+  version: "1.0.0"
+servers:
+  - url: https://api.lazada.vn/rest
+    description: Lazada Vietnam OpenAPI
+security:
+  - LazadaSign: []
+paths:
+  /auth/token/create:
+    post:
+      summary: Đổi OAuth code lấy access token
+      description: Được gọi trong luồng connect channel (LazadaOAuthServiceImpl).
+      operationId: lazadaAuthTokenCreate
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: uuid
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Token response (access_token, refresh_token, expires_in)
+  /auth/token/refresh:
+    post:
+      summary: Refresh access token
+      operationId: lazadaAuthTokenRefresh
+      parameters:
+        - name: refresh_token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: New access_token + refresh_token
+  /order/get:
+    get:
+      summary: Lấy chi tiết một đơn hàng
+      operationId: lazadaOrderGet
+      parameters:
+        - name: order_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: is_detail
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Order detail
+  /order/items/get:
+    get:
+      summary: Lấy các dòng sản phẩm của đơn
+      operationId: lazadaOrderItemsGet
+      parameters:
+        - name: order_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order items
+  /orders/get:
+    get:
+      summary: Lấy danh sách order id theo khoảng thời gian (pull import)
+      operationId: lazadaOrdersGet
+      parameters:
+        - name: created_after
+          in: query
+          schema:
+            type: string
+        - name: created_before
+          in: query
+          schema:
+            type: string
+        - name: update_after
+          in: query
+          schema:
+            type: string
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+        - name: offset
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Danh sách order id
+  /products/get:
+    get:
+      summary: Lấy danh sách sản phẩm (import, đọc tồn kho, re-fetch sau webhook catalog)
+      operationId: lazadaProductsGet
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: sku_seller_list
+          in: query
+          schema:
+            type: string
+        - name: offset
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: create_after
+          in: query
+          schema:
+            type: string
+        - name: update_after
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách sản phẩm + SKU (gồm quantity sellable)
+  /rc/warehouse/get:
+    get:
+      summary: Lấy danh sách kho Lazada
+      operationId: lazadaWarehouseGet
+      parameters:
+        - name: offset
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Danh sách warehouse
+  /rc/warehouse/detail/get:
+    get:
+      summary: Lấy chi tiết kho (địa chỉ, trạng thái) để kiểm tra primary warehouse
+      operationId: lazadaWarehouseDetailGet
+      parameters:
+        - name: warehouse_code
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Warehouse detail
+  /category/tree/get:
+    get:
+      summary: Lấy cây danh mục Lazada (hiển thị tên danh mục)
+      operationId: lazadaCategoryTreeGet
+      parameters:
+        - name: language_code
+          in: query
+          schema:
+            type: string
+            default: vn
+      responses:
+        "200":
+          description: Category tree
+  /product/create:
+    post:
+      summary: Tạo sản phẩm trên Lazada
+      operationId: lazadaProductCreate
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                payload:
+                  type: string
+                  description: XML payload của sản phẩm
+      responses:
+        "200":
+          description: Kết quả tạo sản phẩm (ItemId, SkuId list)
+  /product/update:
+    post:
+      summary: Cập nhật sản phẩm trên Lazada
+      operationId: lazadaProductUpdate
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                payload:
+                  type: string
+                  description: XML payload cập nhật sản phẩm
+      responses:
+        "200":
+          description: Kết quả cập nhật
+  /product/price_quantity/update:
+    post:
+      summary: Cập nhật giá và số lượng hàng loạt
+      operationId: lazadaPriceQuantityUpdate
+      parameters:
+        - name: payload
+          in: query
+          required: true
+          schema:
+            type: string
+          description: JSON payload (SellerSku, Price, Quantity)
+        - name: skus
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Kết quả update
+  /product/stock/sellable/update:
+    post:
+      summary: Cập nhật tồn bán được (sellable stock)
+      operationId: lazadaStockSellableUpdate
+      parameters:
+        - name: payload
+          in: query
+          required: true
+          schema:
+            type: string
+          description: XML payload (SkuIdList, SellableQuantity)
+      responses:
+        "200":
+          description: Kết quả update tồn
+  /image/migrate:
+    post:
+      summary: Migrate ảnh sản phẩm lên CDN Lazada
+      operationId: lazadaImageMigrate
+      parameters:
+        - name: image_url_list
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Danh sách image url đã migrate
+  /order/reverse/get:
+    get:
+      summary: Lấy chi tiết trả hàng (reverse order / RMA)
+      operationId: lazadaReverseGet
+      parameters:
+        - name: order_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Reverse order detail
+  /order/reverse/return/update:
+    post:
+      summary: Duyệt / từ chối / xác nhận nhận lại hàng trả
+      operationId: lazadaReverseReturnUpdate
+      parameters:
+        - name: payload
+          in: query
+          required: true
+          schema:
+            type: string
+          description: JSON payload (Action, Reason, OrderId, ...)
+      responses:
+        "200":
+          description: Kết quả cập nhật trả hàng
+components:
+  securitySchemes:
+    LazadaSign:
+      type: apiKey
+      name: sign
+      in: query
+      description: >
+        Mọi request đều được ký (app_key, timestamp, sign_method, sign). OSMS ký tự động
+        trong LazadaApiClientImpl; bỏ qua sign khi test thủ công.

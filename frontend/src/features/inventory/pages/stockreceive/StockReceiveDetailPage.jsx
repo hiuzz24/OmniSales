@@ -428,7 +428,7 @@ export default function StockReceiveDetailPage() {
               </button>
             </>
           )}
-          {receipt.status === 'CONFIRMED' && receipt.purchaseOrderId && (
+          {receipt.status === 'CONFIRMED' && receipt.purchaseOrderId && !receipt.poCompleted && (
             <button
               onClick={() => navigate(`${ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE}?purchaseOrderId=${receipt.purchaseOrderId}`)}
               style={{

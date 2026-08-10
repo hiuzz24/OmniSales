@@ -9,6 +9,8 @@ import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
+import fu.osms.inventory.dto.request.StockDeliveryFromReceiptItemRequest;
+import fu.osms.inventory.dto.request.StockDeliveryFromReceiptRequest;
 import fu.osms.inventory.dto.request.StockDeliveryItemRequest;
 import fu.osms.inventory.dto.request.StockDeliveryRequest;
 import fu.osms.inventory.dto.response.StockDeliveryResponse;
@@ -65,6 +67,8 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final UserRepository userRepository;
+    private final StockReceiveRepository stockReceiveRepository;
+    private final StockReceiveItemRepository stockReceiveItemRepository;
     private final StockDeliveryMapper stockDeliveryMapper;
     private final InventoryAlertService inventoryAlertService;
     private final OrderGiftReservationService orderGiftReservationService;
@@ -109,6 +113,97 @@ public class StockDeliveryServiceImpl implements StockDeliveryService {
         }
         log.info("Stock delivery created successfully with ID: {}", savedIssue.getId());
         return stockDeliveryMapper.toResponse(savedIssue);
+    }
+
+    @Override
+    @Transactional
+    public StockDeliveryResponse createStockDeliveryFromReceipt(
+            UUID receiptId, StockDeliveryFromReceiptRequest request) {
+        log.info("Creating stock delivery from receipt: {}", receiptId);
+
+        InventoryReceipt receipt = stockReceiveRepository.findById(receiptId)
+                .orElseThrow(() -> new AppException(ErrorCode.RECEIPT_NOT_FOUND));
+
+        if (!"CONFIRMED".equals(receipt.getStatus())) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "Chỉ có thể tạo phiếu xuất từ phiếu nhập đã xác nhận");
+        }
+
+        List<InventoryReceiptItem> receiptItems = stockReceiveItemRepository.findByReceiptId(receiptId);
+        StockDeliveryRequest deliveryRequest = buildRequestFromReceipt(receipt, receiptItems, request);
+
+        StockDeliveryResponse response = createStockDelivery(deliveryRequest);
+
+        InventoryIssue createdIssue = inventoryIssueRepository.findByIdWithDetails(response.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.ISSUE_NOT_FOUND));
+        createdIssue.setDocumentReferenceId(receiptId.toString());
+        InventoryIssue savedIssue = inventoryIssueRepository.save(createdIssue);
+        log.info("Stock delivery created from receipt {} with ID: {}", receiptId, savedIssue.getId());
+        return stockDeliveryMapper.toResponse(savedIssue);
+    }
+
+    StockDeliveryRequest buildRequestFromReceipt(
+            InventoryReceipt receipt,
+            List<InventoryReceiptItem> receiptItems,
+            StockDeliveryFromReceiptRequest request) {
+        if (receiptItems == null || receiptItems.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "Phiếu nhập không có sản phẩm để tạo phiếu xuất");
+        }
+
+        Map<UUID, StockDeliveryFromReceiptItemRequest> overrides = new LinkedHashMap<>();
+        if (request != null && request.getItems() != null) {
+            for (StockDeliveryFromReceiptItemRequest item : request.getItems()) {
+                if (item != null && item.getProductVariantId() != null) {
+                    overrides.put(item.getProductVariantId(), item);
+                }
+            }
+        }
+
+        List<StockDeliveryItemRequest> items = new ArrayList<>();
+        for (InventoryReceiptItem receiptItem : receiptItems) {
+            if (receiptItem.getVariant() == null || receiptItem.getVariant().getId() == null) {
+                continue;
+            }
+            UUID variantId = receiptItem.getVariant().getId();
+            StockDeliveryFromReceiptItemRequest override = overrides.remove(variantId);
+            int quantity = override != null && override.getQuantity() != null
+                    ? override.getQuantity()
+                    : (receiptItem.getQuantity() != null ? receiptItem.getQuantity() : 0);
+            if (quantity <= 0) {
+                continue;
+            }
+            items.add(new StockDeliveryItemRequest(
+                    variantId,
+                    quantity,
+                    override != null ? override.getNote() : null));
+        }
+
+        if (!overrides.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "Không thể tạo phiếu xuất: biến thể không thuộc phiếu nhập " + overrides.keySet());
+        }
+        if (items.isEmpty()) {
+            throw new AppException(ErrorCode.VALIDATION_FAILED,
+                    "Không có sản phẩm hợp lệ để tạo phiếu xuất từ phiếu nhập");
+        }
+
+        String supplierName = receipt.getSupplier() != null ? receipt.getSupplier().getName() : null;
+        String recipient = request != null && request.getRecipient() != null
+                ? request.getRecipient()
+                : supplierName;
+        String note = request != null && request.getNote() != null
+                ? request.getNote()
+                : "Tạo từ phiếu nhập " + receipt.getReceiptCode();
+
+        StockDeliveryRequest deliveryRequest = new StockDeliveryRequest();
+        deliveryRequest.setWarehouseId(receipt.getWarehouse().getId());
+        deliveryRequest.setDeliveryType("TRANSFER");
+        deliveryRequest.setRecipient(recipient);
+        deliveryRequest.setNote(note);
+        deliveryRequest.setIssuedDate(LocalDate.now());
+        deliveryRequest.setItems(items);
+        return deliveryRequest;
     }
 
     @Override
