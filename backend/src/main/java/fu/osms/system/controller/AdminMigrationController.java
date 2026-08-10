@@ -1,0 +1,198 @@
+package fu.osms.system.controller;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * One-shot admin endpoint để apply migration 20260810_webhook_retry_and_order_pull_jobs
+ * lên Postgres Render (free plan không có psql Shell).
+ *
+ * <p><b>Security</b>: chỉ chạy khi env {@code ADMIN_MIGRATION_KEY} được set trên Render
+ * và request phải gửi header {@code X-Admin-Migration-Key} khớp đúng giá trị đó.
+ * Sau khi chạy xong, <b>xóa env {@code ADMIN_MIGRATION_KEY} + redeploy</b> để
+ * endpoint vô hiệu hóa hoàn toàn.
+ *
+ * <p>Endpoint này <b>không</b> nên tồn tại lâu dài — chỉ dùng cho migration một lần.
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/admin/run-migrations")
+public class AdminMigrationController {
+
+    @Value("${app.admin.migration-key:#{null}}")
+    private String configuredKey;
+
+    @PersistenceContext
+    private EntityManager em;
+
+    /**
+     * Apply migration 20260810_webhook_retry_and_order_pull_jobs.
+     *
+     * <p>Idempotent — có thể gọi nhiều lần (dùng {@code IF NOT EXISTS}, {@code DROP TABLE IF EXISTS}).
+     */
+    @PostMapping("/20260810-webhook-retry-and-order-pull-jobs")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> run20260810(
+            @RequestHeader(value = "X-Admin-Migration-Key", required = false) String headerKey) {
+
+        // 1. Security: env var phải được set
+        if (configuredKey == null || configuredKey.isBlank()) {
+            log.warn("AdminMigrationController invoked but ADMIN_MIGRATION_KEY is not configured — endpoint disabled");
+            return ResponseEntity.status(503).body(Map.of(
+                    "status", "DISABLED",
+                    "message", "ADMIN_MIGRATION_KEY env var is not set. Set it on Render to enable this endpoint."));
+        }
+        // 2. Security: key trong header phải khớp
+        if (headerKey == null || !headerKey.equals(configuredKey)) {
+            log.warn("AdminMigrationController invoked with invalid key");
+            return ResponseEntity.status(403).body(Map.of(
+                    "status", "FORBIDDEN",
+                    "message", "X-Admin-Migration-Key header is missing or invalid."));
+        }
+
+        log.info("Running migration 20260810_webhook_retry_and_order_pull_jobs...");
+        List<Map<String, Object>> results = new ArrayList<>();
+        boolean allOk = true;
+
+        // ----- 1. webhook_events.retry_count -----
+        results.add(executeDdl(
+                "ALTER TABLE webhook_events ADD COLUMN IF NOT EXISTS retry_count INT NOT NULL DEFAULT 0"));
+
+        // ----- 2. order_pull_jobs -----
+        results.add(executeDdl("DROP TABLE IF EXISTS order_pull_jobs CASCADE"));
+
+        results.add(executeDdl("""
+                CREATE TABLE order_pull_jobs (
+                    id UUID PRIMARY KEY,
+                    sync_log_id UUID NOT NULL,
+                    from_time TIMESTAMPTZ NOT NULL,
+                    to_time TIMESTAMPTZ NOT NULL,
+                    state VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    published_at TIMESTAMPTZ,
+                    started_at TIMESTAMPTZ,
+                    last_heartbeat_at TIMESTAMPTZ,
+                    completed_at TIMESTAMPTZ,
+                    last_error TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_order_pull_jobs_sync_log
+                        FOREIGN KEY (sync_log_id) REFERENCES sync_logs(id) ON DELETE CASCADE,
+                    CONSTRAINT uq_order_pull_jobs_sync_log UNIQUE (sync_log_id),
+                    CONSTRAINT ck_order_pull_jobs_range CHECK (from_time <= to_time),
+                    CONSTRAINT ck_order_pull_jobs_attempt_count CHECK (attempt_count >= 0),
+                    CONSTRAINT ck_order_pull_jobs_state CHECK (
+                        state IN ('PENDING', 'PUBLISHED', 'PROCESSING', 'COMPLETED', 'FAILED')
+                    )
+                )"""));
+
+        results.add(executeDdl("""
+                CREATE INDEX IF NOT EXISTS idx_order_pull_jobs_recovery
+                    ON order_pull_jobs (state, updated_at)
+                    WHERE state IN ('PENDING', 'PUBLISHED', 'PROCESSING')"""));
+
+        // ----- 3. purchase_orders.evidence_url -----
+        results.add(executeDdl(
+                "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS evidence_url TEXT"));
+
+        // ----- 4. Drop 1-1 unique constraint on inventory_receipts.purchase_order_id -----
+        results.add(executeDdl("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'uq_inventory_receipt_purchase_order'
+                    ) THEN
+                        ALTER TABLE inventory_receipts
+                            DROP CONSTRAINT uq_inventory_receipt_purchase_order;
+                    END IF;
+                END $$"""));
+
+        // ----- 5. Verification -----
+        Map<String, Object> verify = verifyMigration();
+        results.add(Map.of(
+                "statement", "VERIFY",
+                "ok", verify.get("ok"),
+                "detail", verify));
+
+        for (Map<String, Object> r : results) {
+            if (Boolean.FALSE.equals(r.get("ok"))) {
+                allOk = false;
+                break;
+            }
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("migration", "20260810_webhook_retry_and_order_pull_jobs");
+        body.put("status", allOk ? "OK" : "PARTIAL_FAILURE");
+        body.put("executedStatements", results);
+        if (allOk) {
+            body.put("nextStep", "Migration applied. You should now DELETE env ADMIN_MIGRATION_KEY on Render and redeploy to disable this endpoint.");
+        } else {
+            body.put("nextStep", "Check failed statement in executedStatements above.");
+        }
+        log.info("Migration 20260810 finished with status={}", body.get("status"));
+        return ResponseEntity.ok(body);
+    }
+
+    private Map<String, Object> executeDdl(String ddl) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        // Truncate ddl để hiển thị gọn
+        String preview = ddl.length() > 80 ? ddl.substring(0, 80) + "..." : ddl;
+        result.put("statement", preview);
+        try {
+            em.createNativeQuery(ddl).executeUpdate();
+            result.put("ok", true);
+            log.info("Migration step OK: {}", preview);
+        } catch (Exception e) {
+            result.put("ok", false);
+            result.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+            log.error("Migration step FAILED: {} -> {}", preview, e.getMessage());
+        }
+        return result;
+    }
+
+    private Map<String, Object> verifyMigration() {
+        Map<String, Object> v = new LinkedHashMap<>();
+        try {
+            // 1. retry_count column tồn tại
+            Object retryCountCol = em.createNativeQuery(
+                    "SELECT column_name FROM information_schema.columns " +
+                    "WHERE table_name = 'webhook_events' AND column_name = 'retry_count'")
+                    .getSingleResult();
+            v.put("webhook_events.retry_count", retryCountCol != null ? "EXISTS" : "MISSING");
+
+            // 2. order_pull_jobs tồn tại
+            Object orderPullJobsCount = em.createNativeQuery(
+                    "SELECT COUNT(*) FROM information_schema.tables " +
+                    "WHERE table_name = 'order_pull_jobs'")
+                    .getSingleResult();
+            v.put("order_pull_jobs table", orderPullJobsCount);
+
+            // 3. evidence_url column tồn tại
+            Object evidenceUrlCol = em.createNativeQuery(
+                    "SELECT column_name FROM information_schema.columns " +
+                    "WHERE table_name = 'purchase_orders' AND column_name = 'evidence_url'")
+                    .getSingleResult();
+            v.put("purchase_orders.evidence_url", evidenceUrlCol != null ? "EXISTS" : "MISSING");
+
+            v.put("ok", true);
+        } catch (Exception e) {
+            v.put("ok", false);
+            v.put("error", e.getMessage());
+        }
+        return v;
+    }
+}
