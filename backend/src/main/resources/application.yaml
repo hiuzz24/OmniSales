@@ -33,15 +33,26 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:osms}
     password: ${RABBITMQ_PASSWORD:osms}
+    virtual-host: ${RABBITMQ_VHOST:/}
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:3000}
+    ssl:
+      enabled: ${RABBITMQ_SSL_ENABLED:false}
     listener:
       simple:
+        auto-startup: ${RABBITMQ_LISTENER_AUTOSTART:true}
         retry:
           enabled: ${RABBITMQ_LISTENER_RETRY_ENABLED:true}
           max-attempts: ${RABBITMQ_LISTENER_MAX_ATTEMPTS:5}
           initial-interval: 1s
           multiplier: 2
           max-interval: 30s
+    template:
+      retry:
+        enabled: ${RABBITMQ_TEMPLATE_RETRY_ENABLED:true}
+        max-attempts: ${RABBITMQ_TEMPLATE_MAX_ATTEMPTS:3}
+        initial-interval: 500ms
+        multiplier: 2
+        max-interval: 5s
 
   # Cấu hình SMTP Server cho Gmail
   mail:
