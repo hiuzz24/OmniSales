@@ -69,11 +69,7 @@ class LazadaOrderPersistenceServiceImplTest {
     private LazadaOrderWriteModel model(String extOrderId, String extVariantId) {
         return new LazadaOrderWriteModel(
                 extOrderId,
-<<<<<<< HEAD
                 (OffsetDateTime) null,
-=======
-                CREATED_AT,
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 OrderStatus.PENDING,
                 "UNPAID",
                 "Buyer",
@@ -115,11 +111,7 @@ class LazadaOrderPersistenceServiceImplTest {
         Channel channel = channel();
         Order order = order(channel, OrderStatus.PENDING, "UNPAID");
         LazadaOrderWriteModel m = new LazadaOrderWriteModel(
-<<<<<<< HEAD
                 "EXT-1", null, OrderStatus.PENDING, "PAID", null, null, null,
-=======
-                "EXT-1", CREATED_AT, OrderStatus.PENDING, "PAID", null, null, null,
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 BigDecimal.valueOf(100), BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null,
                 List.of(new LazadaOrderWriteModel.Item(null, null, "SKU-1", "P1", 1, BigDecimal.valueOf(100), BigDecimal.ZERO))
         );
@@ -139,11 +131,7 @@ class LazadaOrderPersistenceServiceImplTest {
         Channel channel = channel();
         Order order = order(channel, OrderStatus.PENDING, "PAID");
         LazadaOrderWriteModel m = new LazadaOrderWriteModel(
-<<<<<<< HEAD
                 "EXT-1", null, OrderStatus.CANCELLED, "PAID", null, null, null,
-=======
-                "EXT-1", CREATED_AT, OrderStatus.CANCELLED, "PAID", null, null, null,
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 BigDecimal.valueOf(100), BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null,
                 List.of()
         );
@@ -165,11 +153,7 @@ class LazadaOrderPersistenceServiceImplTest {
         Order order = order(channel, OrderStatus.PENDING, "UNPAID");
         order.setShippingAddress(current);
         LazadaOrderWriteModel m = new LazadaOrderWriteModel(
-<<<<<<< HEAD
                 "EXT-1", null, OrderStatus.PENDING, "UNPAID", null, null,
-=======
-                "EXT-1", CREATED_AT, OrderStatus.PENDING, "UNPAID", null, null,
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 Map.of("city", "*** masked ***"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null,
                 List.of()
@@ -194,11 +178,7 @@ class LazadaOrderPersistenceServiceImplTest {
         order.setShippingAddress(null);
         Map<String, Object> incoming = Map.of("city", "HCMC");
         LazadaOrderWriteModel m = new LazadaOrderWriteModel(
-<<<<<<< HEAD
                 "EXT-1", null, OrderStatus.PENDING, "UNPAID", null, null, incoming,
-=======
-                "EXT-1", CREATED_AT, OrderStatus.PENDING, "UNPAID", null, null, incoming,
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null,
                 List.of()
         );
@@ -221,11 +201,7 @@ class LazadaOrderPersistenceServiceImplTest {
         Order order = order(channel, OrderStatus.PENDING, "UNPAID");
         order.setBuyerName("Real Name");
         LazadaOrderWriteModel m = new LazadaOrderWriteModel(
-<<<<<<< HEAD
                 "EXT-1", null, OrderStatus.PENDING, "UNPAID", "*** Buyer ***", null, null,
-=======
-                "EXT-1", CREATED_AT, OrderStatus.PENDING, "UNPAID", "*** Buyer ***", null, null,
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null,
                 List.of()
         );

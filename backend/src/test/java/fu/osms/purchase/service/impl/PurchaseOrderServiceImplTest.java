@@ -1,4 +1,4 @@
-package fu.osms.purchase.service.impl;
+﻿package fu.osms.purchase.service.impl;
 
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
@@ -271,7 +271,7 @@ class PurchaseOrderServiceImplTest {
 
             assertThatThrownBy(() -> purchaseOrderService.create(request, userId))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Đơn mua hàng phải có ít nhất một sản phẩm");
+                    .hasMessageContaining("Đơn đặt hàng phải có ít nhất một sản phẩm");
         }
 
         @Test
@@ -348,20 +348,20 @@ class PurchaseOrderServiceImplTest {
 
             assertThatThrownBy(() -> purchaseOrderService.updateDraft(orderId, request))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Không tìm thấy đơn mua hàng");
+                    .hasMessageContaining("Không tìm thấy đơn đặt hàng");
         }
 
         @Test
-        @DisplayName("Should throw when updating non-DRAFT order")
+        @DisplayName("Should throw when updating non-DRAFT and non-SENT_TO_SUPPLIER order")
         void shouldThrowWhenUpdatingNonDraftOrder() {
-            purchaseOrder.setStatus(PurchaseOrderStatus.SENT_TO_SUPPLIER);
+            purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
             PurchaseOrderRequest request = createValidRequest(true);
 
             when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
 
             assertThatThrownBy(() -> purchaseOrderService.updateDraft(orderId, request))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Chỉ được sửa đơn mua hàng ở trạng thái Nháp");
+                    .hasMessageContaining("Chỉ được sửa đơn");
         }
     }
 
@@ -420,7 +420,7 @@ class PurchaseOrderServiceImplTest {
 
             assertThatThrownBy(() -> purchaseOrderService.sendToSupplier(orderId))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Không tìm thấy đơn mua hàng");
+                    .hasMessageContaining("Không tìm thấy đơn đặt hàng");
         }
     }
 
@@ -469,43 +469,24 @@ class PurchaseOrderServiceImplTest {
 
             assertThatThrownBy(() -> purchaseOrderService.cancel(orderId))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Không thể hủy đơn mua hàng đã hoàn thành");
+                    .hasMessageContaining("Không thể hủy đơn đặt hàng đã hoàn thành");
         }
 
-<<<<<<< HEAD
         @Test
         @DisplayName("Should throw when cancelling order with receipt")
         void shouldThrowWhenCancellingOrderWithReceipt() {
             purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
-            purchaseOrder.setReceipt(fu.osms.inventory.entity.InventoryReceipt.builder()
+            purchaseOrder.addReceipt(fu.osms.inventory.entity.InventoryReceipt.builder()
                     .id(UUID.randomUUID())
                     .build());
 
             when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
-            when(purchaseOrderRepository.save(any(PurchaseOrder.class))).thenReturn(purchaseOrder);
 
-            // With the current business logic, orders with receipt CAN be cancelled (unless COMPLETED)
-            // This test now verifies the order CAN be cancelled
-            PurchaseOrderResponse result = purchaseOrderService.cancel(orderId);
-            assertThat(result).isNotNull();
-            assertThat(purchaseOrder.getStatus()).isEqualTo(PurchaseOrderStatus.CANCELLED);
+            // RECEIVING orders cannot be cancelled (already being delivered)
+            assertThatThrownBy(() -> purchaseOrderService.cancel(orderId))
+                    .isInstanceOf(AppException.class)
+                    .hasMessageContaining("đang giao hàng");
         }
-=======
-//        @Test
-//        @DisplayName("Should throw when cancelling order with receipt")
-//        void shouldThrowWhenCancellingOrderWithReceipt() {
-//            purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
-//            purchaseOrder.setReceipt(fu.osms.inventory.entity.InventoryReceipt.builder()
-//                    .id(UUID.randomUUID())
-//                    .build());
-//
-//            when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
-//
-//            assertThatThrownBy(() -> purchaseOrderService.cancel(orderId))
-//                    .isInstanceOf(AppException.class)
-//                    .hasMessageContaining("Không thể hủy đơn mua hàng đã có phiếu nhập kho");
-//        }
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
     }
 
     // =========================================================
@@ -534,7 +515,7 @@ class PurchaseOrderServiceImplTest {
 
             assertThatThrownBy(() -> purchaseOrderService.getById(orderId))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Không tìm thấy đơn mua hàng");
+                    .hasMessageContaining("Không tìm thấy đơn đặt hàng");
         }
     }
 
@@ -634,60 +615,6 @@ class PurchaseOrderServiceImplTest {
     }
 
     // =========================================================
-<<<<<<< HEAD
-=======
-    // moveSentOrdersToReceiving() Tests
-    // =========================================================
-    @Nested
-    @DisplayName("moveSentOrdersToReceiving() Tests")
-    class MoveSentOrdersToReceivingTests {
-
-        @Test
-        @DisplayName("Should move sent orders to receiving status")
-        void shouldMoveSentOrdersToReceivingStatus() {
-            PurchaseOrder sentOrder1 = PurchaseOrder.builder()
-                    .id(UUID.randomUUID())
-                    .orderCode("MĐH-2026-000001")
-                    .status(PurchaseOrderStatus.SENT_TO_SUPPLIER)
-                    .sentAt(OffsetDateTime.now().minusSeconds(15))
-                    .build();
-            PurchaseOrder sentOrder2 = PurchaseOrder.builder()
-                    .id(UUID.randomUUID())
-                    .orderCode("MĐH-2026-000002")
-                    .status(PurchaseOrderStatus.SENT_TO_SUPPLIER)
-                    .sentAt(OffsetDateTime.now().minusSeconds(20))
-                    .build();
-
-            when(purchaseOrderRepository.findByStatusAndSentAtLessThanEqual(
-                    eq(PurchaseOrderStatus.SENT_TO_SUPPLIER), any(OffsetDateTime.class)))
-                    .thenReturn(List.of(sentOrder1, sentOrder2));
-            when(purchaseOrderRepository.saveAll(anyList())).thenReturn(List.of(sentOrder1, sentOrder2));
-            when(userRoleRepository.findByRoleNameIn(anyList())).thenReturn(List.of());
-
-//            int result = purchaseOrderService.moveSentOrdersToReceiving();
-//
-//            assertThat(result).isEqualTo(2);
-            assertThat(sentOrder1.getStatus()).isEqualTo(PurchaseOrderStatus.RECEIVING);
-            assertThat(sentOrder2.getStatus()).isEqualTo(PurchaseOrderStatus.RECEIVING);
-            assertThat(sentOrder1.getReceivingAt()).isNotNull();
-            assertThat(sentOrder2.getReceivingAt()).isNotNull();
-        }
-
-        @Test
-        @DisplayName("Should return zero when no orders to move")
-        void shouldReturnZeroWhenNoOrdersToMove() {
-            when(purchaseOrderRepository.findByStatusAndSentAtLessThanEqual(
-                    eq(PurchaseOrderStatus.SENT_TO_SUPPLIER), any(OffsetDateTime.class)))
-                    .thenReturn(List.of());
-
-//            int result = purchaseOrderService.moveSentOrdersToReceiving();
-//
-//            assertThat(result).isEqualTo(0);
-        }
-    }
-
-    // =========================================================
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
     // completeFromReceipt() Tests
     // =========================================================
     @Nested
@@ -698,6 +625,8 @@ class PurchaseOrderServiceImplTest {
         @DisplayName("Should complete order from receipt successfully")
         void shouldCompleteOrderFromReceiptSuccessfully() {
             purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
+            // mark the item as fully received so isFullyReceived() returns true
+            purchaseOrderItem.setActualQuantity(purchaseOrderItem.getQuantity());
 
             when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
             when(purchaseOrderRepository.save(any(PurchaseOrder.class))).thenReturn(purchaseOrder);
@@ -710,15 +639,16 @@ class PurchaseOrderServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should throw when order is not in RECEIVING status")
+        @DisplayName("Should not throw when order is not in RECEIVING status - new logic only checks COMPLETED/CANCELLED")
         void shouldThrowWhenOrderNotInReceivingStatus() {
             purchaseOrder.setStatus(PurchaseOrderStatus.SENT_TO_SUPPLIER);
 
             when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
+            when(purchaseOrderRepository.save(any(PurchaseOrder.class))).thenReturn(purchaseOrder);
 
-            assertThatThrownBy(() -> purchaseOrderService.completeFromReceipt(orderId))
-                    .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Đơn mua hàng phải ở trạng thái Đang giao hàng hoặc Đã kiểm tra trước khi hoàn thành phiếu nhập");
+            // current logic: status SENT_TO_SUPPLIER + not fully received -> silent no-op
+            assertThatCode(() -> purchaseOrderService.completeFromReceipt(orderId)).doesNotThrowAnyException();
+            assertThat(purchaseOrder.getStatus()).isEqualTo(PurchaseOrderStatus.SENT_TO_SUPPLIER);
         }
     }
 

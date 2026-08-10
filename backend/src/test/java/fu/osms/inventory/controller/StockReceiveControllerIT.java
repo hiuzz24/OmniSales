@@ -50,23 +50,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class StockReceiveControllerIT {
 
     @Autowired MockMvc mvc;
-<<<<<<< HEAD
-    @MockBean StockReceiveService stockReceiveService;
-    @MockBean StockReceiveExtraItemImportService stockReceiveExtraItemImportService;
-    @MockBean JwtService jwtService;
-    @MockBean UserRepository userRepository;
-    @MockBean UserService userService;
-    @MockBean AuthService authService;
-    @MockBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
-=======
     @MockitoBean StockReceiveService stockReceiveService;
-    @MockitoBean StockReceiveExtraItemImportService extraItemImportService;
+    @MockitoBean StockReceiveExtraItemImportService stockReceiveExtraItemImportService;
     @MockitoBean JwtService jwtService;
     @MockitoBean UserRepository userRepository;
     @MockitoBean UserService userService;
     @MockitoBean AuthService authService;
     @MockitoBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
 
     private StockReceiveResponse sampleReceipt(UUID id) {
         return StockReceiveResponse.builder()

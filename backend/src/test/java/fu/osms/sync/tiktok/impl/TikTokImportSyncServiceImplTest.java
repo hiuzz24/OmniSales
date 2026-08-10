@@ -48,7 +48,6 @@ class TikTokImportSyncServiceImplTest {
 
     private TikTokImportSyncServiceImpl service;
 
-<<<<<<< HEAD
     @BeforeEach
     void setUp() {
         service = new TikTokImportSyncServiceImpl(
@@ -59,18 +58,6 @@ class TikTokImportSyncServiceImplTest {
                 channelProductAggregationService, syncJobProgressTracker,
                 tikTokProductDetailEnrichmentService, catalogOwnershipPolicy);
     }
-=======
-//    @BeforeEach
-//    void setUp() {
-//        service = new TikTokImportSyncServiceImpl(
-//                channelRepository, channelProductRepository, channelProductVariantRepository,
-//                productRepository, productVariantRepository, warehouseRepository,
-//                inventoryItemRepository, syncLogRepository, tikTokApiClient,
-//                marketplaceInventoryPropagationService, marketplaceWarehouseConsistencyService,
-//                channelProductAggregationService, syncJobProgressTracker,
-//                tikTokProductDetailEnrichmentService, catalogOwnershipPolicy);
-//    }
->>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
 
     @Test
     @DisplayName("Service can be constructed (smoke test verifying dependency wiring)")
