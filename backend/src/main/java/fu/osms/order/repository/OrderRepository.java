@@ -31,6 +31,9 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
 
     Optional<Order> findByChannel_IdAndExternalOrderId(UUID channelId, String externalOrderId);
 
+    @Query("SELECT o FROM Order o LEFT JOIN FETCH o.channel WHERE o.id = :id")
+    Optional<Order> findByIdWithChannel(@Param("id") UUID id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findForUpdateById(@Param("id") UUID id);

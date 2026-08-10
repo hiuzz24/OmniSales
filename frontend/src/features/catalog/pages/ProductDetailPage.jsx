@@ -22,6 +22,17 @@ const ProductDetailPage = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
+  const channelMappings = product?.channelSyncs || [];
+  const blockedMappings = channelMappings.filter((mapping) => !mapping.readyToSync);
+  const syncAllDisabled = channelMappings.length === 0 || blockedMappings.length > 0;
+  const syncAllDisabledReason = channelMappings.length === 0
+    ? 'Sản phẩm chưa liên kết kênh bán hàng.'
+    : blockedMappings.length > 0
+      ? `Chưa thể đồng bộ tất cả: ${blockedMappings.map((mapping) => (
+        `${mapping.channelName || mapping.platform}: ${mapping.configurationError || 'thiếu cấu hình bắt buộc'}`
+      )).join('; ')}`
+      : '';
+
   useEffect(() => {
     fetchProduct();
   }, [id]);
@@ -57,30 +68,16 @@ const ProductDetailPage = () => {
   };
 
   const handleSync = async () => {
+    if (syncAllDisabled) {
+      toast.warning(syncAllDisabledReason);
+      return;
+    }
     try {
       setIsSyncing(true);
-      const res = await productApi.sync(id);
-      const data = res.data?.data || res.data || res;
-
-      if (data && data.failedCount > 0) {
-        const failedChannels = (data.details || [])
-          .filter((detail) => !detail.success)
-          .map((detail) => detail.channelName || detail.platform)
-          .filter(Boolean);
-        const failedLabel = failedChannels.length > 0
-          ? ` Kênh lỗi: ${failedChannels.join(', ')}.`
-          : '';
-
-        toast.warning(
-          `Đã đồng bộ thành công ${data.successCount || 0}/${data.totalChannels || 0} kênh.${failedLabel}`,
-        );
-      } else {
-        toast.success('Đồng bộ thành công lên tất cả các kênh!');
-      }
-
-      await fetchProduct();
+      await productApi.sync(id);
+      toast.success('Đã đưa yêu cầu đồng bộ vào hàng đợi.');
     } catch (error) {
-      toast.error('Đồng bộ thất bại. Vui lòng thử lại.');
+      toast.error(error.response?.data?.message || 'Không thể đưa yêu cầu đồng bộ vào hàng đợi.');
     } finally {
       setIsSyncing(false);
     }
@@ -106,6 +103,8 @@ const ProductDetailPage = () => {
         onEdit={() => navigate(ROUTES.PRODUCT_EDIT.replace(':id', product.id))}
         onSync={handleSync}
         isSyncing={isSyncing}
+        syncAllDisabled={syncAllDisabled}
+        syncAllDisabledReason={syncAllDisabledReason}
       />
 
       <div className={styles.mainContent}>

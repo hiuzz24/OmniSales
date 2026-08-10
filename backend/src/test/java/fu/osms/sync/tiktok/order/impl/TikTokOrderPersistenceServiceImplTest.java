@@ -69,9 +69,15 @@ class TikTokOrderPersistenceServiceImplTest {
                 .build();
     }
 
+    private static final OffsetDateTime CREATED_AT = OffsetDateTime.parse("2026-08-01T10:00:00+07:00");
+
     private TikTokOrderWriteModel model(String extId, OrderStatus status, String paymentStatus) {
         return new TikTokOrderWriteModel(
+<<<<<<< HEAD
                 extId, (OffsetDateTime) null, status, "RAW_STATUS",
+=======
+                extId, CREATED_AT, status, "RAW_STATUS",
+>>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 paymentStatus,
                 "Buyer", "0901", Map.of("city", "HCMC"),
                 BigDecimal.valueOf(100), BigDecimal.ZERO, BigDecimal.ZERO,

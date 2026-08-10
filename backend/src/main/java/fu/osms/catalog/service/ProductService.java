@@ -2,6 +2,7 @@ package fu.osms.catalog.service;
 
 import fu.osms.catalog.dto.request.ProductRequest;
 import fu.osms.catalog.dto.response.ProductResponse;
+import fu.osms.catalog.dto.response.ProductSyncQueuedResponse;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.PlatformType;
@@ -27,4 +28,8 @@ public interface ProductService {
     SyncResult syncProductToAllChannels(UUID productId);
 
     SyncResult syncProductToChannel(UUID productId, UUID channelId);
+
+    ProductSyncQueuedResponse syncProductToAllChannelsAsync(UUID productId);
+
+    ProductSyncQueuedResponse syncProductToChannelAsync(UUID productId, UUID channelId);
 }

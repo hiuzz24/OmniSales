@@ -23,6 +23,7 @@ import fu.osms.purchase.dto.*;
 import fu.osms.purchase.entity.PurchaseOrder;
 import fu.osms.purchase.entity.PurchaseOrderItem;
 import fu.osms.purchase.enums.PurchaseOrderStatus;
+import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.purchase.repository.PurchaseOrderRepository;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,6 +56,8 @@ class PurchaseOrderServiceImplTest {
 
     @Mock
     private PurchaseOrderRepository purchaseOrderRepository;
+    @Mock
+    private PurchaseOrderItemRepository purchaseOrderItemRepository;
     @Mock
     private SupplierRepository supplierRepository;
     @Mock
@@ -384,15 +387,30 @@ class PurchaseOrderServiceImplTest {
         }
 
         @Test
-        @DisplayName("Should throw when sending non-DRAFT order")
-        void shouldThrowWhenSendingNonDraftOrder() {
+        @DisplayName("Should resend SENT_TO_SUPPLIER order (cập nhật thời gian gửi)")
+        void shouldResendSentOrderToSupplierSuccessfully() {
             purchaseOrder.setStatus(PurchaseOrderStatus.SENT_TO_SUPPLIER);
+
+            when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
+            when(purchaseOrderRepository.save(any(PurchaseOrder.class))).thenReturn(purchaseOrder);
+
+            PurchaseOrderResponse result = purchaseOrderService.sendToSupplier(orderId);
+
+            assertThat(result).isNotNull();
+            assertThat(purchaseOrder.getStatus()).isEqualTo(PurchaseOrderStatus.SENT_TO_SUPPLIER);
+            verify(purchaseOrderRepository).save(any(PurchaseOrder.class));
+        }
+
+        @Test
+        @DisplayName("Should throw when sending RECEIVING order")
+        void shouldThrowWhenSendingReceivingOrder() {
+            purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
 
             when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
 
             assertThatThrownBy(() -> purchaseOrderService.sendToSupplier(orderId))
                     .isInstanceOf(AppException.class)
-                    .hasMessageContaining("Chỉ đơn Nháp mới có thể gửi nhà cung cấp");
+                    .hasMessageContaining("Chỉ đơn Nháp hoặc Đã gửi NCC mới có thể gửi nhà cung cấp");
         }
 
         @Test
@@ -454,6 +472,7 @@ class PurchaseOrderServiceImplTest {
                     .hasMessageContaining("Không thể hủy đơn mua hàng đã hoàn thành");
         }
 
+<<<<<<< HEAD
         @Test
         @DisplayName("Should throw when cancelling order with receipt")
         void shouldThrowWhenCancellingOrderWithReceipt() {
@@ -471,6 +490,22 @@ class PurchaseOrderServiceImplTest {
             assertThat(result).isNotNull();
             assertThat(purchaseOrder.getStatus()).isEqualTo(PurchaseOrderStatus.CANCELLED);
         }
+=======
+//        @Test
+//        @DisplayName("Should throw when cancelling order with receipt")
+//        void shouldThrowWhenCancellingOrderWithReceipt() {
+//            purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
+//            purchaseOrder.setReceipt(fu.osms.inventory.entity.InventoryReceipt.builder()
+//                    .id(UUID.randomUUID())
+//                    .build());
+//
+//            when(purchaseOrderRepository.findByIdWithDetails(orderId)).thenReturn(Optional.of(purchaseOrder));
+//
+//            assertThatThrownBy(() -> purchaseOrderService.cancel(orderId))
+//                    .isInstanceOf(AppException.class)
+//                    .hasMessageContaining("Không thể hủy đơn mua hàng đã có phiếu nhập kho");
+//        }
+>>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
     }
 
     // =========================================================
@@ -599,6 +634,60 @@ class PurchaseOrderServiceImplTest {
     }
 
     // =========================================================
+<<<<<<< HEAD
+=======
+    // moveSentOrdersToReceiving() Tests
+    // =========================================================
+    @Nested
+    @DisplayName("moveSentOrdersToReceiving() Tests")
+    class MoveSentOrdersToReceivingTests {
+
+        @Test
+        @DisplayName("Should move sent orders to receiving status")
+        void shouldMoveSentOrdersToReceivingStatus() {
+            PurchaseOrder sentOrder1 = PurchaseOrder.builder()
+                    .id(UUID.randomUUID())
+                    .orderCode("MĐH-2026-000001")
+                    .status(PurchaseOrderStatus.SENT_TO_SUPPLIER)
+                    .sentAt(OffsetDateTime.now().minusSeconds(15))
+                    .build();
+            PurchaseOrder sentOrder2 = PurchaseOrder.builder()
+                    .id(UUID.randomUUID())
+                    .orderCode("MĐH-2026-000002")
+                    .status(PurchaseOrderStatus.SENT_TO_SUPPLIER)
+                    .sentAt(OffsetDateTime.now().minusSeconds(20))
+                    .build();
+
+            when(purchaseOrderRepository.findByStatusAndSentAtLessThanEqual(
+                    eq(PurchaseOrderStatus.SENT_TO_SUPPLIER), any(OffsetDateTime.class)))
+                    .thenReturn(List.of(sentOrder1, sentOrder2));
+            when(purchaseOrderRepository.saveAll(anyList())).thenReturn(List.of(sentOrder1, sentOrder2));
+            when(userRoleRepository.findByRoleNameIn(anyList())).thenReturn(List.of());
+
+//            int result = purchaseOrderService.moveSentOrdersToReceiving();
+//
+//            assertThat(result).isEqualTo(2);
+            assertThat(sentOrder1.getStatus()).isEqualTo(PurchaseOrderStatus.RECEIVING);
+            assertThat(sentOrder2.getStatus()).isEqualTo(PurchaseOrderStatus.RECEIVING);
+            assertThat(sentOrder1.getReceivingAt()).isNotNull();
+            assertThat(sentOrder2.getReceivingAt()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Should return zero when no orders to move")
+        void shouldReturnZeroWhenNoOrdersToMove() {
+            when(purchaseOrderRepository.findByStatusAndSentAtLessThanEqual(
+                    eq(PurchaseOrderStatus.SENT_TO_SUPPLIER), any(OffsetDateTime.class)))
+                    .thenReturn(List.of());
+
+//            int result = purchaseOrderService.moveSentOrdersToReceiving();
+//
+//            assertThat(result).isEqualTo(0);
+        }
+    }
+
+    // =========================================================
+>>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
     // completeFromReceipt() Tests
     // =========================================================
     @Nested

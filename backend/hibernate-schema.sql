@@ -87,7 +87,8 @@ DROP TABLE IF EXISTS user_roles                   CASCADE;
 DROP TABLE IF EXISTS roles                        CASCADE;
 DROP TABLE IF EXISTS users                        CASCADE;
 DROP TABLE IF EXISTS backup_files                 CASCADE;
-
+DROP TABLE IF EXISTS order_returns                 CASCADE;
+DROP TABLE IF EXISTS order_return_items                 CASCADE;
 
 -- ─── 4. DROP ENUM TYPES ─────────────────────────────────────
 DROP TYPE IF EXISTS user_status        CASCADE;
@@ -655,6 +656,7 @@ CREATE TABLE webhook_events (
                                     CHECK (status IN ('RECEIVED','PROCESSING','PROCESSED','FAILED','IGNORED')),
                                 raw_payload       JSONB         NOT NULL,
                                 error_message     TEXT,
+                                retry_count       INT           NOT NULL DEFAULT 0,
                                 received_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
                                 processed_at      TIMESTAMPTZ
 );
@@ -802,15 +804,17 @@ CREATE TABLE system_settings (
 CREATE TABLE notifications (
                                id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
                                user_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
-                               type        VARCHAR(20) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
+                               type        VARCHAR(40) NOT NULL CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','ORDER_SHIPPED','ORDER_DELIVERED','ORDER_RETURN_REQUESTED','ORDER_RETURN_REJECTED','ORDER_RETURN_COMPLETED','ORDER_RETURN_ATTENTION','CHANNEL_DISCONNECTED','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY')),
                                title       VARCHAR(255) NOT NULL,
                                body        TEXT,
                                read_at     TIMESTAMPTZ,
-                               entity_type VARCHAR(10) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE')),
+                               entity_type VARCHAR(20) CHECK (entity_type IS NULL OR entity_type IN ('ORDER','RETURN','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE')),
                                entity_id   UUID,
                                created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_notifications_unread ON notifications(user_id, read_at, created_at) WHERE read_at IS NULL;
+CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at DESC);
+CREATE INDEX idx_notifications_entity ON notifications(user_id, type, entity_type, entity_id);
 
 CREATE TABLE audit_logs (
                             id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1213,13 +1217,13 @@ ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_type_check
-        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
+        CHECK (type IN ('LOW_STOCK','SYNC_FAILED','ORDER_NEW','ORDER_CANCELLED','ORDER_PAID','ORDER_PICK_REQUIRED','ORDER_READY_SHIP','ORDER_SHIPPED','ORDER_DELIVERED','ORDER_RETURN_REQUESTED','ORDER_RETURN_REJECTED','ORDER_RETURN_COMPLETED','ORDER_RETURN_ATTENTION','CHANNEL_DISCONNECTED','STOCK_TRANSFER','STOCKTAKE','SYNC','INVENTORY'));
 
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_entity_type_check;
 
 ALTER TABLE notifications
     ADD CONSTRAINT notifications_entity_type_check
-        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE'));
+        CHECK (entity_type IS NULL OR entity_type IN ('ORDER','RETURN','PRODUCT','CHANNEL','SYNC_LOG','SYNC','INVENTORY','TRANSFER','RECEIPT','PURCHASE'));
 
 ALTER TABLE stock_transfers ADD COLUMN note TEXT;
 ALTER TABLE sync_logs ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id);
@@ -1306,8 +1310,3 @@ ON CONFLICT (key) DO NOTHING;
 
 ALTER TABLE channels
     ADD COLUMN last_synced_application_at TIMESTAMPTZ;
-
--- Optional columns missed in initial schema
-ALTER TABLE order_items       ADD COLUMN IF NOT EXISTS external_item_id        VARCHAR(200);
-ALTER TABLE inventory_issues  ADD COLUMN IF NOT EXISTS document_reference_id   VARCHAR(255);
-ALTER TABLE suppliers         ADD COLUMN IF NOT EXISTS tax_code                VARCHAR(50);

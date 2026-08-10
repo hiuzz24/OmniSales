@@ -67,6 +67,11 @@ public enum ErrorCode {
     ORDER_ALREADY_CANCELLED(HttpStatus.CONFLICT, "Đơn hàng đã bị hủy trước đó"),
     ORDER_CANCEL_ENDPOINT_REQUIRED(HttpStatus.BAD_REQUEST, "Hãy sử dụng chức năng Hủy đơn để hủy đơn hàng"),
     ORDER_PULL_RANGE_INVALID(HttpStatus.BAD_REQUEST, "Chỉ hỗ trợ kéo đơn trong khoảng thời gian tối đa 1 tuần"),
+    ORDER_SHIPPING_LABEL_UNSUPPORTED(HttpStatus.BAD_REQUEST, "Kênh bán hàng không hỗ trợ in phiếu vận chuyển"),
+    ORDER_SHIPPING_LABEL_NOT_READY(HttpStatus.CONFLICT, "Đơn hàng chưa sẵn sàng in phiếu vận chuyển"),
+    ORDER_SHIPPING_LABEL_PACKAGE_MISSING(HttpStatus.CONFLICT, "Không tìm thấy kiện hàng để in phiếu vận chuyển"),
+    ORDER_SHIPPING_LABEL_MULTIPLE_UNSUPPORTED(HttpStatus.CONFLICT, "Chưa hỗ trợ in phiếu cho đơn TikTok có nhiều kiện"),
+    ORDER_SHIPPING_LABEL_PLATFORM_ERROR(HttpStatus.BAD_GATEWAY, "Không thể lấy phiếu vận chuyển từ sàn"),
 
     WAREHOUSE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy kho hàng"),
     INVENTORY_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy sản phẩm trong kho"),

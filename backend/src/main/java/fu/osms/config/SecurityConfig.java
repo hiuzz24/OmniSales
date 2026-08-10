@@ -39,7 +39,6 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        // Auth sub-paths that must remain public (no session required)
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/auth/refresh",
@@ -59,6 +58,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/webhooks/**").permitAll()
                         .requestMatchers("/api/products/**").authenticated()
                         .requestMatchers("/api/address/**").permitAll()
+                        // OpenAPI / Swagger UI
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // Static OpenAPI specs của các sàn
+                        .requestMatchers("/openapi/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -93,9 +96,6 @@ public class SecurityConfig {
         corsConfiguration.setAllowCredentials(true);
         corsConfiguration.setAllowedHeaders(List.of("*"));
         corsConfiguration.setAllowedMethods(List.of("GET","PATCH","DELETE","PUT","POST","OPTIONS"));
-        // Allow both localhost and 127.0.0.1 on the standard dev ports.
-        // Vite, browsers and proxies all treat these as different origins
-        // even though they point to the same machine, so we need both.
         corsConfiguration.setAllowedOriginPatterns(List.of(
                 "http://localhost:517*",
                 "http://localhost:300*",

@@ -60,6 +60,11 @@ const PLATFORM_BADGE_CLASSES = {
   TIKTOK: styles.channelLocal,
 };
 
+const getHoldingQuantity = (item) => Math.max(
+  Number(item?.reservedQuantity ?? 0) - Number(item?.outgoingQuantity ?? 0),
+  0,
+);
+
 const INVENTORY_EXPORT_COLUMNS = [
   { key: 'stt', label: 'STT', width: 6, defaultChecked: true },
   { key: 'variantSku', label: 'Mã SKU', width: 18, defaultChecked: true, getValue: (item) => item.variantSku ?? '' },
@@ -69,7 +74,7 @@ const INVENTORY_EXPORT_COLUMNS = [
   { key: 'quantityOnHand', label: 'Trong kho', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.quantityOnHand ?? 0 },
   { key: 'incomingQuantity', label: 'Hàng đang nhập', width: 16, type: 'number', defaultChecked: true, getValue: (item) => item.incomingQuantity ?? 0 },
   { key: 'outgoingQuantity', label: 'Hàng đang xuất', width: 16, type: 'number', defaultChecked: true, getValue: (item) => item.outgoingQuantity ?? 0 },
-  { key: 'reservedQuantity', label: 'Giữ hàng', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.reservedQuantity ?? 0 },
+  { key: 'reservedQuantity', label: 'Giữ hàng', width: 12, type: 'number', defaultChecked: true, getValue: getHoldingQuantity },
   { key: 'availableQuantity', label: 'Có thể bán', width: 12, type: 'number', defaultChecked: true, getValue: (item) => item.availableQuantity ?? 0 },
   { key: 'lowStockThreshold', label: 'Tồn tối thiểu', width: 14, type: 'number', defaultChecked: true, getValue: (item) => item.lowStockThreshold ?? 0 },
   { key: 'status', label: 'Trạng thái', width: 14, defaultChecked: true, getValue: (item) => getStatusLabel(deriveStatus(item)) },
@@ -987,7 +992,7 @@ const InventoryPage = () => {
                     <th className={`${styles.th} ${styles.thRight}`} title="Hàng đang xuất kho (phiếu xuất chưa hoàn thành)">Đang xuất</th>
                     <th className={`${styles.th} ${styles.thRight}`} title="Hàng đang được giữ cho đơn hàng">Giữ hàng</th>
                     <th className={`${styles.th} ${styles.thRight}`} title="Số lượng có thể bán = Trong kho - Giữ hàng">Có thể bán</th>
-                    <th className={`${styles.th} ${styles.thRight}`} title="Ngưỡng cảnh báo sắp hết hàng">Tồn min</th>
+                    <th className={`${styles.th} ${styles.thRight}`} title="Ngưỡng cảnh báo sắp hết hàng">Tồn kho tối thiểu</th>
                     <th className={styles.th}>Trạng thái</th>
                     <th className={styles.th}></th>
                   </tr>
@@ -1044,7 +1049,7 @@ const InventoryPage = () => {
                           {Number(row.outgoingQuantity ?? 0).toLocaleString('vi-VN')}
                         </td>
                         <td className={`${styles.td} ${styles.tdRight} ${styles.cellMuted}`}>
-                          {Number(row.reservedQuantity ?? 0).toLocaleString('vi-VN')}
+                          {getHoldingQuantity(row).toLocaleString('vi-VN')}
                         </td>
                         <td className={`${styles.td} ${styles.tdRight} ${quantityColor(row.availableQuantity ?? 0)}`}>
                           {(row.availableQuantity ?? 0) < 0 ? (

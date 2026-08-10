@@ -32,6 +32,22 @@ services:
       retries: 10
     restart: unless-stopped
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: osms_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-osms}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-osms}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -67,21 +83,9 @@ services:
       - LAZADA_APP_SECRET=${LAZADA_APP_SECRET}
       - LAZADA_REDIRECT_URI=${LAZADA_REDIRECT_URI}
       - LAZADA_WEBHOOK_CALLBACK_URL=${LAZADA_WEBHOOK_CALLBACK_URL}
-      # TikTok
-      - TIKTOK_APP_KEY=${TIKTOK_APP_KEY}
-      - TIKTOK_APP_SECRET=${TIKTOK_APP_SECRET}
-      - TIKTOK_TOKEN_URL=${TIKTOK_TOKEN_URL:-https://auth.tiktok-shops.com/api/v2/token/get}
-      - TIKTOK_REFRESH_TOKEN_URL=${TIKTOK_REFRESH_TOKEN_URL:-https://auth.tiktok-shops.com/api/v2/token/refresh}
-      - TIKTOK_API_URL=${TIKTOK_API_URL:-https://open-api.tiktokglobalshop.com}
-      # Backup output directory (defaults to /app/backups inside the container)
-      - APP_BACKUP_DIRECTORY=/app/backups
-    volumes:
-      - backup_data:/app/backups
     depends_on:
       postgres_db:
         condition: service_healthy
-    ports:
-      - "${BACKEND_EXTERNAL_PORT:-8080}:8080"
     restart: unless-stopped
 
   frontend:

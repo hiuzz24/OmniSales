@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -44,13 +44,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ProductControllerIT {
 
     @Autowired MockMvc mvc;
-    @MockBean ProductService productService;
-    @MockBean ProductImportService productImportService;
-    @MockBean JwtService jwtService;
-    @MockBean UserRepository userRepository;
-    @MockBean UserService userService;
-    @MockBean AuthService authService;
-    @MockBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
+    @MockitoBean ProductService productService;
+    @MockitoBean ProductImportService productImportService;
+    @MockitoBean JwtService jwtService;
+    @MockitoBean UserRepository userRepository;
+    @MockitoBean UserService userService;
+    @MockitoBean AuthService authService;
+    @MockitoBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
 
     private ProductResponse sampleProduct(UUID id) {
         return ProductResponse.builder()
@@ -79,7 +79,11 @@ class ProductControllerIT {
                 .content(List.of(sampleProduct(id)))
                 .page(0).size(6).totalElements(1).totalPages(1).first(true).last(true)
                 .build();
+<<<<<<< HEAD
         when(productService.search(any(), any(), any(), anyInt(), anyInt())).thenReturn(page);
+=======
+        when(productService.search(eq("test"), eq(null), any(), eq(0), eq(6))).thenReturn(page);
+>>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
 
         mvc.perform(get("/api/products?keyword=test&page=0&size=6"))
                 .andExpect(status().isOk())
@@ -96,6 +100,7 @@ class ProductControllerIT {
                   "categoryId": "%s",
                   "sku": "SKU-NEW",
                   "name": "New Product",
+<<<<<<< HEAD
                   "description": "Product description",
                   "brand": "Brand X",
                   "unit": "pcs",
@@ -105,6 +110,27 @@ class ProductControllerIT {
                   "attributes": {"packageWidthCm": 10, "packageHeightCm": 10, "packageLengthCm": 10},
                   "variants": [{"sku": "VAR-1", "name": "Default", "costPrice": 100000, "price": 150000, "isActive": true, "optionValues": {"Size": "M", "Màu": "Đen"}}],
                   "images": [{"url": "https://example.com/x.png", "isPrimary": true, "sortOrder": 1}]
+=======
+                  "description": "A sample product",
+                  "brand": "Sample Brand",
+                  "unit": "pcs",
+                  "hasVariants": false,
+                  "weightGrams": 100,
+                  "attributes": {
+                    "packageWidthCm": 10,
+                    "packageHeightCm": 10,
+                    "packageLengthCm": 10
+                  },
+                  "variants": [{
+                    "sku": "VAR-1",
+                    "name": "Default",
+                    "price": 10000,
+                    "costPrice": 5000,
+                    "optionValues": {"Size": "M", "Màu": "Đen"}
+                  }],
+                  "images": [{"url": "https://example.com/img.jpg"}],
+                  "categoryId": "%s"
+>>>>>>> 3d332129773decdc073a147ff5a134fdc385e37b
                 }
                 """.formatted(UUID.randomUUID());
 

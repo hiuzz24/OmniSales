@@ -12,6 +12,7 @@ import fu.osms.sync.dto.SyncLogResponse;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.mapper.SyncLogMapper;
 import fu.osms.sync.order.pull.OrderPullRequestedEvent;
+import fu.osms.sync.order.pull.OrderPullJobStore;
 import fu.osms.sync.order.pull.OrderPullService;
 import fu.osms.sync.order.pull.dto.OrderPullRequest;
 import fu.osms.sync.repository.SyncLogRepository;
@@ -33,6 +34,7 @@ public class OrderPullServiceImpl implements OrderPullService {
     private final ChannelConnectionValidator connectionValidator;
     private final SyncLogRepository syncLogRepository;
     private final SyncLogMapper syncLogMapper;
+    private final OrderPullJobStore orderPullJobStore;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -58,7 +60,8 @@ public class OrderPullServiceImpl implements OrderPullService {
                     .idempotencyKey(JOB_TYPE + ":" + channelId + ":" + UUID.randomUUID())
                     .status(SyncStatus.PENDING).successCount(0).failCount(0)
                     .triggeredBy(SecurityUtils.getCurrentUser().orElse(null)).startedAt(OffsetDateTime.now()).build());
-            eventPublisher.publishEvent(new OrderPullRequestedEvent(log.getId(), from, to));
+            UUID orderPullJobId = orderPullJobStore.create(log, from, to);
+            eventPublisher.publishEvent(new OrderPullRequestedEvent(orderPullJobId));
             result.add(syncLogMapper.toResponse(log));
         });
         return result;
@@ -99,6 +102,9 @@ public class OrderPullServiceImpl implements OrderPullService {
     }
     private void expireStale(UUID channelId) {
         for (SyncLog stale : syncLogRepository.findStalePending(JOB_TYPE, channelId, OffsetDateTime.now().minusMinutes(30))) {
+            if (orderPullJobStore.existsForSyncLog(stale.getId())) {
+                continue;
+            }
             stale.setStatus(SyncStatus.FAILED);
             stale.setErrorSummary("[PAGE] Order pull job timed out before completion");
             stale.setCompletedAt(OffsetDateTime.now());

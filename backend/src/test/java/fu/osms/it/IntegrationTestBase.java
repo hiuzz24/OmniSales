@@ -5,7 +5,7 @@ import fu.osms.auth.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpEntity;
@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * shared helpers for HTTP calls, JWT login, and DB cleanup.</p>
  *
  * <p>External integrations (Gmail SMTP, RestCountries API) are mocked
- * with {@code @MockBean} so tests stay hermetic.</p>
+ * with {@code @MockitoBean} so tests stay hermetic.</p>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("it")
@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public abstract class IntegrationTestBase {
 
     /** Prevents RestCountries API calls from failing. */
-    @MockBean
+    @MockitoBean
     protected RestCountriesService restCountriesService;
 
     @Autowired

@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
-import { ArrowLeft, Plus, Trash2, Search, X, FileSpreadsheet, PackageMinus, AlertCircle, Loader2, Package, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Search, X, PackageMinus, AlertCircle, Loader2, Package, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import warehouseService from '../../services/warehouseService';
 import stockDeliveryService from '../../services/stockDeliveryService';
@@ -265,6 +265,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const [searchParams] = useSearchParams();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const fileRef = useRef(null);
+  const prefillAppliedRef = useRef(false);
   const [items, setItems] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
@@ -303,23 +304,50 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const overAvailableItem = useMemo(() => items.find((item) => item.availableQuantity != null && Number(item.quantity || 0) > Number(item.availableQuantity)), [items]);
 
   useEffect(() => {
+    const hasPrefillWarehouse = Boolean(searchParams.get('warehouseId'));
     warehouseService.getMaster()
       .then((wRes) => {
         const extract = (r) => { const d = r?.data?.data ?? r?.data; if (Array.isArray(d)) return d; if (d?.content && Array.isArray(d.content)) return d.content; return []; };
         const masterWarehouse = getResponseData(wRes);
         setWarehouses(masterWarehouse?.id ? [masterWarehouse] : extract(wRes));
-        if (masterWarehouse?.id) {
+        if (masterWarehouse?.id && !hasPrefillWarehouse) {
           setValue('warehouseId', String(masterWarehouse.id), { shouldDirty: false, shouldValidate: true });
         }
       })
       .catch(() => {});
-  }, [setValue]);
+  }, [searchParams, setValue]);
+
+  // Prefill from query params (?warehouseId=&variantId=&sku=&productName=&quantity=),
+  // mirroring the stock-receive create page. Used when opening the create page
+  // from another screen (e.g. return/transfer flows).
+  useEffect(() => {
+    if (isEdit || prefillAppliedRef.current) return;
+
+    const warehouseId = searchParams.get('warehouseId');
+    const variantId = searchParams.get('variantId');
+    if (!warehouseId && !variantId) return;
+
+    prefillAppliedRef.current = true;
+    if (warehouseId) {
+      setValue('warehouseId', warehouseId, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (variantId) {
+      setItems([{
+        variantId,
+        sku: searchParams.get('sku') || '',
+        productName: searchParams.get('productName') || searchParams.get('sku') || 'Sản phẩm',
+        variantName: '',
+        quantity: searchParams.get('quantity') || 1,
+        availableQuantity: null,
+      }]);
+    }
+  }, [isEdit, searchParams, setValue]);
 
   useEffect(() => {
     if (!isEdit || !id) return;
     let ignore = false;
-    setLoadingDelivery(true);
-    stockDeliveryService.getStockDeliveryById(id)
+    setLoadingDelivery(true);    stockDeliveryService.getStockDeliveryById(id)
       .then((response) => {
         if (ignore) return;
         const delivery = getResponseData(response);

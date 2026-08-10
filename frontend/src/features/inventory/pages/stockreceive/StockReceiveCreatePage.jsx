@@ -4,7 +4,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'react-toastify';
-import { ArrowLeft, Plus, Trash2, Search, X, FileSpreadsheet, PackagePlus, AlertCircle, Loader2, Package } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Search, X, PackagePlus, AlertCircle, Loader2, Package } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import warehouseService from '../../services/warehouseService';
 import supplierService from '../../services/supplierService';
@@ -45,6 +45,31 @@ const platformBadgeBaseStyle = {
 };
 
 const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
+
+// Purchase order statuses that still allow creating a stock receive receipt
+// (partial delivery support: one order may be received in several batches).
+const RECEIVABLE_PO_STATUSES = ['RECEIVING'];
+
+const isReceivablePoStatus = (status) => RECEIVABLE_PO_STATUSES.includes(status);
+
+const isFullyReceivedPo = (order) =>
+  (order?.items ?? []).length > 0 &&
+  (order?.items ?? []).every((item) => (item.receivedQuantity ?? 0) >= (item.quantity ?? 0));
+
+// Inline delivery check for the "Số lượng thực tế" column: compare the entered
+// actual received qty against the remaining due qty (thiếu / đủ / thừa).
+const deliveryCheck = (item) => {
+  if (!item.fromPurchaseOrder) return null;
+  const qty = item.quantity === '' || item.quantity === null || item.quantity === undefined
+    ? 0
+    : Number(item.quantity);
+  const remaining = Number(item.remaining ?? 0);
+  if (qty <= 0 && remaining === 0) return { label: 'Đã nhận đủ', icon: '✓', color: '#047857', bg: '#ecfdf5', border: '#6ee7b7' };
+  if (qty <= 0) return { label: 'Chưa nhập', icon: '', color: '#64748b', bg: '#f1f5f9', border: '#cbd5e1' };
+  if (qty > remaining) return { label: `Thừa ${qty - remaining}`, icon: '▲', color: '#b45309', bg: '#fffbeb', border: '#fcd34d' };
+  if (qty < remaining) return { label: `Thiếu ${remaining - qty}`, icon: '▼', color: '#b91c1c', bg: '#fef2f2', border: '#fca5a5' };
+  return { label: 'Đủ', icon: '✓', color: '#047857', bg: '#ecfdf5', border: '#6ee7b7' };
+};
 
 const normalizePlatform = (value) => {
   const text = String(value ?? '').trim().toUpperCase();
@@ -183,11 +208,11 @@ const groupPurchaseOrderItems = (orderItems = []) => {
   orderItems.forEach((item) => {
     const sku = item.marketplaceSku || item.sku || '';
     const groupKey = String(sku).trim().toLowerCase() || `variant:${item.variantId}`;
-    // Use actualQuantity (set during inspection) if available; for surplus cap at ordered qty
-    // (surplus items go to a separate surplus order, not this receipt)
-    const receiptQty = item.actualQuantity != null
-      ? Math.min(item.actualQuantity, item.quantity)
-      : item.quantity;
+    // Remaining quantity still due = ordered qty minus what earlier confirmed
+    // receipts have already delivered (partial receipt support).
+    const orderQuantity = item.quantity ?? 0;
+    const receivedQuantity = item.receivedQuantity ?? 0;
+    const remaining = Math.max(0, orderQuantity - receivedQuantity);
     if (!groups.has(groupKey)) {
       groups.set(groupKey, {
         groupKey,
@@ -196,7 +221,12 @@ const groupPurchaseOrderItems = (orderItems = []) => {
         sku,
         productName: item.productName,
         variantName: item.variantName,
-        quantity: receiptQty,
+        // "Số lượng thực tế" — editable, prefilled with the remaining due qty.
+        quantity: remaining,
+        orderQuantity,
+        receivedQuantity,
+        actualQuantity: item.actualQuantity ?? null,
+        remaining,
         unitPrice: item.unitCost ?? 0,
         salePrice: item.salePrice ?? 0,
         platforms: uniqueValues(item.platforms),
@@ -223,6 +253,12 @@ const expandReceiptItems = (items) => items.map((item) => ({
       ? null
       : Number(item.unitPrice),
   }));
+
+const isFullyReceivedEmptyRow = (item) => item.fromPurchaseOrder
+  && Number(item.remaining ?? 0) === 0
+  && Number(item.quantity ?? 0) === 0;
+
+const submittableItems = (items) => items.filter((item) => !isFullyReceivedEmptyRow(item));
 
 // ── Excel import helpers ──────────────────────────────────────────────────────
 const normalizeImportKey = (value) => String(value ?? '').trim().toLocaleLowerCase('vi-VN');
@@ -483,9 +519,11 @@ export default function StockReceiveCreatePage() {
       warehouseService.getMaster(),
       supplierService.getAll(),
       stockReceiveService.getNextReceiptCode(),
-      purchaseOrderApi.getAll({ size: 100, status: 'INSPECTED' }),
+      // Partial deliveries: a purchase order can be received in multiple batches,
+      // so the Receiving status is listed.
+      ...RECEIVABLE_PO_STATUSES.map((status) => purchaseOrderApi.getAll({ size: 100, status })),
     ])
-      .then(([wRes, sRes, codeRes, purchasePage]) => {
+      .then(([wRes, sRes, codeRes, ...poResponses]) => {
         const extract = (r) => { const d = r?.data?.data ?? r?.data; if (Array.isArray(d)) return d; if (d?.content && Array.isArray(d.content)) return d.content; return []; };
         const masterWarehouse = getResponseData(wRes);
         setWarehouses(masterWarehouse?.id ? [masterWarehouse] : extract(wRes));
@@ -495,8 +533,12 @@ export default function StockReceiveCreatePage() {
         setSuppliers(extract(sRes));
         setNextReceiptCode(codeRes?.data?.data ?? codeRes?.data ?? '');
         setReceivingPurchaseOrders(
-          // Exclude orders that already have a linked receipt
-          (purchasePage?.content ?? []).filter((order) => !order.receiptId),
+          poResponses
+            .flatMap((page) => page?.content ?? [])
+            // Deduplicate and drop orders whose ordered quantity has been received in full.
+            .filter((order, index, arr) =>
+              !isFullyReceivedPo(order) && arr.findIndex((o) => o.id === order.id) === index,
+            ),
         );
       })
       .catch(() => {});
@@ -508,84 +550,29 @@ export default function StockReceiveCreatePage() {
     purchaseOrderApi.getById(purchaseOrderId)
       .then((order) => {
         if (ignore) return;
-        if (order.status !== 'INSPECTED') {
-          toast.error('Đơn mua hàng chưa ở trạng thái Đã kiểm tra.');
+        if (!isReceivablePoStatus(order.status)) {
+          toast.error('Đơn đặt hàng phải ở trạng thái Đang giao hàng.');
           setPurchaseOrderId('');
           return;
         }
-        if (order.receiptId) {
-          toast.error('Đơn mua hàng này đã có phiếu nhập kho liên kết.');
+        if (isFullyReceivedPo(order)) {
+          toast.error('Đơn đặt hàng đã nhận đủ hàng hóa.');
           setPurchaseOrderId('');
           return;
         }
-        // Only add to dropdown if this order doesn't already have a receipt
-        if (!order.receiptId) {
-          setReceivingPurchaseOrders((current) => current.some((item) => item.id === order.id) ? current : [order, ...current]);
-        }
+        // Keep the order in the dropdown (a PO can now receive multiple batches)
+        setReceivingPurchaseOrders((current) => current.some((item) => item.id === order.id) ? current : [order, ...current]);
         setValue('warehouseId', String(order.warehouseId), { shouldDirty: true, shouldValidate: true });
         setValue('supplierId', order.supplierId ? String(order.supplierId) : '', { shouldDirty: true });
 
-        // Auto-generate notes from inspection surplus/shortage annotations
-        const noteLines = [];
-        if (order.notes) noteLines.push(order.notes);
-
-        const allItems = order.items ?? [];
-        const shortageItems = allItems.filter(
-          (item) => item.actualQuantity != null && item.actualQuantity < item.quantity
-        );
-        const surplusItems = allItems.filter(
-          (item) => item.actualQuantity != null && item.actualQuantity > item.quantity
-        );
-
-        if (shortageItems.length > 0) {
-          if (noteLines.length > 0) noteLines.push('');
-          noteLines.push('--- Hàng THIẾU ---');
-          shortageItems.forEach((item) => {
-            const name = item.variantName
-              ? `${item.productName} (${item.variantName})`
-              : item.productName;
-            const diff = item.quantity - item.actualQuantity;
-            noteLines.push(`• [THIẾU] ${name}: thiếu ${diff} sản phẩm (đặt ${item.quantity}, thực nhận ${item.actualQuantity})`);
-          });
-        }
-
-        if (surplusItems.length > 0) {
-          if (noteLines.length > 0) noteLines.push('');
-          noteLines.push('--- Hàng THỪA ---');
-          surplusItems.forEach((item) => {
-            const name = item.variantName
-              ? `${item.productName} (${item.variantName})`
-              : item.productName;
-            const diff = item.actualQuantity - item.quantity;
-            noteLines.push(`• [THỪA] ${name}: thừa ${diff} sản phẩm (đặt ${item.quantity}, thực nhận ${item.actualQuantity})`);
-          });
-        }
-
-        // If this is a shortage/surplus supplementary order (all items have actualQty === qty),
-        // fall back to listing every item from the order's own notes context
-        if (shortageItems.length === 0 && surplusItems.length === 0) {
-          const itemsWithNote = allItems.filter((item) => item.surplusNote?.trim());
-          if (itemsWithNote.length > 0) {
-            if (noteLines.length > 0) noteLines.push('');
-            noteLines.push('--- Chi tiết sản phẩm ---');
-            itemsWithNote.forEach((item) => {
-              const name = item.variantName
-                ? `${item.productName} (${item.variantName})`
-                : item.productName;
-              noteLines.push(`• ${name} (SL: ${item.quantity}): ${item.surplusNote.trim()}`);
-            });
-          }
-        }
-
-        if (noteLines.length > 0) {
-          setValue('notes', noteLines.join('\n'), { shouldDirty: true });
-        }
+        // Reset notes before applying the new purchase order's prefill data
+        setValue('notes', '', { shouldDirty: true });
 
         setItems(groupPurchaseOrderItems(order.items ?? []));
         setPurchaseOrderError('');
       })
       .catch(() => {
-        if (!ignore) toast.error('Không thể tải thông tin đơn mua hàng.');
+        if (!ignore) toast.error('Không thể tải thông tin đơn đặt hàng.');
       });
     return () => { ignore = true; };
   }, [purchaseOrderId, setValue]);
@@ -667,7 +654,7 @@ export default function StockReceiveCreatePage() {
   // ── Item handlers ─────────────────────────────────────────────────────────
   const openAddProducts = () => {
     if (!purchaseOrderId) {
-      setPurchaseOrderError('Vui lòng chọn đơn mua hàng trước khi thêm sản phẩm.');
+      setPurchaseOrderError('Vui lòng chọn đơn đặt hàng trước khi thêm sản phẩm.');
       return;
     }
     if (!selectedWarehouseId) {
@@ -684,20 +671,6 @@ export default function StockReceiveCreatePage() {
   const onQtyChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, quantity: v } : it));
   const onPriceChange = (i, v) => setItems((p) => p.map((it, idx) => idx === i ? { ...it, unitPrice: v } : it));
   const onRemove = (i) => setItems((p) => p.filter((_, idx) => idx !== i));
-
-  const onDownloadExcelTemplate = async () => {
-    try {
-      const response = await stockReceiveService.downloadNewReceiptExtraItemsTemplate();
-      const url = URL.createObjectURL(response.data);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = 'stock-in-extra-items-template.xlsx';
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Không thể tải template Excel. Vui lòng thử lại.');
-    }
-  };
 
   const onAddProducts = (newItems) => {
     setItems((p) => {
@@ -772,19 +745,35 @@ export default function StockReceiveCreatePage() {
 
   const onSubmit = handleSubmit(async (data) => {
     if (!purchaseOrderId) {
-      setPurchaseOrderError('Đơn mua hàng là bắt buộc.');
-      toast.error('Vui lòng chọn đơn mua hàng.');
+      setPurchaseOrderError('Đơn đặt hàng là bắt buộc.');
+      toast.error('Vui lòng chọn đơn đặt hàng.');
       return;
     }
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
-    const invalidQty = items.find((it) => !it.quantity || Number(it.quantity) <= 0);
+    const validItems = submittableItems(items);
+    if (validItems.length === 0) { toast.error('Vui lòng nhập ít nhất một sản phẩm có số lượng lớn hơn 0.'); return; }
+    const invalidQty = validItems.find((it) => !it.quantity || Number(it.quantity) <= 0);
     if (invalidQty) { toast.error(`Sản phẩm "${invalidQty.productName}" phải có số lượng lớn hơn 0.`); return; }
-    const invalidPrice = items.find((it) => { const price = Number(it.unitPrice); return it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || isNaN(price) || price < 0; });
+    const invalidPrice = validItems.find((it) => { const price = Number(it.unitPrice); return it.unitPrice === '' || it.unitPrice === null || it.unitPrice === undefined || isNaN(price) || price < 0; });
     if (invalidPrice) { toast.error(`Đơn giá của sản phẩm "${invalidPrice.productName}" phải lớn hơn hoặc bằng 0.`); return; }
+
+    const hasPartialDelivery = validItems.some(
+      (it) => it.fromPurchaseOrder && Number(it.quantity) < Number(it.remaining ?? 0),
+    );
+    const hasOverDelivery = validItems.some(
+      (it) => it.fromPurchaseOrder && Number(it.quantity) > Number(it.remaining ?? 0),
+    );
+
+    const submittedTotalQty = validItems.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
 
     const confirmed = await confirm({
       title: 'Hoàn thành nhập kho?',
-      message: `Xác nhận nhập ${items.length} sản phẩm (tổng SL: ${totalQty.toLocaleString()}) vào kho.\nTồn kho sẽ được cập nhật ngay sau khi hoàn thành.`,
+      message:
+        hasPartialDelivery
+          ? `Xác nhận nhập ${validItems.length} sản phẩm (tổng SL: ${submittedTotalQty.toLocaleString()}) vào kho.\nĐây là đợt giao một phần: đơn đặt hàng sẽ vẫn ở trạng thái Đang giao hàng, tạo phiếu nhập bổ sung cho đợt sau.`
+          : hasOverDelivery
+            ? `Xác nhận nhập ${validItems.length} sản phẩm (tổng SL: ${submittedTotalQty.toLocaleString()}) vào kho.\nSố lượng thực tế nhận vượt số lượng đặt, đơn đặt hàng sẽ chuyển sang Hoàn thành với số lượng thực tế.`
+            : `Xác nhận nhập ${validItems.length} sản phẩm (tổng SL: ${submittedTotalQty.toLocaleString()}) vào kho.\nTồn kho sẽ được cập nhật ngay sau khi hoàn thành.`,
       confirmLabel: 'Hoàn thành nhập kho',
       tone: 'warning',
     });
@@ -795,19 +784,17 @@ export default function StockReceiveCreatePage() {
         purchaseOrderId: purchaseOrderId || null,
         warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
         receivedAt: data.receivedAt, notes: data.notes || null,
-        items: expandReceiptItems(items), isDraft: false,
+        items: expandReceiptItems(validItems), isDraft: false,
       });
       toast.success('Tạo phiếu nhập thành công.');
       const receipt = getResponseData(response);
 
-      // Notify user if a shortage/surplus order was auto-created
-      if (receipt.autoCreatedOrderCode) {
-        const typeLabel = receipt.autoCreatedOrderType === 'SHORTAGE' ? 'bổ sung (hàng thiếu)' : 'thặng dư (hàng thừa)';
-        const toastId = `auto-order-${receipt.autoCreatedOrderCode}`;
-        toast.info(
-          `🔔 Đã tự động tạo đơn ${typeLabel}: ${receipt.autoCreatedOrderCode}\n${receipt.autoCreatedOrderSummary || ''}`,
-          { autoClose: 8000, toastId }
-        );
+      // Full delivery completes the purchase order; partial keeps it Receiving so
+      // an extra receipt can be created for the next delivery batch.
+      if (receipt.poCompleted) {
+        toast.success('Đã nhập đủ hàng, đơn đặt hàng đã chuyển sang trạng thái Hoàn thành.');
+      } else {
+        toast.warn('Đã nhận một phần hàng, đơn đặt hàng vẫn ở trạng thái Đang giao hàng. Tạo phiếu nhập bổ sung cho đợt giao sau.');
       }
       if (receipt.marketplaceSyncAvailable) {
         const platforms = (receipt.marketplacePlatforms ?? []).map((platform) => PLATFORM_LABELS[platform] ?? platform).join(', ');
@@ -838,17 +825,18 @@ export default function StockReceiveCreatePage() {
 
   const onSaveDraft = handleSubmit(async (data) => {
     if (!purchaseOrderId) {
-      setPurchaseOrderError('Đơn mua hàng là bắt buộc.');
-      toast.error('Vui lòng chọn đơn mua hàng.');
+      setPurchaseOrderError('Đơn đặt hàng là bắt buộc.');
+      toast.error('Vui lòng chọn đơn đặt hàng.');
       return;
     }
     if (items.length === 0) { toast.error('Vui lòng thêm ít nhất một sản phẩm.'); return; }
+    const validItems = submittableItems(items);
     try {
       await stockReceiveService.createReceipt({
         purchaseOrderId: purchaseOrderId || null,
         warehouseId: data.warehouseId, supplierId: data.supplierId || null, invoiceNumber: null,
         receivedAt: data.receivedAt, notes: data.notes || null,
-        items: expandReceiptItems(items), isDraft: true,
+        items: expandReceiptItems(validItems), isDraft: true,
       });
       toast.success('Lưu tạm phiếu nhập thành công.');
       runWithoutGuard(() => navigate(ROUTES.WAREHOUSE_IMPORT_RECEIPTS));
@@ -887,7 +875,7 @@ export default function StockReceiveCreatePage() {
           className={`${styles.actionBtn} ${styles.primaryBtn}`}
           style={{ padding: '7px 16px' }}
         >
-          Theo đơn mua hàng
+          Theo đơn đặt hàng
         </button>
         <button
           type="button"
@@ -914,19 +902,19 @@ export default function StockReceiveCreatePage() {
               </div>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label className={styles.fieldLabel}>Đơn mua hàng <span>*</span></label>
+              <label className={styles.fieldLabel}>Đơn đặt hàng <span>*</span></label>
               <select
                 value={purchaseOrderId}
                 onChange={(event) => {
                   setPurchaseOrderId(event.target.value);
-                  setPurchaseOrderError(event.target.value ? '' : 'Đơn mua hàng là bắt buộc.');
+                  setPurchaseOrderError(event.target.value ? '' : 'Đơn đặt hàng là bắt buộc.');
                   if (!event.target.value) setItems([]);
                 }}
                 className={`${styles.fieldSelect} ${purchaseOrderError ? styles.fieldError : ''}`}
                 aria-invalid={Boolean(purchaseOrderError)}
                 aria-describedby={purchaseOrderError ? 'purchase-order-error' : undefined}
               >
-                <option value="">Chọn đơn mua hàng đã kiểm tra</option>
+                <option value="">Chọn đơn đặt hàng (đang giao hàng)</option>
                 {receivingPurchaseOrders.map((order) => (
                   <option key={order.id} value={order.id}>{order.orderCode} — {order.supplierName}</option>
                 ))}
@@ -996,8 +984,8 @@ export default function StockReceiveCreatePage() {
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      {['Tên sản phẩm', 'SKU', 'Số lượng', 'Đơn giá (₫)', 'Thành tiền', ''].map((h, i) => (
-                        <th key={h} className={i === 4 ? styles.thRight : ''}>{h}</th>
+                      {['Tên sản phẩm', 'SKU', 'SL đặt', 'SL còn cần nhận', 'Số lượng thực tế', 'Đơn giá (₫)', 'Thành tiền', ''].map((h, i) => (
+                        <th key={h} className={i === 6 ? styles.thRight : ''}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1007,8 +995,10 @@ export default function StockReceiveCreatePage() {
                       const price = Number(item.unitPrice);
                       const priceBad = item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined || isNaN(price) || price < 0;
                       const line = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0);
+                      const check = deliveryCheck(item);
+                      const rowDisabled = item.fromPurchaseOrder && Number(item.remaining ?? 0) === 0 && Number(item.quantity ?? 0) === 0;
                       return (
-                        <tr key={item.variantId ?? idx}>
+                        <tr key={item.variantId ?? idx} style={rowDisabled ? { opacity: 0.55, background: '#f8fafc' } : undefined}>
                           <td>
                             <div style={{ fontWeight: 600, fontSize: 12 }}>{item.productName}</div>
                             {item.variantName && <div style={{ fontSize: 11, color: '#94a3b8' }}>{item.variantName}</div>}
@@ -1017,9 +1007,41 @@ export default function StockReceiveCreatePage() {
                             </div>
                           </td>
                           <td><span className={styles.skuTag} style={{ background: '#e0f2fe', color: '#0369a1' }}>{item.sku}</span></td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {item.fromPurchaseOrder
+                              ? Number(item.orderQuantity ?? 0).toLocaleString()
+                              : '—'}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            {item.fromPurchaseOrder
+                              ? Number(item.remaining ?? 0).toLocaleString()
+                              : '—'}
+                          </td>
                           <td>
-                            <input type="number" min="1" step="1" value={item.quantity} disabled={item.fromPurchaseOrder} onChange={(e) => onQtyChange(idx, e.target.value)}
+                            <input type="number" min="1" step="1" value={item.quantity} disabled={rowDisabled} onChange={(e) => onQtyChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${qtyBad ? styles.inputError : ''}`} />
+                            {check && (
+                              <div style={{ marginTop: 5 }}>
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  minHeight: 22,
+                                  padding: '2px 10px',
+                                  borderRadius: 8,
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  lineHeight: 1.3,
+                                  color: check.color,
+                                  backgroundColor: check.bg,
+                                  border: `1px solid ${check.border}`,
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  {check.icon && <span style={{ fontSize: 10.5, lineHeight: 1 }}>{check.icon}</span>}
+                                  {check.label}
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td>
                             <input type="number" min="0" step="1000" value={item.unitPrice} disabled={item.fromPurchaseOrder} onChange={(e) => onPriceChange(idx, e.target.value)}
