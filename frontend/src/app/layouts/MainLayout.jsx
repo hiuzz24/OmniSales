@@ -210,28 +210,14 @@ export default function MainLayout() {
 
   useEffect(() => {
     const showNewNotifications = (event) => {
-      (event.detail ?? []).filter((notification) => !notification.readAt).forEach((notification) => {
-          const actionLabel = 'Mở chi tiết';
-      if (!notificationBaselineReadyRef.current) {
-        loadedNotifications.forEach((notification) => {
-          if (notification.id) seenNotificationIdsRef.current.add(notification.id);
-        });
-        notificationBaselineReadyRef.current = true;
-      } else {
-        loadedNotifications.forEach((notification) => {
-          if (!notification.id || seenNotificationIdsRef.current.has(notification.id)) return;
-          const isWorkflowNotification = [
+      (event.detail ?? [])
+        .filter((notification) => !notification.readAt)
+        .filter((notification) => [
             'ORDER_READY_SHIP',
             'SYNC',
             'SYNC_FAILED',
-          ].includes(notification.type);
-          if (!isWorkflowNotification || notification.readAt) {
-            seenNotificationIdsRef.current.add(notification.id);
-            return;
-          }
-          if (document.hidden) return;
-
-          seenNotificationIdsRef.current.add(notification.id);
+          ].includes(notification.type))
+        .forEach((notification) => {
           const actionLabel = notification.entityType === 'SYNC'
             ? 'Mở lịch sử đồng bộ'
             : 'Mở chi tiết đơn hàng';
@@ -260,7 +246,7 @@ export default function MainLayout() {
               onClick: () => handleNotificationClick(notification),
             },
           );
-      });
+        });
     };
     window.addEventListener('notifications:new', showNewNotifications);
     return () => window.removeEventListener('notifications:new', showNewNotifications);

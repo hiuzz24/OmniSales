@@ -2,11 +2,13 @@ package fu.osms.messaging.handler;
 
 import fu.osms.messaging.dto.OrderReturnWorkflowMessage;
 import fu.osms.orderreturn.enums.OrderReturnStatus;
+import fu.osms.orderreturn.event.OrderReturnProcessedEvent;
 import fu.osms.orderreturn.repository.OrderReturnRepository;
 import fu.osms.orderreturn.service.OrderReturnInventoryPostingService;
 import fu.osms.orderreturn.service.OrderReturnPaymentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -17,6 +19,7 @@ public class OrderReturnWorkflowHandler {
     private final OrderReturnPaymentService paymentService;
     private final OrderReturnInventoryPostingService inventoryPostingService;
     private final OrderReturnRepository returnRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public void handle(OrderReturnWorkflowMessage message) {
         RuntimeException paymentFailure = null;
@@ -45,6 +48,8 @@ public class OrderReturnWorkflowHandler {
                 }
             }
         }
+
+        eventPublisher.publishEvent(new OrderReturnProcessedEvent(message.returnId()));
 
         if (paymentFailure != null) {
             throw paymentFailure;
