@@ -73,13 +73,17 @@ public class AdminMigrationController {
             info.put("current_user", scalarString(
                     "SELECT current_user"));
             info.put("search_path", scalarString(
-                    "SHOW search_path"));
+                    "SELECT current_setting('search_path')"));
+            info.put("server_version_num", scalarString(
+                    "SELECT current_setting('server_version_num')"));
             info.put("server_version", scalarString(
-                    "SHOW server_version"));
+                    "SELECT version()"));
 
             // Where does PostgreSQL resolve 'webhook_events' to?
-            info.put("webhook_events.resolved_schema", scalarString(
-                    "SELECT schemaname FROM pg_tables WHERE tablename = 'webhook_events'"));
+            // Use listStrings in case multiple schemas have webhook_events
+            info.put("webhook_events.resolved_schema", listStrings(
+                    "SELECT schemaname || '.' || tablename " +
+                    "FROM pg_tables WHERE tablename = 'webhook_events'"));
             info.put("webhook_events.schema_multiple", listStrings(
                     "SELECT schemaname || '.' || tablename " +
                     "FROM pg_tables WHERE tablename = 'webhook_events'"));
