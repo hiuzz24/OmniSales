@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.OffsetDateTime;
 
 /**
  * One-shot admin endpoint để apply migration 20260810_webhook_retry_and_order_pull_jobs
@@ -108,6 +109,41 @@ public class AdminMigrationController {
                     "SELECT table_schema || '.' || table_name || '.' || column_name " +
                     "FROM information_schema.columns " +
                     "WHERE column_name = 'evidence_url' AND table_name = 'purchase_orders'"));
+
+            // === EXACT replica of WebhookEventRetrySweeper query ===
+            // The native SQL thrown the "column retry_count does not exist" error.
+            // If this works, the actual sweeper should also work — meaning the
+            // exception must have been from a stale JVM/cache pre-redeploy.
+            try {
+                List<?> replica = em.createNativeQuery(
+                        "SELECT id\n" +
+                        "FROM webhook_events\n" +
+                        "WHERE (\n" +
+                        "        (\n" +
+                        "          status IN ('RECEIVED', 'PROCESSING')\n" +
+                        "          AND received_at <= ?\n" +
+                        "        )\n" +
+                        "        OR\n" +
+                        "        (\n" +
+                        "          status = 'FAILED'\n" +
+                        "          AND retry_count < ?\n" +
+                        "          AND channel_id IS NOT NULL\n" +
+                        "        )\n" +
+                        "      )\n" +
+                        "ORDER BY received_at ASC\n" +
+                        "FOR UPDATE SKIP LOCKED\n" +
+                        "LIMIT ?\n")
+                        .setParameter(1, OffsetDateTime.now().minusDays(7))
+                        .setParameter(2, 3)
+                        .setParameter(3, 50)
+                        .getResultList();
+                info.put("sweeper_replica_query.rows", replica.size());
+                info.put("sweeper_replica_query.ok", true);
+            } catch (Exception ex) {
+                info.put("sweeper_replica_query.ok", false);
+                info.put("sweeper_replica_query.error",
+                        ex.getClass().getSimpleName() + ": " + ex.getMessage());
+            }
 
             info.put("ok", true);
         } catch (Exception e) {
