@@ -42,6 +42,9 @@ public class OrderReturnPaymentServiceImpl implements OrderReturnPaymentService 
         if (order == null) {
             return;
         }
+        if (PaymentStatus.REFUNDED.name().equals(order.getPaymentStatus())) {
+            return;
+        }
         List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
         List<OrderReturnItem> confirmed = returnItemRepository.findValidItemsByOrderId(order.getId()).stream()
                 .filter(item -> item.getOrderReturn().getRefundConfirmedAt() != null)

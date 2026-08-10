@@ -8,10 +8,12 @@ import fu.osms.order.dto.request.CancelOrderRequest;
 import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
+import fu.osms.order.dto.response.OrderShippingLabelResponse;
 import fu.osms.order.dto.response.OrderStats;
 import fu.osms.order.dto.response.UncustomerdCountResponse;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.service.OrderService;
+import fu.osms.order.service.OrderShippingLabelService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -32,6 +34,7 @@ import java.util.UUID;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderShippingLabelService orderShippingLabelService;
     private final ChannelService channelService;
 
     @PostMapping
@@ -127,5 +130,11 @@ public class OrderController {
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<List<CancelReasonResponse>>> getCancelReasons(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getCancelReasons(id)));
+    }
+
+    @PostMapping("/{id}/shipping-label")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<OrderShippingLabelResponse>> createShippingLabel(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(orderShippingLabelService.createLabel(id)));
     }
 }

@@ -43,6 +43,11 @@ const orderApi = {
     return response.data.data;
   },
 
+  createShippingLabel: async (id) => {
+    const response = await axiosClient.post(`/orders/${id}/shipping-label`);
+    return response.data.data;
+  },
+
   getHistory: async (id, page = 0, size = 20) => {
     const response = await axiosClient.get(`/orders/${id}/history`, { params: { page, size } });
     return response.data.data;

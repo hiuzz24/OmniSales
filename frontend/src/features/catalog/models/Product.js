@@ -19,10 +19,15 @@ const imageUrlSchema = z.string()
   .url('URL ảnh không hợp lệ')
   .refine((value) => /^https?:\/\//i.test(value), 'URL ảnh phải bắt đầu bằng http:// hoặc https://');
 
+const optionalBarcode = z.preprocess(
+  (value) => value == null ? '' : value,
+  z.string(),
+);
+
 const variantSchema = z.object({
   id: z.string().nullable().optional(),
   sku: z.string().optional(),
-  barcode: z.string().optional(),
+  barcode: optionalBarcode,
   name: z.string().optional(),
   price: numberOrNull,
   costPrice: numberOrNull,
@@ -36,7 +41,7 @@ export const productEditorSchema = z.object({
   hasOrders: z.boolean().optional(),
   name: requiredText('Tên sản phẩm không được để trống', 500),
   sku: requiredText('SKU không được để trống', 100),
-  barcode: z.string().optional(),
+  barcode: optionalBarcode,
   size: z.string().optional(),
   color: z.string().optional(),
   description: requiredText('Mô tả sản phẩm không được để trống', 5000),
@@ -122,7 +127,11 @@ export function normalizeVariantForEditor(variant = {}) {
   if (size != null) delete options['Option 2'];
   if (color != null) delete options['Option 1'];
 
-  return { ...variant, optionValues: options };
+  return {
+    ...variant,
+    barcode: variant.barcode ?? '',
+    optionValues: options,
+  };
 }
 
 export function seedVariantFromProduct(values) {

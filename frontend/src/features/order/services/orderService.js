@@ -29,6 +29,10 @@ const orderService = {
     return await orderApi.getCancelReasons(id);
   },
 
+  createShippingLabel: async (id) => {
+    return await orderApi.createShippingLabel(id);
+  },
+
   getHistory: async (id, page, size) => {
     return await orderApi.getHistory(id, page, size);
   },

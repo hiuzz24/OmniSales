@@ -71,6 +71,13 @@ app:
     stuck-after-ms: ${WEBHOOK_RETRY_STUCK_AFTER_MS:120000}
     max-retries: ${WEBHOOK_RETRY_MAX_RETRIES:3}
     batch-size: ${WEBHOOK_RETRY_BATCH_SIZE:50}
+  order-pull-recovery:
+    enabled: ${ORDER_PULL_RECOVERY_ENABLED:true}
+    fixed-delay-ms: ${ORDER_PULL_RECOVERY_FIXED_DELAY_MS:30000}
+    published-stale-ms: ${ORDER_PULL_RECOVERY_PUBLISHED_STALE_MS:120000}
+    processing-stale-ms: ${ORDER_PULL_RECOVERY_PROCESSING_STALE_MS:1800000}
+    max-attempts: ${ORDER_PULL_RECOVERY_MAX_ATTEMPTS:3}
+    batch-size: ${ORDER_PULL_RECOVERY_BATCH_SIZE:20}
   async:
     order-pull:
       core-size: ${ASYNC_ORDER_PULL_CORE_SIZE:2}

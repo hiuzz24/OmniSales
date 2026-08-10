@@ -2,7 +2,7 @@ package fu.osms.messaging.listener;
 
 import fu.osms.messaging.constants.RabbitMQConstants;
 import fu.osms.messaging.dto.ProductSyncMessage;
-import fu.osms.sync.service.ProductSyncOrchestratorService;
+import fu.osms.messaging.handler.ProductSyncRequestHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -17,16 +17,12 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ProductSyncEventListener {
 
-    private final ProductSyncOrchestratorService productSyncOrchestratorService;
+    private final ProductSyncRequestHandler handler;
 
     @RabbitListener(queues = RabbitMQConstants.QUEUE_PRODUCT_PUSH, concurrency = "1-2")
     public void onProductSync(ProductSyncMessage message) {
-        log.info("[ProductSyncEventListener] Syncing product productId={} channelId={}",
-                message.productId(), message.channelId());
-        if (message.channelId() == null) {
-            productSyncOrchestratorService.syncProductToAllChannels(message.productId());
-        } else {
-            productSyncOrchestratorService.syncProductToChannel(message.productId(), message.channelId());
-        }
+        log.info("[ProductSyncEventListener] requestLogId={} productId={} channelId={}",
+                message.requestLogId(), message.productId(), message.channelId());
+        handler.handle(message);
     }
 }
