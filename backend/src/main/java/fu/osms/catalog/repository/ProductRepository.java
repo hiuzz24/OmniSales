@@ -44,6 +44,8 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
 
     long count();
 
+    long countByStatusAndDeletedAtIsNull(ProductStatus status);
+
     @Query("""
             SELECT
                 p.category.id as categoryId,

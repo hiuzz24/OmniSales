@@ -12,6 +12,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 @Component
 public class TikTokReturnSnapshotMapper {
@@ -35,6 +36,9 @@ public class TikTokReturnSnapshotMapper {
                     quantity,
                     isCompleted(status) ? quantity : null);
         }).toList();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        String returnReason = text(data, "return_reason", "returnReason", "reason", "reason_text", "buyer_reason");
+        if (returnReason != null && !returnReason.isBlank()) metadata.put("returnReason", returnReason);
         return new OrderReturnSnapshot(
                 externalReturnId(data),
                 text(data, "order_id", "orderId", "trade_order_id"),
@@ -45,7 +49,7 @@ public class TikTokReturnSnapshotMapper {
                 isRefundOnly(data),
                 isCompleted(status),
                 items,
-                Map.of());
+                metadata);
     }
 
     public boolean isPhysicalReturn(Map<String, Object> source) {
