@@ -58,6 +58,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/webhooks/**").permitAll()
                         .requestMatchers("/api/products/**").authenticated()
                         .requestMatchers("/api/address/**").permitAll()
+                        // One-shot admin migration endpoint (must also pass X-Admin-Migration-Key header).
+                        // Remove after migration is applied.
+                        .requestMatchers("/api/admin/run-migrations/**").permitAll()
                         // OpenAPI / Swagger UI
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Static OpenAPI specs của các sàn

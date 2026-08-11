@@ -91,6 +91,8 @@ springdoc:
         url: /openapi/rest-countries.yaml
 
 app:
+  admin:
+    migration-key: ${ADMIN_MIGRATION_KEY:}  # Set on Render to enable /api/admin/run-migrations/**. Delete after migration.
   messaging:
     mode: ${APP_MESSAGING_MODE:broker}
   inventory-extra-import:
