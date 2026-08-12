@@ -12,6 +12,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 @Component
 public class LazadaReturnSnapshotMapper {
@@ -33,6 +34,9 @@ public class LazadaReturnSnapshotMapper {
                             refunded);
                 })
                 .toList();
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        String returnReason = text(data, "return_reason", "returnReason", "reason", "reason_text", "buyer_reason");
+        if (returnReason != null && !returnReason.isBlank()) metadata.put("returnReason", returnReason);
         return new OrderReturnSnapshot(
                 text(data, "reverse_order_id", "reverseOrderId", "reverse_id", "id"),
                 text(data, "trade_order_id", "tradeOrderId", "order_id", "orderId"),
@@ -43,7 +47,7 @@ public class LazadaReturnSnapshotMapper {
                 isRefundOnly(data),
                 isCompleted(status),
                 items,
-                Map.of());
+                metadata);
     }
 
     public boolean isPhysicalReturn(Map<String, Object> source) {

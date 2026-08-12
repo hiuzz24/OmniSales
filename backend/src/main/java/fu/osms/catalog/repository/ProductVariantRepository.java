@@ -1,6 +1,7 @@
 package fu.osms.catalog.repository;
 
 import fu.osms.catalog.entity.ProductVariant;
+import fu.osms.reporting.repository.projection.ProductCatalogProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,16 @@ import java.util.UUID;
 
 @Repository
 public interface ProductVariantRepository extends JpaRepository<ProductVariant, UUID> {
+
+    @Query("""
+            SELECT p.id AS productId, v.id AS variantId, v.sku AS sku,
+                   p.name AS productName, v.name AS variantName
+            FROM ProductVariant v JOIN v.product p
+            WHERE v.isActive = true AND v.deletedAt IS NULL
+              AND p.deletedAt IS NULL AND p.status = 'ACTIVE'
+            ORDER BY p.name, v.sku
+            """)
+    List<ProductCatalogProjection> findActiveProductReportCatalog();
 
     List<ProductVariant> findByProductIdAndDeletedAtIsNull(UUID productId);
 

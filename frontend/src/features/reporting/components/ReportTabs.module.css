@@ -1,0 +1,6 @@
+.tabs { display: flex; width: min(650px, 100%); gap: 5px; padding: 5px; margin-bottom: 18px; border-radius: 14px; background: #edf2f7; box-sizing: border-box; }
+.tabs a, .tabs span { display: flex; align-items: center; justify-content: center; flex: 1; min-height: 40px; padding: 0 14px; border-radius: 10px; color: #64748b; font-size: 14px; font-weight: 700; text-decoration: none; box-sizing: border-box; }
+.tabs span { opacity: .68; cursor: default; }
+.tabs a:hover { color: #2563eb; }
+.tabs .active { background: #fff; color: #172033; box-shadow: 0 1px 5px rgba(15,23,42,.08); }
+@media (max-width: 720px) { .tabs { overflow-x: auto; }.tabs a, .tabs span { min-width: 150px; } }

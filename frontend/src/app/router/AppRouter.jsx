@@ -65,6 +65,9 @@ import NotificationListPage from '../../features/user/pages/NotificationListPage
 import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
 import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
 import PurchaseOrderDetailPage from '../../features/purchase/PurchaseOrderDetailPage';
+import ChannelReportPage from '../../features/reporting/pages/ChannelReportPage';
+import ReturnReportPage from '../../features/reporting/pages/ReturnReportPage';
+import ProductReportPage from '../../features/reporting/pages/ProductReportPage';
 
 const AppRouter = () => {
   return (
@@ -165,6 +168,9 @@ const AppRouter = () => {
               <Route path={ROUTES.ORDER_RETURNS} element={<OrderReturnListPage />} />
               <Route path={ROUTES.ORDER_RETURN_DETAIL} element={<OrderReturnDetailPage />} />
               <Route path={ROUTES.NOTIFICATIONS} element={<NotificationListPage />} />
+              <Route path={ROUTES.REPORTS} element={<ChannelReportPage />} />
+              <Route path={ROUTES.REPORT_RETURNS} element={<ReturnReportPage />} />
+              <Route path={ROUTES.REPORT_PRODUCTS} element={<ProductReportPage />} />
             </Route>
           </Route>
         </Route>
