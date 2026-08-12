@@ -43,7 +43,7 @@ public class ProdApiEmailSender implements EmailSender {
             """.formatted(
                 to,
                 fromEmail,
-                escapeJson(fromName),
+                fromName,
                 escapeJson(subject),
                 contentType,
                 escapeJson(content)
@@ -59,7 +59,7 @@ public class ProdApiEmailSender implements EmailSender {
     }
 
     private String escapeJson(String s) {
-        if (s == null) return "";
+        if (s == null) return "\"\"";
         return "\"" + s
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
