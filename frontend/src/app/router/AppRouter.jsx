@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ROUTES } from './routes';
 import PrivateRoute from './PrivateRoute';
@@ -33,7 +34,6 @@ import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
 import InventoryPage from '../../features/inventory/pages/inventory/InventoryPage';
 import InventoryDetailPage from '../../features/inventory/pages/inventory/InventoryDetailPage';
 import InventoryLogPage from '../../features/inventory/pages/inventory/InventoryLogPage';
-import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
 import OrderListPage from '../../features/order/pages/OrderListPage';
 import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
 import OrderLogPage from '../../features/order/pages/OrderLogPage';
@@ -43,11 +43,9 @@ import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
 import StockReceiveCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveCreatePage';
-import StockReceiveManualCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveManualCreatePage';
 import StockReceiveDetailPage from '../../features/inventory/pages/stockreceive/StockReceiveDetailPage';
 import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/StockReceiveEditPage';
 import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
-import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
 import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
 import ChannelConnectionPage from '../../features/channel/pages/ChannelConnectionPage';
 import ChannelConnectionHistoryPage from '../../features/channel/pages/ChannelConnectionHistoryPage';
@@ -55,6 +53,7 @@ import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
 import StocktakeDetailPage from '../../features/inventory/pages/stocktake/StocktakeDetailPage';
+import StocktakeCheckPage from '../../features/inventory/pages/stocktake/StocktakeCheckPage';
 import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 import WarehousePage from '../../features/inventory/pages/WarehousePage';
@@ -70,6 +69,10 @@ import PurchaseOrderDetailPage from '../../features/purchase/PurchaseOrderDetail
 import ChannelReportPage from '../../features/reporting/pages/ChannelReportPage';
 import ReturnReportPage from '../../features/reporting/pages/ReturnReportPage';
 import ProductReportPage from '../../features/reporting/pages/ProductReportPage';
+
+const StockReceiveManualCreatePage = lazy(() => import('../../features/inventory/pages/stockreceive/StockReceiveManualCreatePage'));
+const StockDeliveryCreatePage = lazy(() => import('../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage'));
+// const StockTransferCreatePage = lazy(() => import('../../features/inventory/pages/stocktransfer/StockTransferCreatePage'));
 
 const AppRouter = () => {
   return (
@@ -115,16 +118,18 @@ const AppRouter = () => {
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
-              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL} element={<StockReceiveManualCreatePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL} element={<Suspense fallback={null}><StockReceiveManualCreatePage /></Suspense>} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
               <Route path={ROUTES.STOCK_DELIVERIES} element={<StockDeliveryPage />} />
-              <Route path={ROUTES.STOCK_DELIVERY_CREATE} element={<StockDeliveryCreatePage />} />
+              <Route path={ROUTES.STOCK_DELIVERY_CREATE} element={<Suspense fallback={null}><StockDeliveryCreatePage /></Suspense>} />
               <Route path={ROUTES.STOCK_DELIVERY_EDIT} element={<StockDeliveryEditPage />} />
               <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
               <Route path={ROUTES.STOCKTAKES} element={<StocktakePage />} />
               <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
               <Route path={ROUTES.STOCKTAKE_DETAIL} element={<StocktakeDetailPage />} />
+              <Route path={ROUTES.STOCKTAKE_CHECK} element={<StocktakeCheckPage />} />
+              <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<Suspense fallback={null}><StockTransferCreatePage /></Suspense>} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
@@ -140,7 +145,7 @@ const AppRouter = () => {
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN]} />}>
               <Route path={ROUTES.WAREHOUSE} element={<WarehousePage />} />
               <Route path={ROUTES.WAREHOUSE_DETAIL} element={<WarehouseDetailPage />} />
-              <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
+              {/* <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} /> */}
               <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
             </Route>
 

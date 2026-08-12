@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Search, Loader2 } from 'lucide-react';
-import { useDebounce } from '../../../../shared/hooks/useDebounce';
+import useDebounce from '../../../../shared/hooks/useDebounce';
 import axiosClient from '../../../../api/axiosClient';
+
+const PAGE_SIZE = 20;
 
 /**
  * AddProductModal
@@ -17,56 +19,114 @@ export default function AddProductModal({ isOpen, onClose, onConfirm, existingVa
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState({}); // { [variantId]: resultItem }
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState(null);
+  const pageRef = useRef(0);
+  const searchSeqRef = useRef(0);
 
   const debouncedKeyword = useDebounce(keyword, 300);
 
   // Reset state whenever the modal opens/closes
   useEffect(() => {
     if (!isOpen) {
-      setKeyword('');
-      setResults([]);
-      setSelected({});
-      setError(null);
-      setLoading(false);
+      const timer = window.setTimeout(() => {
+        setKeyword('');
+        setResults([]);
+        setSelected({});
+        setError(null);
+        setLoading(false);
+        setLoadingMore(false);
+        setHasMore(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
+    return undefined;
   }, [isOpen]);
 
   // Search variants whenever the debounced keyword changes
   useEffect(() => {
     if (!debouncedKeyword.trim()) {
-      setResults([]);
-      setError(null);
-      return;
+      // Invalidate an in-flight search so its response cannot repopulate results
+      // after the user clears the keyword.
+      searchSeqRef.current += 1;
+      pageRef.current = 0;
+      const timer = window.setTimeout(() => {
+        setResults([]);
+        setHasMore(false);
+        setError(null);
+        setLoading(false);
+        setLoadingMore(false);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
 
     let cancelled = false;
+    searchSeqRef.current += 1;
+    const seq = searchSeqRef.current;
 
     const fetchVariants = async () => {
       setLoading(true);
       setError(null);
+      pageRef.current = 0;
       try {
         const response = await axiosClient.get('/catalog/variants', {
-          params: { search: debouncedKeyword.trim(), page: 0, size: 20 },
+          params: { search: debouncedKeyword.trim(), page: 0, size: PAGE_SIZE },
         });
-        if (!cancelled) {
+        if (!cancelled && seq === searchSeqRef.current) {
           // Support both paginated { content: [] } and plain array responses
-          const items = response.data?.content ?? response.data ?? [];
-          setResults(Array.isArray(items) ? items : []);
+          const data = response.data?.data ?? response.data ?? {};
+          const items = data.content ?? data ?? [];
+          const arr = Array.isArray(items) ? items : [];
+          setResults(arr);
+          setHasMore(data.totalPages != null ? 1 < data.totalPages : arr.length >= PAGE_SIZE);
         }
       } catch {
-        if (!cancelled) {
+        if (!cancelled && seq === searchSeqRef.current) {
           setError('Không thể tải danh sách sản phẩm. Vui lòng thử lại.');
           setResults([]);
+          setHasMore(false);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && seq === searchSeqRef.current) setLoading(false);
       }
     };
 
     fetchVariants();
     return () => { cancelled = true; };
   }, [debouncedKeyword]);
+
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || !hasMore || !debouncedKeyword.trim()) return;
+    const seq = searchSeqRef.current;
+    setLoadingMore(true);
+    try {
+      const nextPage = pageRef.current + 1;
+      const response = await axiosClient.get('/catalog/variants', {
+        params: { search: debouncedKeyword.trim(), page: nextPage, size: PAGE_SIZE },
+      });
+      if (seq !== searchSeqRef.current) return;
+      const data = response.data?.data ?? response.data ?? {};
+      const items = data.content ?? data ?? [];
+      const arr = Array.isArray(items) ? items : [];
+      setResults((prev) => [...prev, ...arr]);
+      setHasMore(data.totalPages != null ? nextPage + 1 < data.totalPages : arr.length >= PAGE_SIZE);
+      pageRef.current = nextPage;
+    } catch {
+      if (seq === searchSeqRef.current) {
+        setError('Không thể tải thêm sản phẩm. Vui lòng thử lại.');
+      }
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loading, loadingMore, hasMore, debouncedKeyword]);
+
+  const handleScroll = (event) => {
+    const el = event.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) {
+      loadMore();
+    }
+  };
 
   const toggleSelect = useCallback((item) => {
     if (existingVariantIds.includes(item.variantId)) return; // already in table — not selectable
@@ -134,7 +194,7 @@ export default function AddProductModal({ isOpen, onClose, onConfirm, existingVa
         </div>
 
         {/* Results list */}
-        <div className="flex-1 overflow-y-auto px-6 py-2 min-h-0">
+        <div className="flex-1 overflow-y-auto px-6 py-2 min-h-0" onScroll={handleScroll}>
           {/* Loading */}
           {loading && (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-gray-500">
@@ -219,6 +279,19 @@ export default function AddProductModal({ isOpen, onClose, onConfirm, existingVa
                 );
               })}
             </ul>
+          )}
+
+          {/* Loading more */}
+          {loadingMore && (
+            <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-400">
+              <Loader2 size={14} className="animate-spin" />
+              Đang tải thêm...
+            </div>
+          )}
+
+          {/* End of results */}
+          {!loading && !loadingMore && !error && results.length > 0 && !hasMore && (
+            <p className="py-4 text-center text-xs text-gray-400">Đã hiển thị tất cả kết quả.</p>
           )}
         </div>
 

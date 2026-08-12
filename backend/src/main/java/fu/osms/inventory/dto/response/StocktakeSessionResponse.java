@@ -49,5 +49,8 @@ public class StocktakeSessionResponse {
     private Integer totalDifference;
     private java.math.BigDecimal totalDifferenceValue;
 
+    private Boolean marketplaceSyncAvailable;
+    private List<String> marketplacePlatforms;
+
     private List<StocktakeItemResponse> items;
 }

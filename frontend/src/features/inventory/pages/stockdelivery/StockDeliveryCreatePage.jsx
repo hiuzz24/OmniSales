@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,6 +12,7 @@ import inventoryApi from '../../../../api/inventoryApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
+import usePagedVariants from '../../hooks/usePagedVariants';
 import OrderStockDeliverySelector from './OrderStockDeliverySelector';
 import styles from '../CreatePage.module.css';
 
@@ -164,7 +165,7 @@ const aggregateWarehouseVariantsBySku = (variants) => {
 };
 
 // ── Add Product Modal ─────────────────────────────────────────────────────────
-function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], loading = false }) {
+function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], totalItems = 0, loading = false, loadingMore = false, hasMore = false, onLoadMore, onKeywordChange }) {
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState({});
 
@@ -204,18 +205,18 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div>
             <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Chọn sản phẩm</span>
-            {results.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{results.length} sản phẩm</span>}
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{totalItems} sản phẩm</span>
           </div>
           <button onClick={resetAndClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}><X size={18} /></button>
         </div>
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input autoFocus value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Tìm theo tên sản phẩm hoặc SKU..."
+            <input autoFocus value={keyword} onChange={(e) => { setKeyword(e.target.value); onKeywordChange?.(e.target.value); }} placeholder="Tìm theo tên sản phẩm hoặc SKU..."
               style={{ width: '100%', padding: '8px 10px 8px 34px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} />
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} onScroll={(event) => { const el = event.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 && hasMore && !loading && !loadingMore) onLoadMore?.(); }}>
           {loading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8', fontSize: 13 }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải...</div>}
           {!loading && results.length === 0 && <p style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>{keyword.trim() ? 'Không tìm thấy sản phẩm nào phù hợp.' : 'Không có sản phẩm nào.'}</p>}
           {!loading && results.map((item) => {
@@ -234,7 +235,6 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
                   <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, fontFamily: 'monospace', backgroundColor: '#fee2e2', color: '#991b1b', padding: '1px 6px', borderRadius: 4 }}>{item.sku}</span>
                     {renderPlatformBadges(item)}
-                    {(item.mergedVariantCount ?? 1) > 1 && <span style={{ fontSize: 11, backgroundColor: '#ecfdf5', color: '#047857', padding: '1px 6px', borderRadius: 4 }}>Gộp {item.mergedVariantCount} biến thể</span>}
                     <span style={{ fontSize: 11, backgroundColor: '#fef2f2', color: '#991b1b', padding: '1px 6px', borderRadius: 4 }}>Có thể xuất: {formatNumber(item.availableQuantity)}</span>
                     {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
                   </div>
@@ -242,6 +242,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
               </div>
             );
           })}
+          {loadingMore && <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8', fontSize: 12 }}>Đang tải thêm...</div>}
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
@@ -269,8 +270,6 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
   const [items, setItems] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [warehouses, setWarehouses] = useState([]);
-  const [warehouseVariants, setWarehouseVariants] = useState([]);
-  const [loadingWarehouseVariants, setLoadingWarehouseVariants] = useState(false);
   const previousWarehouseIdRef = useRef('');
   const requestedTab = searchParams.get('tab');
   const linkedOrderId = searchParams.get('orderId');
@@ -297,6 +296,10 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
     defaultValues: { warehouseId: '', issuedDate: today, recipient: '', notes: '' },
   });
   const selectedWarehouseId = watch('warehouseId');
+  const fetchVariants = useCallback(({ page, size, keyword }) => inventoryApi.getInventoryList(page, size, 'updatedAt', 'desc', null, null, false, keyword ? { keyword } : {}), []);
+  const pagedVariants = usePagedVariants({ fetcher: fetchVariants });
+  const warehouseVariants = useMemo(() => aggregateWarehouseVariantsBySku(pagedVariants.items.map(normalizeWarehouseVariant).filter((item) => item.id)), [pagedVariants.items]);
+  const loadingWarehouseVariants = pagedVariants.loading || pagedVariants.loadingMore;
   const itemVariantKey = useMemo(() => items.map((item) => item.variantId).join('|'), [items]);
   const totalQuantity = useMemo(() => items.reduce((s, i) => s + (Number(i.quantity) || 0), 0), [items]);
   const hasUnsavedChanges = !loadingDelivery && (isDirty || (!isEdit && items.length > 0));
@@ -368,34 +371,8 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
     }
     previousWarehouseIdRef.current = warehouseId;
 
-    if (!warehouseId) {
-      setWarehouseVariants([]);
-      setLoadingWarehouseVariants(false);
-      return undefined;
-    }
-
-    let ignore = false;
-    setLoadingWarehouseVariants(true);
-    inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false)
-      .then((response) => {
-        if (ignore) return;
-        const data = getResponseData(response);
-        const variants = Array.isArray(data) ? data : (data.content ?? []);
-        setWarehouseVariants(aggregateWarehouseVariantsBySku(
-          variants.map(normalizeWarehouseVariant).filter((item) => item.id),
-        ));
-      })
-      .catch(() => {
-        if (!ignore) {
-          setWarehouseVariants([]);
-          toast.error('Không thể tải sản phẩm thuộc kho đã chọn.');
-        }
-      })
-      .finally(() => {
-        if (!ignore) setLoadingWarehouseVariants(false);
-      });
-
-    return () => { ignore = true; };
+    pagedVariants.close();
+    return undefined;
   }, [selectedWarehouseId]);
 
   useEffect(() => {
@@ -652,7 +629,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
               </div>
               <div className={styles.tableCardActions}>
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleExcelMerged} />
-                <button className={`${styles.actionBtn} ${styles.dangerBtn}`} onClick={() => setModalOpen(true)} disabled={!selectedWarehouseId || loadingWarehouseVariants}>{loadingWarehouseVariants ? <Loader2 className={styles.dangerIcon} /> : <Plus className={styles.dangerIcon} />} Thêm sản phẩm</button>
+                <button className={`${styles.actionBtn} ${styles.dangerBtn}`} onClick={() => { pagedVariants.open(); setModalOpen(true); }} disabled={!selectedWarehouseId || loadingWarehouseVariants}>{loadingWarehouseVariants ? <Loader2 className={styles.dangerIcon} /> : <Plus className={styles.dangerIcon} />} Thêm sản phẩm</button>
               </div>
             </div>
 
@@ -763,7 +740,12 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
         existingVariantIds={items.map((it) => it.variantId)}
         existingSkus={items.map((it) => String(it.sku ?? '').trim().toLowerCase()).filter(Boolean)}
         products={warehouseVariants}
-        loading={loadingWarehouseVariants}
+        totalItems={pagedVariants.totalItems}
+        loading={pagedVariants.loading}
+        loadingMore={pagedVariants.loadingMore}
+        hasMore={pagedVariants.hasMore}
+        onLoadMore={pagedVariants.loadMore}
+        onKeywordChange={pagedVariants.setKeyword}
       />
         </>
       )}
