@@ -6,6 +6,10 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import java.util.Map;
+
 @Service
 @org.springframework.context.annotation.Profile("render")
 public class ProdApiEmailSender implements EmailSender {
@@ -40,31 +44,37 @@ public class ProdApiEmailSender implements EmailSender {
 
         String contentType = isHtml ? "text/html" : "text/plain";
 
-        String body = """
-            {
-              "personalizations": [{"to": [{"email": "%s"}]}],
-              "from": {"email": "%s", "name": "%s"},
-              "subject": "%s",
-              "content": [{"type": "%s", "value": %s}]
-            }
-            """.formatted(
-                to,
-                fromEmail,
-                fromName,
-                escapeJson(subject),
-                contentType,
-                escapeJson(content)
-        );
+        try {
+            // Build payload using Map + ObjectMapper to avoid string-formatting bugs
+            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("personalizations", List.of(
+                Map.of("to", List.of(Map.of("email", to)))
+            ));
+            payload.put("from", Map.of("email", fromEmail, "name", fromName));
+            payload.put("subject", subject);
+            payload.put("content", List.of(
+                Map.of("type", contentType, "value", content)
+            ));
 
-        log.debug("SendGrid request body: {}", body);
+            String body = new ObjectMapper().writeValueAsString(payload);
+            log.info("SendGrid request body: {}", body);
 
-        restClient.post()
-            .uri(apiUrl)
-            .header("Authorization", "Bearer " + apiKey)
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(body)
-            .retrieve()
-            .toBodilessEntity();
+            restClient.post()
+                .uri(apiUrl)
+                .header("Authorization", "Bearer " + apiKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
+                .retrieve()
+                .toBodilessEntity();
+
+            log.info("Email sent successfully to {}", to);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("SendGrid rejected the request. Status: {}, Body: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to build/send SendGrid request: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
+        }
     }
 
     private String escapeJson(String s) {
