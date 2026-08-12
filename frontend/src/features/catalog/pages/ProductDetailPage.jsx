@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Loader2 } from 'lucide-react';
 import productApi from '../../../api/productApi';
-import channelApi from '../../../api/channelApi';
 import { ROUTES } from '../../../app/router/routes';
 import styles from './ProductDetailPage.module.css';
 import ProductDetailHeader from '../components/ProductDetailHeader';
@@ -12,12 +11,16 @@ import TabOverview from '../components/TabOverview';
 import TabPlatform from '../components/TabPlatform';
 import TabImages from '../components/TabImages';
 import TabVariants from '../components/TabVariants';
+import { ROLES } from '../../auth/constants/roles';
+import useAuth from '../../auth/hooks/useAuth';
 
 const ProductDetailPage = () => {
+  const { user } = useAuth();
+  const canManageProducts = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
+  const canSyncProducts = user?.role === ROLES.OWNER;
   const { id } = useParams();
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
-  const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -40,13 +43,9 @@ const ProductDetailPage = () => {
   const fetchProduct = async () => {
     try {
       setLoading(true);
-      const [prodRes, chanRes] = await Promise.all([
-        productApi.getById(id),
-        channelApi.getAll(),
-      ]);
+      const prodRes = await productApi.getById(id);
       const responseData = prodRes.data?.data || prodRes.data || prodRes;
       setProduct(responseData);
-      setChannels(chanRes.data?.data || chanRes.data || chanRes);
     } catch (error) {
       toast.error('Không thể tải thông tin sản phẩm');
       navigate(ROUTES.PRODUCTS);
@@ -105,6 +104,8 @@ const ProductDetailPage = () => {
         isSyncing={isSyncing}
         syncAllDisabled={syncAllDisabled}
         syncAllDisabledReason={syncAllDisabledReason}
+        canManage={canManageProducts}
+        canSync={canSyncProducts}
       />
 
       <div className={styles.mainContent}>
@@ -117,7 +118,14 @@ const ProductDetailPage = () => {
 
           <div className={styles.tabContent}>
             {activeTab === 'overview' && <TabOverview product={product} />}
-            {activeTab === 'platform' && <TabPlatform product={product} onRefresh={fetchProduct} />}
+            {activeTab === 'platform' && (
+              <TabPlatform
+                product={product}
+                onRefresh={fetchProduct}
+                canConfigure={canManageProducts}
+                canSync={canSyncProducts}
+              />
+            )}
             {activeTab === 'images' && <TabImages product={product} />}
             {activeTab === 'variants' && <TabVariants product={product} />}
           </div>

@@ -15,7 +15,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/orders/pull")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS', 'SYSTEM_ADMIN')")
+@PreAuthorize("hasAnyRole('OWNER', 'SALES')")
 public class OrderPullController {
     private final OrderPullService service;
 

@@ -5,6 +5,8 @@ import styles from './ProductTable.module.css';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import productApi from '../../../api/productApi';
+import { ROLES } from '../../auth/constants/roles';
+import useAuth from '../../auth/hooks/useAuth';
 
 const getChannelBadge = (channel) => {
   switch (channel?.toUpperCase()) {
@@ -67,6 +69,8 @@ const MarketplaceLinkButton = ({ product }) => {
 };
 
 const ProductTable = ({ keyword = '', statusFilter = '', platformFilters = [] }) => {
+  const { user } = useAuth();
+  const canManageProducts = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(0);
@@ -148,7 +152,9 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilters = [] })
                     <PackageSearch aria-hidden="true" />
                   </div>
                   <p>Không có sản phẩm nào</p>
-                  <button onClick={() => navigate('/products/create')} type="button">Thêm sản phẩm đầu tiên</button>
+                  {canManageProducts && (
+                    <button onClick={() => navigate('/products/create')} type="button">Thêm sản phẩm đầu tiên</button>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -198,7 +204,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilters = [] })
                     </td>
                     <td className={styles.td}>
                       <div className={styles.marketplaceCell}>
-                        <MarketplaceLinkButton product={product} />
+                        {canManageProducts && <MarketplaceLinkButton product={product} />}
                         <span className={styles.marketplaceHint}>
                           {product.channels?.length > 0 ? 'Dùng chung tồn kho' : 'Chọn sàn để bán'}
                         </span>

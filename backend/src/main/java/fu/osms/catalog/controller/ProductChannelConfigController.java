@@ -16,6 +16,7 @@ import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.enums.PlatformType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -37,6 +38,7 @@ public class ProductChannelConfigController {
     private final PlatformLookupServiceFactory platformLookupServiceFactory;
 
     @GetMapping("/api/products/{productId}/channels/{channelId}/config")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<ChannelProductConfigResponse>> getConfig(
             @PathVariable UUID productId,
             @PathVariable UUID channelId) {
@@ -44,6 +46,7 @@ public class ProductChannelConfigController {
     }
 
     @PutMapping("/api/products/{productId}/channels/{channelId}/config")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<ChannelProductConfigResponse>> updateConfig(
             @PathVariable UUID productId,
             @PathVariable UUID channelId,
@@ -55,6 +58,7 @@ public class ProductChannelConfigController {
     }
 
     @GetMapping("/api/platform-lookups/{platform}/categories")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     // MANUAL_CATEGORY_BROWSER_FALLBACK: kept while suggestion-first is verified.
     public ResponseEntity<ApiResponse<List<PlatformCategoryNodeResponse>>> categories(
             @PathVariable PlatformType platform,
@@ -67,6 +71,7 @@ public class ProductChannelConfigController {
     }
 
     @GetMapping("/api/platform-lookups/{platform}/categories/{categoryId}/attributes")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<List<PlatformAttributeResponse>>> attributes(
             @PathVariable PlatformType platform,
             @PathVariable String categoryId,
@@ -77,6 +82,7 @@ public class ProductChannelConfigController {
     }
 
     @GetMapping("/api/platform-lookups/{platform}/brands")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<PlatformBrandPageResponse>> brands(
             @PathVariable PlatformType platform,
             @RequestParam UUID channelId,
@@ -93,6 +99,7 @@ public class ProductChannelConfigController {
     }
 
     @PostMapping("/api/platform-lookups/{platform}/category-suggestions")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<List<PlatformCategorySuggestionResponse>>> categorySuggestions(
             @PathVariable PlatformType platform,
             @RequestBody CategorySuggestionRequest request) {
@@ -102,6 +109,7 @@ public class ProductChannelConfigController {
     }
 
     @PutMapping("/api/platform-lookups/{platform}/cache")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<Void>> clearCache(
             @PathVariable PlatformType platform,
             @RequestParam UUID channelId) {

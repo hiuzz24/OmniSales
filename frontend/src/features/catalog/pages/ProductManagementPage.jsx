@@ -8,9 +8,13 @@ import ProductFilterBar from '../components/ProductFilterBar';
 import ProductTable from '../components/ProductTable';
 import ExportProductsModal from '../components/ExportProductsModal';
 import ImportProductsModal from '../components/ImportProductsModal';
+import { ROLES } from '../../auth/constants/roles';
+import useAuth from '../../auth/hooks/useAuth';
 import styles from './ProductManagementPage.module.css';
 
 const ProductManagementPage = () => {
+  const { user } = useAuth();
+  const canManageProducts = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [platformFilters, setPlatformFilters] = useState([]);
@@ -33,16 +37,18 @@ const ProductManagementPage = () => {
         <RefreshCcw className={styles.secondaryIcon} />
         Lịch sử đồng bộ
       </button>
-      <button
-        type="button"
-        aria-label="Nhật ký hệ thống"
-        title="Nhật ký hệ thống"
-        className={`${styles.actionBtn} ${styles.secondaryBtn}`}
-        onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
-      >
-        <History className={styles.secondaryIcon} />
-        Nhật ký hệ thống
-      </button>
+      {canManageProducts && (
+        <button
+          type="button"
+          aria-label="Nhật ký hệ thống"
+          title="Nhật ký hệ thống"
+          className={`${styles.actionBtn} ${styles.secondaryBtn}`}
+          onClick={() => navigate(ROUTES.PRODUCT_LOGS)}
+        >
+          <History className={styles.secondaryIcon} />
+          Nhật ký hệ thống
+        </button>
+      )}
       <button
         type="button"
         aria-label="Nhập Excel"
@@ -63,16 +69,18 @@ const ProductManagementPage = () => {
         <FileDown className={styles.exportIcon} />
         Xuất Excel
       </button>
-      <button
-        type="button"
-        aria-label="Thêm sản phẩm mới"
-        title="Thêm sản phẩm mới"
-        className={`${styles.actionBtn} ${styles.primaryBtn}`}
-        onClick={() => navigate(ROUTES.PRODUCT_CREATE)}
-      >
-        <Plus className={styles.primaryIcon} />
-        Thêm sản phẩm mới
-      </button>
+      {canManageProducts && (
+        <button
+          type="button"
+          aria-label="Thêm sản phẩm mới"
+          title="Thêm sản phẩm mới"
+          className={`${styles.actionBtn} ${styles.primaryBtn}`}
+          onClick={() => navigate(ROUTES.PRODUCT_CREATE)}
+        >
+          <Plus className={styles.primaryIcon} />
+          Thêm sản phẩm mới
+        </button>
+      )}
     </>
   );
 

@@ -28,7 +28,7 @@ const configFromSync = (sync) => ({
   variantAttributeValueMappings: sync.platformConfig?.variantAttributeValueMappings || {},
 });
 
-const TabPlatform = ({ product, onRefresh }) => {
+const TabPlatform = ({ product, onRefresh, canConfigure, canSync }) => {
   const mappings = useMemo(() => product?.channelSyncs || [], [product?.channelSyncs]);
   const [syncing, setSyncing] = useState({});
   const configMethods = useForm({
@@ -122,21 +122,25 @@ const TabPlatform = ({ product, onRefresh }) => {
               </span>
               <div className={styles.syncStatus}>{statusLabel[mapping.syncStatus] || mapping.syncStatus}</div>
             </div>
-            <button
-              type="button"
-              className={styles.syncButton}
-              onClick={() => syncChannel(mapping)}
-              disabled={!mapping.readyToSync || syncing[mapping.channelId]}
-            >
-              <RefreshCw size={16} className={syncing[mapping.channelId] ? styles.spin : ''} />
-              Đồng bộ ngay
-            </button>
+            {canSync && (
+              <button
+                type="button"
+                className={styles.syncButton}
+                onClick={() => syncChannel(mapping)}
+                disabled={!mapping.readyToSync || syncing[mapping.channelId]}
+              >
+                <RefreshCw size={16} className={syncing[mapping.channelId] ? styles.spin : ''} />
+                Đồng bộ ngay
+              </button>
+            )}
           </div>
         ))}
       </div>
-      <FormProvider {...configMethods}>
-        <PlatformConfigSection channels={platformChannels} onSave={saveConfig} productId={product.id} />
-      </FormProvider>
+      {canConfigure && (
+        <FormProvider {...configMethods}>
+          <PlatformConfigSection channels={platformChannels} onSave={saveConfig} productId={product.id} />
+        </FormProvider>
+      )}
     </div>
   );
 };

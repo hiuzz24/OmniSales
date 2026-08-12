@@ -45,6 +45,7 @@ public class WebhookController {
     }
 
     @GetMapping("/api/webhook-events")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<PageResponse<WebhookEventResponse>>> getWebhookEvents(
             @RequestParam(required = false) PlatformType platform,
             @RequestParam(required = false) String status,
@@ -59,7 +60,7 @@ public class WebhookController {
     }
 
     @PostMapping("/api/webhook-events/{id}/reprocess")
-    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<WebhookEventResponse>> reprocessWebhook(@PathVariable UUID id) {
         WebhookEvent event = webhookEventProcessingService.processSavedEvent(id);
         return ResponseEntity.ok(ApiResponse.success(webhookEventMapper.toResponse(event)));
