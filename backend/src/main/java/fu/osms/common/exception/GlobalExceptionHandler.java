@@ -85,6 +85,32 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Cookie '" + ex.getCookieName() + "' không tồn tại hoặc đã hết hạn"));
     }
 
+    /**
+     * Client đóng kết nối giữa chừng (F5 / refresh / close tab). Không phải lỗi server,
+     * chỉ là log noise khi user cancel request. Hạ log xuống DEBUG để không làm nhiễu dashboard.
+     */
+    @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestNotUsableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAsyncRequestNotUsable(
+            org.springframework.web.context.request.async.AsyncRequestNotUsableException ex) {
+        log.debug("[ClientClosed] Async response write failed: {}", rootMessage(ex));
+        return null;
+    }
+
+    @ExceptionHandler(java.io.IOException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIoException(java.io.IOException ex) {
+        // Broken pipe / Connection reset = client cancel request. Không log ERROR.
+        String message = ex.getMessage() == null ? "" : ex.getMessage();
+        if (message.contains("Broken pipe") || message.contains("Connection reset")) {
+            log.debug("[ClientClosed] {}", message);
+            return null;
+        }
+        log.error("[IOException] {}", message, ex);
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                        "Lỗi máy chủ nội bộ, vui lòng thử lại sau"));
+    }
+
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Void>> handleResponseStatus(ResponseStatusException ex) {
         int statusCode = ex.getStatusCode().value();
