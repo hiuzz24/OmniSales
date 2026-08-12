@@ -92,7 +92,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(org.springframework.web.context.request.async.AsyncRequestNotUsableException.class)
     public ResponseEntity<ApiResponse<Void>> handleAsyncRequestNotUsable(
             org.springframework.web.context.request.async.AsyncRequestNotUsableException ex) {
-        log.debug("[ClientClosed] Async response write failed: {}", rootMessage(ex));
+        log.debug("[ClientClosed] Async response write failed: {}", ex.getMessage());
         return null;
     }
 
