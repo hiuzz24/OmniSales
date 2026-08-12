@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 @Service
-@org.springframework.context.annotation.Profile("prod")
+@org.springframework.context.annotation.Profile("render")
 public class ProdApiEmailSender implements EmailSender {
 
     @Value("${email.api.key:}")
