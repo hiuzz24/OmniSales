@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,18 +37,21 @@ public class ProductController {
     private final ProductImportService productImportService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductRequest request) {
         ProductResponse productResponse = productService.create(request);
         return ResponseEntity.ok(ApiResponse.success("Tạo sản phẩm thành công",productResponse));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<ProductResponse>> getById(@PathVariable UUID id) {
         ProductResponse response = productService.getById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) ProductStatus status,
@@ -83,6 +87,7 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<ProductResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ProductRequest request) {
         ProductResponse response = productService.update(id, request);
@@ -90,24 +95,28 @@ public class ProductController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<ProductResponse>> updateStatus(@PathVariable UUID id,
                                                                      @RequestParam ProductStatus status) {
         throw new UnsupportedOperationException("Chưa code");
     }
 
     @DeleteMapping("/{id}/delete")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         productService.delete(id);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @PostMapping("/{productId}/sync")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<SyncResult>> syncProduct(@PathVariable UUID productId) {
         SyncResult result = productService.syncProductToAllChannels(productId);
         return ResponseEntity.ok(ApiResponse.success("Sync triggered", result));
     }
 
     @PostMapping("/{productId}/channels/{channelId}/sync")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<SyncResult>> syncProductToChannel(
             @PathVariable UUID productId,
             @PathVariable UUID channelId) {
@@ -116,6 +125,7 @@ public class ProductController {
     }
 
     @PostMapping("/{productId}/sync/async")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<ProductSyncQueuedResponse>> syncProductToAllChannelsAsync(
             @PathVariable UUID productId) {
         ProductSyncQueuedResponse response = productService.syncProductToAllChannelsAsync(productId);
@@ -123,6 +133,7 @@ public class ProductController {
     }
 
     @PostMapping("/{productId}/channels/{channelId}/sync/async")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<ProductSyncQueuedResponse>> syncProductToChannelAsync(
             @PathVariable UUID productId,
             @PathVariable UUID channelId) {

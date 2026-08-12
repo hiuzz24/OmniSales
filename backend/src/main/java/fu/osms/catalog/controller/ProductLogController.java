@@ -6,6 +6,7 @@ import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
@@ -18,6 +19,7 @@ public class ProductLogController {
     private final ProductLogService productLogService;
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<PageResponse<ProductLogResponse>>> getLogs(
             @RequestParam(required = false) UUID productId,
             @RequestParam(defaultValue = "0") int page,

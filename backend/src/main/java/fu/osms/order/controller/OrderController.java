@@ -38,6 +38,7 @@ public class OrderController {
     private final ChannelService channelService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<OrderResponse>> create(@Valid @RequestBody OrderRequest request) {
         OrderResponse response = orderService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -45,12 +46,14 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderResponse>> getById(@PathVariable UUID id) {
         OrderResponse response = orderService.getById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getOrders(
             @RequestParam(required = false) OrderStatus status,
             @RequestParam(required = false) UUID channelId,
@@ -107,6 +110,7 @@ public class OrderController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<OrderResponse>> update(@PathVariable UUID id,
                                                             @Valid @RequestBody OrderRequest request) {
         OrderResponse response = orderService.update(id, request);

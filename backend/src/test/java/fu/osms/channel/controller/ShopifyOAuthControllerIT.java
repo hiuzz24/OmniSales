@@ -5,15 +5,9 @@ import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.UserService;
 import fu.osms.channel.service.ChannelConnectionLogService;
-import fu.osms.channel.service.ChannelService;
-import fu.osms.common.dto.ApiResponse;
-import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
-import fu.osms.sync.shopify.ShopifyApiClient;
-import fu.osms.sync.shopify.ShopifyOAuthService;
-import fu.osms.sync.shopify.ShopifyShopDomainNormalizer;
-import fu.osms.channel.dto.response.ChannelResponse;
+import fu.osms.sync.shopify.ShopifyChannelConnectionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -25,11 +19,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -56,16 +45,7 @@ class ShopifyOAuthControllerIT {
     MockMvc mvc;
 
     @MockBean
-    ShopifyOAuthService shopifyOAuthService;
-
-    @MockBean
-    ShopifyApiClient shopifyApiClient;
-
-    @MockBean
-    ShopifyShopDomainNormalizer shopDomainNormalizer;
-
-    @MockBean
-    ChannelService channelService;
+    ShopifyChannelConnectionService shopifyChannelConnectionService;
 
     @MockBean
     ChannelConnectionLogService channelConnectionLogService;
@@ -87,8 +67,7 @@ class ShopifyOAuthControllerIT {
 
     @Test
     void authorize_withValidShop_returnsAuthorizationUrl() throws Exception {
-        when(shopDomainNormalizer.normalizeHandle("demo")).thenReturn("demo.myshopify.com");
-        when(shopifyOAuthService.buildAuthorizationUrl("demo.myshopify.com"))
+        when(shopifyChannelConnectionService.buildAuthorizationUrl("demo"))
                 .thenReturn("https://demo.myshopify.com/admin/oauth/authorize?client_id=test");
 
         mvc.perform(get("/api/channels/shopify/authorize")
@@ -101,7 +80,8 @@ class ShopifyOAuthControllerIT {
 
     @Test
     void authorize_withInvalidShop_returnsBadRequest() throws Exception {
-        when(shopDomainNormalizer.normalizeHandle("invalid")).thenThrow(new IllegalArgumentException("Invalid shop name"));
+        when(shopifyChannelConnectionService.buildAuthorizationUrl("invalid"))
+                .thenThrow(new IllegalArgumentException("Invalid shop name"));
 
         mvc.perform(get("/api/channels/shopify/authorize")
                         .param("shop", "invalid")
@@ -112,22 +92,6 @@ class ShopifyOAuthControllerIT {
 
     @Test
     void callback_withValidCodeAndShop_redirectsToSuccess() throws Exception {
-        UUID channelId = UUID.randomUUID();
-        ChannelResponse channelResponse = ChannelResponse.builder()
-                .id(channelId)
-                .platform(PlatformType.SHOPIFY)
-                .displayName("Demo Store")
-                .build();
-
-        when(shopDomainNormalizer.normalizeHandle("demo.myshopify.com")).thenReturn("demo.myshopify.com");
-        when(shopifyOAuthService.exchangeCodeForToken("demo.myshopify.com", "valid_code"))
-                .thenReturn("access_token_123");
-        when(shopifyApiClient.listAccessScopes("demo.myshopify.com", "access_token_123"))
-                .thenReturn(List.of("read_locations", "read_products"));
-        when(channelService.connectShopify("demo.myshopify.com", "access_token_123"))
-                .thenReturn(channelResponse);
-        doNothing().when(channelService).registerShopifyWebhooks(anyString(), anyString(), any());
-
         mvc.perform(get("/api/channels/shopify/callback")
                         .param("code", "valid_code")
                         .param("shop", "demo.myshopify.com")
@@ -138,11 +102,8 @@ class ShopifyOAuthControllerIT {
 
     @Test
     void callback_withMissingReadLocationsScope_returnsError() throws Exception {
-        when(shopDomainNormalizer.normalizeHandle("demo.myshopify.com")).thenReturn("demo.myshopify.com");
-        when(shopifyOAuthService.exchangeCodeForToken("demo.myshopify.com", "valid_code"))
-                .thenReturn("access_token_123");
-        when(shopifyApiClient.listAccessScopes("demo.myshopify.com", "access_token_123"))
-                .thenReturn(List.of("read_products"));
+        when(shopifyChannelConnectionService.connect("demo.myshopify.com", "valid_code"))
+                .thenThrow(new IllegalStateException("Missing read_locations"));
 
         mvc.perform(get("/api/channels/shopify/callback")
                         .param("code", "valid_code")
@@ -153,12 +114,7 @@ class ShopifyOAuthControllerIT {
 
     @Test
     void callback_withChannelConflict_redirectsToConflict() throws Exception {
-        when(shopDomainNormalizer.normalizeHandle("demo.myshopify.com")).thenReturn("demo.myshopify.com");
-        when(shopifyOAuthService.exchangeCodeForToken("demo.myshopify.com", "valid_code"))
-                .thenReturn("access_token_123");
-        when(shopifyApiClient.listAccessScopes("demo.myshopify.com", "access_token_123"))
-                .thenReturn(List.of("read_locations"));
-        when(channelService.connectShopify("demo.myshopify.com", "access_token_123"))
+        when(shopifyChannelConnectionService.connect("demo.myshopify.com", "valid_code"))
                 .thenThrow(new AppException(ErrorCode.CHANNEL_IDENTITY_CONFLICT, "Channel already exists"));
 
         doNothing().when(channelConnectionLogService).logFailure(any(), any(), anyString(), anyString(), any());
@@ -172,8 +128,7 @@ class ShopifyOAuthControllerIT {
 
     @Test
     void callback_withGenericError_redirectsToError() throws Exception {
-        when(shopDomainNormalizer.normalizeHandle("demo.myshopify.com")).thenReturn("demo.myshopify.com");
-        when(shopifyOAuthService.exchangeCodeForToken("demo.myshopify.com", "invalid_code"))
+        when(shopifyChannelConnectionService.connect("demo.myshopify.com", "invalid_code"))
                 .thenThrow(new RuntimeException("Token exchange failed"));
 
         doNothing().when(channelConnectionLogService).logFailure(any(), any(), anyString(), anyString(), any());

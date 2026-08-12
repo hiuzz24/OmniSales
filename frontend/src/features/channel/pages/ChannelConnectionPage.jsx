@@ -19,6 +19,8 @@ import channelApi from '../../../api/channelApi';
 import { ROUTES } from '../../../app/router/routes';
 import ChannelFormModal from '../components/ChannelFormModal';
 import DisconnectChannelDialog from '../components/DisconnectChannelDialog';
+import { ROLES } from '../../auth/constants/roles';
+import useAuth from '../../auth/hooks/useAuth';
 import styles from './ChannelConnectionPage.module.css';
 
 const PLATFORM_META = {
@@ -43,6 +45,8 @@ const connectionView = (channel) => {
 };
 
 const ChannelConnectionPage = () => {
+  const { user } = useAuth();
+  const canManageChannels = user?.role === ROLES.OWNER;
   const [channels, setChannels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -129,10 +133,12 @@ const ChannelConnectionPage = () => {
             <History size={16} />
             Lịch sử kết nối
           </button>
-          <button type="button" className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
-            <Plus size={16} />
-            Thêm kênh mới
-          </button>
+          {canManageChannels && (
+            <button type="button" className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
+              <Plus size={16} />
+              Thêm kênh mới
+            </button>
+          )}
         </div>
       </div>
 
@@ -183,9 +189,11 @@ const ChannelConnectionPage = () => {
             <Wifi size={48} className={styles.emptyIcon} />
             <p className={styles.emptyTitle}>Chưa có kênh nào được kết nối</p>
             <p className={styles.emptyDesc}>Nhấn "Thêm kênh mới" để bắt đầu đồng bộ sản phẩm lên các sàn TMĐT</p>
-            <button type="button" className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
-              <Plus size={16} /> Thêm kênh mới
-            </button>
+            {canManageChannels && (
+              <button type="button" className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={openCreate}>
+                <Plus size={16} /> Thêm kênh mới
+              </button>
+            )}
           </div>
         ) : (
           <div className={styles.tableWrapper}>
@@ -242,24 +250,26 @@ const ChannelConnectionPage = () => {
                         {ch.createdAt ? new Date(ch.createdAt).toLocaleDateString('vi-VN') : '—'}
                       </td>
                       <td>
-                        <div className={styles.actionBtns}>
-                          <button
-                            type="button"
-                            className={styles.editBtn}
-                            onClick={() => openEdit(ch)}
-                            title="Chỉnh sửa"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className={styles.disconnectBtn}
-                            onClick={() => setConfirmDisconnect(ch)}
-                            title="Ngắt kết nối"
-                          >
-                            <Link2Off size={15} />
-                          </button>
-                        </div>
+                        {canManageChannels && (
+                          <div className={styles.actionBtns}>
+                            <button
+                              type="button"
+                              className={styles.editBtn}
+                              onClick={() => openEdit(ch)}
+                              title="Chỉnh sửa"
+                            >
+                              <Edit2 size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.disconnectBtn}
+                              onClick={() => setConfirmDisconnect(ch)}
+                              title="Ngắt kết nối"
+                            >
+                              <Link2Off size={15} />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -271,7 +281,7 @@ const ChannelConnectionPage = () => {
       </div>
 
       {/* Channel Form Modal */}
-      {isModalOpen && (
+      {canManageChannels && isModalOpen && (
         <ChannelFormModal
           mode={modalMode}
           channelData={selectedChannel}
@@ -280,12 +290,14 @@ const ChannelConnectionPage = () => {
         />
       )}
 
-      <DisconnectChannelDialog
-        channel={confirmDisconnect}
-        isDisconnecting={isDisconnecting}
-        onCancel={() => setConfirmDisconnect(null)}
-        onConfirm={handleDisconnect}
-      />
+      {canManageChannels && (
+        <DisconnectChannelDialog
+          channel={confirmDisconnect}
+          isDisconnecting={isDisconnecting}
+          onCancel={() => setConfirmDisconnect(null)}
+          onConfirm={handleDisconnect}
+        />
+      )}
     </div>
   );
 };
