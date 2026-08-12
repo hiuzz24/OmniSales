@@ -65,8 +65,6 @@ import NotificationListPage from '../../features/user/pages/NotificationListPage
 import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
 import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
 import PurchaseOrderDetailPage from '../../features/purchase/PurchaseOrderDetailPage';
-import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
-import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
 
 const AppRouter = () => {
   return (
@@ -141,16 +139,29 @@ const AppRouter = () => {
               <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
             </Route>
 
-            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
-              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
               <Route path={ROUTES.PRODUCT_LOGS} element={<ProductLogPage />} />
               <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
               <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
               <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
-              <Route path={ROUTES.CATEGORIES} element={<CategoryPage />} />
+              <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
+              <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
+              <Route path={ROUTES.ORDER_RETURNS} element={<OrderReturnListPage />} />
+              <Route path={ROUTES.ORDER_RETURN_DETAIL} element={<OrderReturnDetailPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
               <Route path={ROUTES.CHANNELS} element={<ChannelConnectionPage />} />
               <Route path={ROUTES.CHANNEL_CONNECTION_HISTORY} element={<ChannelConnectionHistoryPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+              <Route path={ROUTES.CATEGORIES} element={<CategoryPage />} />
               <Route path={ROUTES.SYNC_HISTORY} element={<SyncHistoryPage />} />
               <Route path={ROUTES.CUSTOMER_LIST} element={<CustomerListPage />} />
               <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />
@@ -163,12 +174,11 @@ const AppRouter = () => {
               <Route path={ROUTES.INVENTORY_LOGS} element={<InventoryLogPage />} />
               <Route path={ROUTES.SUPPLIERS} element={<SupplierPage />} />
               <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
-              <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
-              <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
               <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
-              <Route path={ROUTES.ORDER_RETURNS} element={<OrderReturnListPage />} />
-              <Route path={ROUTES.ORDER_RETURN_DETAIL} element={<OrderReturnDetailPage />} />
               <Route path={ROUTES.NOTIFICATIONS} element={<NotificationListPage />} />
+              <Route path={ROUTES.REPORTS} element={<ChannelReportPage />} />
+              <Route path={ROUTES.REPORT_RETURNS} element={<ReturnReportPage />} />
+              <Route path={ROUTES.REPORT_PRODUCTS} element={<ProductReportPage />} />
             </Route>
           </Route>
         </Route>

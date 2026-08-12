@@ -34,43 +34,47 @@ public class ChannelController {
     private final MarketplaceSyncJobService marketplaceSyncJobService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<ChannelResponse>> create(@Valid @RequestBody ChannelRequest request) {
         ChannelResponse response = channelService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(response));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<ChannelResponse>> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(channelService.getById(id)));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<List<ChannelResponse>>> getAll() {
         List<ChannelResponse> channels = channelService.getAll();
         return ResponseEntity.ok(ApiResponse.success(channels));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<ChannelResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ChannelRequest request) {
         return ResponseEntity.ok(ApiResponse.success(channelService.update(id, request)));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         channelService.delete(id);
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
     @GetMapping("/{id}/credentials")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<ChannelCredentialResponse>> getCredentials(@PathVariable UUID id) {
         throw new UnsupportedOperationException("Chưa code");
     }
 
     @GetMapping("/{id}/products")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<PageResponse<ChannelProductResponse>>> getProducts(
             @PathVariable UUID id,
             @RequestParam(defaultValue = "0") int page,

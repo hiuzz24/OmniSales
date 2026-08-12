@@ -43,6 +43,12 @@ public class ShopifyReturnSnapshotMapper {
         metadata.put("shopifyReturnName", fallback(firstText(source, "name"), ""));
         metadata.put("shopifyProcessEvidence", hasProcessEvidence(source));
         metadata.put("shopifyRefundState", refundState(source));
+        String returnReason = returnItems(source).stream()
+                .map(item -> firstText(item, "returnReason", "return_reason", "reason", "reasonNote"))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        if (returnReason != null && !returnReason.isBlank()) metadata.put("returnReason", returnReason);
         return new OrderReturnSnapshot(
                 externalReturnId,
                 externalOrderId,

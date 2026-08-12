@@ -5,7 +5,7 @@ import {
   Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User, Tag, Database, ShoppingBag, RotateCcw,
+  ChevronRight, User, Tag, Database, ShoppingBag, RotateCcw, ChartNoAxesCombined,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -16,11 +16,12 @@ import useNotifications from '../providers/useNotifications';
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { name: 'Dashboard', href: ROUTES.DASHBOARD, icon: LayoutDashboard, roles: [] },
+  { name: 'Đơn hàng',       href: '/orders', icon: ShoppingCart, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
   {
     name: 'Sản phẩm',
     href: '/products',
     icon: Package,
-    roles: [],
+    roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS],
     children: [
       { name: 'Danh sách sản phẩm', href: ROUTES.PRODUCTS, icon: Package, exact: true, roles: [] },
       { name: 'Danh mục sản phẩm', href: ROUTES.CATEGORIES, icon: Tag, roles: [] },
@@ -44,9 +45,9 @@ const NAV_ITEMS = [
   },
   { name: 'Đơn đặt hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
-  { name: 'Đơn hàng',       href: '/orders',   icon: ShoppingCart, roles: [] },
   { name: 'Trả hàng', href: ROUTES.ORDER_RETURNS, icon: RotateCcw, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
-  { name: 'Kênh bán hàng',  href: ROUTES.CHANNELS, icon: Share2,   roles: [] },
+  { name: 'Kênh bán hàng', href: ROUTES.CHANNELS, icon: Share2, roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },
+  { name: 'Báo cáo', href: ROUTES.REPORTS, icon: ChartNoAxesCombined, roles: [] },
   {
     name: 'Nhân sự',
     href: '/users',

@@ -1,13 +1,12 @@
 package fu.osms.channel.controller;
 
-import fu.osms.channel.service.ChannelService;
 import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.enums.ChannelConnectionAction;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
-import fu.osms.sync.lazada.service.LazadaOAuthService;
+import fu.osms.sync.lazada.service.LazadaChannelConnectionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,18 +29,17 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class LazadaOAuthController {
 
-    private final LazadaOAuthService lazadaOAuthService;
-    private final ChannelService channelService;
+    private final LazadaChannelConnectionService lazadaChannelConnectionService;
     private final ChannelConnectionLogService channelConnectionLogService;
 
     @Value("${app.frontend-url}")
     private String frontendUrl;
 
     @GetMapping("/authorize")
-    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponse<Map<String, String>>> authorize() {
         try {
-            String authUrl = lazadaOAuthService.buildAuthorizationUrl();
+            String authUrl = lazadaChannelConnectionService.buildAuthorizationUrl();
             log.info("[LazadaOAuthController] Returning authorization URL");
             return ResponseEntity.ok(ApiResponse.success(Map.of("url", authUrl)));
         } catch (IllegalStateException e) {
@@ -84,21 +82,7 @@ public class LazadaOAuthController {
         }
 
         try {
-            Map<String, Object> tokenData = lazadaOAuthService.exchangeToken(code);
-            String accessToken = toStringValue(tokenData.get("access_token"));
-            String refreshToken = toStringValue(tokenData.get("refresh_token"));
-            int expiresIn = toIntValue(tokenData.get("expires_in"), 604800);
-            int refreshExpiresIn = toIntValue(tokenData.get("refresh_expires_in"), 0);
-            String accountId = toStringValue(tokenData.get("account_id"));
-            String accountName = toStringValue(tokenData.get("account_name"));
-
-            if (accessToken == null || accessToken.isBlank()) {
-                throw new IllegalStateException("Lazada OAuth callback không có access_token.");
-            }
-
-            channelService.connectLazada(accessToken, refreshToken, expiresIn,
-                    refreshExpiresIn, accountId, accountName);
-
+            lazadaChannelConnectionService.connect(code);
             response.sendRedirect(frontendUrl + "/channels?success=lazada_connected");
         } catch (AppException e) {
             log.error("[LazadaOAuthController] Failed to connect channel", e);
@@ -121,21 +105,4 @@ public class LazadaOAuthController {
         }
     }
 
-    private String toStringValue(Object value) {
-        return value == null ? null : String.valueOf(value);
-    }
-
-    private int toIntValue(Object value, int fallback) {
-        if (value instanceof Number number) {
-            return number.intValue();
-        }
-        if (value != null) {
-            try {
-                return Integer.parseInt(String.valueOf(value));
-            } catch (NumberFormatException ignored) {
-                return fallback;
-            }
-        }
-        return fallback;
-    }
 }

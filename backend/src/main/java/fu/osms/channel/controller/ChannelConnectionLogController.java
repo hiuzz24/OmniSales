@@ -9,6 +9,7 @@ import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.PlatformType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,6 +25,7 @@ public class ChannelConnectionLogController {
     private final ChannelConnectionLogService channelConnectionLogService;
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<PageResponse<ChannelConnectionLogResponse>>> getLogs(
             @RequestParam(required = false) PlatformType platform,
             @RequestParam(required = false) ChannelConnectionLogStatus status,
