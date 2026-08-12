@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  Store,
 } from 'lucide-react';
 import Footer from '../components/Footer';
 import styles from './HomePage.module.css';
@@ -25,9 +26,9 @@ const HERO_IMG =
   'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1600&h=800&fit=crop&auto=format&q=90';
 
 const PLATFORMS = [
-  { name: 'Shopify', color: '#96BF48', logo: 'SH' },
-  { name: 'TikTok Shop', color: '#010101', logo: 'TT' },
-  { name: 'Lazada', color: '#0F146D', logo: 'LZ' },
+  { name: 'Shopify', color: '#95BF47', Icon: Store },
+  { name: 'TikTok Shop', color: '#010101', Icon: Zap },
+  { name: 'Lazada', color: '#0F146D', Icon: Layers },
 ];
 
 const FEATURES = [
@@ -242,15 +243,15 @@ const HeroSection = () => (
 
       {/* Platforms */}
       <div className={styles.heroPlatforms}>
-        {PLATFORMS.map((p) => (
-          <div key={p.name} className={styles.platformBadge}>
+        {PLATFORMS.map(({ name, color, Icon }) => (
+          <div key={name} className={styles.platformBadge}>
             <div
               className={styles.platformLogo}
-              style={{ backgroundColor: p.color }}
+              style={{ backgroundColor: color }}
             >
-              {p.logo}
+              <Icon className="w-4 h-4" />
             </div>
-            <span className={styles.platformName}>{p.name}</span>
+            <span className={styles.platformName}>{name}</span>
           </div>
         ))}
       </div>
