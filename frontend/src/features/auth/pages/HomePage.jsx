@@ -25,7 +25,7 @@ const HERO_IMG =
   'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1600&h=800&fit=crop&auto=format&q=90';
 
 const PLATFORMS = [
-  { name: 'Shopee', color: '#EE4D2D', logo: 'SP' },
+  { name: 'Shopify', color: '#96BF48', logo: 'SH' },
   { name: 'TikTok Shop', color: '#010101', logo: 'TT' },
   { name: 'Lazada', color: '#0F146D', logo: 'LZ' },
 ];
@@ -41,7 +41,7 @@ const FEATURES = [
   {
     icon: ShoppingCart,
     title: 'Xử lý đơn hàng tập trung',
-    desc: 'Nhận, xác nhận và quản lý đơn hàng từ Shopee, TikTok Shop, Lazada trên một màn hình.',
+    desc: 'Nhận, xác nhận và quản lý đơn hàng từ Shopify, TikTok Shop, Lazada trên một màn hình.',
     iconBg: '#f0fdf4',
     iconColor: '#16a34a',
   },
@@ -79,7 +79,7 @@ const STEPS = [
   {
     num: '01',
     title: 'Kết nối gian hàng',
-    desc: 'Liên kết tài khoản Shopee, TikTok Shop, Lazada chỉ trong vài phút với vài click đơn giản.',
+    desc: 'Liên kết tài khoản Shopify, TikTok Shop, Lazada chỉ trong vài phút với vài click đơn giản.',
   },
   {
     num: '02',
@@ -228,7 +228,7 @@ const HeroSection = () => (
 
       {/* Subtitle */}
       <p className={styles.heroSubtitle}>
-        Kết nối Shopee, TikTok Shop và Lazada, đồng bộ sản phẩm, đơn hàng và tồn kho tự
+        Kết nối Shopify, TikTok Shop và Lazada, đồng bộ sản phẩm, đơn hàng và tồn kho tự
         động — tất cả trên một nền tảng duy nhất.
       </p>
 
