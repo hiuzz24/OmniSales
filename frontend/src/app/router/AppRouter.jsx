@@ -59,12 +59,17 @@ import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 import WarehousePage from '../../features/inventory/pages/WarehousePage';
 import WarehouseDetailPage from '../../features/inventory/pages/WarehouseDetailPage';
+import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
+import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 import NotificationListPage from '../../features/user/pages/NotificationListPage';
 import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
 import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
 import PurchaseOrderDetailPage from '../../features/purchase/PurchaseOrderDetailPage';
+import ChannelReportPage from '../../features/reporting/pages/ChannelReportPage';
+import ReturnReportPage from '../../features/reporting/pages/ReturnReportPage';
+import ProductReportPage from '../../features/reporting/pages/ProductReportPage';
 
 const AppRouter = () => {
   return (
