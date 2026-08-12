@@ -71,35 +71,24 @@ public class CustomerServiceImpl implements CustomerService {
         boolean hasStatus = status != null && !"ALL".equalsIgnoreCase(status);
         boolean hasGender = gender != null && !"ALL".equalsIgnoreCase(gender);
 
-        // Normalize gender: accept both enum (MALE/FEMALE/OTHER) and Vietnamese labels
-        String genderValue = gender;
-        if (hasGender) {
-            genderValue = switch (gender.toUpperCase()) {
-                case "MALE" -> "Nam";
-                case "FEMALE" -> "Nữ";
-                case "OTHER" -> "Khác";
-                default -> gender; // already Vietnamese label
-            };
-        }
-
         if (hasSearch && hasStatus && hasGender) {
             customerPage = customerRepository.findAllBySearchKeywordAndStatusAndGender(
-                    "%" + search.trim().toLowerCase() + "%", "ACTIVE".equalsIgnoreCase(status), genderValue, pageRequest);
+                    "%" + search.trim().toLowerCase() + "%", "ACTIVE".equalsIgnoreCase(status), gender, pageRequest);
         } else if (hasSearch && hasStatus) {
             customerPage = customerRepository.findAllBySearchKeywordAndStatus(
                     "%" + search.trim().toLowerCase() + "%", "ACTIVE".equalsIgnoreCase(status), pageRequest);
         } else if (hasSearch && hasGender) {
             customerPage = customerRepository.findAllBySearchKeywordAndGender(
-                    "%" + search.trim().toLowerCase() + "%", genderValue, pageRequest);
+                    "%" + search.trim().toLowerCase() + "%", gender, pageRequest);
         } else if (hasStatus && hasGender) {
             customerPage = customerRepository.findAllByIsActiveAndGender(
-                    "ACTIVE".equalsIgnoreCase(status), genderValue, pageRequest);
+                    "ACTIVE".equalsIgnoreCase(status), gender, pageRequest);
         } else if (hasSearch) {
             customerPage = customerRepository.findAllBySearchKeyword("%" + search.trim().toLowerCase() + "%", pageRequest);
         } else if (hasStatus) {
             customerPage = customerRepository.findAllByIsActive("ACTIVE".equalsIgnoreCase(status), pageRequest);
         } else if (hasGender) {
-            customerPage = customerRepository.findAllByGender(genderValue, pageRequest);
+            customerPage = customerRepository.findAllByGenderWithNull(gender, pageRequest);
         } else {
             customerPage = customerRepository.findAll(pageRequest);
         }
@@ -206,6 +195,10 @@ public class CustomerServiceImpl implements CustomerService {
         }
 
         // 4. Aggregate order stats for missing customers in one bulk query
+        //    Only include customers that match the current gender filter (if not "ALL")
+        boolean filterByGender = gender != null && !"ALL".equalsIgnoreCase(gender);
+        boolean filterByStatus = status != null && !"ALL".equalsIgnoreCase(status);
+        boolean filterActive = "ACTIVE".equalsIgnoreCase(status); // true for ACTIVE, false for INACTIVE
         if (!missingIds.isEmpty()) {
             Map<UUID, CustomerOrderAggregate> aggMap = orderRepository.aggregateByCustomerIds(missingIds).stream()
                     .collect(Collectors.toMap(CustomerOrderAggregate::getCustomerId, a -> a));
@@ -215,12 +208,20 @@ public class CustomerServiceImpl implements CustomerService {
                     .toList();
 
             if (!idsWithOrders.isEmpty()) {
+                // Fetch all missing customers and filter by gender
                 Map<UUID, Customer> customerMap = customerRepository.findAllById(idsWithOrders).stream()
                         .collect(Collectors.toMap(Customer::getId, c -> c));
 
                 for (UUID cid : idsWithOrders) {
                     Customer c = customerMap.get(cid);
                     if (c == null) continue; // customer was deleted but orders remain
+
+                    // Skip customers that don't match the gender filter
+                    if (filterByGender && !gender.equalsIgnoreCase(c.getGender())) continue;
+
+                    // Skip customers that don't match the status filter
+                    if (filterByStatus && (c.getIsActive() == null || !c.getIsActive().equals(filterActive))) continue;
+
                     CustomerOrderAggregate agg = aggMap.get(cid);
                     CustomerResponse base = toCustomerResponse(c);
                     base.setOrderCount(agg.getOrderCount());

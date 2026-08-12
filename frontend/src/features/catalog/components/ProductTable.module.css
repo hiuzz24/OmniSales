@@ -63,19 +63,23 @@
 .tableResponsive {
   min-height: 0;
   flex: 1 1 auto;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: #c6d1dc transparent;
 }
 
 .tableResponsive::-webkit-scrollbar {
   height: 8px;
+  width: 8px;
 }
 
 .tableResponsive::-webkit-scrollbar-thumb {
   border-radius: 4px;
   background: #c6d1dc;
+}
+
+.tableResponsive::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .table {
@@ -119,10 +123,16 @@
 }
 
 .thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   background: #f3f7fa;
 }
 
 .th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   padding: 13px 16px;
   border-bottom: 1px solid #e3e9ef;
   color: #5b6878;
@@ -131,6 +141,7 @@
   letter-spacing: 0;
   text-align: left;
   white-space: nowrap;
+  background: #f3f7fa;
 }
 
 .thProduct {

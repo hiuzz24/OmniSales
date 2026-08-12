@@ -1,9 +1,12 @@
 package fu.osms.config;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -13,8 +16,18 @@ public class DatabaseMigration {
 
     private final JdbcTemplate jdbcTemplate;
 
-    @PostConstruct
+    /**
+     * Chạy migrations SAU khi Tomcat đã bind port và app ready.
+     * Dùng @EventListener(ApplicationReadyEvent.class) thay vì @PostConstruct để:
+     *   1. Tránh block Tomcat startup (Render port scan timeout 30s)
+     *   2. Cho phép app accept traffic NGAY khi ready, migration chạy nền
+     * @Async để không block main thread sau khi ready event.
+     */
+    @Async
+    @EventListener(ApplicationReadyEvent.class)
+    @Order(1)
     public void migrate() {
+        log.info("DatabaseMigration: starting migrations in background...");
         try {
             jdbcTemplate.execute("""
                         ALTER TABLE customers
@@ -166,26 +179,8 @@ public class DatabaseMigration {
 
         try {
             jdbcTemplate.execute("""
-                        ALTER TABLE notifications
-                        DROP CONSTRAINT IF EXISTS notifications_entity_type_check,
-                        ADD CONSTRAINT notifications_entity_type_check
-                        CHECK (entity_type IS NULL OR entity_type IN (
-                            'ORDER', 'RETURN', 'PRODUCT', 'CHANNEL', 'SYNC_LOG', 'SYNC',
-                            'INVENTORY', 'TRANSFER', 'RECEIPT', 'PURCHASE'
-                        ));
-                        CREATE INDEX IF NOT EXISTS idx_notifications_user_created
-                            ON notifications(user_id, created_at DESC);
-                        CREATE INDEX IF NOT EXISTS idx_notifications_entity
-                            ON notifications(user_id, type, entity_type, entity_id);
-                    """);
-        } catch (Exception e) {
-            log.error("Migration error updating notification entity constraints: {}", e.getMessage());
-        }
-
-        try {
-            jdbcTemplate.execute("""
                         INSERT INTO system_settings (key, value, description, category, updated_at)
-                        VALUES 
+                        VALUES
                         ('store.name', 'OmniSales Store', 'Tên thương hiệu / Cửa hàng', 'STORE', NOW()),
                         ('store.phone', '0987654321', 'Hotline liên hệ', 'STORE', NOW()),
                         ('store.email', 'contact@omnisales.vn', 'Email liên hệ', 'STORE', NOW()),

@@ -47,7 +47,7 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
            "LOWER(c.fullName) LIKE :keyword OR " +
            "LOWER(c.phone) LIKE :keyword OR " +
            "LOWER(c.email) LIKE :keyword) " +
-           "AND c.gender = :gender")
+           "AND (c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER'))")
     Page<Customer> findAllBySearchKeywordAndGender(
             @Param("keyword") String keyword,
             @Param("gender") String gender,
@@ -58,7 +58,8 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
            "LOWER(c.fullName) LIKE :keyword OR " +
            "LOWER(c.phone) LIKE :keyword OR " +
            "LOWER(c.email) LIKE :keyword) " +
-           "AND c.isActive = :isActive AND c.gender = :gender")
+           "AND c.isActive = :isActive " +
+           "AND (c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER'))")
     Page<Customer> findAllBySearchKeywordAndStatusAndGender(
             @Param("keyword") String keyword,
             @Param("isActive") Boolean isActive,
@@ -69,6 +70,10 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID>, JpaSp
 
     Page<Customer> findAllByGender(String gender, Pageable pageable);
 
+    @Query("SELECT c FROM Customer c WHERE c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER')")
+    Page<Customer> findAllByGenderWithNull(@Param("gender") String gender, Pageable pageable);
+
+    @Query("SELECT c FROM Customer c WHERE c.isActive = :isActive AND (c.gender = :gender OR (c.gender IS NULL AND :gender = 'OTHER'))")
     Page<Customer> findAllByIsActiveAndGender(Boolean isActive, String gender, Pageable pageable);
 
     @Query("SELECT COUNT(c) FROM Customer c")

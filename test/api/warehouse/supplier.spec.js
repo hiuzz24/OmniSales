@@ -119,6 +119,7 @@ test.describe('Supplier API Tests', () => {
         phone: '0987654321',
         email: `updated${Date.now()}@example.com`,
         address: 'Updated address',
+        taxCode: `MST${Date.now()}`.slice(0, 13),
         isActive: true,
       },
     });
@@ -129,7 +130,7 @@ test.describe('Supplier API Tests', () => {
     expect(body.contactName).toBe('Updated Contact');
   });
 
-  test('SP8 - PUT /api/suppliers/{id} - Not found returns 500 (RuntimeException)', async ({ request, managerHeaders }) => {
+  test('SP8 - PUT /api/suppliers/{id} - Not found returns 400/404/500', async ({ request, managerHeaders }) => {
     const randomId = '00000000-0000-0000-0000-000000000000';
     const response = await request.put(`${API_BASE}/suppliers/${randomId}`, {
       headers: {
@@ -139,7 +140,7 @@ test.describe('Supplier API Tests', () => {
       data: { name: 'X', isActive: true },
     });
 
-    expect([404, 500]).toContain(response.status());
+    expect([400, 404, 500]).toContain(response.status());
   });
 
   // PATCH /api/suppliers/{id}/status

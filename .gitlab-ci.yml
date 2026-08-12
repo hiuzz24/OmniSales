@@ -1,0 +1,113 @@
+# =============================================================================
+# GitLab CI/CD — OmniSales
+#
+# Mục đích: tránh OOM 512MB trên Render free tier khi build Maven multi-module.
+# Render không build gì cả — chỉ pull pre-built image do GitLab CI build ở đây.
+#
+# GitLab.com Shared Runners: 2 vCPU + 8GB RAM → thoải mái build 747 Java files.
+#
+# Trigger: pipeline tự động chạy khi push vào `main` hoặc merge request merge.
+#
+# Cần cấu hình GitLab CI/CD Variables (Settings → CI/CD → Variables):
+#   RENDER_DEPLOY_HOOK  - Deploy hook URL từ Render Dashboard
+#                          (api-osms → Settings → Deploy Hook)
+# =============================================================================
+
+stages:
+  - build
+  - package
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Xmx2g -Xms512m -XX:+UseG1GC"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end -DskipTests"
+  # Image name dùng GitLab Container Registry (sẵn với mọi repo gitlab.com)
+  BACKEND_IMAGE: "$CI_REGISTRY_IMAGE/backend"
+  BACKEND_IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+
+# -----------------------------------------------------------------------------
+# Cache Maven dependencies giữa các pipeline để build nhanh hơn.
+# policy: pull-push → job pull cache cũ, build xong push cache mới.
+# -----------------------------------------------------------------------------
+cache:
+  key: "$CI_COMMIT_REF_SLUG-maven"
+  paths:
+    - .m2/repository
+  policy: pull-push
+
+# -----------------------------------------------------------------------------
+# Stage 1: Compile & package Spring Boot JAR
+# -----------------------------------------------------------------------------
+build-backend:
+  stage: build
+  image: maven:3.9.6-eclipse-temurin-17
+  script:
+    # GitLab CI đã tự động checkout full repo (pom.xml + backend/) ở workspace root.
+    # Build đa-module từ root, -pl backend -am để chỉ build module backend.
+    # JVM heap 2GB (GitLab.com Shared Runner cấp 8GB) → không OOM.
+    - mvn $MAVEN_CLI_OPTS -pl backend -am clean package -B -T 1C
+    - ls -lh backend/target/*.jar
+  artifacts:
+    paths:
+      # Path tương đối từ workspace root → job sau download sẽ đặt
+      # JAR đúng vào ./backend/target/ trong workspace của job sau.
+      - backend/target/*.jar
+    expire_in: 1 hour
+
+# -----------------------------------------------------------------------------
+# Stage 2: Build Docker image (chỉ chứa JRE + JAR — KHÔNG có Maven)
+# Size: ~250MB thay vì ~500MB như cũ.
+# -----------------------------------------------------------------------------
+package-backend:
+  stage: package
+  # Override entrypoint → /busybox/sh -c.
+  # Kaniko:debug dựa trên gcr.io/distroless/static:debug có busybox ở /busybox/sh.
+  # Lý do cần override: image's default ENTRYPOINT là /kaniko/executor.
+  # Nếu không override, Runner exec /kaniko/executor với args[1]="ls"/"mkdir"/"echo" → fail.
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: ["/busybox/sh", "-c"]
+  needs:
+    # artifacts: true → download JAR từ build-backend vào workspace
+    - job: build-backend
+      artifacts: true
+  before_script:
+    # Verify artifact có thật trước khi build
+    - ls -lh backend/target/*.jar
+    # Tạo Docker config cho GitLab Container Registry (auth để push)
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')\"},\"https://index.docker.io/v1/\":{\"auth\":\"$(printf '%s:%s' "$DOCKERHUB_USERNAME" "$DOCKERHUB_TOKEN" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+  script:
+    # Gộp 1 dòng: Runner exec "/busybox/sh -c '/kaniko/executor ...'" → args chính xác.
+    # Push tới 3 destinations:
+    #   1. GitLab Container Registry với tag SHA (CHÍNH)
+    #   2. GitLab Container Registry với tag :latest (cho Render latest tracking)
+    #   3. Docker Hub với tag SHA + :latest (backup public registry)
+    - /kaniko/executor --context=. --dockerfile=backend/Dockerfile.ci --build-arg=JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar --destination=$BACKEND_IMAGE:$BACKEND_IMAGE_TAG --destination=$BACKEND_IMAGE:latest --destination=docker.io/$DOCKERHUB_USERNAME/osms-backend:$BACKEND_IMAGE_TAG --destination=docker.io/$DOCKERHUB_USERNAME/osms-backend:latest
+
+# -----------------------------------------------------------------------------
+# Stage 3: Trigger Render redeploy bằng Deploy Hook.
+# Image đã được push ở stage trên, Render sẽ pull image mới từ registry.
+# -----------------------------------------------------------------------------
+deploy-render:
+  stage: deploy
+  image: curlimages/curl:latest
+  needs:
+    - package-backend
+  script:
+    - echo "Triggering Render deploy hook for image duydz1604/osms-backend:$BACKEND_IMAGE_TAG"
+    - 'curl -fsS -X POST "$RENDER_DEPLOY_HOOK" || { echo "WARNING: Render deploy hook failed (non-blocking)"; exit 0; }'
+  environment:
+    name: production
+    url: https://api-osms.onrender.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# =============================================================================
+# NOTES:
+#   * Render.yaml phải đổi từ `runtime: docker` sang `image:` để pull pre-built.
+#     Xem phần hướng dẫn sau khi apply.
+#
+#   * Nếu muốn chạy test trong CI (khuyến nghị sau): thêm job `test-backend`
+#     stage `build`, dùng profile H2 in-memory.
+# =============================================================================

@@ -38,6 +38,8 @@ async function createTestSupplier(request, token, overrides = {}) {
     email: overrides.email || `supplier${timestamp}@example.com`,
     phone: overrides.phone || `09${String(timestamp).slice(-8)}`,
     address: overrides.address || `${timestamp} Test Street`,
+    taxCode: overrides.taxCode || `MST${timestamp}`.slice(0, 13),
+    contactName: overrides.contactName || 'Test Contact',
     isActive: overrides.isActive !== undefined ? overrides.isActive : true,
   };
 

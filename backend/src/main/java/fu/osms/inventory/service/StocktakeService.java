@@ -21,4 +21,8 @@ public interface StocktakeService {
     StocktakeSessionResponse changeStatus(UUID id, String status);
 
     Map<String, Object> getStatistics();
+
+    int syncPendingMarketplaceInventory();
+
+    int syncStocktakeMarketplaceInventory(UUID id);
 }

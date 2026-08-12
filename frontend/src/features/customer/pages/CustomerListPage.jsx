@@ -302,7 +302,7 @@ const CustomerListPage = () => {
                     </div>
                   </td>
                   <td>
-                    <span className={`${styles.genderBadge} ${c.gender === 'Nam' ? styles.genderMale : c.gender === 'Nữ' ? styles.genderFemale : styles.genderOther}`}>
+                    <span className={`${styles.genderBadge} ${c.gender === 'MALE' ? styles.genderMale : c.gender === 'FEMALE' ? styles.genderFemale : styles.genderOther}`}>
                       {getGenderLabel(c.gender)}
                     </span>
                   </td>

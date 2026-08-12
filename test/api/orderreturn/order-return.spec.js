@@ -1,21 +1,3 @@
-/**
- * API tests for OrderReturnController (/api/order-returns).
- *
- * Order returns are created from marketplace webhooks; there is no POST
- * endpoint to create them in the public API. The tests in this file
- * therefore cover:
- *   - Listing (empty / unauth / pagination)
- *   - Get-by-id (404 on non-existent, 400 on invalid UUID)
- *   - Action endpoints (approve / reject / refresh / inspect / check /
- *     retry-action / retry-stock) — all of which return 404 when the
- *     return does not exist
- *   - Reject with invalid body (400) when the return is missing
- *   - Role enforcement (401 unauth, 403 wrong role)
- *   - Reject options list (404 when return not found)
- *   - Inspect validation (400 when items list empty)
- *   - Inspect role enforcement (403 SALES)
- */
-
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
 const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');

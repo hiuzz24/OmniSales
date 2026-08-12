@@ -298,25 +298,25 @@ class CustomerServiceImplTest {
         @DisplayName("Should filter customers by gender")
         void shouldFilterCustomersByGender() {
             Page<Customer> customerPage = new PageImpl<>(List.of(customer), PageRequest.of(0, 10), 1);
-            when(customerRepository.findAllByGender(eq("Nam"), any(PageRequest.class))).thenReturn(customerPage);
+            when(customerRepository.findAllByGenderWithNull(eq("Nam"), any(PageRequest.class))).thenReturn(customerPage);
             when(customerMapper.toResponse(customer)).thenReturn(customerResponse);
 
             PageResponse<CustomerResponse> result = customerService.getAll(0, 10, null, null, "Nam");
 
             assertThat(result).isNotNull();
-            verify(customerRepository).findAllByGender(eq("Nam"), any(PageRequest.class));
+            verify(customerRepository).findAllByGenderWithNull(eq("Nam"), any(PageRequest.class));
         }
 
         @Test
-        @DisplayName("Should normalize gender enum to Vietnamese label")
-        void shouldNormalizeGenderEnum() {
+        @DisplayName("Should handle raw gender value without normalization")
+        void shouldHandleRawGenderValue() {
             Page<Customer> customerPage = new PageImpl<>(List.of(customer), PageRequest.of(0, 10), 1);
-            when(customerRepository.findAllByGender(eq("Nam"), any(PageRequest.class))).thenReturn(customerPage);
+            when(customerRepository.findAllByGenderWithNull(eq("MALE"), any(PageRequest.class))).thenReturn(customerPage);
             when(customerMapper.toResponse(customer)).thenReturn(customerResponse);
 
             customerService.getAll(0, 10, null, null, "MALE");
 
-            verify(customerRepository).findAllByGender(eq("Nam"), any(PageRequest.class));
+            verify(customerRepository).findAllByGenderWithNull(eq("MALE"), any(PageRequest.class));
         }
     }
 

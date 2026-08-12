@@ -1,0 +1,29 @@
+# =============================================================================
+# OmniSales reverse proxy (Caddy)
+#
+# Behavior:
+#   * If DOMAIN is set in the env file, this service serves the production
+#     stack over HTTPS (Let's Encrypt auto-issued by Caddy).
+#   * In local dev, leave DOMAIN empty/unset to skip this service entirely:
+#       docker compose --profile prod up -d proxy
+#     The frontend nginx keeps serving on :80 and backend on :8080.
+#
+# Required env vars when DOMAIN is set:
+#   DOMAIN  = your public hostname (e.g. osms.example.com)
+#   EMAIL   = Let's Encrypt registration email
+# =============================================================================
+
+{$DOMAIN::localhost} {
+    tls {$EMAIL:}
+
+    encode zstd gzip
+
+    # Forward HTTPS traffic to the bundled frontend (nginx) container.
+    # nginx is already configured to reverse-proxy /api/* to the backend,
+    # so a single origin keeps CORS / cookies simple.
+    reverse_proxy frontend:80 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+    }
+}

@@ -61,7 +61,7 @@ class ShopifyOrderPersistenceServiceImplTest {
 
     private ShopifyOrderWriteModel model(String externalOrderId, OrderStatus status, String paymentStatus) {
         return new ShopifyOrderWriteModel(
-                externalOrderId, CREATED_AT, status, paymentStatus,
+                externalOrderId, null, status, paymentStatus,
                 "Buyer", "0901", Map.of("city", "HCMC"),
                 BigDecimal.valueOf(100), BigDecimal.ZERO, BigDecimal.ZERO,
                 "VND", "note", "track-1", null,
@@ -127,7 +127,7 @@ class ShopifyOrderPersistenceServiceImplTest {
         Order order = order(channel, OrderStatus.PENDING, "UNPAID");
         order.setBuyerName("Real Name");
         ShopifyOrderWriteModel m = new ShopifyOrderWriteModel(
-                "EXT-1", CREATED_AT, OrderStatus.PENDING, "UNPAID",
+                "EXT-1", null, OrderStatus.PENDING, "UNPAID",
                 "*** Buyer ***", "0901", null,
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null, null,
                 List.of());
@@ -150,7 +150,7 @@ class ShopifyOrderPersistenceServiceImplTest {
         Order order = order(channel, OrderStatus.PENDING, "UNPAID");
         order.setShippingAddress(current);
         ShopifyOrderWriteModel m = new ShopifyOrderWriteModel(
-                "EXT-1", CREATED_AT, OrderStatus.PENDING, "UNPAID",
+                "EXT-1", null, OrderStatus.PENDING, "UNPAID",
                 null, null, Map.of("city", "*** masked ***"),
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null, null,
                 List.of());

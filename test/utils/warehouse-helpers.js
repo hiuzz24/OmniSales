@@ -367,6 +367,7 @@ async function createTestSupplierInline(request, token) {
     email: `supplier${ts}-${Math.floor(Math.random() * 9999)}@example.com`,
     phone: '0987654321',
     address: 'Test Address',
+    taxCode: `MST${ts}`.slice(0, 13),
     isActive: true,
   };
   try {

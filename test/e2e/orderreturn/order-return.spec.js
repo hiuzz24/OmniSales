@@ -1,15 +1,3 @@
-/**
- * E2E specs for OrderReturn surfaces.
- *
- * Notes:
- * - Order returns are created from marketplace webhooks; there is no
- *   POST /api/order-returns create endpoint. Most tests therefore focus
- *   on the GET endpoints, validation, role enforcement, and 404 behavior
- *   for non-existent IDs.
- * - The `/order-returns` frontend route may not be wired in the SPA —
- *   tests use `gotoOrSkip` to gracefully skip when the route is absent.
- */
-
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { gotoOrSkip } = require('../../utils/route-helpers');
 const { API_BASE } = require('../../utils/env-config');

@@ -514,37 +514,6 @@ const OrderDetailPage = () => {
               )}
             </div>
           )}
-          {canChangePaymentStatus && (
-            <div className={styles.statusDropdown}>
-              <button
-                className={styles.updatePaymentBtn}
-                style={{ '--btn-color': pc.color, '--btn-border': pc.border }}
-                onClick={() => setShowPaymentMenu((v) => !v)}
-                disabled={updating}
-              >
-                <RotateCcw size={14} />
-                Đổi TT thanh toán
-              </button>
-              {showPaymentMenu && (
-                <div className={styles.dropdownMenu}>
-                  {Object.entries(paymentLabels).map(([key, cfg]) => {
-                    if (key === order.paymentStatus) return null;
-                    return (
-                      <button
-                        key={key}
-                        className={styles.dropdownItem}
-                        onClick={() => handleUpdatePaymentStatus(key)}
-                      >
-                        <span className={styles.paymentDot} style={{ background: cfg.color }} />
-                        {cfg.label}
-                        <ChevronRight size={12} style={{ marginLeft: 'auto', opacity: 0.4 }} />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
           {canChangeStatus && isCancellable && (
             <button
               className={styles.cancelBtn}

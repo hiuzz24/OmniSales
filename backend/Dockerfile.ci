@@ -1,0 +1,53 @@
+# =============================================================================
+# Runtime-only Docker image — dùng cho GitLab CI → Render deploy.
+#
+# KHÔNG build Maven ở đây (đã build ở GitLab CI với 8GB RAM).
+# Chỉ COPY JAR + JRE Alpine → image nhỏ (~250MB), chạy nhanh, không OOM.
+#
+# Dùng bởi: GitLab CI job `package-backend`
+# Không dùng cho: local dev (cần Maven build thì dùng Dockerfile gốc)
+# =============================================================================
+
+# Stage duy nhất — chỉ runtime
+FROM eclipse-temurin:17-jre-alpine
+
+# Cài curl cho healthcheck của Render
+RUN apk add --no-cache curl tini
+
+# Tạo user non-root cho bảo mật
+RUN addgroup -S osms && adduser -S osms -G osms
+
+WORKDIR /app
+
+# JAR file được truyền qua --build-arg JAR_FILE
+# (đường dẫn tương đối từ docker build context, mặc định ./)
+ARG JAR_FILE=backend/target/backend-0.0.1-SNAPSHOT.jar
+COPY ${JAR_FILE} /app/backend.jar
+
+# JAR name chuẩn hoá — đỡ phải sửa mỗi lần đổi version
+# (Giữ nguyên tên file nếu muốn truy cập trực tiếp)
+
+# Chuyển ownership
+RUN chown -R osms:osms /app
+
+USER osms
+
+# JVM tuning cho Render free tier 512MB
+# Tổng RAM 512MB trừ OS/runtime ~150MB = ~360MB cho JVM process.
+# Heap 180m + metaspace 180m + direct 32m + code cache JVM = ~400MB peak.
+# Khởi đầu heap 128m cho boot nhanh, max 180m để chừa RAM cho:
+#   - Hibernate mapping 747 entities + 49 repositories (~80m metaspace)
+#   - Hikari pool + Tomcat threads + native + JNI
+# Spring Boot 3.5 + 747 entity files cần metaspace 150-180m (Hibernate bytecode).
+# JAVA_TOOL_OPTIONS này là default trong image; Render Dashboard có thể override.
+ENV JAVA_TOOL_OPTIONS="-Xmx180m -Xms128m -XX:MaxMetaspaceSize=180m -XX:MaxDirectMemorySize=32m -XX:+UseContainerSupport -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
+
+EXPOSE 8080
+
+# Healthcheck: Render dùng /api/address/countries (đã khai báo trong render.yaml)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -fsS http://localhost:8080/api/address/countries || exit 1
+
+# tini: init system để signal handling đúng cách
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["java", "-jar", "/app/backend.jar"]

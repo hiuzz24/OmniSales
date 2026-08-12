@@ -24,6 +24,8 @@ class SupplierControllerFullStackIT extends BaseFullStackIT {
         java.util.Map<String, Object> m = new java.util.HashMap<>();
         m.put("supplierCode", "SUP-IT-" + TestDataFactory.uniqueSuffix());
         m.put("name",         "Supplier IT " + TestDataFactory.uniqueSuffix());
+        m.put("contactName",  "Contact IT " + TestDataFactory.uniqueSuffix());
+        m.put("taxCode",      "MST-IT-" + TestDataFactory.uniqueSuffix());
         m.put("email",        TestDataFactory.uniqueEmail("sup"));
         m.put("phone",        TestDataFactory.uniquePhone());
         m.put("isActive",     true);
@@ -49,6 +51,14 @@ class SupplierControllerFullStackIT extends BaseFullStackIT {
     }
 
     private void cleanSupplierTestData() {
+        // Drop dependent rows (purchase orders referencing test suppliers) before
+        // deleting the suppliers themselves. Stock-receive ITs may have created
+        // PO rows pointing at suppliers named "Supplier IT %".
+        jdbc.execute("DELETE FROM purchase_order_items WHERE purchase_order_id IN " +
+                "(SELECT id FROM purchase_orders WHERE supplier_id IN " +
+                "  (SELECT id FROM suppliers WHERE name LIKE 'Supplier IT %'))");
+        jdbc.execute("DELETE FROM purchase_orders WHERE supplier_id IN " +
+                "(SELECT id FROM suppliers WHERE name LIKE 'Supplier IT %')");
         jdbc.execute("DELETE FROM suppliers WHERE name LIKE 'Supplier IT %'");
     }
 
@@ -137,10 +147,11 @@ class SupplierControllerFullStackIT extends BaseFullStackIT {
     }
 
     @Test
-    @DisplayName("S9 — SALES GET /api/suppliers is forbidden (403)")
-    void getAll_asSales_isForbidden() {
+    @DisplayName("S9 — SALES GET /api/suppliers is allowed (200) — security broadened")
+    void getAll_asSales_isAllowed() {
+        // SALES now has read access to suppliers (was 403, security broadened).
         ResponseEntity<JsonNode> resp = getForJson("/api/suppliers", salesToken);
-        assertThat(resp.getStatusCode().value()).isIn(401, 403);
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     @Test

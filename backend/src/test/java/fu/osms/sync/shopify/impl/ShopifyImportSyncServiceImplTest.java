@@ -4,6 +4,7 @@ import fu.osms.channel.repository.ChannelCredentialRepository;
 import fu.osms.channel.repository.ChannelProductRepository;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
+import fu.osms.catalog.repository.CategoryRepository;
 import fu.osms.catalog.repository.ProductImageRepository;
 import fu.osms.catalog.repository.ProductRepository;
 import fu.osms.catalog.repository.ProductVariantRepository;
@@ -38,6 +39,7 @@ class ShopifyImportSyncServiceImplTest {
     @Mock private ProductRepository productRepository;
     @Mock private ProductImageRepository productImageRepository;
     @Mock private ProductVariantRepository productVariantRepository;
+    @Mock private CategoryRepository categoryRepository;
     @Mock private WarehouseRepository warehouseRepository;
     @Mock private InventoryItemRepository inventoryItemRepository;
     @Mock private InventoryTransactionRepository inventoryTransactionRepository;
@@ -49,18 +51,18 @@ class ShopifyImportSyncServiceImplTest {
     @Mock private SyncJobProgressTracker syncJobProgressTracker;
 
     private ShopifyImportSyncServiceImpl service;
-//
-//    @BeforeEach
-//    void setUp() {
-//        service = new ShopifyImportSyncServiceImpl(
-//                shopifyApiClient, channelRepository, credentialRepository,
-//                channelProductRepository, channelProductVariantRepository,
-//                productRepository, productImageRepository, productVariantRepository,
-//                warehouseRepository, inventoryItemRepository, inventoryTransactionRepository,
-//                syncLogRepository, marketplaceInventoryPropagationService,
-//                marketplaceWarehouseConsistencyService, catalogOwnershipPolicy,
-//                channelProductAggregationService, syncJobProgressTracker);
-//    }
+
+    @BeforeEach
+    void setUp() {
+        service = new ShopifyImportSyncServiceImpl(
+                shopifyApiClient, channelRepository, credentialRepository,
+                channelProductRepository, channelProductVariantRepository,
+                productRepository, productImageRepository, productVariantRepository,
+                categoryRepository, warehouseRepository, inventoryItemRepository, inventoryTransactionRepository,
+                syncLogRepository, marketplaceInventoryPropagationService,
+                marketplaceWarehouseConsistencyService, catalogOwnershipPolicy,
+                channelProductAggregationService, syncJobProgressTracker);
+    }
 
     @Test
     @DisplayName("Service can be constructed (smoke test verifying dependency wiring)")
