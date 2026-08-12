@@ -1,0 +1,26 @@
+# Cấu hình cho môi trường phát triển (localhost)
+# Sử dụng Gmail SMTP để gửi email
+
+spring:
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${GMAIL_USERNAME}
+    password: ${GMAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connection-timeout: 5000
+          timeout: 5000
+          write-timeout: 5000
+
+# Email API config - không dùng ở dev, để trống
+email:
+  api:
+    key: ""
+    url: ""
+    from: ""
