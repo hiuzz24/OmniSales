@@ -12,7 +12,7 @@ import org.springframework.test.context.ActiveProfiles;
  *
  * <p>Boots only the web layer with {@code @WebMvcTest} (no real DB, no real
  * security filter) and excludes external service mocks via type filter.
- * Service-layer beans are replaced with {@code @MockBean} on the concrete
+ * Service-layer beans are replaced with {@code @MockitoBean} on the concrete
  * test class.</p>
  *
  * <p>For full-stack tests that need the entire Spring context (real JWT,

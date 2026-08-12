@@ -5,14 +5,18 @@ import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.UserService;
 import fu.osms.channel.service.ChannelConnectionLogService;
+import fu.osms.channel.service.ChannelService;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
+import fu.osms.sync.shopify.ShopifyApiClient;
 import fu.osms.sync.shopify.ShopifyChannelConnectionService;
+import fu.osms.sync.shopify.ShopifyOAuthService;
+import fu.osms.sync.shopify.ShopifyShopDomainNormalizer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.http.MediaType;
@@ -44,25 +48,36 @@ class ShopifyOAuthControllerIT {
     @Autowired
     MockMvc mvc;
 
-    @MockBean
+    @MockitoBean
     ShopifyChannelConnectionService shopifyChannelConnectionService;
+    @MockitoBean
+    ShopifyOAuthService shopifyOAuthService;
 
-    @MockBean
+    @MockitoBean
+    ShopifyApiClient shopifyApiClient;
+
+    @MockitoBean
+    ShopifyShopDomainNormalizer shopDomainNormalizer;
+
+    @MockitoBean
+    ChannelService channelService;
+
+    @MockitoBean
     ChannelConnectionLogService channelConnectionLogService;
 
-    @MockBean
+    @MockitoBean
     JwtService jwtService;
 
-    @MockBean
+    @MockitoBean
     UserRepository userRepository;
 
-    @MockBean
+    @MockitoBean
     UserService userService;
 
-    @MockBean
+    @MockitoBean
     AuthService authService;
 
-    @MockBean
+    @MockitoBean
     org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
 
     @Test

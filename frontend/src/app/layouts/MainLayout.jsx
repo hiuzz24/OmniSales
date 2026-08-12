@@ -5,7 +5,7 @@ import {
   Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
   Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
-  ChevronRight, User, Tag, Database, ShoppingBag, RotateCcw,
+  ChevronRight, User, Tag, Database, ShoppingBag, RotateCcw, ChartNoAxesCombined,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
 import { ROLES } from '../../features/auth/constants/roles';
@@ -46,6 +46,7 @@ const NAV_ITEMS = [
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
   { name: 'Trả hàng', href: ROUTES.ORDER_RETURNS, icon: RotateCcw, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
   { name: 'Kênh bán hàng', href: ROUTES.CHANNELS, icon: Share2, roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },
+  { name: 'Báo cáo', href: ROUTES.REPORTS, icon: ChartNoAxesCombined, roles: [] },
   {
     name: 'Nhân sự',
     href: '/users',

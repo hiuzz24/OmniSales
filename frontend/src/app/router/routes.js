@@ -65,4 +65,7 @@ export const ROUTES = {
   API_MONITOR: '/admin/api-monitor',
   SYSTEM_SETTINGS: '/admin/settings',
   NOTIFICATIONS: '/notifications',
+  REPORTS: '/reports',
+  REPORT_PRODUCTS: '/reports/products',
+  REPORT_RETURNS: '/reports/returns',
 };

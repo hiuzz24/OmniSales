@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -43,12 +43,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerIT {
 
     @Autowired MockMvc mvc;
-    @MockBean AuthService authService;
-    @MockBean UserService userService;
-    @MockBean CookieService cookieService;
-    @MockBean JwtService jwtService;
-    @MockBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
-    @MockBean fu.osms.auth.repository.UserRepository userRepository;
+    @MockitoBean AuthService authService;
+    @MockitoBean UserService userService;
+    @MockitoBean CookieService cookieService;
+    @MockitoBean JwtService jwtService;
+    @MockitoBean org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
+    @MockitoBean fu.osms.auth.repository.UserRepository userRepository;
 
     @Test
     void login_returns200_andAccessTokenEnvelope() throws Exception {

@@ -211,12 +211,13 @@ export default function PurchaseOrderDetailPage() {
             style={{ minHeight: 36, paddingInline: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Printer size={15} /> In phiếu
           </button>
-          {/* Sửa đơn — DRAFT / SENT_TO_SUPPLIER */}
+          {/* Sửa đơn / Gửi lại NCC — DRAFT / SENT_TO_SUPPLIER */}
           {canAct && ['DRAFT', 'SENT_TO_SUPPLIER'].includes(order.status) && (
             <button className={styles.secondaryButton}
               onClick={() => navigate(`${ROUTES.PURCHASE_ORDER_EDIT.replace(':id', order.id)}`)}
               style={{ minHeight: 36, paddingInline: 14, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0369a1', borderColor: '#bae6fd' }}>
-              <PenLine size={15} /> Sửa đơn
+              {order.status === 'SENT_TO_SUPPLIER' ? <Send size={15} /> : <PenLine size={15} />}
+              {order.status === 'SENT_TO_SUPPLIER' ? 'Gửi lại NCC' : 'Sửa đơn'}
             </button>
           )}
           {/* Gửi NCC — DRAFT */}

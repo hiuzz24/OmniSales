@@ -41,13 +41,12 @@ spring:
           multiplier: 2
           max-interval: 30s
 
-  # Cấu hình SMTP Server cho Gmail (Đã chuyển về đúng nhóm spring)
+  # Cấu hình SMTP Server cho Gmail
   mail:
     host: smtp.gmail.com
     port: 587
     username: ${GMAIL_USERNAME}
     password: ${GMAIL_PASSWORD}
-
     properties:
       mail:
         smtp:
@@ -58,6 +57,25 @@ spring:
           connection timeout: 5000
           timeout: 5000
           write timeout: 5000
+
+# OpenAPI / Swagger UI: spec nội bộ auto-generate + spec tĩnh của các sàn
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:true}
+    urls:
+      - name: OSMS Internal API
+        url: /v3/api-docs
+      - name: Lazada API
+        url: /openapi/lazada.yaml
+      - name: TikTok Shop API
+        url: /openapi/tiktok.yaml
+      - name: Shopify Admin API
+        url: /openapi/shopify.yaml
+      - name: RestCountries API
+        url: /openapi/rest-countries.yaml
 
 app:
   messaging:

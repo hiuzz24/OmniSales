@@ -5,14 +5,16 @@ import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.UserService;
 import fu.osms.channel.service.ChannelConnectionLogService;
+import fu.osms.channel.service.ChannelService;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.sync.lazada.service.LazadaChannelConnectionService;
+import fu.osms.sync.lazada.service.LazadaOAuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.context.TestPropertySource;
@@ -43,25 +45,30 @@ class LazadaOAuthControllerIT {
     @Autowired
     MockMvc mvc;
 
-    @MockBean
+    @MockitoBean
     LazadaChannelConnectionService lazadaChannelConnectionService;
+    @MockitoBean
+    LazadaOAuthService lazadaOAuthService;
 
-    @MockBean
+    @MockitoBean
+    ChannelService channelService;
+
+    @MockitoBean
     ChannelConnectionLogService channelConnectionLogService;
 
-    @MockBean
+    @MockitoBean
     JwtService jwtService;
 
-    @MockBean
+    @MockitoBean
     UserRepository userRepository;
 
-    @MockBean
+    @MockitoBean
     UserService userService;
 
-    @MockBean
+    @MockitoBean
     AuthService authService;
 
-    @MockBean
+    @MockitoBean
     org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
 
     @Test

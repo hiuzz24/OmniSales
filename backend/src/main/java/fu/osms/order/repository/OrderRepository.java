@@ -2,6 +2,8 @@ package fu.osms.order.repository;
 
 import fu.osms.order.entity.Order;
 import fu.osms.order.enums.OrderStatus;
+import fu.osms.reporting.repository.projection.ChannelOrderAggregateProjection;
+import fu.osms.reporting.repository.projection.OrderStatusAggregateProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,6 +24,38 @@ import java.util.UUID;
 
 @Repository
 public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecificationExecutor<Order> {
+
+    @Query("""
+            SELECT o.channel.id AS channelId,
+                   o.platform AS platform,
+                   o.channelName AS channelName,
+                   COUNT(o) AS orderCount,
+                   SUM(CASE WHEN o.status <> 'CANCELLED' THEN 1 ELSE 0 END) AS validOrderCount,
+                   COALESCE(SUM(CASE WHEN o.status <> 'CANCELLED' THEN o.totalAmount ELSE 0 END), 0) AS revenue,
+                   SUM(CASE WHEN o.status = 'DELIVERED' THEN 1 ELSE 0 END) AS deliveredCount,
+                   SUM(CASE WHEN o.status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelledCount
+            FROM Order o
+            WHERE o.createdAt >= :from AND o.createdAt < :to
+            GROUP BY o.channel.id, o.platform, o.channelName
+            ORDER BY COUNT(o) DESC
+            """)
+    List<ChannelOrderAggregateProjection> aggregateOrdersByChannel(@Param("from") OffsetDateTime from,
+                                                                    @Param("to") OffsetDateTime to);
+
+    @Query("""
+            SELECT o.status AS status, COUNT(o) AS orderCount
+            FROM Order o
+            WHERE o.createdAt >= :from AND o.createdAt < :to
+            GROUP BY o.status
+            ORDER BY COUNT(o) DESC
+            """)
+    List<OrderStatusAggregateProjection> aggregateOrderStatuses(@Param("from") OffsetDateTime from,
+                                                                 @Param("to") OffsetDateTime to);
+
+    @Query("SELECT COUNT(o) FROM Order o WHERE o.status = :status AND o.createdAt >= :from AND o.createdAt < :to")
+    long countByStatusInDateRange(@Param("status") OrderStatus status,
+                                  @Param("from") OffsetDateTime from,
+                                  @Param("to") OffsetDateTime to);
 
     Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
