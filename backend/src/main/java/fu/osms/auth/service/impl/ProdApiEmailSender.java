@@ -24,6 +24,8 @@ public class ProdApiEmailSender implements EmailSender {
 
     private final RestClient restClient = RestClient.create();
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ProdApiEmailSender.class);
+
     @Override
     public void send(String to, String subject, String htmlContent) {
         send(to, subject, htmlContent, true);
@@ -31,6 +33,11 @@ public class ProdApiEmailSender implements EmailSender {
 
     @Override
     public void send(String to, String subject, String content, boolean isHtml) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.error("SENDGRID_API_KEY is not set! Please configure your API key.");
+            throw new IllegalStateException("SENDGRID_API_KEY environment variable is not configured");
+        }
+
         String contentType = isHtml ? "text/html" : "text/plain";
 
         String body = """
@@ -48,6 +55,8 @@ public class ProdApiEmailSender implements EmailSender {
                 contentType,
                 escapeJson(content)
         );
+
+        log.debug("SendGrid request body: {}", body);
 
         restClient.post()
             .uri(apiUrl)
