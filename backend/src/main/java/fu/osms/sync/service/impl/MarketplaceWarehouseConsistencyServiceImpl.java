@@ -48,6 +48,7 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
             PlatformType.LAZADA,
             PlatformType.TIKTOK);
     private static final String SHARED_WAREHOUSE_DISPLAY_NAME = "Kho mặc định đa sàn";
+    private static final double ADDRESS_SIMILARITY_THRESHOLD = 0.90;
     private static final Pattern DIACRITICS = Pattern.compile("\\p{M}+");
     private static final Pattern NON_ALNUM = Pattern.compile("[^\\p{IsAlphabetic}\\p{IsDigit}]+");
     private static final Set<String> STREET_TYPE_TOKENS = Set.of(
@@ -101,14 +102,15 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
         RemotePrimaryWarehouse baseline = warehouses.get(0);
         String normalizedBaseline = normalizeAddressLine(baseline.firstAddressLine());
         List<RemotePrimaryWarehouse> mismatches = warehouses.stream()
-                .filter(warehouse -> !Objects.equals(normalizedBaseline,
+                .filter(warehouse -> !isAddressSimilar(normalizedBaseline,
                         normalizeAddressLine(warehouse.firstAddressLine())))
                 .toList();
 
         if (!mismatches.isEmpty()) {
             String details = warehouses.stream()
                     .map(warehouse -> warehouse.platform() + " \"" + warehouse.channelName() + "\": "
-                            + warehouse.firstAddressLine())
+                            + warehouse.firstAddressLine()
+                            + " (normalized: \"" + normalizeAddressLine(warehouse.firstAddressLine()) + "\")")
                     .toList()
                     .toString();
             throw new AppException(
@@ -116,6 +118,40 @@ public class MarketplaceWarehouseConsistencyServiceImpl implements MarketplaceWa
                     "Kho chính của các sàn chưa cùng địa chỉ. Vui lòng cấu hình cùng dòng địa chỉ đầu tiên trước khi đồng bộ tồn kho: "
                             + details);
         }
+    }
+
+    private boolean isAddressSimilar(String normalizedA, String normalizedB) {
+        if (Objects.equals(normalizedA, normalizedB)) {
+            return true;
+        }
+        if (normalizedA == null || normalizedA.isEmpty() || normalizedB == null || normalizedB.isEmpty()) {
+            return false;
+        }
+        int distance = levenshteinDistance(normalizedA, normalizedB);
+        int maxLength = Math.max(normalizedA.length(), normalizedB.length());
+        double similarity = 1.0 - ((double) distance / maxLength);
+        return similarity >= ADDRESS_SIMILARITY_THRESHOLD;
+    }
+
+    private int levenshteinDistance(String a, String b) {
+        int[] previous = new int[b.length() + 1];
+        int[] current = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) {
+            previous[j] = j;
+        }
+        for (int i = 1; i <= a.length(); i++) {
+            current[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(
+                        Math.min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + cost);
+            }
+            int[] swap = previous;
+            previous = current;
+            current = swap;
+        }
+        return previous[b.length()];
     }
 
     private List<Channel> connectedMarketplaceChannels() {
