@@ -42,5 +42,6 @@ public interface InventoryService {
 
     public InventoryDetailDTO getInventoryItemDetail(UUID inventoryItemId);
     public List<AvailableVariantDTO> getAvailableVariantsByWarehouse(UUID warehouseId);
+    PageResponse<AvailableVariantDTO> getAvailableVariantsByWarehousePaged(UUID warehouseId, String keyword, int page, int size);
     public InventoryDetailDTO updateInventoryDetail(UUID inventoryItemId, InventoryItemUpdateRequest request);
 }

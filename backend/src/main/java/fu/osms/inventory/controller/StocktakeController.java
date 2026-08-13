@@ -75,6 +75,26 @@ public class StocktakeController {
         return ResponseEntity.ok(ApiResponse.success(stocktakeService.changeStatus(id, request.get("status"))));
     }
 
+    @PostMapping("/sync-marketplace-inventory")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> syncPendingMarketplaceInventory() {
+        int syncedVariantCount = stocktakeService.syncPendingMarketplaceInventory();
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đồng bộ tồn kho phiếu kiểm lên các sàn thành công",
+                Map.of("syncedVariantCount", syncedVariantCount)
+        ));
+    }
+
+    @PostMapping("/{id}/sync-marketplace-inventory")
+    @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> syncStocktakeMarketplaceInventory(@PathVariable UUID id) {
+        int syncedVariantCount = stocktakeService.syncStocktakeMarketplaceInventory(id);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đồng bộ tồn kho phiếu kiểm lên các sàn đang bán thành công",
+                Map.of("syncedVariantCount", syncedVariantCount)
+        ));
+    }
+
     @GetMapping("/statistics")
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getStatistics() {

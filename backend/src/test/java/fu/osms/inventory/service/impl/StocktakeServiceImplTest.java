@@ -16,6 +16,8 @@ import fu.osms.inventory.repository.StocktakeItemRepository;
 import fu.osms.inventory.repository.StocktakeSessionRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.InventoryAlertService;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -58,6 +60,8 @@ class StocktakeServiceImplTest {
     @Mock private UserRepository userRepository;
     @Mock private StocktakeMapper mapper;
     @Mock private InventoryAlertService inventoryAlertService;
+    @Mock private MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    @Mock private ChannelProductVariantRepository channelProductVariantRepository;
 
     @InjectMocks
     private StocktakeServiceImpl stocktakeService;
@@ -232,5 +236,53 @@ class StocktakeServiceImplTest {
         assertThatThrownBy(() -> stocktakeService.createStocktake(req, false))
                 .isInstanceOf(AppException.class)
                 .hasMessageContaining("must include at least one item");
+    }
+
+    @Test
+    @DisplayName("syncPendingMarketplaceInventory - returns 0 when no pending variants")
+    void syncPendingMarketplaceInventory_noPendingReturnsZero() {
+        when(itemRepository.findCompletedVariantIdsPendingMarketplaceSync()).thenReturn(List.of());
+
+        int count = stocktakeService.syncPendingMarketplaceInventory();
+
+        assertThat(count).isZero();
+        verify(marketplaceInventoryPropagationService, never()).pushAvailableStock(any());
+    }
+
+    @Test
+    @DisplayName("syncPendingMarketplaceInventory - pushes available stock for pending variants")
+    void syncPendingMarketplaceInventory_pushesStock() {
+        UUID variantId = UUID.randomUUID();
+        when(itemRepository.findCompletedVariantIdsPendingMarketplaceSync()).thenReturn(List.of(variantId));
+
+        int count = stocktakeService.syncPendingMarketplaceInventory();
+
+        assertThat(count).isEqualTo(1);
+        verify(marketplaceInventoryPropagationService).pushAvailableStock(List.of(variantId));
+    }
+
+    @Test
+    @DisplayName("syncStocktakeMarketplaceInventory - throws INVALID_REQUEST when session not completed")
+    void syncStocktakeMarketplaceInventory_notCompletedThrows() {
+        sample.setStatus("IN_PROGRESS");
+        when(sessionRepository.findById(sample.getId())).thenReturn(Optional.of(sample));
+
+        assertThatThrownBy(() -> stocktakeService.syncStocktakeMarketplaceInventory(sample.getId()))
+                .isInstanceOf(AppException.class)
+                .hasMessageContaining("mới được đồng bộ");
+    }
+
+    @Test
+    @DisplayName("syncStocktakeMarketplaceInventory - pushes available stock for completed session")
+    void syncStocktakeMarketplaceInventory_pushesStock() {
+        sample.setStatus("COMPLETED");
+        UUID variantId = UUID.randomUUID();
+        when(sessionRepository.findById(sample.getId())).thenReturn(Optional.of(sample));
+        when(itemRepository.findCompletedVariantIdsBySessionId(sample.getId())).thenReturn(List.of(variantId));
+
+        int count = stocktakeService.syncStocktakeMarketplaceInventory(sample.getId());
+
+        assertThat(count).isEqualTo(1);
+        verify(marketplaceInventoryPropagationService).pushAvailableStock(List.of(variantId));
     }
 }

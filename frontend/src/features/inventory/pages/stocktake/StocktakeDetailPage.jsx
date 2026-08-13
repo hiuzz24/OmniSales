@@ -29,6 +29,11 @@ import {
   formatVND,
   getResponseData,
 } from '../components/inventoryDocumentListUtils';
+import {
+  confirmStocktakeComplete,
+  confirmSyncMarketplaceNow,
+  getDiffSummary,
+} from './stocktakeCompletion';
 
 const STATUS_CFG = {
   DRAFT: { label: 'Nháp', icon: ClipboardList, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
@@ -100,6 +105,9 @@ const DiffCell = ({ diff, checked }) => {
   );
 };
 
+const hasActual = (item) => item.actualQuantity !== '' && item.actualQuantity !== null && item.actualQuantity !== undefined;
+const getDiff = (item) => (hasActual(item) ? Number(item.actualQuantity || 0) - Number(item.systemQuantity || 0) : 0);
+
 const actionBtnStyle = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -117,6 +125,7 @@ export default function StocktakeDetailPage() {
   const { id } = useParams();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const [stocktake, setStocktake] = useState(null);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -124,7 +133,9 @@ export default function StocktakeDetailPage() {
     setLoading(true);
     try {
       const response = await stocktakeService.getById(id);
-      setStocktake(getResponseData(response));
+      const data = getResponseData(response);
+      setStocktake(data);
+      setItems(data?.items ?? []);
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Không thể tải chi tiết phiếu kiểm kho.');
     } finally {
@@ -137,31 +148,77 @@ export default function StocktakeDetailPage() {
     fetchDetail();
   }, [fetchDetail]);
 
-  const changeStatus = async (nextStatus) => {
+  const handleCheck = async () => {
     if (!stocktake) return;
-    if (nextStatus === 'COMPLETED') {
-      const hasMissingActual = (stocktake.items ?? []).some((item) => !item.checked);
-      if (hasMissingActual || !(stocktake.items ?? []).length) {
-        toast.error('Cần nhập đủ số lượng tồn kho thực tế trước khi hoàn thành.');
+    if (stocktake.status === 'DRAFT') {
+      setSaving(true);
+      try {
+        await stocktakeService.changeStatus(stocktake.id, 'IN_PROGRESS');
+      } catch (error) {
+        toast.error(error?.response?.data?.message || 'Không thể bắt đầu kiểm kho.');
+        setSaving(false);
         return;
       }
+      setSaving(false);
     }
-    const proceed = nextStatus === 'CANCELLED'
-      ? await confirm({
-          title: 'Hủy phiếu kiểm kho',
-          message: `Bạn chắc chắn muốn hủy phiếu ${stocktake.sessionCode}?`,
-          confirmText: 'Hủy phiếu',
-          danger: true,
-        })
-      : true;
-    if (!proceed) return;
+    navigate(ROUTES.STOCKTAKE_CHECK.replace(':id', stocktake.id));
+  };
+
+  const handleComplete = async () => {
+    if (!stocktake) return;
+    const missing = items.find((item) => !hasActual(item));
+    if (missing || items.length === 0) {
+      toast.error('Cần nhập đủ số lượng tồn kho thực tế trước khi hoàn thành.');
+      return;
+    }
+    const negative = items.find((item) => Number(item.actualQuantity) < 0);
+    if (negative) {
+      toast.error(`Tồn thực tế của "${negative.productName}" không được âm.`);
+      return;
+    }
+    const summary = getDiffSummary(items);
+    const ok = await confirmStocktakeComplete({ confirm, summary });
+    if (!ok) return;
+
     setSaving(true);
     try {
-      await stocktakeService.changeStatus(stocktake.id, nextStatus);
-      toast.success('Cập nhật trạng thái phiếu kiểm thành công.');
+      await stocktakeService.changeStatus(stocktake.id, 'COMPLETED');
+      toast.success('Hoàn thành phiếu kiểm kho thành công.');
+      if (summary.hasDiff) {
+        const shouldSync = await confirmSyncMarketplaceNow({ confirm });
+        if (shouldSync) {
+          try {
+            await stocktakeService.syncStocktakeMarketplaceInventory(stocktake.id);
+            toast.success('Đã đồng bộ tồn kho lên các sàn liên quan.');
+          } catch (syncError) {
+            toast.error(syncError?.response?.data?.message || 'Hoàn thành kiểm kho nhưng đồng bộ sàn thất bại.');
+          }
+        }
+      }
       fetchDetail();
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Không thể cập nhật trạng thái phiếu kiểm.');
+      toast.error(error?.response?.data?.message || 'Không thể hoàn thành phiếu kiểm kho.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!stocktake) return;
+    const ok = await confirm({
+      title: 'Hủy phiếu kiểm kho',
+      message: `Bạn chắc chắn muốn hủy phiếu ${stocktake.sessionCode}?`,
+      confirmText: 'Hủy phiếu',
+      danger: true,
+    });
+    if (!ok) return;
+    setSaving(true);
+    try {
+      await stocktakeService.changeStatus(stocktake.id, 'CANCELLED');
+      toast.success('Đã hủy phiếu kiểm kho.');
+      fetchDetail();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể hủy phiếu kiểm kho.');
     } finally {
       setSaving(false);
     }
@@ -187,18 +244,18 @@ export default function StocktakeDetailPage() {
     );
   }
 
-  const items = stocktake.items ?? [];
   const isClosed = stocktake.status === 'COMPLETED' || stocktake.status === 'CANCELLED';
+  const checkedItems = items.filter((item) => hasActual(item));
   const summary = {
-    totalItems: stocktake.totalItems ?? items.length,
-    checked: stocktake.checkedCount ?? 0,
-    matched: stocktake.matchedCount ?? 0,
-    surplus: stocktake.surplusCount ?? 0,
-    shortage: stocktake.shortageCount ?? 0,
-    system: stocktake.totalSystemQuantity ?? 0,
-    actual: stocktake.totalActualQuantity ?? 0,
-    diff: stocktake.totalDifference ?? 0,
-    diffValue: stocktake.totalDifferenceValue ?? 0,
+    totalItems: items.length,
+    checked: checkedItems.length,
+    matched: checkedItems.filter((item) => getDiff(item) === 0).length,
+    surplus: checkedItems.filter((item) => getDiff(item) > 0).length,
+    shortage: checkedItems.filter((item) => getDiff(item) < 0).length,
+    system: items.reduce((sum, item) => sum + Number(item.systemQuantity || 0), 0),
+    actual: checkedItems.reduce((sum, item) => sum + Number(item.actualQuantity || 0), 0),
+    diff: checkedItems.reduce((sum, item) => sum + getDiff(item), 0),
+    diffValue: checkedItems.reduce((sum, item) => sum + getDiff(item) * Number(item.costPrice ?? 0), 0),
   };
 
   return (
@@ -218,16 +275,14 @@ export default function StocktakeDetailPage() {
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>Chi tiết phiếu kiểm kho</p>
         </div>
         {!isClosed && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            {stocktake.status !== 'IN_PROGRESS' && (
-              <button type="button" disabled={saving} style={{ ...actionBtnStyle, background: '#2563eb', color: '#fff' }} onClick={() => changeStatus('IN_PROGRESS')}>
-                <PlayCircle size={14} /> Bắt đầu kiểm
-              </button>
-            )}
-            <button type="button" disabled={saving} style={{ ...actionBtnStyle, background: '#059669', color: '#fff' }} onClick={() => changeStatus('COMPLETED')}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button type="button" disabled={saving} style={{ ...actionBtnStyle, background: '#2563eb', color: '#fff' }} onClick={handleCheck}>
+              <PlayCircle size={14} /> Kiểm tra
+            </button>
+            <button type="button" disabled={saving} style={{ ...actionBtnStyle, background: '#059669', color: '#fff' }} onClick={handleComplete}>
               <CheckCircle2 size={14} /> Hoàn thành
             </button>
-            <button type="button" disabled={saving} style={{ ...actionBtnStyle, background: '#fff1f2', color: '#e11d48', border: '1px solid #fecdd3' }} onClick={() => changeStatus('CANCELLED')}>
+            <button type="button" disabled={saving} style={{ ...actionBtnStyle, background: '#fff1f2', color: '#e11d48', border: '1px solid #fecdd3' }} onClick={handleCancel}>
               <XCircle size={14} /> Hủy phiếu
             </button>
           </div>
@@ -283,7 +338,9 @@ export default function StocktakeDetailPage() {
       </div>
 
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}><PackageCheck size={15} color="#0d9488" /> Chi tiết sản phẩm kiểm</div>
+        <div style={sectionTitleStyle}>
+          <PackageCheck size={15} color="#0d9488" /> Chi tiết sản phẩm kiểm
+        </div>
         {items.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>Phiếu không có sản phẩm kiểm.</div>
         ) : (
@@ -306,9 +363,9 @@ export default function StocktakeDetailPage() {
               </thead>
               <tbody>
                 {items.map((item, index) => {
-                  const checked = Boolean(item.checked);
-                  const diff = checked ? Number(item.difference ?? 0) : 0;
-                  const diffValue = checked ? Number(item.differenceValue ?? 0) : 0;
+                  const checked = hasActual(item);
+                  const diff = checked ? getDiff(item) : 0;
+                  const diffValue = checked ? diff * Number(item.costPrice ?? 0) : 0;
                   const rowBg = checked && diff < 0 ? '#fff7f7' : checked && diff > 0 ? '#f0fdfa' : '#ffffff';
                   return (
                     <tr key={item.id ?? item.variantId} style={{ background: rowBg }}>

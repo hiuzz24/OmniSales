@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,6 +14,7 @@ import purchaseOrderApi from '../../../../api/purchaseOrderApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
+import usePagedVariants from '../../hooks/usePagedVariants';
 import styles from '../CreatePage.module.css';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -372,7 +373,7 @@ const schema = z.object({
 });
 
 // ── Add Product Modal ─────────────────────────────────────────────────────────
-function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], loading = false }) {
+function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], totalItems = 0, loading = false, loadingMore = false, hasMore = false, onLoadMore, onKeywordChange }) {
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState({});
 
@@ -381,9 +382,10 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
     const timer = window.setTimeout(() => {
       setKeyword('');
       setSelected({});
+      onKeywordChange?.('');
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [isOpen]);
+  }, [isOpen, onKeywordChange]);
 
   const results = useMemo(() => {
     const keywordText = keyword.trim().toLowerCase();
@@ -408,6 +410,13 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
 
   const count = Object.keys(selected).length;
 
+  const handleScroll = (event) => {
+    const el = event.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 && hasMore && !loading && !loadingMore) {
+      onLoadMore?.();
+    }
+  };
+
   if (!isOpen) return null;
   return (
     <div onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -416,7 +425,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div>
             <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Chọn sản phẩm</span>
-            {results.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{results.length} sản phẩm</span>}
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{totalItems} sản phẩm</span>
           </div>
           <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
             <X size={18} />
@@ -425,12 +434,12 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input autoFocus value={keyword} onChange={(e) => setKeyword(e.target.value)}
+            <input autoFocus value={keyword} onChange={(e) => { setKeyword(e.target.value); onKeywordChange?.(e.target.value); }}
               placeholder="Tìm theo tên sản phẩm hoặc SKU..."
               style={{ width: '100%', padding: '8px 10px 8px 34px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} />
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} onScroll={handleScroll}>
           {loading && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
               <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải...
@@ -469,6 +478,11 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
               </div>
             );
           })}
+          {loadingMore && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', color: '#94a3b8', fontSize: 12 }}>
+              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải thêm...
+            </div>
+          )}
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
@@ -497,8 +511,6 @@ export default function StockReceiveCreatePage() {
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [nextReceiptCode, setNextReceiptCode] = useState('');
-  const [warehouseVariants, setWarehouseVariants] = useState([]);
-  const [loadingWarehouseVariants, setLoadingWarehouseVariants] = useState(false);
   const [receivingPurchaseOrders, setReceivingPurchaseOrders] = useState([]);
   const [purchaseOrderId, setPurchaseOrderId] = useState(searchParams.get('purchaseOrderId') || '');
   const [purchaseOrderError, setPurchaseOrderError] = useState('');
@@ -509,6 +521,33 @@ export default function StockReceiveCreatePage() {
     defaultValues: { warehouseId: '', supplierId: '', invoiceNumber: '', receivedAt: new Date().toISOString().split('T')[0], notes: '' },
   });
   const selectedWarehouseId = useWatch({ control, name: 'warehouseId' });
+
+  const fetchWarehouseVariants = useCallback(async ({ page, size, keyword }) => {
+      return inventoryApi.getInventoryList(page, size, 'updatedAt', 'desc', null, null, false, {
+        ...(keyword ? { keyword } : {}),
+      });
+  }, []);
+
+  const pagedVariants = usePagedVariants({
+    enabled: true,
+    fetcher: fetchWarehouseVariants,
+  });
+  const { close: closePagedVariants } = pagedVariants;
+
+  const warehouseVariants = useMemo(
+    () => aggregateWarehouseVariantsBySku(
+      pagedVariants.items.map(normalizeWarehouseVariant).filter((item) => item.id),
+    ),
+    [pagedVariants.items],
+  );
+  const loadingWarehouseVariants = pagedVariants.loading || pagedVariants.loadingMore;
+
+  const closeAddModal = () => {
+    setModalOpen(false);
+    pagedVariants.close();
+    pagedVariants.setKeyword('');
+  };
+
   const totalAmount = useMemo(() => items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0), [items]);
   const totalQty = useMemo(() => items.reduce((s, i) => s + (Number(i.quantity) || 0), 0), [items]);
   const hasUnsavedChanges = isDirty || items.length > 0;
@@ -585,42 +624,9 @@ export default function StockReceiveCreatePage() {
     }
     previousWarehouseIdRef.current = warehouseId;
 
-    if (!warehouseId) {
-      const timer = window.setTimeout(() => {
-        setWarehouseVariants([]);
-        setLoadingWarehouseVariants(false);
-      }, 0);
-      return () => window.clearTimeout(timer);
-    }
-
-    let ignore = false;
-    const timer = window.setTimeout(() => {
-      setLoadingWarehouseVariants(true);
-      inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false, { warehouseId })
-        .then((response) => {
-          if (ignore) return;
-          const data = getResponseData(response);
-          const variants = Array.isArray(data) ? data : (data.content ?? []);
-          const normalizedVariants = aggregateWarehouseVariantsBySku(variants
-            .map(normalizeWarehouseVariant)
-            .filter((item) => item.id)
-          );
-          setWarehouseVariants(normalizedVariants);
-        })
-        .catch(() => {
-          if (!ignore) {
-            setWarehouseVariants([]);
-            toast.error('Không thể tải sản phẩm thuộc kho đã chọn.');
-          }
-        })
-        .finally(() => { if (!ignore) setLoadingWarehouseVariants(false); });
-    }, 0);
-
-    return () => {
-      ignore = true;
-      window.clearTimeout(timer);
-    };
-  }, [selectedWarehouseId]);
+    closePagedVariants();
+    return undefined;
+  }, [selectedWarehouseId, closePagedVariants]);
 
   useEffect(() => {
     if (prefillAppliedRef.current) return;
@@ -665,6 +671,7 @@ export default function StockReceiveCreatePage() {
       toast.info('Đang tải sản phẩm thuộc kho, vui lòng thử lại sau.');
       return;
     }
+    pagedVariants.open();
     setModalOpen(true);
   };
 
@@ -684,7 +691,7 @@ export default function StockReceiveCreatePage() {
         }),
       ];
     });
-    setModalOpen(false);
+    closeAddModal();
   };
 
   const handleExcel = (e) => {
@@ -700,8 +707,9 @@ export default function StockReceiveCreatePage() {
       return;
     }
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
+        await pagedVariants.loadAll('');
         // cellFormula:false → dùng cached VLOOKUP value để lấy variantId từ hidden column D
         const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellFormula: false, cellNF: false });
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: undefined }).slice(1);
@@ -1147,12 +1155,17 @@ export default function StockReceiveCreatePage() {
 
       <AddProductModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeAddModal}
         onConfirm={onAddProducts}
         existingVariantIds={items.map((i) => i.variantId)}
         existingSkus={items.map((i) => String(i.sku ?? '').trim().toLowerCase()).filter(Boolean)}
         products={warehouseVariants}
-        loading={loadingWarehouseVariants}
+        totalItems={pagedVariants.totalItems}
+        loading={pagedVariants.loading}
+        loadingMore={pagedVariants.loadingMore}
+        hasMore={pagedVariants.hasMore}
+        onLoadMore={pagedVariants.loadMore}
+        onKeywordChange={pagedVariants.setKeyword}
       />
       {ConfirmDialog}
     </div>
