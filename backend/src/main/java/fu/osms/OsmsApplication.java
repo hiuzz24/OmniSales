@@ -88,12 +88,16 @@ public class OsmsApplication {
 				try (Connection conn = DriverManager.getConnection(url, dbUser, dbPass)) {
 					System.out.println("[main] ✅ Connected to '" + dbName + "'");
 
-					if (isSchemaInitialized(conn)) {
-						System.out.println("[main] ✅ categories table exists — SKIP schema init");
-					} else {
-						System.out.println("[main] categories table missing — running schema.sql");
-						runSchemaSql(conn);
-					}
+				if (isSchemaInitialized(conn)) {
+					System.out.println("[main] ✅ categories table exists — SKIP schema init");
+					System.out.println("[main] STEP 2.5: Running lightweight startup migrations...");
+					runStartupMigrations(conn);
+				} else {
+					System.out.println("[main] categories table missing — running schema.sql");
+					runSchemaSql(conn);
+					// Even after fresh schema init, run migrations (idempotent ADD COLUMN IF NOT EXISTS).
+					runStartupMigrations(conn);
+				}
 				}
 
 			} catch (Exception e) {
@@ -152,6 +156,49 @@ public class OsmsApplication {
 					 "SELECT EXISTS (SELECT 1 FROM information_schema.tables " +
 					 "WHERE table_schema = 'public' AND table_name = 'categories')")) {
 			return rs.next() && rs.getBoolean(1);
+		}
+	}
+
+	/**
+	 * Chạy các ALTER TABLE idempotent để bổ sung cột còn thiếu.
+	 *
+	 * LÝ DO CẦN:
+	 *   - Render DB là persistent (không bị wipe), nhưng schema.sql chỉ chạy
+	 *     khi categories table CHƯA tồn tại.
+	 *   - Khi entity mới thêm field, DB cũ thiếu cột → Hibernate validate fail.
+	 *   - Giải pháp: chạy ADD COLUMN IF NOT EXISTS mỗi lần startup (safe, idempotent).
+	 *
+	 * CÁCH THÊM MIGRATION MỚI:
+	 *   - Thêm 1 dòng ALTER TABLE ... ADD COLUMN IF NOT EXISTS ... vào list bên dưới.
+	 *   - Migration phải idempotent (chạy nhiều lần không lỗi).
+	 *   - KHÔNG drop/rename column ở đây → phải viết SQL migration riêng.
+	 */
+	private static void runStartupMigrations(Connection conn) {
+		String[] migrations = {
+				// 2026-08-06: stocktake detail page - actor + timestamp columns
+				"ALTER TABLE stocktake_sessions " +
+						"ADD COLUMN IF NOT EXISTS notes         TEXT, " +
+						"ADD COLUMN IF NOT EXISTS started_by    UUID, " +
+						"ADD COLUMN IF NOT EXISTS started_at    TIMESTAMPTZ, " +
+						"ADD COLUMN IF NOT EXISTS completed_by  UUID, " +
+						"ADD COLUMN IF NOT EXISTS completed_at  TIMESTAMPTZ, " +
+						"ADD COLUMN IF NOT EXISTS cancelled_by  UUID, " +
+						"ADD COLUMN IF NOT EXISTS cancelled_at  TIMESTAMPTZ",
+				"ALTER TABLE stocktake_items ALTER COLUMN actual_quantity DROP NOT NULL",
+		};
+
+		try (Statement stmt = conn.createStatement()) {
+			for (String sql : migrations) {
+				try {
+					stmt.execute(sql);
+					System.out.println("[migrate] ✅ " + sql.substring(0, Math.min(80, sql.length())) + "...");
+				} catch (Exception e) {
+					System.err.println("[migrate] ❌ " + e.getMessage());
+					System.err.println("[migrate] SQL: " + sql);
+				}
+			}
+		} catch (Exception e) {
+			System.err.println("[migrate] ❌ Migration runner failed: " + e.getMessage());
 		}
 	}
 
