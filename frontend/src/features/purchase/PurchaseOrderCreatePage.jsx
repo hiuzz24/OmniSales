@@ -591,11 +591,11 @@ export default function PurchaseOrderCreatePage() {
           const variants = group.variants ?? [];
           const marketplaceSources = variants.flatMap((variant) => variant.marketplaceSources ?? []);
           const variantNames = [...new Set(variants.map((variant) => variant.variantName).filter(Boolean))];
-          const unitPrice = variants.find((variant) => Number(variant.unitPrice ?? variant.price) > 0)?.unitPrice
-            ?? variants.find((variant) => Number(variant.price) > 0)?.price
-            ?? variants[0]?.unitPrice
-            ?? variants[0]?.price
-            ?? 0;
+          const unitPrice = variants.find((variant) => Number(variant.averageCost) > 0)?.averageCost
+            ?? variants.find((variant) => Number(variant.costPrice) > 0)?.costPrice
+            ?? variants.find((variant) => Number(variant.averageCost ?? variant.costPrice ?? 0) > 0)?.averageCost
+            ?? variants.find((variant) => Number(variant.averageCost ?? variant.costPrice ?? 0) > 0)?.costPrice
+            ?? (Number(variants[0]?.averageCost) > 0 ? variants[0]?.averageCost : (variants[0]?.costPrice ?? 0));
           const canonicalSku = String(group.sku ?? '').trim().toLowerCase();
           const representative = variants.find(
             (variant) => String(variant.sku ?? '').trim().toLowerCase() === canonicalSku,
@@ -659,7 +659,7 @@ export default function PurchaseOrderCreatePage() {
       });
       toast.success(isDraft
         ? 'Đã lưu nháp đơn đặt hàng.'
-        : 'Đã gửi đơn cho nhà cung cấp. Đơn sẽ chuyển sang Đang giao hàng sau 10 giây.');
+        : 'Đã gửi đơn cho nhà cung cấp.');
       navigate(ROUTES.PURCHASE_ORDERS);
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Không thể tạo đơn đặt hàng.');

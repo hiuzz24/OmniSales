@@ -35,6 +35,7 @@ export const ROUTES = {
   STOCKTAKES: '/warehouse/stocktakes',
   STOCKTAKE_CREATE: '/warehouse/stocktakes/create',
   STOCKTAKE_DETAIL: '/warehouse/stocktakes/:id',
+  STOCKTAKE_CHECK: '/warehouse/stocktakes/:id/check',
 
   // Inventory
   INVENTORY: '/inventory',
@@ -65,4 +66,7 @@ export const ROUTES = {
   API_MONITOR: '/admin/api-monitor',
   SYSTEM_SETTINGS: '/admin/settings',
   NOTIFICATIONS: '/notifications',
+  REPORTS: '/reports',
+  REPORT_PRODUCTS: '/reports/products',
+  REPORT_RETURNS: '/reports/returns',
 };

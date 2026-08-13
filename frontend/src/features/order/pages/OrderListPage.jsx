@@ -14,6 +14,8 @@ import orderApi from '../../../api/orderApi';
 import channelApi from '../../../api/channelApi';
 import ExportOrdersModal from '../components/ExportOrdersModal';
 import PullOrdersModal from '../components/PullOrdersModal';
+import { ROLES } from '../../auth/constants/roles';
+import useAuth from '../../auth/hooks/useAuth';
 import styles from './OrderListPage.module.css';
 
 const PAGE_SIZE = 5;
@@ -71,6 +73,8 @@ const getShippingLabelAvailability = (order) => {
 };
 
 const OrderListPage = () => {
+  const { user } = useAuth();
+  const canPullOrders = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
   const navigate = useNavigate();
 
   const [keyword, setKeyword] = useState('');
@@ -155,6 +159,10 @@ const OrderListPage = () => {
   useEffect(() => { setPage(0); }, [keyword, statusFilter, channelFilter, fromDate, toDate]);
 
   useEffect(() => {
+    if (!canPullOrders) {
+      setPullJobs([]);
+      return undefined;
+    }
     let cancelled = false;
     const recover = async () => {
       try {
@@ -170,7 +178,7 @@ const OrderListPage = () => {
     };
     recover();
     return () => { cancelled = true; };
-  }, []);
+  }, [canPullOrders]);
 
   useEffect(() => {
     const pendingIds = pullJobs.filter((job) => job.status === 'PENDING').map((job) => job.id);
@@ -202,6 +210,7 @@ const OrderListPage = () => {
   }, [pullJobs, fetchOrders, fetchStats]);
 
   const handlePullOrders = async (payload) => {
+    if (!canPullOrders) return;
     setIsStartingPull(true);
     try {
       const jobs = await orderApi.pullOrders(payload);
@@ -297,14 +306,16 @@ const OrderListPage = () => {
 
   const actions = (
     <>
-      <button
-        className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
-        onClick={() => setIsPullModalOpen(true)}
-        title="Kéo đơn từ sàn"
-      >
-        <CloudDownload size={15} />
-        Kéo đơn{pullJobs.some((job) => job.status === 'PENDING') ? ` (${pullJobs.filter((job) => job.status === 'PENDING').length})` : ''}
-      </button>
+      {canPullOrders && (
+        <button
+          className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
+          onClick={() => setIsPullModalOpen(true)}
+          title="Kéo đơn từ sàn"
+        >
+          <CloudDownload size={15} />
+          Kéo đơn{pullJobs.some((job) => job.status === 'PENDING') ? ` (${pullJobs.filter((job) => job.status === 'PENDING').length})` : ''}
+        </button>
+      )}
       <button
         className={`${styles.headerActionBtn} ${styles.secondaryBtn}`}
         onClick={() => navigate(ROUTES.ORDER_LOGS)}
@@ -546,13 +557,15 @@ const OrderListPage = () => {
         onClose={() => setIsExportModalOpen(false)}
         currentFilters={{ keyword, status: statusFilter, channelId: channelFilter, from: fromDate, to: toDate }}
       />
-      <PullOrdersModal
-        open={isPullModalOpen}
-        channels={channels}
-        submitting={isStartingPull}
-        onClose={() => setIsPullModalOpen(false)}
-        onSubmit={handlePullOrders}
-      />
+      {canPullOrders && (
+        <PullOrdersModal
+          open={isPullModalOpen}
+          channels={channels}
+          submitting={isStartingPull}
+          onClose={() => setIsPullModalOpen(false)}
+          onSubmit={handlePullOrders}
+        />
+      )}
     </div>
   );
 };

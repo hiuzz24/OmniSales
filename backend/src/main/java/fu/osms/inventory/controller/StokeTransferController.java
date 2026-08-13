@@ -8,13 +8,11 @@ import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.StokeTransferService;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -41,11 +39,16 @@ public class StokeTransferController {
     }
 
     @GetMapping("/available-variants")
-    public ResponseEntity<Map<String, Object>> getAvailableVariantsByWarehouse(@RequestParam("warehouseId") UUID warehouseId) {
+    public ResponseEntity<Map<String, Object>> getAvailableVariantsByWarehouse(
+            @RequestParam("warehouseId") UUID warehouseId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "200") int size) {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            List<AvailableVariantDTO> data = inventoryService.getAvailableVariantsByWarehouse(warehouseId);
+            fu.osms.common.dto.PageResponse<AvailableVariantDTO> data =
+                    inventoryService.getAvailableVariantsByWarehousePaged(warehouseId, keyword, page, size);
 
             response.put("success", true);
             response.put("message", "Loaded warehouse inventory products successfully.");

@@ -10,6 +10,8 @@ const ProductDetailHeader = ({
   isSyncing,
   syncAllDisabled,
   syncAllDisabledReason,
+  canManage,
+  canSync,
 }) => {
   const primaryImage = product.images?.find(img => img.isPrimary)?.url || 'https://via.placeholder.com/40';
 
@@ -36,30 +38,36 @@ const ProductDetailHeader = ({
       </div>
 
       <div className={styles.actions}>
-        <button
-          className={styles.btnSecondary}
-          onClick={onSync}
-          disabled={isSyncing || syncAllDisabled}
-          title={syncAllDisabledReason || 'Đồng bộ sản phẩm lên tất cả kênh đang liên kết'}
-        >
-          <RefreshCw className={`${styles.btnIcon} ${isSyncing ? styles.spin : ''}`} />
-          {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ tất cả'}
-        </button>
-        <button className={styles.btnSecondary} onClick={onEdit}>
-          <Edit className={styles.btnIcon} />
-          Chỉnh sửa
-        </button>
-        <button 
-          className={styles.btnDanger}
-          onClick={() => {
-            if (window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này không thể hoàn tác.')) {
-              onDelete && onDelete();
-            }
-          }}
-        >
-          <Trash2 className={styles.btnIcon} />
-          Xóa
-        </button>
+        {canSync && (
+          <button
+            className={styles.btnSecondary}
+            onClick={onSync}
+            disabled={isSyncing || syncAllDisabled}
+            title={syncAllDisabledReason || 'Đồng bộ sản phẩm lên tất cả kênh đang liên kết'}
+          >
+            <RefreshCw className={`${styles.btnIcon} ${isSyncing ? styles.spin : ''}`} />
+            {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ tất cả'}
+          </button>
+        )}
+        {canManage && (
+          <button className={styles.btnSecondary} onClick={onEdit}>
+            <Edit className={styles.btnIcon} />
+            Chỉnh sửa
+          </button>
+        )}
+        {canSync && (
+          <button
+            className={styles.btnDanger}
+            onClick={() => {
+              if (window.confirm('Bạn có chắc chắn muốn xóa sản phẩm này không? Hành động này không thể hoàn tác.')) {
+                onDelete && onDelete();
+              }
+            }}
+          >
+            <Trash2 className={styles.btnIcon} />
+            Xóa
+          </button>
+        )}
       </div>
     </div>
   );

@@ -64,6 +64,9 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.security.lock-time-duration}")
     private int lockTimeDuration;
 
+    @Value("${app.frontend-url:http://localhost:5174}")
+    private String frontendUrl;
+
     @Override
     @Transactional(noRollbackFor = {AuthenticationException.class, AppException.class})
     public TokenPairDTO login(LoginRequest request) {
@@ -281,7 +284,7 @@ public class AuthServiceImpl implements AuthService {
         userInviteTokenRepository.save(inviteToken);
         
         log.info("INVITATION TOKEN GENERATED: {}", tokenStr);
-        System.out.println("INVITATION LINK: http://localhost:5174/inviteUser?token=" + tokenStr);
+        log.info("INVITATION LINK: {}/inviteUser?token={}", frontendUrl, tokenStr);
 
         emailService.sendInviteEmail(email, tokenStr);
     }

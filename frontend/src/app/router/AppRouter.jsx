@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ROUTES } from './routes';
 import PrivateRoute from './PrivateRoute';
@@ -33,7 +34,6 @@ import CustomerEditPage from '../../features/customer/pages/CustomerEditPage';
 import InventoryPage from '../../features/inventory/pages/inventory/InventoryPage';
 import InventoryDetailPage from '../../features/inventory/pages/inventory/InventoryDetailPage';
 import InventoryLogPage from '../../features/inventory/pages/inventory/InventoryLogPage';
-import InventoryIssuePage from '../../features/inventory/pages/InventoryIssuePage';
 import OrderListPage from '../../features/order/pages/OrderListPage';
 import OrderDetailPage from '../../features/order/pages/OrderDetailPage';
 import OrderLogPage from '../../features/order/pages/OrderLogPage';
@@ -43,11 +43,9 @@ import EmptyLayout from '../layouts/EmptyLayout';
 import MainLayout from '../layouts/MainLayout';
 import StockReceivePage from '../../features/inventory/pages/stockreceive/StockReceivePage';
 import StockReceiveCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveCreatePage';
-import StockReceiveManualCreatePage from '../../features/inventory/pages/stockreceive/StockReceiveManualCreatePage';
 import StockReceiveDetailPage from '../../features/inventory/pages/stockreceive/StockReceiveDetailPage';
 import StockReceiveEditPage from '../../features/inventory/pages/stockreceive/StockReceiveEditPage';
 import StockDeliveryPage from '../../features/inventory/pages/stockdelivery/StockDeliveryPage';
-import StockDeliveryCreatePage from '../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage';
 import StockDeliveryDetailPage from '../../features/inventory/pages/stockdelivery/StockDeliveryDetailPage';
 import ChannelConnectionPage from '../../features/channel/pages/ChannelConnectionPage';
 import ChannelConnectionHistoryPage from '../../features/channel/pages/ChannelConnectionHistoryPage';
@@ -55,18 +53,26 @@ import StockDeliveryEditPage from '../../features/inventory/pages/stockdelivery/
 import StocktakePage from '../../features/inventory/pages/stocktake/StocktakePage';
 import StocktakeCreatePage from '../../features/inventory/pages/stocktake/StocktakeCreatePage';
 import StocktakeDetailPage from '../../features/inventory/pages/stocktake/StocktakeDetailPage';
+import StocktakeCheckPage from '../../features/inventory/pages/stocktake/StocktakeCheckPage';
 import SyncHistoryPage from '../../features/sync/pages/SyncHistoryPage';
 import SupplierPage from '../../features/inventory/pages/supplier/SupplierPage.jsx';
 import WarehousePage from '../../features/inventory/pages/WarehousePage';
 import WarehouseDetailPage from '../../features/inventory/pages/WarehouseDetailPage';
+import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
+import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
 
 import ForceChangePasswordPage from '../../features/auth/pages/ForceChangePasswordPage';
 import NotificationListPage from '../../features/user/pages/NotificationListPage';
 import PurchaseOrderPage from '../../features/purchase/PurchaseOrderPage';
 import PurchaseOrderCreatePage from '../../features/purchase/PurchaseOrderCreatePage';
 import PurchaseOrderDetailPage from '../../features/purchase/PurchaseOrderDetailPage';
-import StockTransferPage from '../../features/inventory/pages/StockTransferPage';
-import StockTransferCreatePage from '../../features/inventory/pages/stocktransfer/StockTransferCreatePage';
+import ChannelReportPage from '../../features/reporting/pages/ChannelReportPage';
+import ReturnReportPage from '../../features/reporting/pages/ReturnReportPage';
+import ProductReportPage from '../../features/reporting/pages/ProductReportPage';
+
+const StockReceiveManualCreatePage = lazy(() => import('../../features/inventory/pages/stockreceive/StockReceiveManualCreatePage'));
+const StockDeliveryCreatePage = lazy(() => import('../../features/inventory/pages/stockdelivery/StockDeliveryCreatePage'));
+// const StockTransferCreatePage = lazy(() => import('../../features/inventory/pages/stocktransfer/StockTransferCreatePage'));
 
 const AppRouter = () => {
   return (
@@ -112,16 +118,18 @@ const AppRouter = () => {
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS]} />}>
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPTS} element={<StockReceivePage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE} element={<StockReceiveCreatePage />} />
-              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL} element={<StockReceiveManualCreatePage />} />
+              <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_CREATE_MANUAL} element={<Suspense fallback={null}><StockReceiveManualCreatePage /></Suspense>} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_EDIT} element={<StockReceiveEditPage />} />
               <Route path={ROUTES.WAREHOUSE_IMPORT_RECEIPT_DETAIL} element={<StockReceiveDetailPage />} />
               <Route path={ROUTES.STOCK_DELIVERIES} element={<StockDeliveryPage />} />
-              <Route path={ROUTES.STOCK_DELIVERY_CREATE} element={<StockDeliveryCreatePage />} />
+              <Route path={ROUTES.STOCK_DELIVERY_CREATE} element={<Suspense fallback={null}><StockDeliveryCreatePage /></Suspense>} />
               <Route path={ROUTES.STOCK_DELIVERY_EDIT} element={<StockDeliveryEditPage />} />
               <Route path={ROUTES.STOCK_DELIVERY_DETAIL} element={<StockDeliveryDetailPage />} />
               <Route path={ROUTES.STOCKTAKES} element={<StocktakePage />} />
               <Route path={ROUTES.STOCKTAKE_CREATE} element={<StocktakeCreatePage />} />
               <Route path={ROUTES.STOCKTAKE_DETAIL} element={<StocktakeDetailPage />} />
+              <Route path={ROUTES.STOCKTAKE_CHECK} element={<StocktakeCheckPage />} />
+              <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<Suspense fallback={null}><StockTransferCreatePage /></Suspense>} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
@@ -137,20 +145,33 @@ const AppRouter = () => {
             <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.OPERATIONS, ROLES.SYSTEM_ADMIN]} />}>
               <Route path={ROUTES.WAREHOUSE} element={<WarehousePage />} />
               <Route path={ROUTES.WAREHOUSE_DETAIL} element={<WarehouseDetailPage />} />
-              <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} />
+              {/* <Route path={ROUTES.STOCK_TRANSFER} element={<StockTransferPage />} /> */}
               <Route path={ROUTES.STOCK_TRANSFER_CREATE} element={<StockTransferCreatePage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES]} />}>
+              <Route path={ROUTES.PRODUCT_LOGS} element={<ProductLogPage />} />
+              <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
+              <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS]} />}>
+              <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
+              <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
+              <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
+              <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
+              <Route path={ROUTES.ORDER_RETURNS} element={<OrderReturnListPage />} />
+              <Route path={ROUTES.ORDER_RETURN_DETAIL} element={<OrderReturnDetailPage />} />
+            </Route>
+
+            <Route element={<RoleRoute allowedRoles={[ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
+              <Route path={ROUTES.CHANNELS} element={<ChannelConnectionPage />} />
+              <Route path={ROUTES.CHANNEL_CONNECTION_HISTORY} element={<ChannelConnectionHistoryPage />} />
             </Route>
 
             <Route element={<RoleRoute allowedRoles={[ROLES.OPERATIONS, ROLES.SALES, ROLES.OWNER, ROLES.SYSTEM_ADMIN]} />}>
               <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-              <Route path={ROUTES.PRODUCT_LOGS} element={<ProductLogPage />} />
-              <Route path={ROUTES.PRODUCT_CREATE} element={<ProductCreatePage />} />
-              <Route path={ROUTES.PRODUCT_EDIT} element={<ProductEditPage />} />
-              <Route path={ROUTES.PRODUCT_DETAIL} element={<ProductDetailPage />} />
-              <Route path={ROUTES.PRODUCTS} element={<ProductManagementPage />} />
               <Route path={ROUTES.CATEGORIES} element={<CategoryPage />} />
-              <Route path={ROUTES.CHANNELS} element={<ChannelConnectionPage />} />
-              <Route path={ROUTES.CHANNEL_CONNECTION_HISTORY} element={<ChannelConnectionHistoryPage />} />
               <Route path={ROUTES.SYNC_HISTORY} element={<SyncHistoryPage />} />
               <Route path={ROUTES.CUSTOMER_LIST} element={<CustomerListPage />} />
               <Route path={ROUTES.CUSTOMER_CREATE} element={<CustomerCreatePage />} />
@@ -163,12 +184,11 @@ const AppRouter = () => {
               <Route path={ROUTES.INVENTORY_LOGS} element={<InventoryLogPage />} />
               <Route path={ROUTES.SUPPLIERS} element={<SupplierPage />} />
               <Route path={ROUTES.STOCKTAKE} element={<StocktakePage />} />
-              <Route path={ROUTES.ORDER_LIST} element={<OrderListPage />} />
-              <Route path={ROUTES.ORDER_DETAIL} element={<OrderDetailPage />} />
               <Route path={ROUTES.ORDER_LOGS} element={<OrderLogPage />} />
-              <Route path={ROUTES.ORDER_RETURNS} element={<OrderReturnListPage />} />
-              <Route path={ROUTES.ORDER_RETURN_DETAIL} element={<OrderReturnDetailPage />} />
               <Route path={ROUTES.NOTIFICATIONS} element={<NotificationListPage />} />
+              <Route path={ROUTES.REPORTS} element={<ChannelReportPage />} />
+              <Route path={ROUTES.REPORT_RETURNS} element={<ReturnReportPage />} />
+              <Route path={ROUTES.REPORT_PRODUCTS} element={<ProductReportPage />} />
             </Route>
           </Route>
         </Route>

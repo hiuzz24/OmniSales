@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
@@ -7,8 +7,6 @@ import {
   ClipboardList,
   Loader2,
   LockKeyhole,
-  MapPin,
-  Package,
   PackageCheck,
   Plus,
   Save,
@@ -25,10 +23,17 @@ import stocktakeService from '../../services/stocktakeService';
 import warehouseService from '../../services/warehouseService';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
+import useDebounce from '../../../../shared/hooks/useDebounce';
 import { formatNumber, formatVND, getResponseData } from '../components/inventoryDocumentListUtils';
+import {
+  confirmStocktakeComplete,
+  confirmSyncMarketplaceNow,
+  getDiffSummary,
+} from './stocktakeCompletion';
 import styles from '../CreatePage.module.css';
 
 const today = new Date().toISOString().slice(0, 10);
+const WAREHOUSE_PAGE_SIZE = 50;
 
 const makeSessionCode = () => {
   const now = new Date();
@@ -61,69 +66,185 @@ const DiffValue = ({ diff, checked }) => {
   );
 };
 
-function AddProductModal({ open, products, selectedIds, loading, onClose, onAdd, warehouseName }) {
+const PLATFORM_LABELS = {
+  LAZADA: 'Lazada',
+  SHOPIFY: 'Shopify',
+  TIKTOK: 'TikTok Shop',
+};
+const PLATFORM_KEYS = Object.keys(PLATFORM_LABELS);
+const PLATFORM_BADGE_STYLES = {
+  LAZADA: { backgroundColor: '#eef2ff', color: '#3730a3', borderColor: '#c7d2fe' },
+  SHOPIFY: { backgroundColor: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' },
+  TIKTOK: { backgroundColor: '#f8fafc', color: '#0f172a', borderColor: '#cbd5e1' },
+  LOCAL: { backgroundColor: '#f1f5f9', color: '#475569', borderColor: '#e2e8f0' },
+};
+const platformBadgeBaseStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 20,
+  padding: '2px 7px',
+  borderRadius: 6,
+  border: '1px solid transparent',
+  fontSize: 11,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  whiteSpace: 'nowrap',
+};
+
+const uniqueValues = (values) => [...new Set((values ?? []).filter(Boolean))];
+
+const normalizePlatform = (value) => {
+  const text = String(value ?? '').trim().toUpperCase();
+  if (!text) return null;
+  if (text.includes('LAZADA')) return 'LAZADA';
+  if (text.includes('SHOPIFY')) return 'SHOPIFY';
+  if (text.includes('TIKTOK')) return 'TIKTOK';
+  return PLATFORM_KEYS.includes(text) ? text : null;
+};
+
+const extractPlatforms = (value) => {
+  if (Array.isArray(value)) return value.flatMap(extractPlatforms);
+  const text = String(value ?? '').trim().toUpperCase();
+  if (!text) return [];
+  const matches = [];
+  if (text.includes('LAZADA')) matches.push('LAZADA');
+  if (text.includes('SHOPIFY')) matches.push('SHOPIFY');
+  if (text.includes('TIKTOK')) matches.push('TIKTOK');
+  const normalized = normalizePlatform(text);
+  return matches.length > 0 ? matches : (normalized ? [normalized] : []);
+};
+
+const itemPlatforms = (item) => {
+  return uniqueValues([
+    ...extractPlatforms(item?.platforms),
+    ...extractPlatforms(item?.platform),
+    ...extractPlatforms(item?.channelPlatform),
+    ...extractPlatforms(item?.salesChannelPlatform),
+    ...extractPlatforms(item?.channel?.platform),
+    ...extractPlatforms(item?.channelName),
+    ...extractPlatforms(item?.channelNames),
+  ]);
+};
+
+const renderPlatformBadges = (item) => {
+  const platforms = itemPlatforms(item);
+  const displayPlatforms = platforms.length > 0 ? platforms : ['LOCAL'];
+  return displayPlatforms.map((platform) => (
+    <span
+      key={platform}
+      style={{
+        ...platformBadgeBaseStyle,
+        ...(PLATFORM_BADGE_STYLES[platform] ?? PLATFORM_BADGE_STYLES.LOCAL),
+      }}
+    >
+      {platform === 'LOCAL' ? 'Ứng dụng' : PLATFORM_LABELS[platform] ?? platform}
+    </span>
+  ));
+};
+
+function AddProductModal({ open, products, totalItems = 0, existingVariantIds = [], loading = false, loadingMore = false, hasMore = false, onClose, onAdd, onLoadMore, onKeywordChange }) {
   const [keyword, setKeyword] = useState('');
+  const [selected, setSelected] = useState({});
+
+  const results = products;
+
+  const toggle = (item) => {
+    const key = item.variantId ?? item.id;
+    if (existingVariantIds.includes(key)) return;
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = item;
+      }
+      return next;
+    });
+  };
+
+  const count = Object.keys(selected).length;
+  const resetAndClose = () => {
+    setKeyword(''); onKeywordChange?.('');
+    setSelected({});
+    onClose();
+  };
+  const confirmSelected = () => {
+    onAdd(Object.values(selected));
+    setKeyword(''); onKeywordChange?.('');
+    setSelected({});
+  };
+
+  const handleScroll = (event) => {
+    const el = event.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 && hasMore && !loading && !loadingMore) {
+      onLoadMore?.();
+    }
+  };
+
   if (!open) return null;
-
-  const filtered = products.filter((item) => {
-    const k = keyword.trim().toLowerCase();
-    if (!k) return true;
-    return [item.productName, item.variantName, item.variantSku]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(k));
-  });
-
   return (
-    <div className={styles.modalBackdrop} onClick={(event) => event.target === event.currentTarget && onClose()}>
-      <div className={styles.stocktakeModal}>
-        <div className={styles.modalHeader}>
+    <div onClick={(e) => e.target === e.currentTarget && resetAndClose()}
+      style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(2px)' }}>
+      <div style={{ width: '100%', maxWidth: 640, background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', maxHeight: '85vh', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div>
-            <div className={styles.modalTitle}>Thêm sản phẩm kiểm kê</div>
-            <div className={styles.modalSubtitle}>Chỉ hiển thị SKU thuộc kho mặc định: {warehouseName || '—'}</div>
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Chọn sản phẩm</span>
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{totalItems} sản phẩm</span>
           </div>
-          <button type="button" onClick={onClose} className={styles.modalCloseBtn} aria-label="Đóng">
+          <button onClick={resetAndClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
             <X size={18} />
           </button>
         </div>
-
-        <div className={styles.modalSearchRow}>
-          <Search size={16} className={styles.modalSearchIcon} />
-          <input
-            autoFocus
-            value={keyword}
-            onChange={(event) => setKeyword(event.target.value)}
-            placeholder="Tìm theo tên, biến thể hoặc SKU..."
-            className={styles.modalSearchInput}
-          />
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input autoFocus value={keyword} onChange={(e) => { setKeyword(e.target.value); onKeywordChange?.(e.target.value); }} placeholder="Tìm theo tên sản phẩm hoặc SKU..."
+              style={{ width: '100%', padding: '8px 10px 8px 34px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
         </div>
-
-        <div className={styles.modalList}>
-          {loading ? (
-            <div className={styles.modalLoading}>
-              <Loader2 size={18} className={styles.spinIcon} />
-              Đang tải sản phẩm trong kho mặc định...
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className={styles.modalEmpty}>Không tìm thấy sản phẩm phù hợp.</div>
-          ) : filtered.map((item, index) => {
-            const isSelected = selectedIds.includes(item.variantId);
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} onScroll={handleScroll}>
+          {loading && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8', fontSize: 13 }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải...</div>}
+          {!loading && results.length === 0 && <p style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>{keyword.trim() ? 'Không tìm thấy sản phẩm nào phù hợp.' : 'Không có sản phẩm nào.'}</p>}
+          {!loading && results.map((item) => {
+            const key = item.variantId ?? item.id;
+            const sku = item.variantSku ?? item.sku;
+            const variantName = item.variantName ?? item.name;
+            const isExisting = existingVariantIds.includes(key);
+            const isSelected = Boolean(selected[key]);
             return (
-              <button
-                type="button"
-                key={item.variantId}
-                disabled={isSelected}
-                className={`${styles.modalProductRow} ${isSelected ? styles.modalProductRowDisabled : ''}`}
-                onClick={() => onAdd(item)}
-              >
-                <span className={styles.modalProductIndex}>{String(index + 1).padStart(2, '0')}</span>
-                <span className={styles.modalProductInfo}>
-                  <strong>{item.productName}{item.variantName ? ` — ${item.variantName}` : ''}</strong>
-                  <small>{item.variantSku} · Tồn hệ thống: {formatNumber(item.quantityOnHand ?? item.availableQuantity ?? 0)}</small>
-                </span>
-                {isSelected ? <span className={styles.modalAdded}>Đã thêm</span> : <span className={styles.modalAddIcon}><Plus size={16} /></span>}
-              </button>
+              <div key={key} onClick={() => toggle(item)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 20px', cursor: isExisting ? 'not-allowed' : 'pointer', backgroundColor: isExisting ? '#f8fafc' : isSelected ? '#f0fdfa' : '#fff', borderBottom: '1px solid #f1f5f9', opacity: isExisting ? 0.55 : 1 }}>
+                <input type="checkbox" checked={isSelected} disabled={isExisting} onChange={() => toggle(item)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, accentColor: '#0d9488', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{item.productName}</span>
+                    {variantName && <span style={{ fontSize: 11, color: '#475569', backgroundColor: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{variantName}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, fontFamily: 'monospace', backgroundColor: '#ccfbf1', color: '#0f766e', padding: '1px 6px', borderRadius: 4 }}>{sku}</span>
+                    {renderPlatformBadges(item)}
+                    <span style={{ fontSize: 11, backgroundColor: '#f0fdfa', color: '#0d9488', padding: '1px 6px', borderRadius: 4 }}>Tồn hệ thống: {formatNumber(item.quantityOnHand ?? item.availableQuantity ?? 0)}</span>
+                    {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
+                  </div>
+                </div>
+              </div>
             );
           })}
+          {loadingMore && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', color: '#94a3b8', fontSize: 12 }}>
+              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải thêm...
+            </div>
+          )}
+        </div>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={resetAndClose} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: 13, fontWeight: 500, color: '#374151', cursor: 'pointer' }}>Hủy</button>
+            <button onClick={confirmSelected} disabled={count === 0}
+              style={{ padding: '7px 16px', borderRadius: 8, border: 'none', backgroundColor: count === 0 ? '#99f6e4' : '#0d9488', color: '#fff', fontSize: 13, fontWeight: 500, cursor: count === 0 ? 'not-allowed' : 'pointer' }}>
+              Thêm ({count})
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -142,12 +263,17 @@ export default function StocktakeCreatePage() {
   const [warehouseItems, setWarehouseItems] = useState([]);
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreItems, setHasMoreItems] = useState(false);
+  const [totalItems, setTotalItems] = useState(0);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const debouncedKeyword = useDebounce(searchKeyword, 300);
   const [submitting, setSubmitting] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const itemsPageRef = useRef(0);
 
   useEffect(() => {
     let ignore = false;
-    setLoadingWarehouse(true);
     warehouseService.getMaster()
       .then((response) => {
         if (ignore) return;
@@ -166,29 +292,40 @@ export default function StocktakeCreatePage() {
     return () => { ignore = true; };
   }, []);
 
-  useEffect(() => {
-    if (!warehouseId) {
-      setWarehouseItems([]);
-      return undefined;
+  const loadWarehouseItems = async (reset = false, keyword = debouncedKeyword) => {
+    if (!warehouseId) return;
+    const page = reset ? 0 : itemsPageRef.current;
+    if (page > 0) {
+      setLoadingMore(true);
+    } else {
+      setLoadingItems(true);
     }
-    let ignore = false;
-    setLoadingItems(true);
-    setWarehouseItems([]);
-    inventoryApi.getByWarehouse(warehouseId, { page: 0, size: 500 })
-      .then((response) => {
-        if (ignore) return;
-        const data = getResponseData(response);
-        setWarehouseItems(Array.isArray(data) ? data : data.content ?? []);
-      })
-      .catch(() => {
-        if (!ignore) {
-          setWarehouseItems([]);
-          toast.error('Không thể tải tồn kho của kho mặc định.');
-        }
-      })
-      .finally(() => { if (!ignore) setLoadingItems(false); });
-    return () => { ignore = true; };
-  }, [warehouseId]);
+    try {
+      const response = await inventoryApi.getInventoryList(page, WAREHOUSE_PAGE_SIZE, 'updatedAt', 'desc', null, null, false, keyword ? { keyword } : {});
+      const data = getResponseData(response);
+      const list = Array.isArray(data) ? data : data.content ?? [];
+      setWarehouseItems((current) => (page === 0 ? list : [...current, ...list]));
+      const hasMore = Array.isArray(data)
+        ? false
+        : data.totalPages != null
+          ? page + 1 < data.totalPages
+          : list.length >= WAREHOUSE_PAGE_SIZE;
+      setHasMoreItems(hasMore);
+      setTotalItems(Array.isArray(data) ? list.length : data.totalElements ?? list.length);
+      itemsPageRef.current = page + 1;
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể tải tồn kho của kho mặc định.');
+    } finally {
+      setLoadingMore(false);
+      setLoadingItems(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!addModalOpen) return;
+    loadWarehouseItems(true, debouncedKeyword);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedKeyword]);
 
   const totals = useMemo(() => {
     const checkedItems = items.filter((item) => hasActualQuantity(item));
@@ -212,18 +349,26 @@ export default function StocktakeCreatePage() {
     setItems((current) => current.map((item) => ({ ...item, actualQuantity: String(item.systemQuantity) })));
   };
 
-  const addItem = (item) => {
-    setItems((current) => current.some((existing) => existing.variantId === item.variantId)
-      ? current
-      : [...current, toStocktakeItem(item)]);
+  const addItems = (newItems) => {
+    setItems((current) => {
+      const ids = new Set(current.map((item) => item.variantId));
+      const added = newItems
+        .map(toStocktakeItem)
+        .filter((item) => !ids.has(item.variantId));
+      return added.length > 0 ? [...current, ...added] : current;
+    });
   };
 
-  const openAddModal = () => {
+  const openAddModal = async () => {
     if (!warehouseId) {
       toast.error('Chưa có kho mặc định để kiểm kho.');
       return;
     }
     setAddModalOpen(true);
+    itemsPageRef.current = 0;
+    setWarehouseItems([]);
+    setHasMoreItems(false);
+    await loadWarehouseItems(true, '');
   };
 
   const updateActual = (variantId, value) => {
@@ -277,10 +422,27 @@ export default function StocktakeCreatePage() {
       toast.error(`Tồn thực tế của "${invalid.productName}" không được âm.`);
       return;
     }
+    const summary = complete ? getDiffSummary(items) : null;
+    if (complete) {
+      const ok = await confirmStocktakeComplete({ confirm, summary });
+      if (!ok) return;
+    }
     setSubmitting(true);
     try {
-      await stocktakeService.create(buildPayload(!complete), complete);
-      toast.success(complete ? 'Hoàn thành phiếu kiểm kho thành công.' : 'Lưu tạm phiếu kiểm kho thành công.');
+      const response = await stocktakeService.create(buildPayload(false), complete);
+      toast.success(complete ? 'Hoàn thành phiếu kiểm kho thành công.' : 'Lưu nháp phiếu kiểm kho thành công.');
+      if (complete && summary.hasDiff) {
+        const shouldSync = await confirmSyncMarketplaceNow({ confirm });
+        if (shouldSync) {
+          const created = getResponseData(response);
+          try {
+            await stocktakeService.syncStocktakeMarketplaceInventory(created.id);
+            toast.success('Đã đồng bộ tồn kho lên các sàn liên quan.');
+          } catch (syncError) {
+            toast.error(syncError?.response?.data?.message || 'Hoàn thành kiểm kho nhưng đồng bộ sàn thất bại.');
+          }
+        }
+      }
       runWithoutGuard(() => navigate(ROUTES.STOCKTAKES));
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || 'Không thể tạo phiếu kiểm kho.');
@@ -374,11 +536,8 @@ export default function StocktakeCreatePage() {
             </label>
 
             <div className={styles.formActionsRight}>
-              <button type="button" className={`${styles.actionBtn} ${styles.backBtn}`} onClick={() => navigate(ROUTES.STOCKTAKES)}>
-                <ArrowLeft size={14} /> Hủy
-              </button>
               <button type="button" className={`${styles.actionBtn} ${styles.primaryBtn}`} onClick={() => submit(false)} disabled={submitting || loadingWarehouse}>
-                <Save className={styles.primaryIcon} />{submitting ? 'Đang xử lý...' : 'Lưu tạm'}
+                <Save className={styles.primaryIcon} />{submitting ? 'Đang xử lý...' : 'Lưu nháp'}
               </button>
               <button type="button" className={`${styles.actionBtn} ${styles.tealBtn}`} onClick={() => submit(true)} disabled={submitting || loadingWarehouse}>
                 <CheckCircle2 className={styles.tealIcon} />{submitting ? 'Đang xử lý...' : 'Hoàn thành kiểm kho'}
@@ -435,7 +594,7 @@ export default function StocktakeCreatePage() {
                         <tr key={item.variantId} className={rowClass}>
                           <td className={styles.mutedCell}>{index + 1}</td>
                           <td><span className={styles.skuTag} style={{ background: '#ccfbf1', color: '#0d9488' }}>{item.variantSku}</span></td>
-                          <td className={styles.productNameCell}>{item.productName}{item.variantName ? ` — ${item.variantName}` : ''}</td>
+                          <td className={styles.productNameCell}>{item.productName}</td>
                           <td className={styles.mutedCell}>Cái</td>
                           <td className={styles.tdRight}>{formatNumber(item.systemQuantity)}</td>
                           <td>
@@ -491,20 +650,6 @@ export default function StocktakeCreatePage() {
             </div>
           </div>
 
-          <div className={`${styles.card} ${styles.sidebarCard}`}>
-            <div className={styles.sidebarCardTitle}>Thao tác nhanh</div>
-            <div className={styles.sidebarActionStack}>
-              <button type="button" className={`${styles.actionBtn} ${styles.tealBtn}`} onClick={openAddModal} disabled={!warehouseId || loadingItems}>
-                <Plus className={styles.tealIcon} />Thêm sản phẩm kiểm
-              </button>
-              {items.length > 0 && (
-                <button type="button" className={`${styles.actionBtn} ${styles.secondaryBtn}`} onClick={fillActualWithSystem} disabled={!warehouseId || loadingItems}>
-                  <Package className={styles.secondaryIcon} />Điền SL theo hệ thống
-                </button>
-              )}
-            </div>
-          </div>
-
           {items.length > 0 && (
             <div className={`${styles.card} ${styles.sidebarCard}`}>
               <div className={styles.sidebarCardTitle}>Trạng thái kiểm kê</div>
@@ -547,11 +692,15 @@ export default function StocktakeCreatePage() {
       <AddProductModal
         open={addModalOpen}
         products={warehouseItems}
-        selectedIds={items.map((item) => item.variantId)}
+        totalItems={totalItems}
+        existingVariantIds={items.map((item) => item.variantId)}
         loading={loadingItems}
+        loadingMore={loadingMore}
+        hasMore={hasMoreItems}
+        onLoadMore={() => loadWarehouseItems(false)}
+        onKeywordChange={setSearchKeyword}
         onClose={() => setAddModalOpen(false)}
-        onAdd={addItem}
-        warehouseName={defaultWarehouse?.name}
+        onAdd={addItems}
       />
       {ConfirmDialog}
     </div>

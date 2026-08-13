@@ -4,17 +4,13 @@ import fu.osms.auth.repository.UserRepository;
 import fu.osms.auth.security.JwtService;
 import fu.osms.auth.service.AuthService;
 import fu.osms.auth.service.UserService;
-import fu.osms.channel.dto.response.ChannelResponse;
 import fu.osms.channel.service.ChannelConnectionLogService;
 import fu.osms.channel.service.ChannelService;
-import fu.osms.common.dto.ApiResponse;
-import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
+import fu.osms.sync.lazada.service.LazadaChannelConnectionService;
 import fu.osms.sync.lazada.service.LazadaOAuthService;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.AfterEach;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -23,9 +19,6 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-
-import java.util.Map;
-import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -53,6 +46,8 @@ class LazadaOAuthControllerIT {
     MockMvc mvc;
 
     @MockitoBean
+    LazadaChannelConnectionService lazadaChannelConnectionService;
+    @MockitoBean
     LazadaOAuthService lazadaOAuthService;
 
     @MockitoBean
@@ -78,7 +73,7 @@ class LazadaOAuthControllerIT {
 
     @Test
     void authorize_returnsAuthorizationUrl() throws Exception {
-        when(lazadaOAuthService.buildAuthorizationUrl())
+        when(lazadaChannelConnectionService.buildAuthorizationUrl())
                 .thenReturn("https://auth.lazada.com/rest?client_id=test");
 
         mvc.perform(get("/api/channels/lazada/authorize")
@@ -90,7 +85,7 @@ class LazadaOAuthControllerIT {
 
     @Test
     void authorize_withInvalidConfig_returnsBadRequest() throws Exception {
-        when(lazadaOAuthService.buildAuthorizationUrl())
+        when(lazadaChannelConnectionService.buildAuthorizationUrl())
                 .thenThrow(new IllegalStateException("Missing Lazada OAuth configuration"));
 
         mvc.perform(get("/api/channels/lazada/authorize")
@@ -102,24 +97,6 @@ class LazadaOAuthControllerIT {
 
     @Test
     void callback_withValidCode_redirectsToSuccess() throws Exception {
-        Map<String, Object> tokenData = Map.of(
-                "access_token", "lazada_access_token_123",
-                "refresh_token", "lazada_refresh_token_456",
-                "expires_in", 604800,
-                "refresh_expires_in", 2592000,
-                "account_id", "lazada_seller_123",
-                "account_name", "Lazada Seller"
-        );
-
-        when(lazadaOAuthService.exchangeToken("valid_code")).thenReturn(tokenData);
-        when(channelService.connectLazada(
-                anyString(), anyString(), anyInt(), anyInt(), anyString(), anyString()))
-                .thenReturn(ChannelResponse.builder()
-                        .id(UUID.randomUUID())
-                        .platform(PlatformType.LAZADA)
-                        .displayName("Lazada Seller")
-                        .build());
-
         mvc.perform(get("/api/channels/lazada/callback")
                         .param("code", "valid_code"))
                 .andExpect(status().is3xxRedirection())
@@ -149,8 +126,8 @@ class LazadaOAuthControllerIT {
 
     @Test
     void callback_withNoAccessToken_redirectsToError() throws Exception {
-        when(lazadaOAuthService.exchangeToken("invalid_code"))
-                .thenReturn(Map.of("error", "invalid_grant"));
+        when(lazadaChannelConnectionService.connect("invalid_code"))
+                .thenThrow(new IllegalStateException("Missing access token"));
 
         doNothing().when(channelConnectionLogService).logFailure(
                 any(), any(), anyString(), anyString(), any());
@@ -163,7 +140,7 @@ class LazadaOAuthControllerIT {
 
     @Test
     void callback_withGenericException_redirectsToError() throws Exception {
-        when(lazadaOAuthService.exchangeToken("code"))
+        when(lazadaChannelConnectionService.connect("code"))
                 .thenThrow(new RuntimeException("Unexpected error"));
 
         doNothing().when(channelConnectionLogService).logFailure(
@@ -173,5 +150,16 @@ class LazadaOAuthControllerIT {
                         .param("code", "code"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrlPattern("**/channels?error=connection_failed"));
+    }
+
+    @Test
+    void callback_withChannelConflict_redirectsToConflict() throws Exception {
+        when(lazadaChannelConnectionService.connect("code"))
+                .thenThrow(new AppException(ErrorCode.CHANNEL_IDENTITY_CONFLICT, "Channel already exists"));
+
+        mvc.perform(get("/api/channels/lazada/callback")
+                        .param("code", "code"))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrlPattern("**/channels?error=channel_identity_conflict"));
     }
 }

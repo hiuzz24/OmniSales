@@ -23,6 +23,7 @@ public class OrderReturnController {
     private final OrderReturnService service;
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<PageResponse<OrderReturnResponse>>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
@@ -30,6 +31,7 @@ public class OrderReturnController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.getById(id)));
     }

@@ -159,6 +159,11 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     autoDeploy: false  # Tắt auto deploy để tránh build tự động fail trên free tier (OOM)
+    # SPA fallback: mọi route không match file tĩnh → trả về /index.html để React Router xử lý
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
         value: https://api-osms.onrender.com/api

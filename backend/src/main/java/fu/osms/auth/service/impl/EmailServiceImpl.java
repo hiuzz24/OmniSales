@@ -1,12 +1,10 @@
 package fu.osms.auth.service.impl;
 
+import fu.osms.auth.service.EmailSender;
 import fu.osms.auth.service.EmailService;
 
-import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -16,15 +14,15 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.frontend-url:http://localhost:5174}")
     private String frontendUrl = "http://localhost:5174";
 
-    private final JavaMailSender mailSender;
+    private final EmailSender emailSender;
 
     @Autowired
-    public EmailServiceImpl(JavaMailSender mailSender) {
-        this.mailSender = mailSender;
+    public EmailServiceImpl(EmailSender emailSender) {
+        this.emailSender = emailSender;
     }
 
-    public EmailServiceImpl(JavaMailSender mailSender, String frontendUrl) {
-        this.mailSender = mailSender;
+    public EmailServiceImpl(EmailSender emailSender, String frontendUrl) {
+        this.emailSender = emailSender;
         if (frontendUrl != null && !frontendUrl.isBlank()) {
             this.frontendUrl = frontendUrl;
         }
@@ -36,12 +34,6 @@ public class EmailServiceImpl implements EmailService {
         try {
             String baseUrl = getCleanFrontendUrl();
             String resetLink = baseUrl + "/change-password?token=" + token;
-
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "UTF-8");
-
-            helper.setTo(toEmail);
-            helper.setSubject("[OmniSales] Yêu cầu đặt lại mật khẩu tài khoản");
 
             String title = "Bảo mật tài khoản của bạn";
             String subtitleHtml = "Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản OmniSales của bạn.<br/>Vui lòng nhấn vào nút bên dưới để tiến hành đặt lại mật khẩu.";
@@ -61,9 +53,8 @@ public class EmailServiceImpl implements EmailService {
             String securityNoticeHtml = "Liên kết này có hiệu lực trong <strong>15 phút</strong>.<br/>Nếu bạn không gửi yêu cầu đặt lại mật khẩu, bạn có thể an tâm bỏ qua email này.";
 
             String htmlContent = buildGitLabStyleEmailHtml(title, subtitleHtml, contentHtml, securityNoticeHtml);
-            helper.setText(htmlContent, true);
 
-            mailSender.send(mimeMessage);
+            emailSender.send(toEmail, "[OmniSales] Yêu cầu đặt lại mật khẩu tài khoản", htmlContent);
             System.out.println("Forget password email sent successfully to: " + toEmail);
         } catch (Exception e) {
             System.err.println("Failed to send forget password email to " + toEmail + ": " + e.getMessage());
@@ -74,12 +65,6 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sentResetPasswordEmail(String toEmail, String fullName, String newPassword) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "UTF-8");
-
-            helper.setTo(toEmail);
-            helper.setSubject("[OmniSales] Tài khoản của bạn đã được đặt lại mật khẩu");
-
             String title = "Thông tin mật khẩu mới";
             String subtitleHtml = "Xin chào <strong>" + escapeHtml(fullName) + "</strong>,<br/>Quản trị viên hệ thống đã đặt lại mật khẩu cho tài khoản của bạn. Dưới đây là thông tin đăng nhập tạm thời:";
 
@@ -108,9 +93,8 @@ public class EmailServiceImpl implements EmailService {
             String securityNoticeHtml = "<strong style=\"color: #b45309;\">Lưu ý bảo mật:</strong> Mật khẩu tạm thời này chỉ có giá trị cho lần đăng nhập đầu tiên. Bạn <strong>bắt buộc phải thay đổi mật khẩu</strong> ngay sau khi đăng nhập thành công.";
 
             String htmlContent = buildGitLabStyleEmailHtml(title, subtitleHtml, contentHtml, securityNoticeHtml);
-            helper.setText(htmlContent, true);
 
-            mailSender.send(mimeMessage);
+            emailSender.send(toEmail, "[OmniSales] Tài khoản của bạn đã được đặt lại mật khẩu", htmlContent);
             System.out.println("Reset password email sent successfully to: " + toEmail);
         } catch (Exception e) {
             System.err.println("Failed to send reset password email to " + toEmail + ": " + e.getMessage());
@@ -122,12 +106,7 @@ public class EmailServiceImpl implements EmailService {
     @Async
     public void sendNotificationEmail(String toEmail, String subject, String body) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "UTF-8");
-
-            helper.setTo(toEmail);
             String safeSubject = subject != null ? subject : "[OmniSales] Thông báo hệ thống";
-            helper.setSubject(safeSubject);
 
             String title = "Thông báo hệ thống";
             String subtitleHtml = escapeHtml(safeSubject);
@@ -141,9 +120,8 @@ public class EmailServiceImpl implements EmailService {
             String securityNoticeHtml = "Đây là thông báo tự động từ hệ thống quản lý OmniSales.";
 
             String htmlContent = buildGitLabStyleEmailHtml(title, subtitleHtml, contentHtml, securityNoticeHtml);
-            helper.setText(htmlContent, true);
 
-            mailSender.send(mimeMessage);
+            emailSender.send(toEmail, safeSubject, htmlContent);
         } catch (Exception e) {
             System.err.println("Failed to send notification email to " + toEmail + ": " + e.getMessage());
         }
@@ -155,12 +133,6 @@ public class EmailServiceImpl implements EmailService {
         try {
             String baseUrl = getCleanFrontendUrl();
             String inviteLink = baseUrl + "/inviteUser?token=" + token;
-
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "UTF-8");
-
-            helper.setTo(toEmail);
-            helper.setSubject("[OmniSales] Lời mời tham gia hệ thống OmniSales");
 
             String title = "Lời mời tham gia hệ thống";
             String subtitleHtml = "Chào bạn,<br/>Bạn đã được mời trở thành thành viên trên hệ thống quản lý bán hàng <strong>OmniSales</strong>.<br/>Vui lòng nhấn vào nút bên dưới để tạo tài khoản của bạn.";
@@ -180,9 +152,8 @@ public class EmailServiceImpl implements EmailService {
             String securityNoticeHtml = "Liên kết này có hiệu lực trong <strong>15 phút</strong>.<br/>Nếu bạn không mong đợi lời mời này, bạn có thể an tâm bỏ qua email này.";
 
             String htmlContent = buildGitLabStyleEmailHtml(title, subtitleHtml, contentHtml, securityNoticeHtml);
-            helper.setText(htmlContent, true);
 
-            mailSender.send(mimeMessage);
+            emailSender.send(toEmail, "[OmniSales] Lời mời tham gia hệ thống OmniSales", htmlContent);
 
             System.out.println("Invite email sent successfully to: " + toEmail);
         } catch (Exception e) {
@@ -210,7 +181,7 @@ public class EmailServiceImpl implements EmailService {
                     <tr>
                         <td align="center" style="padding: 36px 16px 48px 16px;">
                             <table width="100%%" cellpadding="0" cellspacing="0" border="0" style="max-width: 560px; margin: 0 auto;">
-                                
+
                                 <!-- Header Brand Logo -->
                                 <tr>
                                     <td align="center" style="padding-bottom: 24px;">
@@ -234,11 +205,11 @@ public class EmailServiceImpl implements EmailService {
                                         <table width="100%%" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04); overflow: hidden;">
                                             <tr>
                                                 <td style="padding: 40px 36px 36px 36px;">
-                                                    
+
                                                     <h1 style="margin: 0 0 16px 0; font-size: 22px; font-weight: 700; color: #0f172a; text-align: center; line-height: 1.3;">
                                                         %s
                                                     </h1>
-                                                    
+
                                                     <div style="margin: 0 0 28px 0; font-size: 14px; line-height: 1.6; color: #475569; text-align: center;">
                                                         %s
                                                     </div>
@@ -293,4 +264,3 @@ public class EmailServiceImpl implements EmailService {
                     .replace("'", "&#39;");
     }
 }
-
