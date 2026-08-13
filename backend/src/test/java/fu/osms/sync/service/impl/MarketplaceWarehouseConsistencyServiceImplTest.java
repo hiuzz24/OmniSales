@@ -144,6 +144,26 @@ class MarketplaceWarehouseConsistencyServiceImplTest {
     }
 
     @Test
+    @DisplayName("validateConnectedPrimaryWarehouses: passes when addresses differ only by formatting (glued house number vs spaced)")
+    void validate_sameAddressDifferentFormatting() {
+        UUID lzId = UUID.randomUUID();
+        UUID shId = UUID.randomUUID();
+        Channel lz = channel(lzId, PlatformType.LAZADA, Map.of("accountId", "a"));
+        Channel sh = channel(shId, PlatformType.SHOPIFY, Map.of("shopDomain", "shop.myshopify.com"));
+        when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(lz, sh));
+        when(credentialRepository.findByChannelIdAndConnectionState(org.mockito.ArgumentMatchers.any(UUID.class), eq("CONNECTED")))
+                .thenReturn(Optional.of(credential("token")));
+        when(lazadaApiClient.executeGet(eq(lz.getId()), org.mockito.ArgumentMatchers.anyString(), any()))
+                .thenReturn("{\"code\":\"0\",\"data\":[{\"name\":\"WH1\",\"warehouse_code\":\"WH1\","
+                        + "\"detail_address\":\"243Khuất Duy Tiến, 243, Phường Cầu Giấy (mới), Hà Nội (mới), Vietnam\"}]}");
+        when(shopifyApiClient.executeGraphQl(eq("shop.myshopify.com"), eq("token"), org.mockito.ArgumentMatchers.anyString(), any()))
+                .thenReturn(Map.of("data", Map.of("locations", Map.of("nodes", List.of(
+                        Map.of("isPrimary", true, "isActive", true, "address", Map.of("address1", "243 Khuất Duy Tiến")))))));
+
+        service.validateConnectedPrimaryWarehouses();
+    }
+
+    @Test
     @DisplayName("resolveMasterWarehouse: reuses existing shared warehouse when one already exists")
     void resolveMaster_existing() {
         Warehouse existing = Warehouse.builder().id(UUID.randomUUID()).name("Kho mặc định đa sàn").isActive(true).build();
