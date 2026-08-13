@@ -54,7 +54,6 @@ const InventoryDetailPage = () => {
   const [editName, setEditName] = useState('');
   const [editWarehouseId, setEditWarehouseId] = useState('');
   const [editQty, setEditQty] = useState(0);
-  const [editPrice, setEditPrice] = useState(0);
   const [editCost, setEditCost] = useState(0);
   const [updating, setUpdating] = useState(false);
 
@@ -152,15 +151,14 @@ const InventoryDetailPage = () => {
       toast.error('Tên sản phẩm không được để trống');
       return;
     }
-    if (editPrice < 0 || editCost < 0 || editQty < 0) {
-      toast.error('Giá bán, giá vốn và số lượng không được âm');
+    if (editCost < 0 || editQty < 0) {
+      toast.error('Giá vốn và số lượng không được âm');
       return;
     }
     try {
       setUpdating(true);
       const payload = {
         productVariantName: editName,
-        price: editPrice,
         averageCost: editCost,
         quantityOnHand: editQty,
         warehouseId: editWarehouseId
@@ -559,20 +557,6 @@ const InventoryDetailPage = () => {
                     min="0"
                     value={editQty}
                     onChange={(e) => setEditQty(parseInt(e.target.value) || 0)}
-                    className={styles.formInput}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>
-                    Giá bán <span className={styles.requiredStar}>*</span>
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={editPrice}
-                    onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0)}
                     className={styles.formInput}
                   />
                 </div>
