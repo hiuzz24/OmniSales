@@ -79,7 +79,7 @@ const normalizeWarehouseVariant = (item) => {
     sku, variantSku: internalSku, marketplaceSku,
     productName: item.productName ?? item.product?.name ?? sku,
     name: item.variantName ?? item.name ?? '',
-    unitPrice: item.unitPrice ?? item.price ?? 0,
+    unitPrice: item.averageCost ?? item.costPrice ?? 0,
     salePrice: item.salePrice ?? item.currentSalePrice ?? item.price ?? 0,
     availableQuantity: item.availableQuantity ?? 0,
     platforms: itemPlatforms(item),

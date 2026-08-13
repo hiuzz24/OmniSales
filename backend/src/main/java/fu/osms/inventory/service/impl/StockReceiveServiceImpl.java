@@ -1159,14 +1159,15 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         int qtyBefore = quantityOnHand(inventoryItem);
         avgCostBefore = normalizeMoney(avgCostBefore);
         avgCostAfter = normalizeMoney(avgCostAfter);
-        BigDecimal sellingPrice = normalizeMoney(receivedUnitCost);
 
         inventoryItem.setQuantityOnHand(quantityAfter);
         inventoryItem.setAverageCost(avgCostAfter);
         inventoryItem.setUpdatedBy(updatedBy);
         inventoryItemRepository.save(inventoryItem);
 
-        productVariant.setPrice(sellingPrice);
+        // Sale price (variant.price) must NOT be changed by a stock receipt.
+        // It is only editable on the product update page. Here we update only
+        // the cost price (giá vốn) and the inventory average cost.
         productVariant.setCostPrice(avgCostAfter);
         productVariant.setUpdatedBy(updatedBy);
         variantRepository.save(productVariant);

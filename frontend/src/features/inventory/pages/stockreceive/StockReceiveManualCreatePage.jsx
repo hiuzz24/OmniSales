@@ -76,7 +76,7 @@ const normalizeWarehouseVariant = (item) => {
   const marketplaceSku = item.marketplaceSku ?? '';
   const sku = internalVariantSku || marketplaceSku;
   const salePrice = item.salePrice ?? item.currentSalePrice ?? item.price ?? item.unitPrice ?? 0;
-  const unitPrice = item.unitPrice ?? item.price ?? 0;
+  const unitPrice = item.averageCost ?? item.costPrice ?? 0;
   const variantIds = uniqueValues([...(item.variantIds ?? []), variantId]).filter(Boolean);
   return {
     id: variantId, variantId, variantIds,
@@ -296,7 +296,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
                     {renderPlatformBadges(item)}
                     {isExisting && <span style={{ fontSize: 11, backgroundColor: '#fffbeb', color: '#d97706', padding: '1px 6px', borderRadius: 4 }}>Đã có</span>}
                   </div>
-                  {Number(item.salePrice) > 0 && <div style={{ marginTop: 4, fontSize: 11, color: '#64748b' }}>Giá bán: <strong style={{ color: '#0f172a' }}>{formatVND(Number(item.salePrice))}</strong></div>}
+                  {Number(item.unitPrice) > 0 && <div style={{ marginTop: 4, fontSize: 11, color: '#64748b' }}>Giá vốn: <strong style={{ color: '#0f172a' }}>{formatVND(Number(item.unitPrice))}</strong></div>}
                 </div>
               </div>
             );
@@ -663,8 +663,8 @@ export default function StockReceiveManualCreatePage() {
                           <td>
                             <input type="number" min="0" step="1000" value={item.unitPrice} onChange={(e) => onPriceChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${priceBad ? styles.inputError : ''}`} />
-                            {Number(item.salePrice) > 0 && <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
-                              Giá bán: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.salePrice))}</strong></div>}
+                            {Number(item.unitPrice) > 0 && <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
+                              Giá vốn: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.unitPrice))}</strong></div>}
                           </td>
                           <td className={styles.tdRight} style={{ fontWeight: 700, color: line > 0 ? '#16a34a' : '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
                             {line > 0 ? formatVND(line) : '—'}

@@ -296,7 +296,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
     defaultValues: { warehouseId: '', issuedDate: today, recipient: '', notes: '' },
   });
   const selectedWarehouseId = watch('warehouseId');
-  const fetchVariants = useCallback(({ page, size, keyword }) => inventoryApi.getInventoryList(page, size, 'updatedAt', 'desc', null, null, false, keyword ? { keyword } : {}), []);
+  const fetchVariants = useCallback(({ page, size, keyword }) => inventoryApi.getInventoryList(page, size, 'updatedAt', 'desc', null, null, false, selectedWarehouseId ? { keyword, warehouseId: selectedWarehouseId } : { keyword }), [selectedWarehouseId]);
   const pagedVariants = usePagedVariants({ fetcher: fetchVariants });
   const warehouseVariants = useMemo(() => aggregateWarehouseVariantsBySku(pagedVariants.items.map(normalizeWarehouseVariant).filter((item) => item.id)), [pagedVariants.items]);
   const loadingWarehouseVariants = pagedVariants.loading || pagedVariants.loadingMore;

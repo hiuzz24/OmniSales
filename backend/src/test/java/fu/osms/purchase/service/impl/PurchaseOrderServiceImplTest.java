@@ -2,7 +2,6 @@ package fu.osms.purchase.service.impl;
 
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
-import fu.osms.auth.repository.UserRoleRepository;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
@@ -18,7 +17,6 @@ import fu.osms.inventory.entity.Supplier;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.SupplierRepository;
-import fu.osms.notification.service.NotificationService;
 import fu.osms.purchase.dto.*;
 import fu.osms.purchase.entity.PurchaseOrder;
 import fu.osms.purchase.entity.PurchaseOrderItem;
@@ -70,10 +68,6 @@ class PurchaseOrderServiceImplTest {
     private ChannelProductVariantRepository channelVariantRepository;
     @Mock
     private UserRepository userRepository;
-    @Mock
-    private UserRoleRepository userRoleRepository;
-    @Mock
-    private NotificationService notificationService;
     @Mock
     private MarketplaceWarehouseConsistencyService warehouseConsistencyService;
 
