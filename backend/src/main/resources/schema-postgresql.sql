@@ -629,8 +629,14 @@ CREATE TABLE stocktake_sessions (
                                     status         VARCHAR(15)  NOT NULL DEFAULT 'DRAFT'
                                         CHECK (status IN ('DRAFT','IN_PROGRESS','COMPLETED','CANCELLED')),
                                     created_by     UUID         REFERENCES users(id) ON DELETE SET NULL,
-                                    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+                                    started_by     UUID         REFERENCES users(id) ON DELETE SET NULL,
+                                    started_at     TIMESTAMPTZ,
+                                    completed_by   UUID         REFERENCES users(id) ON DELETE SET NULL,
+                                    completed_at   TIMESTAMPTZ,
+                                    cancelled_by   UUID         REFERENCES users(id) ON DELETE SET NULL,
                                     cancelled_at   TIMESTAMPTZ,
+                                    notes          TEXT,
+                                    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
                                     updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -639,7 +645,7 @@ CREATE TABLE stocktake_items (
                                  session_id      UUID NOT NULL REFERENCES stocktake_sessions(id) ON DELETE CASCADE,
                                  variant_id      UUID NOT NULL REFERENCES product_variants(id),
                                  system_quantity INT  NOT NULL,
-                                 actual_quantity INT  NOT NULL,
+                                 actual_quantity INT,
                                  difference      INT  GENERATED ALWAYS AS (actual_quantity - system_quantity) STORED,
                                  notes           TEXT
 );

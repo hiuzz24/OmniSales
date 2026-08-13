@@ -1007,9 +1007,8 @@ public class InventoryServiceImpl implements InventoryService {
             if (request.getProductVariantName() != null) {
                 variant.setName(request.getProductVariantName());
             }
-            if (request.getPrice() != null) {
-                variant.setPrice(request.getPrice());
-            }
+            // Sale price (variant.price) must NOT be changed from the inventory
+            // detail page. It is only editable on the product update page.
             if (request.getAverageCost() != null) {
                 variant.setCostPrice(request.getAverageCost());
             }
