@@ -43,7 +43,7 @@ import java.util.Map;
  *
  * <h3>What gets seeded</h3>
  * <ul>
- *   <li>Roles: ADMIN, STAFF, WAREHOUSE (default set)</li>
+ *   <li>Roles: ADMIN, SYSTEM_ADMIN, STAFF, WAREHOUSE, SALES, OPERATIONS, OWNER</li>
  *   <li>Admin user: credentials read from {@code ADMIN_EMAIL} / {@code ADMIN_PASSWORD}
  *       environment variables (defaults to {@code admin@osms.local / ChangeMe123!}).
  *       Password is BCrypt-encoded before storage.</li>
@@ -75,6 +75,12 @@ public class RenderDataSeeder {
 
     private static final List<Map<String, String>> SEED_ROLES = List.of(
             Map.of("name", "ADMIN",      "description", "System administrator — full access to all modules"),
+            // SYSTEM_ADMIN alias — tên dùng trong @PreAuthorize("hasRole('SYSTEM_ADMIN')")
+            // Đây là role THEO QUY ƯỚC SPRING SECURITY (tiền tố ROLE_ tự động thêm).
+            // Nếu không có role này trong DB, các API dùng @PreAuthorize sẽ 403 cho
+            // user có role ADMIN. Vì @PreAuthorize check AUTHORITY = "ROLE_" + role_name,
+            // ta cần role DB có tên "SYSTEM_ADMIN".
+            Map.of("name", "SYSTEM_ADMIN", "description", "System administrator alias — full system access (alias for ADMIN)"),
             Map.of("name", "STAFF",      "description", "Regular staff — orders, customers, products"),
             Map.of("name", "WAREHOUSE",  "description", "Warehouse keeper — stock, transfers, stocktakes"),
             Map.of("name", "SALES",      "description", "Sales staff — orders and customer management"),
@@ -191,6 +197,7 @@ public class RenderDataSeeder {
         // Skip if admin already exists (e.g. created via invite or manual DB entry)
         if (userRepository.existsByEmail(email)) {
             log.info("[seeder] Admin user '{}' already exists, skipping.", email);
+            ensureUserHasSystemAdminRole(email);
             return;
         }
 
@@ -211,13 +218,17 @@ public class RenderDataSeeder {
 
         User savedAdmin = userRepository.save(admin);
 
-        // Create the join-table entry in user_roles
+        // Create the join-table entry in user_roles for ADMIN role
         UserRole userRole = UserRole.builder()
                 .user(savedAdmin)
                 .role(adminRole)
                 .grantedAt(OffsetDateTime.now())
                 .build();
         userRoleRepository.save(userRole);
+
+        // Also assign SYSTEM_ADMIN role so user can access @PreAuthorize endpoints
+        // that require ROLE_SYSTEM_ADMIN (Spring Security strips ROLE_ prefix).
+        ensureUserHasSystemAdminRole(email);
 
         log.warn("[seeder] ╔══════════════════════════════════════════════════════════╗");
         log.warn("[seeder] ║  ✅ ADMIN USER CREATED — CHANGE PASSWORD AFTER LOGIN!     ║");
@@ -262,6 +273,56 @@ public class RenderDataSeeder {
         log.warn("[seeder] ║  Email    : {}                                       ║", email);
         log.warn("[seeder] ║  Password : {} (from OWNER_PASSWORD env)           ║", password);
         log.warn("[seeder] ╚══════════════════════════════════════════════════════════╝");
+    }
+
+    /**
+     * Đảm bảo user (admin owner) có role SYSTEM_ADMIN.
+     *
+     * LÝ DO CẦN:
+     *   - @PreAuthorize("hasRole('SYSTEM_ADMIN')") check authority = "ROLE_SYSTEM_ADMIN"
+     *     (Spring Security tự thêm tiền tố "ROLE_").
+     *   - Database chỉ có role "ADMIN" → @PreAuthorize 403 cho mọi API dùng SYSTEM_ADMIN.
+     *   - Role "SYSTEM_ADMIN" được thêm vào SEED_ROLES ở trên (idempotent nếu đã có).
+     *   - Method này gán role SYSTEM_ADMIN cho admin/owner user nếu chưa có.
+     *     Idempotent — chạy nhiều lần không lỗi.
+     */
+    private void ensureUserHasSystemAdminRole(String email) {
+        try {
+            User user = userRepository.findByEmail(email).orElse(null);
+            if (user == null) {
+                log.debug("[seeder] User '{}' not found when ensuring SYSTEM_ADMIN role", email);
+                return;
+            }
+
+            Role systemAdminRole = roleRepository.findByName("SYSTEM_ADMIN")
+                    .orElseGet(() -> {
+                        log.warn("[seeder] SYSTEM_ADMIN role missing — creating now");
+                        Role newRole = Role.builder()
+                                .name("SYSTEM_ADMIN")
+                                .description("System administrator alias — auto-created for legacy data")
+                                .build();
+                        return roleRepository.save(newRole);
+                    });
+
+            // Check existing assignment
+            boolean alreadyHas = userRoleRepository
+                    .findByUserIdAndRoleId(user.getId(), systemAdminRole.getId())
+                    .isPresent();
+            if (alreadyHas) {
+                log.debug("[seeder] User '{}' already has SYSTEM_ADMIN role", email);
+                return;
+            }
+
+            UserRole userRole = UserRole.builder()
+                    .user(user)
+                    .role(systemAdminRole)
+                    .grantedAt(OffsetDateTime.now())
+                    .build();
+            userRoleRepository.save(userRole);
+            log.info("[seeder] ✅ Granted SYSTEM_ADMIN role to user '{}'", email);
+        } catch (Exception e) {
+            log.error("[seeder] Failed to ensure SYSTEM_ADMIN role for '{}': {}", email, e.getMessage());
+        }
     }
 
     private void seedCountries() {

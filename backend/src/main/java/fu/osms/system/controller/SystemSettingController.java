@@ -17,7 +17,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/settings")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('SYSTEM_ADMIN')")
+// Cho phép ADMIN và OWNER (business owner có full access tới settings).
+// KHÔNG dùng SYSTEM_ADMIN — role này không tồn tại trong DB (xem RenderDataSeeder.SEED_ROLES).
+@PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
 public class SystemSettingController {
 
     private final SystemSettingService systemSettingService;
