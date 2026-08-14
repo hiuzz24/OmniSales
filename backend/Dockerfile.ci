@@ -12,8 +12,7 @@
 FROM eclipse-temurin:17-jre-alpine
 
 # Cài curl cho healthcheck của Render
-RUN apk add --no-cache curl tini
-
+RUN apk add --no-cache curl tini postgresql-client
 # Tạo user non-root cho bảo mật
 RUN addgroup -S osms && adduser -S osms -G osms
 

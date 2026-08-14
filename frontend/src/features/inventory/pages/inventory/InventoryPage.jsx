@@ -104,12 +104,16 @@ const nextSort = (current) =>
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 /**
  * Derive a status string from BE fields for display purposes.
- * BE trả về: quantityOnHand, availableQuantity, lowStockThreshold, isLowStock
+ * Trạng thái tồn kho phải dựa trên số lượng thực tế trong kho. Số lượng có thể
+ * bán có thể bằng 0 khi toàn bộ hàng đang được giữ, nhưng sản phẩm chưa hết hàng.
  */
 const deriveStatus = (item) => {
-  if (item.availableQuantity < 0) return 'negative';
-  if (item.availableQuantity === 0) return 'out-of-stock';
-  if (item.isLowStock) return 'low-stock';
+  const quantityOnHand = Number(item?.quantityOnHand ?? 0);
+  const lowStockThreshold = Number(item?.lowStockThreshold ?? 0);
+
+  if (quantityOnHand < 0) return 'negative';
+  if (quantityOnHand === 0) return 'out-of-stock';
+  if (quantityOnHand <= lowStockThreshold) return 'low-stock';
   return 'in-stock';
 };
 
@@ -269,7 +273,7 @@ const StatusBadge = ({ status, item }) => {
   const subLabel = useMemo(() => {
     if (status === 'low-stock') return 'Dưới mức tồn';
     if (status === 'negative') {
-      const absVal = Math.abs(item?.availableQuantity ?? 0);
+      const absVal = Math.abs(item?.quantityOnHand ?? 0);
       return `Âm ${absVal}`;
     }
     if (status === 'out-of-stock') return 'Hết hàng';
