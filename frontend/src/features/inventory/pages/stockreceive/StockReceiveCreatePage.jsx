@@ -1027,10 +1027,10 @@ export default function StockReceiveCreatePage() {
                               : '—'}
                           </td>
                           <td>
-                            <input type="number" min="1" step="1" value={item.quantity} disabled={rowDisabled} onChange={(e) => onQtyChange(idx, e.target.value)}
-                              className={`${styles.tableInput} ${qtyBad ? styles.inputError : ''}`} />
-                            {check && (
-                              <div style={{ marginTop: 5 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <input type="number" min="1" step="1" value={item.quantity} disabled={rowDisabled} onChange={(e) => onQtyChange(idx, e.target.value)}
+                                className={`${styles.tableInput} ${qtyBad ? styles.inputError : ''}`} style={{ width: 'auto', minWidth: 80 }} />
+                              {check && (
                                 <span style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
@@ -1045,17 +1045,18 @@ export default function StockReceiveCreatePage() {
                                   backgroundColor: check.bg,
                                   border: `1px solid ${check.border}`,
                                   whiteSpace: 'nowrap',
+                                  flexShrink: 0,
                                 }}>
                                   {check.icon && <span style={{ fontSize: 10.5, lineHeight: 1 }}>{check.icon}</span>}
                                   {check.label}
                                 </span>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </td>
                           <td>
                             <input type="number" min="0" step="1000" value={item.unitPrice} disabled={item.fromPurchaseOrder} onChange={(e) => onPriceChange(idx, e.target.value)}
                               className={`${styles.tableInput} ${priceBad ? styles.inputError : ''}`} />
-                            {item.fromPurchaseOrder
+                            {/* {item.fromPurchaseOrder
                               ? (Number(item.costPrice) > 0 && (
                                   <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
                                     Giá vốn ban đầu: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.costPrice))}</strong>
@@ -1065,7 +1066,7 @@ export default function StockReceiveCreatePage() {
                                   <div style={{ marginTop: 4, fontSize: 10.5, color: '#64748b', whiteSpace: 'nowrap' }}>
                                     Giá vốn: <strong style={{ color: '#0f172a', fontWeight: 600 }}>{formatVND(Number(item.unitPrice))}</strong>
                                   </div>
-                                ))}
+                                ))} */}
                           </td>
                           <td className={styles.tdRight} style={{ fontWeight: 700, color: line > 0 ? '#2563eb' : '#94a3b8', fontSize: 12, whiteSpace: 'nowrap' }}>
                             {line > 0 ? formatVND(line) : '—'}
