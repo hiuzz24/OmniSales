@@ -43,7 +43,7 @@ import java.util.Map;
  *
  * <h3>What gets seeded</h3>
  * <ul>
- *   <li>Roles: ADMIN, SYSTEM_ADMIN, STAFF, WAREHOUSE, SALES, OPERATIONS, OWNER</li>
+ *   <li>Roles: SYSTEM_ADMIN, OWNER, OPERATIONS, SALES (khớp schema-postgresql.sql)</li>
  *   <li>Admin user: credentials read from {@code ADMIN_EMAIL} / {@code ADMIN_PASSWORD}
  *       environment variables (defaults to {@code admin@osms.local / ChangeMe123!}).
  *       Password is BCrypt-encoded before storage.</li>
@@ -74,18 +74,17 @@ public class RenderDataSeeder {
     // -------------------------------------------------------------------------
 
     private static final List<Map<String, String>> SEED_ROLES = List.of(
-            Map.of("name", "ADMIN",      "description", "System administrator — full access to all modules"),
-            // SYSTEM_ADMIN alias — tên dùng trong @PreAuthorize("hasRole('SYSTEM_ADMIN')")
-            // Đây là role THEO QUY ƯỚC SPRING SECURITY (tiền tố ROLE_ tự động thêm).
-            // Nếu không có role này trong DB, các API dùng @PreAuthorize sẽ 403 cho
-            // user có role ADMIN. Vì @PreAuthorize check AUTHORITY = "ROLE_" + role_name,
-            // ta cần role DB có tên "SYSTEM_ADMIN".
-            Map.of("name", "SYSTEM_ADMIN", "description", "System administrator alias — full system access (alias for ADMIN)"),
-            Map.of("name", "STAFF",      "description", "Regular staff — orders, customers, products"),
-            Map.of("name", "WAREHOUSE",  "description", "Warehouse keeper — stock, transfers, stocktakes"),
-            Map.of("name", "SALES",      "description", "Sales staff — orders and customer management"),
-            Map.of("name", "OPERATIONS", "description", "Operations staff — inventory and channel sync"),
-            Map.of("name", "OWNER",      "description", "Business owner — full ownership with billing and settings access")
+            // CHỈ CÓ 4 ROLES (khớp với schema-postgresql.sql):
+            //   - SYSTEM_ADMIN: dùng trong @PreAuthorize("hasRole('SYSTEM_ADMIN')")
+            //   - OWNER: business owner full access
+            //   - OPERATIONS: operations staff
+            //   - SALES: sales staff
+            // KHÔNG seed thêm 'ADMIN', 'STAFF', 'WAREHOUSE' vì schema gốc không có.
+            // Nếu cần thêm role mới, sửa CẢ schema-postgresql.sql VÀ seeder.
+            Map.of("name", "SYSTEM_ADMIN", "description", "System administrator — full access to all modules (used by @PreAuthorize)"),
+            Map.of("name", "OWNER",        "description", "Business owner — full ownership with billing and settings access"),
+            Map.of("name", "OPERATIONS",   "description", "Operations staff — inventory and channel sync"),
+            Map.of("name", "SALES",        "description", "Sales staff — orders and customer management")
     );
 
     private static final List<Map<String, String>> SEED_COUNTRIES = List.of(
@@ -201,10 +200,14 @@ public class RenderDataSeeder {
             return;
         }
 
-        // Look up the ADMIN role (must exist — seeded above)
-        Role adminRole = roleRepository.findByName("ADMIN")
+        // Look up the SYSTEM_ADMIN role (must exist — seeded above and in schema-postgresql.sql)
+        // LÝ DO dùng SYSTEM_ADMIN thay vì ADMIN:
+        //   - schema-postgresql.sql chỉ seed 4 roles: SYSTEM_ADMIN, OWNER, OPERATIONS, SALES.
+        //   - @PreAuthorize("hasRole('SYSTEM_ADMIN')") trong code yêu cầu authority ROLE_SYSTEM_ADMIN.
+        //   - User phải có role SYSTEM_ADMIN để truy cập được API admin.
+        Role adminRole = roleRepository.findByName("SYSTEM_ADMIN")
                 .orElseThrow(() -> new IllegalStateException(
-                        "[seeder] ADMIN role not found — ensure seedRoles() runs first"));
+                        "[seeder] SYSTEM_ADMIN role not found — ensure seedRoles() runs first"));
 
         // Build user entity (UserStatus defaults to INACTIVE via @Builder.Default;
         // set explicitly to ACTIVE so the admin can log in immediately after seeding)
@@ -281,8 +284,9 @@ public class RenderDataSeeder {
      * LÝ DO CẦN:
      *   - @PreAuthorize("hasRole('SYSTEM_ADMIN')") check authority = "ROLE_SYSTEM_ADMIN"
      *     (Spring Security tự thêm tiền tố "ROLE_").
-     *   - Database chỉ có role "ADMIN" → @PreAuthorize 403 cho mọi API dùng SYSTEM_ADMIN.
-     *   - Role "SYSTEM_ADMIN" được thêm vào SEED_ROLES ở trên (idempotent nếu đã có).
+     *   - Database CHỈ có role "SYSTEM_ADMIN", "OWNER", "OPERATIONS", "SALES"
+     *     (xem schema-postgresql.sql).
+     *   - User admin phải có role SYSTEM_ADMIN để truy cập API admin.
      *   - Method này gán role SYSTEM_ADMIN cho admin/owner user nếu chưa có.
      *     Idempotent — chạy nhiều lần không lỗi.
      */
