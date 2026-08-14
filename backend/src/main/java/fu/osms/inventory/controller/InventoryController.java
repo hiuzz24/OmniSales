@@ -7,7 +7,9 @@ import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryItemUpdateRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryDetailDTO;
+import fu.osms.inventory.dto.response.InventoryGroupResponse;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
+import fu.osms.inventory.dto.response.InventorySummaryResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionDTO;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
 import fu.osms.inventory.dto.response.AvailableVariantDTO;
@@ -104,6 +106,40 @@ public class InventoryController {
                 .data(inventoryPage)
                 .build();
 
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/groups")
+    public ResponseEntity<ApiResponse<PageResponse<InventoryGroupResponse>>> getInventoryGroups(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) UUID channelId,
+            @RequestParam(defaultValue = "false") boolean localOnly,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) String platforms) {
+        PageResponse<InventoryGroupResponse> inventoryGroups = inventoryService.getInventoryGroupsPage(
+                page, size, sortBy, sortDir, channelId, localOnly, keyword, status, warehouseId,
+                parsePlatforms(platforms), categoryId);
+        ApiResponse<PageResponse<InventoryGroupResponse>> response = ApiResponse.<PageResponse<InventoryGroupResponse>>builder()
+                .success(true)
+                .message("Tải danh sách tồn kho theo nhóm sản phẩm thành công")
+                .data(inventoryGroups)
+                .build();
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<InventorySummaryResponse>> getInventorySummary() {
+        ApiResponse<InventorySummaryResponse> response = ApiResponse.<InventorySummaryResponse>builder()
+                .success(true)
+                .message("Tải thống kê tồn kho thành công")
+                .data(inventoryService.getInventorySummary())
+                .build();
         return ResponseEntity.ok(response);
     }
 
