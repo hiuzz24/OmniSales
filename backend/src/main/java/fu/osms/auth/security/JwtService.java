@@ -2,11 +2,11 @@ package fu.osms.auth.security;
 
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
+import fu.osms.system.service.SystemSettingService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
@@ -23,16 +23,26 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JwtService {
     private final UserRepository userRepository;
+    private final SystemSettingService systemSettingService;
 
     @Value("${app.security.jwt.secret}")
     private String jwtSecret;
 
-    @Getter
     @Value("${JWT_EXPIRATION_MS:86400000}")
-    private long accessTokenExpirationMs;
+    private long defaultAccessTokenExpirationMs;
 
     @Value("${JWT_REFRESH_EXPIRATION_MS:604800000}")
-    private long refreshTokenExpirationMs;
+    private long defaultRefreshTokenExpirationMs;
+
+    public long getAccessTokenExpirationMs() {
+        long defaultMinutes = Math.max(defaultAccessTokenExpirationMs / 60_000L, 1L);
+        return systemSettingService.getLong("access_token_expiration_minutes", defaultMinutes) * 60_000L;
+    }
+
+    public long getRefreshTokenExpirationMs() {
+        long defaultDays = Math.max(defaultRefreshTokenExpirationMs / 86_400_000L, 1L);
+        return systemSettingService.getLong("refresh_token_expiration_days", defaultDays) * 86_400_000L;
+    }
 
     private SecretKey getSigningKey(){
         return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
@@ -51,7 +61,7 @@ public class JwtService {
                 .claim("role", role)
                 .claim("userId", user.getId())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + accessTokenExpirationMs))
+                .expiration(new Date(System.currentTimeMillis() + getAccessTokenExpirationMs()))
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -62,7 +72,7 @@ public class JwtService {
                 .id(UUID.randomUUID().toString())
                 .subject(userDetails.getUsername())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + refreshTokenExpirationMs))
+                .expiration(new Date(System.currentTimeMillis() + getRefreshTokenExpirationMs()))
                 .signWith(getSigningKey())
                 .compact();
     }

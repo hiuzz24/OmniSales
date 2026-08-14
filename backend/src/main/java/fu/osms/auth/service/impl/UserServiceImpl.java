@@ -19,6 +19,7 @@ import fu.osms.auth.service.UserService;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
+import fu.osms.system.service.SystemSettingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.coyote.BadRequestException;
@@ -30,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -43,6 +43,7 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final UserInviteTokenRepository userInviteTokenRepository;
+    private final SystemSettingService systemSettingService;
 
     // ════════════════════════════════════════════════════════════════════════
     // CRUD
@@ -54,11 +55,16 @@ public class UserServiceImpl implements UserService {
         if (request.getPassword() == null || request.getPassword().isBlank()) {
             throw new IllegalArgumentException("Mật khẩu không được để trống khi tạo mới tài khoản");
         }
+        if (!isValidPasswordFormat(request.getPassword())) {
+            throw new IllegalArgumentException("Mật khẩu không đáp ứng chính sách bảo mật hiện tại");
+        }
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Email is already in use: " + request.getEmail());
         }
         User user = userMapper.toEntity(request);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setPasswordChangedAt(java.time.OffsetDateTime.now());
+        user.setPasswordExpired(false);
         user.setStatus(UserStatus.ACTIVE);
         
         User savedUser = userRepository.save(user);
@@ -182,7 +188,12 @@ public class UserServiceImpl implements UserService {
         if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
             throw new IllegalArgumentException("Mật khẩu cũ không đúng");
         }
+        if (!isValidPasswordFormat(newPassword)) {
+            throw new IllegalArgumentException("Mật khẩu mới không đáp ứng chính sách bảo mật hiện tại");
+        }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordChangedAt(java.time.OffsetDateTime.now());
+        user.setPasswordExpired(false);
         userRepository.save(user);
     }
 
@@ -245,17 +256,28 @@ public class UserServiceImpl implements UserService {
         if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
             throw new IllegalArgumentException("Mật khẩu cũ không đúng");
         }
+        if (!isValidPasswordFormat(newPassword)) {
+            throw new IllegalArgumentException("Mật khẩu mới không đáp ứng chính sách bảo mật hiện tại");
+        }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordChangedAt(java.time.OffsetDateTime.now());
+        user.setPasswordExpired(false);
         userRepository.save(user);
         log.info("Password changed for user: {}", email);
     }
     public boolean isValidPasswordFormat(String password) {
-        if (password == null || password.length() < 8) {
+        int minLength = Math.max(systemSettingService.getInteger("password_min_length", 8), 6);
+        if (password == null || password.length() < minLength) {
             return false;
         }
-        String passwordRegex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@#$%^&+=!\\-_]).{8,}$";
-        Pattern pattern = Pattern.compile(passwordRegex);
-        return pattern.matcher(password).matches();
+        if (systemSettingService.getBoolean("password_require_lowercase", true)
+                && password.chars().noneMatch(Character::isLowerCase)) return false;
+        if (systemSettingService.getBoolean("password_require_uppercase", true)
+                && password.chars().noneMatch(Character::isUpperCase)) return false;
+        if (systemSettingService.getBoolean("password_require_number", true)
+                && password.chars().noneMatch(Character::isDigit)) return false;
+        return !systemSettingService.getBoolean("password_require_special_character", true)
+                || password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
     }
     @Override
     public UUID findUserIdByEmail(String email) {

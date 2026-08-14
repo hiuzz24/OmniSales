@@ -23,6 +23,8 @@ public interface SystemLogRepository extends JpaRepository<SystemLog, UUID> {
                                                     OffsetDateTime to,
                                                     Pageable pageable);
 
+    long deleteByLoggedAtBefore(OffsetDateTime loggedAt);
+
     @Query(value = """
         SELECT 
             s.id as id, 

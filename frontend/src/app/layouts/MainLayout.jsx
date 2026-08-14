@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Package, Warehouse, ShoppingCart, Share2,
   Settings, Menu, Bell, Users, ChevronDown,
   PackagePlus, PackageMinus, ArrowRightLeft, ClipboardList,
-  Store, LogOut, Shield, AlertTriangle, RefreshCw, Info,
+  LogOut, Shield, AlertTriangle, RefreshCw, Info,
   ChevronRight, User, Tag, Database, ShoppingBag, RotateCcw, ChartNoAxesCombined,
 } from 'lucide-react';
 import { ROUTES } from '../router/routes';
@@ -12,6 +12,7 @@ import { ROLES } from '../../features/auth/constants/roles';
 import useAuth from '../../features/auth/hooks/useAuth';
 import { toast } from 'react-toastify';
 import useNotifications from '../providers/useNotifications';
+import settingsApi from '../../api/settingsApi';
 
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -67,7 +68,7 @@ const ROLE_HIDDEN = {
   [ROLES.SALES]: ['Sản phẩm', 'Kênh bán hàng', 'Nhân sự'],
   [ROLES.OPERATIONS]: ['Nhân sự'],
   [ROLES.OWNER]: [],
-  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Đơn hàng', 'Kênh bán hàng'],
+  [ROLES.SYSTEM_ADMIN]: ['Sản phẩm', 'Kho hàng', 'Khách hàng', 'Đơn hàng', 'Kênh bán hàng', 'Báo cáo'],
 };
 
 const isVisible = (item, role) => {
@@ -138,6 +139,7 @@ export default function MainLayout() {
   const [open, setOpen] = useState(true);
   const [expanded, setExpanded] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [systemName, setSystemName] = useState('OmniSales');
   const notifRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -152,6 +154,28 @@ export default function MainLayout() {
 
   const role = user?.role;
   const sidebarW = open ? SIDEBAR_OPEN : SIDEBAR_CLOSE;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPreferences = async () => {
+      try {
+        const preferences = await settingsApi.getPublicPreferences();
+        if (!cancelled && preferences?.systemName) {
+          setSystemName(preferences.systemName);
+          localStorage.setItem('omnisales.systemPreferences', JSON.stringify(preferences));
+          window.dispatchEvent(new Event('system-preferences:loaded'));
+        }
+      } catch {
+        // Keep the built-in display name when preferences are unavailable.
+      }
+    };
+    loadPreferences();
+    window.addEventListener('system-preferences:updated', loadPreferences);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('system-preferences:updated', loadPreferences);
+    };
+  }, []);
 
   // Close notif on outside click
   useEffect(() => {
@@ -280,7 +304,7 @@ export default function MainLayout() {
           padding: open ? '0 16px' : '0',
           borderBottom: '1px solid #e2e8f0', flexShrink: 0,
         }}>
-          {open && <span style={{ fontWeight: 700, fontSize: 20, color: '#0f172a' }}>OmniSales</span>}
+          {open && <span style={{ fontWeight: 700, fontSize: 20, color: '#0f172a' }}>{systemName}</span>}
           <button
             onClick={() => setOpen((v) => !v)}
             style={{
@@ -565,28 +589,13 @@ function UserDropdown({ user, role, onLogout }) {
             <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{user?.email}</div>
           </div>
 
-          {[
-            { label: 'Hồ sơ', icon: User,     href: ROUTES.PROFILE },
-            { label: 'Cài đặt', icon: Settings, href: '/settings' },
-          ].map((m) => (
-            <Link key={m.label} to={m.href} onClick={() => setShow(false)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#374151', textDecoration: 'none' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            >
-              <m.icon size={15} /> {m.label}
-            </Link>
-          ))}
-
-          {role === ROLES.SYSTEM_ADMIN && (
-            <Link to="/admin" onClick={() => setShow(false)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#374151', textDecoration: 'none', borderTop: '1px solid #f1f5f9' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            >
-              <Shield size={15} /> Admin Panel
-            </Link>
-          )}
+          <Link to={ROUTES.PROFILE} onClick={() => setShow(false)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 16px', fontSize: 13, color: '#374151', textDecoration: 'none' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <User size={15} /> Hồ sơ
+          </Link>
 
           <div style={{ borderTop: '1px solid #f1f5f9' }}>
             <button onClick={onLogout}

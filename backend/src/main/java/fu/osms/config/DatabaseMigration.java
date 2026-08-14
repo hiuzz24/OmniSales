@@ -112,6 +112,18 @@ public class DatabaseMigration {
 
         try {
             jdbcTemplate.execute("""
+                        ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+                        UPDATE users
+                        SET password_changed_at = COALESCE(updated_at, created_at, NOW())
+                        WHERE password_changed_at IS NULL;
+                    """);
+            log.info("Migration: added and initialized users.password_changed_at");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for users password_changed_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
                         ALTER TABLE stock_transfers ADD COLUMN IF NOT EXISTS note TEXT
                     """);
             log.info("Migration: added note column to stock_transfers table");
@@ -188,10 +200,37 @@ public class DatabaseMigration {
                         ('store.address', '123 Nguyễn Trãi, Thanh Xuân, Hà Nội', 'Địa chỉ trụ sở chính', 'STORE', NOW()),
                         ('inventory.low_stock_threshold', '10', 'Ngưỡng cảnh báo tồn kho tối thiểu', 'INVENTORY', NOW()),
                         ('inventory.allow_negative_stock', 'false', 'Cho phép xuất kho khi tồn kho bằng 0', 'INVENTORY', NOW()),
-                        ('inventory.reserved_timeout_minutes', '30', 'Thời gian tự động giải phóng hàng giữ (phút)', 'INVENTORY', NOW())
+                        ('inventory.reserved_timeout_minutes', '30', 'Thời gian tự động giải phóng hàng giữ (phút)', 'INVENTORY', NOW()),
+                        ('notification_order_enabled', 'true', 'Gửi cảnh báo về đơn hàng', 'NOTIFICATION', NOW()),
+                        ('notification_return_enabled', 'true', 'Gửi cảnh báo về yêu cầu trả hàng', 'NOTIFICATION', NOW()),
+                        ('notification_low_stock_enabled', 'true', 'Gửi cảnh báo khi tồn kho thấp hoặc hết hàng', 'NOTIFICATION', NOW()),
+                        ('notification_sync_failure_enabled', 'true', 'Gửi cảnh báo khi đồng bộ dữ liệu thất bại', 'NOTIFICATION', NOW()),
+                        ('notification_channel_disconnected_enabled', 'true', 'Gửi cảnh báo khi kênh bán hàng mất kết nối', 'NOTIFICATION', NOW()),
+                        ('notification_email_enabled', 'false', 'Gửi thêm thông báo qua email', 'NOTIFICATION', NOW()),
+                        ('notification_retention_days', '90', 'Số ngày lưu thông báo trước khi tự động xóa', 'NOTIFICATION', NOW()),
+                        ('account_lock_minutes', '5', 'Thời gian khóa tài khoản sau khi đăng nhập sai (phút)', 'SECURITY', NOW()),
+                        ('access_token_expiration_minutes', '1440', 'Thời gian hiệu lực access token (phút)', 'SECURITY', NOW()),
+                        ('refresh_token_expiration_days', '7', 'Thời gian hiệu lực refresh token (ngày)', 'SECURITY', NOW()),
+                        ('password_min_length', '8', 'Độ dài mật khẩu tối thiểu', 'SECURITY', NOW()),
+                        ('password_require_uppercase', 'true', 'Yêu cầu mật khẩu có chữ hoa', 'SECURITY', NOW()),
+                        ('password_require_lowercase', 'true', 'Yêu cầu mật khẩu có chữ thường', 'SECURITY', NOW()),
+                        ('password_require_number', 'true', 'Yêu cầu mật khẩu có chữ số', 'SECURITY', NOW()),
+                        ('password_require_special_character', 'true', 'Yêu cầu mật khẩu có ký tự đặc biệt', 'SECURITY', NOW()),
+                        ('password_expiration_days', '90', 'Số ngày mật khẩu có hiệu lực; nhập 0 để không hết hạn', 'SECURITY', NOW()),
+                        ('system_name', 'OmniSales', 'Tên hiển thị của hệ thống', 'SYSTEM', NOW()),
+                        ('support_email', 'contact@omnisales.vn', 'Email hỗ trợ', 'SYSTEM', NOW()),
+                        ('support_phone', '0987654321', 'Số điện thoại hỗ trợ', 'SYSTEM', NOW()),
+                        ('business_address', '123 Nguyễn Trãi, Thanh Xuân, Hà Nội', 'Địa chỉ doanh nghiệp', 'SYSTEM', NOW()),
+                        ('tax_code', '0101234567', 'Mã số thuế', 'SYSTEM', NOW()),
+                        ('date_format', 'dd/MM/yyyy', 'Định dạng ngày tháng mặc định', 'SYSTEM', NOW()),
+                        ('default_page_size', '20', 'Số bản ghi mặc định trên mỗi trang', 'SYSTEM', NOW()),
+                        ('audit_log_retention_days', '180', 'Số ngày lưu nhật ký hệ thống', 'SYSTEM', NOW()),
+                        ('maintenance_mode', 'false', 'Bật chế độ bảo trì hệ thống', 'SYSTEM', NOW()),
+                        ('maintenance_message', 'Hệ thống đang bảo trì. Vui lòng thử lại sau.', 'Thông báo hiển thị khi bảo trì', 'SYSTEM', NOW()),
+                        ('backup_schedule_enabled', 'true', 'Bật sao lưu dữ liệu tự động hằng ngày', 'SYSTEM', NOW())
                         ON CONFLICT (key) DO NOTHING;
                     """);
-            log.info("Migration: seeded default store and inventory system settings");
+            log.info("Migration: seeded default store, inventory, and notification system settings");
         } catch (Exception e) {
             log.warn("Migration skipped or already applied for system_settings seeding: {}", e.getMessage());
         }
