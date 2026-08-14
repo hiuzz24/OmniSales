@@ -36,6 +36,11 @@ async function getAuthHeaders(request) {
 /**
  * Create a test order via API
  * Returns the created order object with id
+ *
+ * Backend no longer exposes a public POST /api/orders endpoint after the
+ * manual-order refactor (it returns 405).  When the POST returns 405
+ * we fall back to a direct SQL insert so that downstream tests which
+ * need a real order (cancel, payment-status, etc.) can still run.
  */
 async function createTestOrder(request, token, overrides = {}) {
   const timestamp = Date.now();
@@ -82,12 +87,115 @@ async function createTestOrder(request, token, overrides = {}) {
     data: defaultOrder,
   });
 
-  if (response.status() !== 201 && response.status() !== 200) {
-    throw new Error(`Create order failed with status ${response.status()}`);
+  if (response.status() === 201 || response.status() === 200) {
+    const body = await response.json();
+    return body.data;
   }
 
-  const body = await response.json();
-  return body.data;
+  // 405 = backend no longer exposes POST /api/orders (manual refactor).
+  // Fall back to direct SQL insert so consumers still get an order.
+  if (response.status() === 405) {
+    return await createTestOrderViaSql(overrides);
+  }
+
+  throw new Error(`Create order failed with status ${response.status()}`);
+}
+
+async function createTestOrderViaSql(overrides = {}) {
+  const { Client } = require('pg');
+  const client = new Client({
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT) || 5432,
+    user: process.env.DB_USERNAME || 'postgres',
+    password: process.env.DB_PASSWORD || '123',
+    database: process.env.DB_NAME || 'OSMS',
+  });
+  await client.connect();
+  try {
+    const ts = Date.now();
+    const externalOrderId = overrides.externalOrderId
+      || `TEST-ORD-${ts}-${Math.random().toString(36).slice(2, 8)}`;
+    const note = overrides.note || `Test order note ${ts}`;
+    const subtotal = overrides.subtotal !== undefined ? overrides.subtotal : 150000;
+    const discountAmount = overrides.discountAmount !== undefined ? overrides.discountAmount : 0;
+    const shippingFee = overrides.shippingFee !== undefined ? overrides.shippingFee : 0;
+    const status = overrides.status || 'PENDING';
+    const paymentStatus = overrides.paymentStatus || 'UNPAID';
+    const platform = overrides.platform || 'MANUAL';
+    const channelName = overrides.channelName || `Test Channel ${ts}`;
+    const buyerName = overrides.buyerName || 'Test Customer';
+    const buyerPhone = overrides.buyerPhone || '0912345678';
+    const shippingAddress = overrides.shippingAddress || {
+      fullName: buyerName, phone: buyerPhone, address: '123 Test Street',
+      city: 'Ho Chi Minh City', district: 'District 1', ward: 'Ward 1',
+    };
+
+    const order = await client.query(
+      `INSERT INTO orders
+        (id, customer_id, channel_id, platform, channel_name, external_order_id,
+         status, payment_status, buyer_name, buyer_phone, shipping_address,
+         subtotal, discount_amount, shipping_fee, currency, note,
+         created_at, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5,
+               $6::order_status, $7, $8, $9, $10::jsonb,
+               $11::numeric, $12::numeric, $13::numeric, 'VND', $14,
+               NOW(), NOW())
+       RETURNING id, external_order_id, status, payment_status, subtotal,
+                 discount_amount, shipping_fee, buyer_name, buyer_phone, note`,
+      [
+        overrides.customerId || null,
+        overrides.channelId || null,
+        platform,
+        channelName,
+        externalOrderId,
+        status,
+        paymentStatus,
+        buyerName,
+        buyerPhone,
+        JSON.stringify(shippingAddress),
+        String(subtotal),
+        String(discountAmount),
+        String(shippingFee),
+        note,
+      ]
+    );
+
+    const insertedOrder = order.rows[0];
+
+    const items = overrides.items || [
+      {
+        sku: externalOrderId,
+        name: `Test Order Item ${ts}`,
+        quantity: 1,
+        unitPrice: subtotal,
+        discountAmount: 0,
+      },
+    ];
+
+    for (const it of items) {
+      await client.query(
+        `INSERT INTO order_items
+          (id, order_id, sku, name, quantity, unit_price, discount_amount)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)`,
+        [insertedOrder.id, it.sku, it.name, it.quantity, it.unitPrice, it.discountAmount || 0]
+      );
+    }
+
+    return {
+      id: insertedOrder.id,
+      externalOrderId: insertedOrder.external_order_id,
+      status: insertedOrder.status,
+      paymentStatus: insertedOrder.payment_status,
+      subtotal: Number(insertedOrder.subtotal),
+      discountAmount: Number(insertedOrder.discount_amount),
+      shippingFee: Number(insertedOrder.shipping_fee),
+      buyerName: insertedOrder.buyer_name,
+      buyerPhone: insertedOrder.buyer_phone,
+      note: insertedOrder.note,
+    };
+  } finally {
+    await client.end();
+  }
 }
 
 /**

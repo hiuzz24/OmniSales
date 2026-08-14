@@ -113,7 +113,9 @@ test.describe('Stock Transfer API Tests', () => {
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(Array.isArray(body.data)).toBe(true);
+    // Backend returns paginated response with content array.
+    const items = Array.isArray(body.data) ? body.data : body.data?.content;
+    expect(Array.isArray(items)).toBe(true);
   });
 
   test('TR-8 - GET /api/transfer/available-variants - Missing warehouseId returns 400/500', async ({ request, managerHeaders }) => {
