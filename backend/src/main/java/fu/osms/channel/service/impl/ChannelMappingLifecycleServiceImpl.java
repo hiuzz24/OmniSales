@@ -21,6 +21,7 @@ public class ChannelMappingLifecycleServiceImpl implements ChannelMappingLifecyc
     private final ChannelProductRepository channelProductRepository;
 
     @Override
+    /** Lưu trữ catalog mapping đang hoạt động và giữ metadata cần cho kết nối lại. */
     public int archiveForDisconnect(UUID channelId) {
         List<ChannelProduct> activeMappings = channelProductRepository
                 .findByChannelIdAndMappingState(channelId, "ACTIVE");
@@ -35,6 +36,7 @@ public class ChannelMappingLifecycleServiceImpl implements ChannelMappingLifecyc
     }
 
     @Override
+    /** Chỉ khôi phục mapping từng được lưu trữ bởi luồng ngắt kết nối. */
     public MappingRestoreResult restoreAfterReconnect(UUID channelId) {
         List<ChannelProduct> archived = channelProductRepository
                 .findByChannelIdAndMappingState(channelId, "ARCHIVED");

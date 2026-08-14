@@ -5,7 +5,6 @@ import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.order.dto.request.CancelOrderRequest;
-import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderShippingLabelResponse;
@@ -14,10 +13,8 @@ import fu.osms.order.dto.response.UncustomerdCountResponse;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.service.OrderService;
 import fu.osms.order.service.OrderShippingLabelService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -37,14 +34,7 @@ public class OrderController {
     private final OrderShippingLabelService orderShippingLabelService;
     private final ChannelService channelService;
 
-    @PostMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
-    public ResponseEntity<ApiResponse<OrderResponse>> create(@Valid @RequestBody OrderRequest request) {
-        OrderResponse response = orderService.create(request);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Tạo đơn hàng thành công", response));
-    }
-
+    /** Trả về một đơn đã import cùng các dòng sản phẩm cho màn chi tiết. */
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderResponse>> getById(@PathVariable UUID id) {
@@ -52,6 +42,7 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    /** Tìm đơn đã import theo platform, trạng thái, khách hàng, từ khóa và ngày. */
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getOrders(
@@ -72,6 +63,7 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
+    /** Tải lịch sử audit của một đơn hàng. */
     @GetMapping("/{id}/history")
     public ResponseEntity<ApiResponse<PageResponse<AuditLogResponse>>> getOrderHistory(
             @PathVariable UUID id,
@@ -94,6 +86,7 @@ public class OrderController {
                 UncustomerdCountResponse.builder().count(count).build()));
     }
 
+    /** Áp dụng chuyển trạng thái hợp lệ và đẩy lên platform khi cần. */
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<OrderResponse>> updateStatus(@PathVariable UUID id,
@@ -109,14 +102,7 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái thanh toán thành công", response));
     }
 
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
-    public ResponseEntity<ApiResponse<OrderResponse>> update(@PathVariable UUID id,
-                                                            @Valid @RequestBody OrderRequest request) {
-        OrderResponse response = orderService.update(id, request);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật đơn hàng thành công", response));
-    }
-
+    /** Hủy đơn thông qua luồng hủy riêng của từng platform. */
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id,
@@ -130,12 +116,14 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công", null));
     }
 
+    /** Lấy danh sách lý do hủy được platform hỗ trợ cho đơn đã chọn. */
     @GetMapping("/{id}/cancel-reasons")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<List<CancelReasonResponse>>> getCancelReasons(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(orderService.getCancelReasons(id)));
     }
 
+    /** Yêu cầu phiếu vận chuyển chính thức từ sàn mà không đổi trạng thái đơn. */
     @PostMapping("/{id}/shipping-label")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderShippingLabelResponse>> createShippingLabel(@PathVariable UUID id) {

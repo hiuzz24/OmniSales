@@ -14,6 +14,7 @@ import TabVariants from '../components/TabVariants';
 import { ROLES } from '../../auth/constants/roles';
 import useAuth from '../../auth/hooks/useAuth';
 
+/** Hiển thị catalog, tồn kho và trạng thái đồng bộ theo từng kênh của sản phẩm. */
 const ProductDetailPage = () => {
   const { user } = useAuth();
   const canManageProducts = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
@@ -40,6 +41,7 @@ const ProductDetailPage = () => {
     fetchProduct();
   }, [id]);
 
+  // Tải lại chi tiết sản phẩm và trạng thái sẵn sàng của từng kênh sau cập nhật hoặc đồng bộ.
   const fetchProduct = async () => {
     try {
       setLoading(true);
@@ -54,6 +56,7 @@ const ProductDetailPage = () => {
     }
   };
 
+  // Xóa mềm sản phẩm OSMS sau khi người dùng xác nhận.
   const handleDelete = async () => {
     try {
       setLoading(true);
@@ -66,6 +69,7 @@ const ProductDetailPage = () => {
     }
   };
 
+  // Chỉ đưa yêu cầu đồng bộ vào hàng đợi khi mọi kênh đã đủ field bắt buộc.
   const handleSync = async () => {
     if (syncAllDisabled) {
       toast.warning(syncAllDisabledReason);

@@ -22,6 +22,7 @@ public class ChannelReconnectResolverImpl implements ChannelReconnectResolver {
     private final ShopifyShopDomainNormalizer shopDomainNormalizer;
 
     @Override
+    /** Tìm duy nhất kênh Shopify có thể kết nối lại theo shop handle đã chuẩn hóa. */
     public Channel resolveShopify(String shopHandle) {
         String normalized = shopDomainNormalizer.normalizeHandle(shopHandle);
         List<Channel> candidates = channelRepository.findShopifyCandidatesByHandle(normalized).stream()
@@ -32,6 +33,7 @@ public class ChannelReconnectResolverImpl implements ChannelReconnectResolver {
     }
 
     @Override
+    /** Tìm kênh Lazada theo định danh người bán ổn định thay vì chỉ dùng tên hiển thị. */
     public Channel resolveLazada(String accountId, String displayName) {
         List<Channel> candidates = channelRepository.findLazadaCandidatesByAccountId(accountId);
         return resolve(PlatformType.LAZADA, accountId, candidates,
@@ -39,6 +41,7 @@ public class ChannelReconnectResolverImpl implements ChannelReconnectResolver {
     }
 
     @Override
+    /** Tìm kênh TikTok bằng định danh cửa hàng hoặc tài khoản đáng tin cậy nhất. */
     public Channel resolveTikTok(String shopId, String openId, String accountId, String displayName) {
         List<Channel> candidates = channelRepository.findTikTokCandidatesByIdentity(
                 blankToEmpty(shopId), blankToEmpty(openId), blankToEmpty(accountId));

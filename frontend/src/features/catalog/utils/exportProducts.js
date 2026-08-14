@@ -6,6 +6,7 @@ const STATUS_LABELS = {
   DRAFT: 'Nháp',
 };
 
+/** Tính một mức giá hoặc khoảng giá của các Variant. */
 const getPriceRange = (variants) => {
   if (!variants || variants.length === 0) return 0;
   const prices = variants.map((v) => v.price).filter((p) => p != null);
@@ -15,11 +16,13 @@ const getPriceRange = (variants) => {
   return min === max ? min : `${min} - ${max}`;
 };
 
+/** Cộng tổng tồn có thể bán của các Variant. */
 const getTotalStock = (variants) => {
   if (!variants) return 0;
   return variants.reduce((sum, v) => sum + (v.availableQuantity || v.quantityOnHand || 0), 0);
 };
 
+/** Chọn ảnh đại diện ưu tiên từ Product rồi mới fallback sang Variant. */
 const getPrimaryImage = (product) => {
   return (
     product.images?.find((img) => img.isPrimary)?.url ||
@@ -29,6 +32,7 @@ const getPrimaryImage = (product) => {
   );
 };
 
+/** Tạo tên hiển thị Variant từ name hoặc các option. */
 const formatVariantName = (variant) => {
   if (!variant) return '';
   if (variant.name) return variant.name;
@@ -220,6 +224,7 @@ const PRICE_VARIANT_STYLE = {
   border: allBorders,
 };
 
+/** Chuyển chỉ số cột thành ký hiệu cột Excel. */
 const colLetter = (index) => {
   let s = '';
   let n = index;
@@ -230,12 +235,14 @@ const colLetter = (index) => {
   return s;
 };
 
+/** Gắn style cho một ô trong worksheet. */
 const setCellStyle = (worksheet, ref, style) => {
   const cell = worksheet[ref] || { t: 's', v: '' };
   cell.s = { ...(cell.s || {}), ...style };
   worksheet[ref] = cell;
 };
 
+/** Áp dụng style cho toàn bộ một hàng Excel. */
 const applyRowStyle = (worksheet, rowIndex, style, numCols) => {
   for (let c = 0; c < numCols; c += 1) {
     setCellStyle(worksheet, `${colLetter(c)}${rowIndex + 1}`, style);
@@ -244,6 +251,7 @@ const applyRowStyle = (worksheet, rowIndex, style, numCols) => {
 
 const PRICE_KEYS = new Set(['price', 'costPrice', 'stock']);
 
+/** Xây dữ liệu hai chiều gồm dòng Product và các dòng Variant liên quan. */
 const buildAoa = (products, selectedColumns) => {
   const header = selectedColumns.map((c) => c.label);
   const aoa = [header];
@@ -285,6 +293,7 @@ const buildAoa = (products, selectedColumns) => {
   return { aoa, rowMeta, cellType };
 };
 
+/** Xuất Product và Variant ra file Excel theo các cột người dùng chọn. */
 export const exportProductsToExcel = (
   products,
   selectedColumnKeys = null,

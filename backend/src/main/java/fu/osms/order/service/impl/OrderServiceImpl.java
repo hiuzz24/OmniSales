@@ -6,26 +6,18 @@ import fu.osms.audit.mapper.AuditLogMapper;
 import fu.osms.audit.repository.AuditLogRepository;
 import fu.osms.audit.service.AuditService;
 import fu.osms.auth.entity.User;
-import fu.osms.channel.entity.Channel;
-import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
-import fu.osms.customer.entity.Customer;
-import fu.osms.customer.repository.CustomerRepository;
-import fu.osms.customer.service.CustomerService;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.repository.InventoryItemRepository;
-import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.inventory.service.OrderStockDeliveryReadinessService;
 import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.order.dto.request.CancelOrderRequest;
-import fu.osms.order.dto.request.OrderItemRequest;
-import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderItemResponse;
 import fu.osms.order.dto.response.OrderResponse;
@@ -53,13 +45,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
-import fu.osms.order.event.OrderCreatedEvent;
 import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderPaidEvent;
 import fu.osms.order.event.OrderStatusChangedEvent;
 
 import fu.osms.common.utils.SecurityUtils;
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -75,9 +65,6 @@ public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
-    private final ChannelRepository channelRepository;
-    private final CustomerRepository customerRepository;
-    private final CustomerService customerService;
     private final AuditLogRepository auditLogRepository;
     private final AuditService auditService;
     private final OrderMapper orderMapper;
@@ -85,68 +72,13 @@ public class OrderServiceImpl implements OrderService {
     private final AuditLogMapper auditLogMapper;
     private final ProductVariantRepository productVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
-    private final InventoryAlertService inventoryAlertService;
     private final OrderStatusPushService orderStatusPushService;
     private final OrderStockDeliveryReadinessService orderStockDeliveryReadinessService;
     private final ApplicationEventPublisher eventPublisher;
     private final PlatformOrderInventoryService platformOrderInventoryService;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
-    @Override
-    @Transactional
-    public OrderResponse create(OrderRequest request) {
-        Order order = orderMapper.toEntity(request);
-
-        if (request.getChannelId() != null) {
-            Channel channel = channelRepository.findById(request.getChannelId())
-                    .orElseThrow(() -> new EntityNotFoundException("Channel not found: " + request.getChannelId()));
-            order.setChannel(channel);
-}
-        if (request.getCustomerId() != null) {
-            Customer customer = customerRepository.findById(request.getCustomerId())
-                    .orElseThrow(() -> new EntityNotFoundException("Customer not found: " + request.getCustomerId()));
-            order.setCustomer(customer);
-        } else if (order.getBuyerName() != null || order.getBuyerPhone() != null) {
-            Customer customer = customerService.findOrCreateFromBuyer(order.getBuyerName(), order.getBuyerPhone());
-            order.setCustomer(customer);
-        }
-
-        order.setStatusChangedAt(OffsetDateTime.now());
-        Order savedOrder = orderRepository.save(order);
-
-        Set<UUID> changedVariantIds = new HashSet<>();
-        for (OrderItemRequest itemReq : request.getItems()) {
-            ProductVariant variant = manualInventoryService().resolveVariant(itemReq);
-            OrderItem item = OrderItem.builder()
-                    .order(savedOrder)
-                    .variant(variant)
-                    .sku(itemReq.getSku())
-                    .name(itemReq.getName())
-                    .quantity(itemReq.getQuantity())
-                    .unitPrice(itemReq.getUnitPrice())
-                    .discountAmount(itemReq.getDiscountAmount() != null ? itemReq.getDiscountAmount() : BigDecimal.ZERO)
-                    .build();
-            orderItemRepository.save(item);
-
-            if (variant != null) {
-                if (manualInventoryService().reserve(variant, itemReq.getQuantity())) {
-                    changedVariantIds.add(variant.getId());
-                }
-            }
-        }
-        manualInventoryService().propagate(changedVariantIds);
-
-        var userOpt = SecurityUtils.getCurrentUser();
-        UUID actorId = userOpt.map(User::getId).orElse(null);
-        String actorEmail = userOpt.map(User::getEmail).orElse("system");
-        auditService.record(actorId, actorEmail, "CREATE", "ORDER", savedOrder.getId(),
-                savedOrder.getId().toString(), java.util.Map.of("status", savedOrder.getStatus().name()));
-
-        eventPublisher.publishEvent(new OrderCreatedEvent(savedOrder));
-
-        return responseAssembler().withItems(savedOrder);
-    }
-
+    /** Tải đơn và gom các dòng sản phẩm vào response chi tiết. */
     @Override
     @Transactional(readOnly = true)
     public OrderResponse getById(UUID id) {
@@ -155,6 +87,7 @@ public class OrderServiceImpl implements OrderService {
         return responseAssembler().withItems(order);
     }
 
+    /** Liệt kê đơn đã import bằng phân trang tại database. */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getAll(int page, int size) {
@@ -163,6 +96,7 @@ public class OrderServiceImpl implements OrderService {
         return responseAssembler().page(orderPage);
     }
 
+    /** Liệt kê đơn theo một trạng thái OSMS bằng phân trang tại database. */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getByStatus(OrderStatus status, int page, int size) {
@@ -171,6 +105,7 @@ public class OrderServiceImpl implements OrderService {
         return responseAssembler().page(orderPage);
     }
 
+    /** Kiểm tra, đẩy và lưu chuyển trạng thái đơn, sau đó phát domain event. */
     @Override
     @Transactional
     public OrderResponse updateStatus(UUID id, OrderStatus status) {
@@ -227,6 +162,7 @@ public class OrderServiceImpl implements OrderService {
         return responseAssembler().withItems(savedOrder);
     }
 
+    /** Cập nhật trạng thái thanh toán nội bộ và dành REFUNDED cho luồng trả hàng. */
     @Override
     @Transactional
     public OrderResponse updatePaymentStatus(UUID id, PaymentStatus paymentStatus) {
@@ -253,37 +189,7 @@ public class OrderServiceImpl implements OrderService {
         return responseAssembler().withItems(savedOrder);
     }
 
-    @Override
-    @Transactional
-    public OrderResponse update(UUID id, OrderRequest request) {
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
-
-        orderMapper.updateEntityFromRequest(request, order);
-
-        if (request.getChannelId() != null) {
-            Channel channel = channelRepository.findById(request.getChannelId())
-                    .orElseThrow(() -> new EntityNotFoundException("Channel not found: " + request.getChannelId()));
-            order.setChannel(channel);
-        }
-
-        if (request.getCustomerId() != null) {
-            Customer customer = customerRepository.findById(request.getCustomerId())
-                    .orElseThrow(() -> new EntityNotFoundException("Customer not found: " + request.getCustomerId()));
-            order.setCustomer(customer);
-        }
-
-        Order savedOrder = orderRepository.save(order);
-
-        var userOpt = SecurityUtils.getCurrentUser();
-        UUID actorId = userOpt.map(User::getId).orElse(null);
-        String actorEmail = userOpt.map(User::getEmail).orElse("system");
-        auditService.record(actorId, actorEmail, "UPDATE", "ORDER", id,
-                savedOrder.getId().toString(), null);
-
-        return responseAssembler().withItems(savedOrder);
-    }
-
+    /** Gọi hủy trên platform và chỉ giải phóng reservation sau khi hủy được xác nhận. */
     @Override
     @Transactional
     public void cancel(UUID id, CancelOrderRequest request) {
@@ -391,6 +297,7 @@ public class OrderServiceImpl implements OrderService {
                 savedOrder.getId(), oldStatus, savedOrder.getStatus()));
     }
 
+    /** Chuyển việc lấy lý do hủy cho adapter của platform chứa đơn. */
     @Override
     @Transactional(readOnly = true)
     public List<CancelReasonResponse> getCancelReasons(UUID id) {
@@ -410,6 +317,7 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
+    /** Tạo trang đơn hàng đã lọc cho màn danh sách. */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getFiltered(OrderStatus status, UUID channelId, String keyword,
@@ -421,6 +329,7 @@ public class OrderServiceImpl implements OrderService {
         return responseAssembler().page(orderPage);
     }
 
+    /** Trả về các số liệu tổng hợp trên dashboard đơn hàng. */
     @Override
     @Transactional(readOnly = true)
     public OrderStats getStats() {
@@ -436,6 +345,7 @@ public class OrderServiceImpl implements OrderService {
         );
     }
 
+    /** Trả về audit log của đơn theo thời gian mới nhất trước. */
     @Override
     @Transactional(readOnly = true)
     public long countOrdersWithoutCustomer() {
@@ -467,7 +377,6 @@ public class OrderServiceImpl implements OrderService {
         return new ManualOrderInventoryService(
                 productVariantRepository,
                 inventoryItemRepository,
-                inventoryAlertService,
                 orderItemRepository,
                 marketplaceInventoryPropagationService
         );

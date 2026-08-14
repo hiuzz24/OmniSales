@@ -14,6 +14,7 @@ public class OrderStockDeliveryLifecycleHandler {
 
     private final OrderStockDeliveryService orderStockDeliveryService;
 
+    /** Điều phối message đơn đã giao hoặc đã hủy tới service phiếu xuất idempotent. */
     public void handle(OrderStockDeliveryLifecycleMessage message) {
         log.info("[OrderStockDeliveryLifecycle] actionKey={} messageId={} orderId={} status={}",
                 message.actionKey(), message.messageId(), message.orderId(), message.status());

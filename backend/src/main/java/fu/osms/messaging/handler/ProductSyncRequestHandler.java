@@ -29,6 +29,7 @@ public class ProductSyncRequestHandler {
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
 
+    /** Xử lý một yêu cầu đồng bộ từ UI và kết thúc SyncLog cha đúng một lần. */
     public void handle(ProductSyncMessage message) {
         if (message.requestLogId() == null) {
             handleLegacy(message);
@@ -66,6 +67,7 @@ public class ProductSyncRequestHandler {
         notifyOutcome(request);
     }
 
+    /** Tạo một thông báo không trùng cho yêu cầu cha đã kết thúc. */
     public void notifyOutcome(SyncLog request) {
         if (request == null || request.getId() == null || request.getTriggeredBy() == null
                 || (request.getStatus() != SyncStatus.SYNCED && request.getStatus() != SyncStatus.FAILED)) {

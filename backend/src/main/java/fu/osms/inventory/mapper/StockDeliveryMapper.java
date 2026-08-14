@@ -69,16 +69,17 @@ public class StockDeliveryMapper {
             return null;
         }
 
+        boolean gift = Boolean.TRUE.equals(item.getIsGift());
         StockDeliveryItemResponse.StockDeliveryItemResponseBuilder builder = StockDeliveryItemResponse.builder()
                 .id(item.getId())
                 .productVariantId(item.getProductVariant().getId())
                 .sku(item.getProductVariant().getSku())
                 .productVariantName(item.getProductVariant().getName())
                 .quantity(item.getQuantity())
-                .unitCost(item.getUnitCost())
-                .totalCost(resolveItemTotalCost(item))
+                .unitCost(gift ? BigDecimal.ZERO : item.getUnitCost())
+                .totalCost(gift ? BigDecimal.ZERO : resolveItemTotalCost(item))
                 .note(item.getNotes())
-                .isGift(Boolean.TRUE.equals(item.getIsGift()));
+                .isGift(gift);
 
         if (item.getProductVariant().getProduct() != null) {
             builder.productName(item.getProductVariant().getProduct().getName());

@@ -38,6 +38,7 @@ public class ProductController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Tạo sản phẩm OSMS cùng các biến thể và ảnh nội bộ. */
     public ResponseEntity<ApiResponse<ProductResponse>> create(@Valid @RequestBody ProductRequest request) {
         ProductResponse productResponse = productService.create(request);
         return ResponseEntity.ok(ApiResponse.success("Tạo sản phẩm thành công",productResponse));
@@ -45,6 +46,7 @@ public class ProductController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
+    /** Trả về đầy đủ chi tiết sản phẩm cho màn xem và chỉnh sửa. */
     public ResponseEntity<ApiResponse<ProductResponse>> getById(@PathVariable UUID id) {
         ProductResponse response = productService.getById(id);
         return ResponseEntity.ok(ApiResponse.success(response));
@@ -52,6 +54,7 @@ public class ProductController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
+    /** Tìm sản phẩm theo trạng thái, platform và bộ lọc phân trang. */
     public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getProducts(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) ProductStatus status,
@@ -88,6 +91,7 @@ public class ProductController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Cập nhật catalog nội bộ nhưng giữ nguyên dữ liệu mapping do kênh quản lý. */
     public ResponseEntity<ApiResponse<ProductResponse>> update(@PathVariable UUID id,
                                                                @Valid @RequestBody ProductRequest request) {
         ProductResponse response = productService.update(id, request);
@@ -96,6 +100,7 @@ public class ProductController {
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Thay đổi trạng thái cho phép bán và đồng bộ của sản phẩm. */
     public ResponseEntity<ApiResponse<ProductResponse>> updateStatus(@PathVariable UUID id,
                                                                      @RequestParam ProductStatus status) {
         throw new UnsupportedOperationException("Chưa code");
@@ -103,6 +108,7 @@ public class ProductController {
 
     @DeleteMapping("/{id}/delete")
     @PreAuthorize("hasRole('OWNER')")
+    /** Xóa mềm sản phẩm để tham chiếu từ đơn hàng cũ vẫn hợp lệ. */
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         productService.delete(id);
         return ResponseEntity.ok(ApiResponse.success(null));
@@ -110,6 +116,7 @@ public class ProductController {
 
     @PostMapping("/{productId}/sync")
     @PreAuthorize("hasRole('OWNER')")
+    /** Đồng bộ một sản phẩm lên tất cả kênh đã cấu hình theo luồng đồng bộ. */
     public ResponseEntity<ApiResponse<SyncResult>> syncProduct(@PathVariable UUID productId) {
         SyncResult result = productService.syncProductToAllChannels(productId);
         return ResponseEntity.ok(ApiResponse.success("Sync triggered", result));
@@ -117,6 +124,7 @@ public class ProductController {
 
     @PostMapping("/{productId}/channels/{channelId}/sync")
     @PreAuthorize("hasRole('OWNER')")
+    /** Chỉ đồng bộ một sản phẩm lên kênh được chọn. */
     public ResponseEntity<ApiResponse<SyncResult>> syncProductToChannel(
             @PathVariable UUID productId,
             @PathVariable UUID channelId) {
@@ -126,6 +134,7 @@ public class ProductController {
 
     @PostMapping("/{productId}/sync/async")
     @PreAuthorize("hasRole('OWNER')")
+    /** Đưa yêu cầu đồng bộ tất cả kênh vào hàng đợi và trả về ID theo dõi. */
     public ResponseEntity<ApiResponse<ProductSyncQueuedResponse>> syncProductToAllChannelsAsync(
             @PathVariable UUID productId) {
         ProductSyncQueuedResponse response = productService.syncProductToAllChannelsAsync(productId);
@@ -134,6 +143,7 @@ public class ProductController {
 
     @PostMapping("/{productId}/channels/{channelId}/sync/async")
     @PreAuthorize("hasRole('OWNER')")
+    /** Đưa yêu cầu đồng bộ một kênh vào hàng đợi và trả về ID theo dõi. */
     public ResponseEntity<ApiResponse<ProductSyncQueuedResponse>> syncProductToChannelAsync(
             @PathVariable UUID productId,
             @PathVariable UUID channelId) {

@@ -1,6 +1,7 @@
 import { Boxes } from 'lucide-react';
 import styles from './TabVariants.module.css';
 
+/** Hiển thị danh sách biến thể và dữ liệu giá, option, tồn tương ứng. */
 const TabVariants = ({ product }) => {
   const variants = product.variants || [];
 

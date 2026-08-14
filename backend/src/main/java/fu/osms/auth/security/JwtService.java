@@ -38,6 +38,7 @@ public class JwtService {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Tạo token ngắn hạn dùng để xác thực các API request. */
     public String generateAccessToken(UserDetails userDetails){
         String role = userDetails.getAuthorities().stream().findFirst().map(GrantedAuthority::getAuthority).orElse("ROLE_USER");
 
@@ -55,6 +56,7 @@ public class JwtService {
                 .compact();
     }
 
+    /** Tạo token dài hạn chỉ dùng để gia hạn phiên đăng nhập. */
     public String generateRefreshToken(UserDetails userDetails) {
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
@@ -65,6 +67,7 @@ public class JwtService {
                 .compact();
     }
 
+    /** Phân tích và xác minh chữ ký JWT trước khi đọc claims. */
     public Claims extractClaim(String token){
         return Jwts.parser()
                 .verifyWith(getSigningKey())
@@ -77,6 +80,7 @@ public class JwtService {
         return extractClaim(token).getSubject();
     }
 
+    /** Kiểm tra chữ ký và thời hạn của token có hợp lệ hay không. */
     public boolean validateToken(String token){
         try{
             extractClaim(token);

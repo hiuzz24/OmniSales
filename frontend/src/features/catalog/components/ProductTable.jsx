@@ -8,6 +8,7 @@ import productApi from '../../../api/productApi';
 import { ROLES } from '../../auth/constants/roles';
 import useAuth from '../../auth/hooks/useAuth';
 
+/** Trả về class badge theo tên platform. */
 const getChannelBadge = (channel) => {
   switch (channel?.toUpperCase()) {
     case 'SHOPEE': return <Badge variant="shopee">Shopee</Badge>;
@@ -18,6 +19,7 @@ const getChannelBadge = (channel) => {
   }
 };
 
+/** Trả về nhãn và class badge theo trạng thái Product. */
 const getStatusBadge = (status) => {
   switch (status?.toUpperCase()) {
     case 'ACTIVE': return <Badge variant="success">Hoạt động</Badge>;
@@ -27,8 +29,10 @@ const getStatusBadge = (status) => {
   }
 };
 
+/** Định dạng số tiền theo locale Việt Nam. */
 const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN');
 
+/** Chọn SKU phù hợp nhất để hiển thị trên dòng Product. */
 const getDisplaySku = (product) =>
   product.marketplaceSku
   || product.sku
@@ -36,6 +40,7 @@ const getDisplaySku = (product) =>
   || product.variants?.[0]?.sku
   || '—';
 
+/** Điều hướng tới thao tác xem hoặc sửa phù hợp với quyền người dùng. */
 const ActionButton = ({ product }) => {
   const navigate = useNavigate();
   return (
@@ -51,6 +56,7 @@ const ActionButton = ({ product }) => {
   );
 };
 
+/** Mở listing trên sàn khi sản phẩm có URL marketplace hợp lệ. */
 const MarketplaceLinkButton = ({ product }) => {
   const navigate = useNavigate();
   const linkedCount = product.channels?.length || 0;
@@ -68,6 +74,7 @@ const MarketplaceLinkButton = ({ product }) => {
   );
 };
 
+/** Hiển thị một trang sản phẩm và điều khiển phân trang phía server. */
 const ProductTable = ({ keyword = '', statusFilter = '', platformFilters = [] }) => {
   const { user } = useAuth();
   const canManageProducts = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
@@ -80,6 +87,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilters = [] })
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Tải một trang sản phẩm từ backend mỗi khi bộ lọc hoặc phân trang thay đổi.
     const fetchProducts = async () => {
       try {
         setLoading(true);
@@ -102,6 +110,7 @@ const ProductTable = ({ keyword = '', statusFilter = '', platformFilters = [] })
     fetchProducts();
   }, [page, size, keyword, statusFilter, platformFilters]);
 
+  // Chọn kiểu hiển thị theo mức tồn tổng của sản phẩm.
   const getStockClass = (totalStock) => {
     if (totalStock === 0) return styles.stockEmpty;
     if (totalStock <= 5) return styles.stockLow;

@@ -26,6 +26,7 @@ const STATUS_LABELS = {
   FAILED: 'Thất bại',
 };
 
+/** Hiển thị lịch sử kết nối và ngắt kết nối theo kênh. */
 const ChannelConnectionHistoryPage = () => {
   const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
@@ -39,6 +40,7 @@ const ChannelConnectionHistoryPage = () => {
   const [channelFilter, setChannelFilter] = useState('');
 
   useEffect(() => {
+    // Tải danh sách kênh dùng cho bộ lọc lịch sử.
     const fetchChannels = async () => {
       try {
         const response = await channelApi.getAll();
@@ -55,6 +57,7 @@ const ChannelConnectionHistoryPage = () => {
     fetchLogs();
   }, [page, platformFilter, statusFilter, actionFilter, channelFilter]);
 
+  // Tải connection log theo platform, kênh, hành động và khoảng ngày.
   const fetchLogs = async () => {
     try {
       setLoading(true);
@@ -76,11 +79,13 @@ const ChannelConnectionHistoryPage = () => {
     }
   };
 
+  // Tạo handler cập nhật bộ lọc và đưa phân trang về trang đầu.
   const resetPage = (setter) => (event) => {
     setter(event.target.value);
     setPage(0);
   };
 
+  // Chuyển mã platform thành nhãn dễ đọc.
   const renderPlatform = (platform) => {
     const variant = platform ? platform.toLowerCase() : 'default';
     return <Badge variant={variant}>{PLATFORM_LABELS[platform] || platform || '-'}</Badge>;

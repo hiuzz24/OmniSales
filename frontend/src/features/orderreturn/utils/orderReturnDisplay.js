@@ -1,3 +1,4 @@
+/** Rút gọn Shopify GID nhưng giữ nguyên external return ID của platform khác. */
 export const formatExternalReturnId = (value) => {
   if (value == null) {
     return '-';
@@ -67,8 +68,10 @@ export const DATA_VALIDATION_LABELS = {
   INVALID: 'Không hợp lệ',
 };
 
+/** Chuyển platform code thành nhãn tiếng Việt. */
 export const formatPlatformLabel = (platform) => PLATFORM_LABELS[platform] ?? 'Sàn bán hàng';
 
+/** Chuyển trạng thái trả hàng của platform thành nhãn tiếng Việt. */
 export const formatReturnPlatformStatus = (status) => {
   if (!status) return '-';
   return RETURN_PLATFORM_STATUS_LABELS[status] ?? 'Trạng thái khác từ sàn';
@@ -86,6 +89,7 @@ const RETURN_ERROR_TRANSLATIONS = [
     'TikTok không chấp nhận lý do trả hàng hiện tại.'],
 ];
 
+/** Việt hóa các lỗi platform phổ biến trước khi hiển thị cho người dùng. */
 export const formatReturnErrorMessage = (message) => {
   if (!message) return '';
   const normalized = String(message).trim();
@@ -100,11 +104,13 @@ export const formatReturnErrorMessage = (message) => {
   return normalized;
 };
 
+/** Cộng một field số nhưng giữ null khi mọi dòng đều chưa có dữ liệu. */
 const sumNullable = (items, field) => {
   const values = items.map((item) => item[field]).filter((value) => value != null);
   return values.length === 0 ? null : values.reduce((total, value) => total + Number(value), 0);
 };
 
+/** Gộp return item cùng external identity/SKU và cộng các số lượng tương ứng. */
 export const groupOrderReturnItems = (items = []) => {
   const groups = new Map();
   items.forEach((item) => {
@@ -134,6 +140,7 @@ export const groupOrderReturnItems = (items = []) => {
   });
 };
 
+/** Định dạng thời gian trả hàng theo locale Việt Nam. */
 export const formatReturnDateTime = (value) => {
   if (!value) return '-';
   return new Date(value).toLocaleString('vi-VN', {

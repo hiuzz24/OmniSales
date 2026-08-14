@@ -1,6 +1,7 @@
 import styles from './ProductShippingInfo.module.css';
 import { useFormContext } from 'react-hook-form';
 
+/** Nhập kích thước đóng gói và ngưỡng cảnh báo tồn thấp của Product. */
 const ProductShippingInfo = () => {
   const { register, formState: { errors } } = useFormContext();
   return (

@@ -44,6 +44,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
     private final OrderReturnActionService actionService;
     private final OrderReturnInventoryPostingService inventoryPostingService;
 
+    /** Trả về danh sách phiếu trả hàng đã lưu có phân trang. */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<OrderReturnResponse> getAll(int page, int size) {
@@ -60,6 +61,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
                 .build();
     }
 
+    /** Tải một phiếu trả cùng số lượng kiểm hàng và hoàn tiền theo từng item. */
     @Override
     @Transactional(readOnly = true)
     public OrderReturnResponse getById(UUID id) {
@@ -67,12 +69,14 @@ public class OrderReturnServiceImpl implements OrderReturnService {
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_RETURN_NOT_FOUND)));
     }
 
+    /** Bắt đầu action APPROVE trên platform và trả về snapshot nội bộ mới nhất. */
     @Override
     public OrderReturnResponse approve(UUID id) {
         actionService.execute(id, ReturnAction.APPROVE, null);
         return getById(id);
     }
 
+    /** Chuyển lựa chọn từ chối của platform thành nhãn hiển thị trên UI. */
     @Override
     public OrderReturnRejectOptionsResponse getRejectOptions(UUID id) {
         ReturnRejectOptions options = actionService.getRejectOptions(id);
@@ -85,6 +89,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
                 options.unavailableReason());
     }
 
+    /** Kiểm tra và gửi lệnh từ chối riêng của từng platform. */
     @Override
     public OrderReturnResponse reject(UUID id, OrderReturnRejectRequest request) {
         String legacyReason = trim(request.reason());
@@ -99,6 +104,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
         return getById(id);
     }
 
+    /** Kiểm tra trước trạng thái platform, lưu kiểm hàng rồi chạy PROCESS khi đủ điều kiện. */
     @Override
     public OrderReturnResponse inspect(UUID id, OrderReturnInspectionRequest request) {
         actionService.validateInspection(id);
@@ -115,12 +121,14 @@ public class OrderReturnServiceImpl implements OrderReturnService {
         return getById(id);
     }
 
+    /** Làm mới trạng thái từ xa mà không duyệt, từ chối hoặc process phiếu trả. */
     @Override
     public OrderReturnResponse refresh(UUID id) {
         actionService.refresh(id);
         return getById(id);
     }
 
+    /** Kiểm tra action platform chưa xác định có tạo side effect hay không. */
     @Override
     public OrderReturnResponse checkAction(UUID id) {
         requireActionRole(id);
@@ -128,6 +136,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
         return getById(id);
     }
 
+    /** Kiểm tra quyền theo action gần nhất trước khi thử lại bằng request ID hiện có. */
     @Override
     public OrderReturnResponse retryAction(UUID id) {
         requireActionRole(id);
@@ -135,6 +144,7 @@ public class OrderReturnServiceImpl implements OrderReturnService {
         return getById(id);
     }
 
+    /** Chạy lại nhập kho nội bộ và không gọi API platform. */
     @Override
     public OrderReturnResponse retryStock(UUID id) {
         try {

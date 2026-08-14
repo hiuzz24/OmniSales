@@ -17,6 +17,7 @@ public class ChannelCredentialLifecycleServiceImpl implements ChannelCredentialL
     private final ChannelCredentialRepository credentialRepository;
 
     @Override
+    /** Lưu access token không có refresh token của Shopify cho kênh đã kết nối. */
     public void connectShopify(Channel channel, String accessToken) {
         ChannelCredential credential = credential(channel);
         credential.setAccessToken(accessToken);
@@ -26,6 +27,7 @@ public class ChannelCredentialLifecycleServiceImpl implements ChannelCredentialL
     }
 
     @Override
+    /** Lưu access token, refresh token cùng thời điểm hết hạn đã tính. */
     public void connectRefreshable(Channel channel, String accessToken, String refreshToken,
                                    int expiresIn, int refreshExpiresIn) {
         ChannelCredential credential = credential(channel);
@@ -41,6 +43,7 @@ public class ChannelCredentialLifecycleServiceImpl implements ChannelCredentialL
     }
 
     @Override
+    /** Đánh dấu credential đã ngắt để không thể tiếp tục gọi API. */
     public void disconnect(UUID channelId) {
         credentialRepository.findByChannelId(channelId).ifPresent(credential -> {
             credential.setConnectionState("DISCONNECTED");

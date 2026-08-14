@@ -35,6 +35,7 @@ public class ChannelTokenServiceImpl implements ChannelTokenService {
     private long refreshBeforeMinutes;
 
     @Override
+    /** Trả về token khả dụng và refresh trước nếu token sắp hết hạn. */
     public AccessTokenContext getValidToken(UUID channelId) {
         ChannelCredential credential = connectedCredential(channelId);
         if (!needsRefresh(credential)) {
@@ -44,11 +45,13 @@ public class ChannelTokenServiceImpl implements ChannelTokenService {
     }
 
     @Override
+    /** Buộc luân chuyển token để phục hồi sau lỗi ủy quyền. */
     public AccessTokenContext forceRefresh(UUID channelId) {
         return refresh(channelId, true, null);
     }
 
     @Override
+    /** Gọi platform và thử lại một lần bằng token đã refresh khi phù hợp. */
     public <T> T execute(UUID channelId, TokenOperation<T> operation) {
         AccessTokenContext current = getValidToken(channelId);
         try {
@@ -71,6 +74,7 @@ public class ChannelTokenServiceImpl implements ChannelTokenService {
         return attempt.context();
     }
 
+    /** Khóa dòng credential để các request đồng thời không refresh cùng token hai lần. */
     private RefreshAttempt refreshLocked(UUID channelId, boolean force, String failedAccessToken) {
         ChannelCredential credential = credentialRepository.findByChannelIdForUpdate(channelId)
                 .orElseThrow(() -> new IllegalStateException("Channel credential not found: " + channelId));

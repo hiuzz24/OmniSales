@@ -19,6 +19,7 @@ public class OrderPullRecoverySweeper {
     private final OrderPullJobStore jobStore;
     private final OrderPullDispatchService dispatchService;
 
+    /** Phát lại job bền vững bị treo do ứng dụng lỗi hoặc broker gián đoạn. */
     @Scheduled(fixedDelayString = "${app.order-pull-recovery.fixed-delay-ms:30000}")
     public void sweep() {
         if (!properties.isEnabled()) {
@@ -43,4 +44,3 @@ public class OrderPullRecoverySweeper {
         });
     }
 }
-

@@ -42,7 +42,9 @@ const OPTIONAL_LAZADA_SPECIFICATIONS = new Set([
 ]);
 const TIKTOK_LISTING_ATTRIBUTE_IDS = new Set(['100149', '101489', '101490']);
 const TIKTOK_FREE_TEXT_ATTRIBUTE_IDS = new Set(['101489', '101490']);
+/** Bóc payload từ các dạng response API platform. */
 const extractData = (response) => response?.data?.data || response?.data || response || [];
+/** Kiểm tra URL HTTP(S) dùng cho ảnh/bảng size. */
 const isHttpUrl = (value) => {
   if (!value?.trim()) return false;
   try {
@@ -53,6 +55,7 @@ const isHttpUrl = (value) => {
   }
 };
 
+/** Tạo cấu hình platform mặc định cho một channel chưa được thiết lập. */
 const emptyConfig = (channel) => ({
   channelId: channel.channelId || channel.id,
   categoryId: '',
@@ -66,6 +69,7 @@ const emptyConfig = (channel) => ({
   variantAttributeValueMappings: {},
 });
 
+/** Điều phối cấu hình category, brand, attribute và package theo từng platform. */
 const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
   const { control, setValue } = useFormContext();
   const configs = useWatch({ control, name: 'channelConfigs', defaultValue: {} });
@@ -113,9 +117,12 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     Object.values(brandSearchTimers.current).forEach((timer) => clearTimeout(timer));
   }, []);
 
+  // Lấy cấu hình hiện tại hoặc tạo cấu hình rỗng cho kênh.
   const configFor = (channel) => configs[channel.channelId || channel.id] || emptyConfig(channel);
+  // Cập nhật loading độc lập cho một kênh.
   const setLoadingFor = (channelId, value) => setLoading((previous) => ({ ...previous, [channelId]: value }));
   const primaryImageUrl = productImages?.find((image) => image.isPrimary)?.url || productImages?.[0]?.url;
+  // Tạo tiêu đề TikTok từ dữ liệu sản phẩm và giới hạn ký tự của sàn.
   const tikTokTitleFor = (channel) => {
     const config = configFor(channel);
     return resolveTikTokProductTitle({
@@ -126,18 +133,23 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
       description: productDescription,
     });
   };
+  // Tạo dấu vết input để nhận biết cấu hình cần tải lại lookup.
   const inputHash = (channel) => {
     const title = channel.platform === 'TIKTOK'
       ? tikTokTitleFor(channel).title
       : productName || '';
     return `${productId || 'new'}|${title}|${productDescription || ''}|${primaryImageUrl || ''}`;
   };
+  // Kiểm tra attribute do hệ thống tự quản lý và không cho nhập tay.
   const isSystemManaged = (attribute) => SYSTEM_ATTRIBUTES.has(String(attribute.name || '').toLowerCase());
+  // Nhận biết thông số Lazada được phép bỏ trống.
   const isOptionalLazadaSpecification = (attribute) => OPTIONAL_LAZADA_SPECIFICATIONS.has(
     String(attribute.name || '').trim().toLowerCase().replace(/[\s-]+/g, '_'));
+  // Nhận biết attribute TikTok thuộc cấu hình listing V1.
   const isTikTokListingAttribute = (attribute) => TIKTOK_LISTING_ATTRIBUTE_IDS.has(String(attribute.id));
 
   // MANUAL_CATEGORY_BROWSER_FALLBACK: only called after the user chooses manual browsing.
+  // Tải category platform theo node cha hoặc từ khóa tìm kiếm.
   const loadCategories = async (channel, parentId = null, keyword = null) => {
     const channelId = channel.channelId || channel.id;
     setLoadingFor(channelId, true);
@@ -159,11 +171,13 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     }
   };
 
+  // Debounce tìm category để tránh gọi lookup API sau mỗi phím.
   const searchCategories = (channel, value, immediate = false) => {
     const channelId = channel.channelId || channel.id;
     setSearchValues((previous) => ({ ...previous, [channelId]: value }));
     clearTimeout(categorySearchTimers.current[channelId]);
 
+    // Thực hiện lần tìm category mới nhất sau thời gian debounce.
     const runSearch = () => loadCategories(channel, null, value.trim() || null);
     if (immediate) {
       runSearch();
@@ -172,6 +186,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     categorySearchTimers.current[channelId] = setTimeout(runSearch, 350);
   };
 
+  // Tải brand platform theo category, từ khóa và trạng thái phân trang.
   const loadBrands = async (channel, keyword = null, categoryIdOverride = null, page = 0, pageToken = null) => {
     if (!['LAZADA', 'TIKTOK'].includes(channel.platform)) return;
     const channelId = channel.channelId || channel.id;
@@ -202,11 +217,13 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     }
   };
 
+  // Debounce tìm brand riêng cho từng kênh.
   const searchBrands = (channel, value, immediate = false) => {
     const channelId = channel.channelId || channel.id;
     setBrandSearchValues((previous) => ({ ...previous, [channelId]: value }));
     clearTimeout(brandSearchTimers.current[channelId]);
 
+    // Thực hiện lần tìm brand mới nhất sau thời gian debounce.
     const runSearch = () => loadBrands(channel, value.trim() || null, null, 0, null);
     if (immediate) {
       runSearch();
@@ -215,6 +232,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     brandSearchTimers.current[channelId] = setTimeout(runSearch, 350);
   };
 
+  // Tải trang brand tiếp theo theo cơ chế page hoặc page token của platform.
   const loadNextBrandPage = async (channel) => {
     const channelId = channel.channelId || channel.id;
     const current = brandPages[channelId];
@@ -227,6 +245,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     await loadBrands(channel, brandSearchValues[channelId] || null, null, (current.page || 0) + 1, current.nextPageToken);
   };
 
+  // Quay lại trang brand trước đó từ lịch sử phân trang cục bộ.
   const loadPreviousBrandPage = async (channel) => {
     const channelId = channel.channelId || channel.id;
     const current = brandPages[channelId];
@@ -237,6 +256,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     await loadBrands(channel, brandSearchValues[channelId] || null, null, current.page - 1, previousToken);
   };
 
+  // Yêu cầu platform gợi ý category từ thông tin sản phẩm.
   const suggestCategories = async (channel) => {
     const channelId = channel.channelId || channel.id;
     if (!productId && (!productName?.trim() || !primaryImageUrl)) {
@@ -272,6 +292,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     }
   };
 
+  // Tải schema attribute bắt buộc sau khi chọn category platform.
   const loadAttributes = async (channel, config) => {
     const channelId = channel.channelId || channel.id;
     if (!config.categoryId) return;
@@ -298,11 +319,13 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     return () => clearTimeout(timer);
   }, [openChannelId, brandSearchValues]);
 
+  // Gộp một phần thay đổi vào cấu hình của kênh.
   const updateConfig = (channel, patch) => {
     const channelId = channel.channelId || channel.id;
     setValue(`channelConfigs.${channelId}`, { ...configFor(channel), ...patch }, { shouldDirty: true });
   };
 
+  // Tải ảnh bảng kích thước rồi gán URL vào field platform tương ứng.
   const uploadSizeChartImage = async (channel, event, attributeKey = null) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -327,6 +350,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     }
   };
 
+  // Mở hoặc đóng phần cấu hình và tải lookup ở lần mở đầu tiên.
   const toggle = async (channel) => {
     const channelId = channel.channelId || channel.id;
     const willOpen = openChannelId !== channelId;
@@ -336,6 +360,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     if (config.categoryId && !attributeState[channelId]) await loadAttributes(channel, config);
   };
 
+  // Chọn category, reset dữ liệu phụ thuộc rồi tải brand và attribute mới.
   const selectCategory = async (channel, category, source = 'MANUAL_BROWSER') => {
     const current = configFor(channel);
     if (!category.leaf) {
@@ -358,6 +383,7 @@ const PlatformConfigSection = ({ channels = [], onSave, productId = null }) => {
     await loadBrands(channel, null, category.id);
   };
 
+  // Render control phù hợp với kiểu dữ liệu của một platform attribute.
   const renderAttribute = (channel, attribute) => <PlatformAttributeField
     key={channel.platform === 'TIKTOK' ? attribute.id || attribute.name : attribute.name || attribute.id}
     channel={channel}

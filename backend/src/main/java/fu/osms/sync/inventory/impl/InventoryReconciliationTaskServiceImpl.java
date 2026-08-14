@@ -25,6 +25,7 @@ public class InventoryReconciliationTaskServiceImpl implements InventoryReconcil
     private final ChannelProductVariantRepository mappingRepository;
     private final InventoryReconciliationProperties properties;
 
+    /** Nhận task mapping đến hạn bằng row lock để mỗi chu kỳ chỉ có một worker xử lý. */
     @Override
     @Transactional
     public List<InventoryReconciliationTask> claimDueTasks() {
@@ -64,6 +65,7 @@ public class InventoryReconciliationTaskServiceImpl implements InventoryReconcil
         return tasks;
     }
 
+    /** Đánh dấu chu kỳ mapping đã hội tụ khi số lượng từ xa bằng available của OSMS. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markSynced(UUID mappingId, String cycleId) {
@@ -74,6 +76,7 @@ public class InventoryReconciliationTaskServiceImpl implements InventoryReconcil
         });
     }
 
+    /** Trì hoãn xác minh sau thay đổi platform được dự kiến phát sinh từ OSMS. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void scheduleVerification(UUID mappingId, String cycleId) {
@@ -93,6 +96,7 @@ public class InventoryReconciliationTaskServiceImpl implements InventoryReconcil
         });
     }
 
+    /** Lên lịch thử hiệu chỉnh có giới hạn sau sai lệch tạm thời hoặc lỗi API. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void scheduleRetry(
@@ -115,6 +119,7 @@ public class InventoryReconciliationTaskServiceImpl implements InventoryReconcil
         });
     }
 
+    /** Đánh dấu chu kỳ reconciliation hết lượt thử là thất bại để người vận hành theo dõi. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markFailed(UUID mappingId, String cycleId, String error) {

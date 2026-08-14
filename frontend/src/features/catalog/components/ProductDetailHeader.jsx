@@ -1,6 +1,7 @@
 import { ArrowLeft, RefreshCw, Edit, Trash2 } from 'lucide-react';
 import styles from './ProductDetailHeader.module.css';
 
+/** Hiển thị thông tin đầu trang và các thao tác quản lý Product. */
 const ProductDetailHeader = ({
   product,
   onBack,

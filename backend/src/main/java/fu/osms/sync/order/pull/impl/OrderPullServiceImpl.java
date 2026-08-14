@@ -37,6 +37,7 @@ public class OrderPullServiceImpl implements OrderPullService {
     private final OrderPullJobStore orderPullJobStore;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** Kiểm tra khoảng thời gian, lưu context job bền vững và publish sau commit. */
     @Override
     @Transactional
     public List<SyncLogResponse> start(OrderPullRequest request) {
@@ -67,6 +68,7 @@ public class OrderPullServiceImpl implements OrderPullService {
         return result;
     }
 
+    /** Đọc một job kéo đơn mà không gọi lại request tới sàn. */
     @Override
     @Transactional(readOnly = true)
     public SyncLogResponse get(UUID id) {
@@ -76,6 +78,7 @@ public class OrderPullServiceImpl implements OrderPullService {
         return syncLogMapper.toResponse(log);
     }
 
+    /** Trả về các job kéo đơn đang chờ để UI phục hồi trạng thái. */
     @Override
     @Transactional(readOnly = true)
     public List<SyncLogResponse> active() {

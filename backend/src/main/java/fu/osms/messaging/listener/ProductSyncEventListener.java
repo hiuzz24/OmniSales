@@ -20,6 +20,7 @@ public class ProductSyncEventListener {
     private final ProductSyncRequestHandler handler;
 
     @RabbitListener(queues = RabbitMQConstants.QUEUE_PRODUCT_PUSH, concurrency = "1-2")
+    /** Nhận message đồng bộ sản phẩm RabbitMQ qua handler idempotent dùng chung. */
     public void onProductSync(ProductSyncMessage message) {
         log.info("[ProductSyncEventListener] requestLogId={} productId={} channelId={}",
                 message.requestLogId(), message.productId(), message.channelId());

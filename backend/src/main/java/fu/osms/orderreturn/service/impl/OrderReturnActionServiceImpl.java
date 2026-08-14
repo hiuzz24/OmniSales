@@ -34,18 +34,21 @@ public class OrderReturnActionServiceImpl implements OrderReturnActionService {
     private final ChannelRepository channelRepository;
     private final OrderReturnPersistenceService persistenceService;
 
+    /** Tạo chu kỳ action mới và gọi platform ngoài database transaction. */
     @Override
     public void execute(UUID returnId, ReturnAction action, ReturnRejectCommand rejectCommand) {
         ReturnActionContext context = stateService.beginNew(returnId, action, rejectCommand);
         call(context, false);
     }
 
+    /** Lấy điều kiện từ chối mà không thay đổi trạng thái trả hàng. */
     @Override
     public ReturnRejectOptions getRejectOptions(UUID returnId) {
         ReturnActionContext context = stateService.contextForRejectOptions(returnId);
         return gateway(context.platform()).rejectOptions(context);
     }
 
+    /** Đảm bảo trạng thái platform hiện tại cho phép kiểm hàng tại kho. */
     @Override
     public void validateInspection(UUID returnId) {
         ReturnActionContext context = stateService.contextForRefresh(returnId);
@@ -57,6 +60,7 @@ public class OrderReturnActionServiceImpl implements OrderReturnActionService {
         }
     }
 
+    /** Chỉ kéo và lưu snapshot trả hàng mới nhất từ platform. */
     @Override
     public void refresh(UUID returnId) {
         ReturnActionContext context = stateService.contextForRefresh(returnId);
@@ -69,6 +73,7 @@ public class OrderReturnActionServiceImpl implements OrderReturnActionService {
         }
     }
 
+    /** Kiểm tra action UNKNOWN và phân loại đã áp dụng, được phép thử lại hoặc vẫn chưa rõ. */
     @Override
     public void check(UUID returnId) {
         ReturnActionContext context = stateService.contextForCheck(returnId);
@@ -81,6 +86,7 @@ public class OrderReturnActionServiceImpl implements OrderReturnActionService {
         }
     }
 
+    /** Xác minh trạng thái từ xa trước khi gọi lại action platform thất bại gần nhất. */
     @Override
     public void retry(UUID returnId) {
         ReturnActionContext context = stateService.beginRetry(returnId);

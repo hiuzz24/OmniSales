@@ -59,6 +59,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
 
     @Override
     @Transactional(readOnly = true)
+    /** Đọc cấu hình platform đã chuẩn hóa trong product mapping. */
     public ChannelProductConfigResponse getConfig(UUID productId, UUID channelId) {
         ChannelProduct channelProduct = findMapping(productId, channelId);
         return response(channelProduct);
@@ -66,6 +67,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
 
     @Override
     @Transactional
+    /** Kiểm tra và lưu field platform mà không sửa catalog dùng chung của OSMS. */
     public ChannelProductConfigResponse updateConfig(UUID productId, UUID channelId, ChannelConfigRequest request) {
         if (request == null) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Channel configuration is required");
@@ -80,6 +82,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
     }
 
     @Override
+    /** Khởi tạo cấu hình đăng bán khi tạo channel mapping mới. */
     public void applyInitialConfig(ChannelProduct channelProduct, ChannelConfigRequest request) {
         if (request == null) {
             initializeWithoutConfig(channelProduct);
@@ -89,6 +92,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
     }
 
     @Override
+    /** Kiểm tra toàn bộ field bắt buộc của platform đã đủ để đồng bộ hay chưa. */
     public boolean isReady(ChannelProduct channelProduct) {
         if (channelProduct == null || channelProduct.getChannel() == null) return false;
         if (channelProduct.getChannel().getPlatform() == PlatformType.SHOPIFY) return true;
@@ -98,6 +102,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
     }
 
     @Override
+    /** Trả về nguyên nhân đầu tiên đang chặn việc đồng bộ sản phẩm. */
     public String configurationError(ChannelProduct channelProduct) {
         Object value = config(channelProduct).get("configurationError");
         if (value != null) return String.valueOf(value);
@@ -117,6 +122,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         persistConfig(channelProduct, config);
     }
 
+    /** Chuẩn hóa danh mục, thuộc tính, biến thể, kiện hàng và giá trị riêng của platform. */
     private void applyConfig(ChannelProduct channelProduct, ChannelConfigRequest request) {
         PlatformType platform = channelProduct.getChannel().getPlatform();
         if (platform == PlatformType.SHOPIFY) {
@@ -206,6 +212,7 @@ public class ProductChannelConfigServiceImpl implements ProductChannelConfigServ
         return configValidator().isHttpUrl(value);
     }
 
+    /** Kiểm tra thuộc tính bắt buộc theo schema do platform cung cấp. */
     private String validationError(List<PlatformAttributeResponse> schema,
                                    Map<String, Object> attributes,
                                    Map<String, Map<String, String>> valueMappings,

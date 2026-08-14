@@ -336,6 +336,7 @@ private ImportedCatalogProduct upsertProduct(Channel channel,
                 ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sku)
                         .orElseGet(ProductVariant::new)
                 : mappedVariant;
+        boolean newVariant = variant.getId() == null;
         Map<String, Object> optionValues = selectedOptionValues(variantNode);
         boolean preserveLocalPrice = shouldPreserveLocalPrice(channelProduct, externalVariantId);
         variant.setProduct(product);
@@ -347,10 +348,9 @@ private ImportedCatalogProduct upsertProduct(Channel channel,
         Map<String, Object> inventoryItem = map(variantNode.get("inventoryItem"));
         Map<String, Object> unitCost = map(inventoryItem.get("unitCost"));
         BigDecimal importedCost = decimalValue(unitCost.get("amount"));
-        BigDecimal costCandidate = ProductCostPolicy.isPositive(importedCost)
-                ? importedCost
-                : variant.getCostPrice();
-        variant.setCostPrice(ProductCostPolicy.initialCost(costCandidate, variant.getPrice()));
+        if (newVariant) {
+            variant.setCostPrice(importedCost != null ? importedCost : BigDecimal.ZERO);
+        }
         variant.setIsActive(true);
         variant.setOptionValues(optionValues.isEmpty() ? mapOf("title", variant.getName()) : optionValues);
         return productVariantRepository.save(variant);

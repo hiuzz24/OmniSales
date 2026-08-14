@@ -3,7 +3,6 @@ package fu.osms.order.service;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.audit.dto.response.AuditLogResponse;
 import fu.osms.order.dto.request.CancelOrderRequest;
-import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderStats;
@@ -15,8 +14,6 @@ import java.util.List;
 import java.util.UUID;
 
 public interface OrderService {
-
-    OrderResponse create(OrderRequest request);
 
     OrderResponse getById(UUID id);
 
@@ -31,8 +28,6 @@ public interface OrderService {
     OrderResponse updateStatus(UUID id, OrderStatus status);
 
     OrderResponse updatePaymentStatus(UUID id, PaymentStatus paymentStatus);
-
-    OrderResponse update(UUID id, OrderRequest request);
 
     void cancel(UUID id, CancelOrderRequest request);
 

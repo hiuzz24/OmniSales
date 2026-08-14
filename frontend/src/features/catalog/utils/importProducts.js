@@ -105,6 +105,7 @@ const HEADER_NORMALIZE = {
 
 const REQUIRED_KEYS = ['productSku', 'productName', 'variantSku'];
 
+/** Đọc file Excel, tìm sheet hợp lệ và chuẩn hóa từng dòng import Product. */
 export const parseImportFile = async (file) => {
   if (!file) {
     return { ok: false, message: 'Không có file được chọn' };

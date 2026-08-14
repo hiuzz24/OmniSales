@@ -21,6 +21,7 @@ const loginSchema = z.object({
   rememberMe: z.boolean().optional(),
 });
 
+/** Hiển thị biểu mẫu đăng nhập và điều hướng theo trạng thái mật khẩu. */
 const LoginForm = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -41,6 +42,7 @@ const LoginForm = () => {
     },
   });
 
+  // Gửi thông tin đăng nhập và chuyển tới màn phù hợp với tài khoản.
   const onSubmit = async (data) => {
     setApiError('');
     try {

@@ -31,6 +31,7 @@ const PLATFORM_META = {
   MANUAL: { label: 'Thủ công', color: '#6b7280', bg: '#f3f4f6', abbr: 'M' },
 };
 
+/** Chuẩn hóa trạng thái kết nối backend thành nhãn và kiểu hiển thị trên UI. */
 const connectionView = (channel) => {
   if (channel.connectionState === 'REVOKED') {
     return { connected: false, label: 'Seller đã thu hồi quyền' };
@@ -44,6 +45,7 @@ const connectionView = (channel) => {
   return { connected: false, label: 'Ngắt kết nối' };
 };
 
+/** Hiển thị danh sách kênh và điều phối kết nối, chỉnh sửa, ngắt kết nối. */
 const ChannelConnectionPage = () => {
   const { user } = useAuth();
   const canManageChannels = user?.role === ROLES.OWNER;
@@ -58,6 +60,7 @@ const ChannelConnectionPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  // Tải trạng thái kết nối và OAuth metadata đã chuẩn hóa của mọi kênh sàn.
   const loadChannels = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -100,9 +103,12 @@ const ChannelConnectionPage = () => {
     }
   }, []);
 
+  // Mở modal ở chế độ kết nối kênh mới.
   const openCreate = () => { setModalMode('create'); setSelectedChannel(null); setIsModalOpen(true); };
+  // Mở modal chỉnh sửa cho kênh đã chọn.
   const openEdit = (ch) => { setModalMode('edit'); setSelectedChannel(ch); setIsModalOpen(true); };
 
+  // Ngắt kênh đã chọn và tải lại trạng thái kết nối sau khi xác nhận.
   const handleDisconnect = async () => {
     if (!confirmDisconnect) return;
     setIsDisconnecting(true);

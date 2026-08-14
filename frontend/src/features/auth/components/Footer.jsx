@@ -16,6 +16,7 @@ const SUPPORT_LINKS = [
   { label: 'Điều khoản sử dụng', href: '#' },
 ];
 
+/** Hiển thị footer dùng chung cho các trang công khai. */
 const Footer = () => {
   return (
     <footer className={styles.footer}>

@@ -290,6 +290,38 @@
   font-size: 11px;
 }
 
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.addGiftButton,
+.cancelButton,
+.confirmButton {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.addGiftButton {
+  border: 1px solid #d6a36f;
+  background: #fff8ef;
+  color: #96551f;
+}
+
+.addGiftButton:hover {
+  border-color: #bb7a3c;
+  background: #fff1df;
+}
+
 .itemsTableWrap {
   overflow-x: auto;
   padding: 0 18px 16px;
@@ -379,6 +411,44 @@
   padding: 16px 18px 18px;
 }
 
+.confirmFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 18px;
+  border-top: 1px solid #e2e9f1;
+  background: #f8fbfe;
+}
+
+.confirmFooter p {
+  margin: 0;
+  color: #65778d;
+  font-size: 11px;
+}
+
+.confirmFooter > div {
+  display: flex;
+  gap: 8px;
+}
+
+.cancelButton {
+  border: 1px solid #ccd8e5;
+  background: #fff;
+  color: #52657b;
+}
+
+.confirmButton {
+  border: 1px solid #2563a8;
+  background: #2563a8;
+  color: #fff;
+}
+
+.confirmButton:hover {
+  border-color: #174f8a;
+  background: #174f8a;
+}
+
 .totalTitle {
   display: flex;
   align-items: center;
@@ -436,6 +506,26 @@
 
   .totals dl {
     margin-top: 12px;
+  }
+
+  .sectionHeader,
+  .confirmFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sectionActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .confirmFooter > div {
+    width: 100%;
+  }
+
+  .cancelButton,
+  .confirmButton {
+    flex: 1;
   }
 }
 

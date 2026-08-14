@@ -6,6 +6,7 @@ import authService from '../services/authService';
 import useAuth from '../hooks/useAuth';
 import styles from './ChangePasswordPage.module.css';
 
+/** Bắt buộc người dùng đổi mật khẩu tạm thời trước khi vào hệ thống. */
 const ForceChangePasswordPage = () => {
   const navigate = useNavigate();
   const { updateUser, logout } = useAuth();
@@ -22,6 +23,7 @@ const ForceChangePasswordPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
+  // Xác minh mật khẩu hiện tại và lưu mật khẩu mới.
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!oldPassword) {
@@ -56,10 +58,12 @@ const ForceChangePasswordPage = () => {
     }
   };
 
+  // Chuyển tới dashboard sau khi đổi mật khẩu thành công.
   const handleGoToDashboard = () => {
     navigate('/');
   };
 
+  // Đăng xuất nếu người dùng không tiếp tục đổi mật khẩu.
   const handleLogout = async () => {
     await logout();
     navigate('/login');

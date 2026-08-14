@@ -103,6 +103,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    /** Lưu cây sản phẩm mới và khởi tạo tồn kho cho các biến thể nội bộ. */
     public ProductResponse create(ProductRequest request) {
         if(productRepository.existsBySkuAndDeletedAtIsNull(request.getSku())){
             throw new AppException(ErrorCode.PRODUCT_SKU_CONFLICT);
@@ -184,6 +185,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    /** Tổng hợp dữ liệu sản phẩm, biến thể, ảnh, tồn kho và kênh cho một sản phẩm. */
     public ProductResponse getById(UUID id) {
         Product product = productRepository.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
@@ -193,6 +195,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    /** Tạo trang catalog đã lọc và giữ nguyên quy tắc gộp hiển thị theo SKU. */
     public PageResponse<ProductResponse> search(String keyword, ProductStatus status, Collection<PlatformType> platforms, int page, int size) {
         Specification<Product> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -219,6 +222,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    /** Cập nhật sản phẩm nội bộ và đối chiếu biến thể, ảnh cùng cấu hình kênh. */
     public ProductResponse update(UUID id, ProductRequest request) {
         Product product = productRepository.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
@@ -330,6 +334,10 @@ public class ProductServiceImpl implements ProductService {
         return this.getById(product.getId());
     }
 
+    /**
+     * Kiểm tra cấu hình chỉ thuộc các kênh đã chọn và chuyển thành map theo channel ID.
+     * Đồng thời từ chối cấu hình thiếu channel ID hoặc bị khai báo trùng.
+     */
     private Map<UUID, ChannelConfigRequest> channelConfigsById(ProductRequest request) {
         if (request.getChannelConfigs() == null || request.getChannelConfigs().isEmpty()) {
             return Collections.emptyMap();
@@ -349,6 +357,7 @@ public class ProductServiceImpl implements ProductService {
         return result;
     }
 
+    /** Cập nhật trạng thái sản phẩm và ghi audit log catalog. */
     @Override
     @Transactional
     public ProductResponse updateStatus(UUID id, ProductStatus status) {
@@ -357,6 +366,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    /** Xóa mềm sản phẩm và các dữ liệu catalog con đang hoạt động. */
     public void delete(UUID id) {
         Product product = productRepository.findById(id)
                 .filter(p -> p.getDeletedAt() == null)
@@ -385,25 +395,30 @@ public class ProductServiceImpl implements ProductService {
 
 
     @Override
+    /** Thực hiện đăng sản phẩm lên mọi kênh đã kết nối. */
     public SyncResult syncProductToAllChannels(UUID productId) {
         return productSyncOrchestratorService.syncProductToAllChannels(productId);
     }
 
     @Override
+    /** Thực hiện đăng sản phẩm cho đúng một channel mapping. */
     public SyncResult syncProductToChannel(UUID productId, UUID channelId) {
         return productSyncOrchestratorService.syncProductToChannel(productId, channelId);
     }
 
     @Override
+    /** Tạo sync log cha và đưa yêu cầu đồng bộ tất cả kênh vào hàng đợi. */
     public ProductSyncQueuedResponse syncProductToAllChannelsAsync(UUID productId) {
         return queueProductSync(productId, null);
     }
 
     @Override
+    /** Tạo sync log cha và đưa yêu cầu đồng bộ một kênh vào hàng đợi. */
     public ProductSyncQueuedResponse syncProductToChannelAsync(UUID productId, UUID channelId) {
         return queueProductSync(productId, channelId);
     }
 
+    /** Lưu trạng thái theo dõi hàng đợi trước khi phát message đồng bộ idempotent. */
     private ProductSyncQueuedResponse queueProductSync(UUID productId, UUID channelId) {
         Product product = productRepository.findById(productId)
                 .filter(candidate -> candidate.getDeletedAt() == null)
@@ -465,10 +480,12 @@ public class ProductServiceImpl implements ProductService {
         return new ProductSyncQueuedResponse(requestLog.getId());
     }
 
+    /** Tạo helper khởi tạo tồn kho cho biến thể mới tại các kho phù hợp. */
     private ProductInventoryInitializer inventoryInitializer() {
         return new ProductInventoryInitializer(warehouseRepository, inventoryItemRepository);
     }
 
+    /** Tạo service nội bộ dùng chung cho nghiệp vụ thêm, sửa và xóa biến thể. */
     private ProductVariantMutationService variantMutationService() {
         return new ProductVariantMutationService(
                 productRepository,
@@ -482,6 +499,7 @@ public class ProductServiceImpl implements ProductService {
         );
     }
 
+    /** Tạo assembler tổng hợp product response từ biến thể, ảnh, tồn kho và mapping kênh. */
     private ProductResponseAssembler responseAssembler() {
         return new ProductResponseAssembler(
                 productMapper,
@@ -496,6 +514,7 @@ public class ProductServiceImpl implements ProductService {
         );
     }
 
+    /** Ghi lại một thay đổi sản phẩm hoặc biến thể vào lịch sử product log. */
     private void logProductAction(Product product, ProductVariant variant, ProductLogAction action, Map<String, Object> fieldChanges, User performedBy, String referenceType, UUID referenceId, String notes) {
         ProductLog productLog = ProductLog.builder()
                 .product(product)

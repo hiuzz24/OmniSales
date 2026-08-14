@@ -1,6 +1,7 @@
 import { AlignLeft, BadgeDollarSign, Info, PackageCheck } from 'lucide-react';
 import styles from './TabOverview.module.css';
 
+/** Hiển thị thông tin catalog tổng quan của sản phẩm. */
 const TabOverview = ({ product }) => {
   // Compute price range if multiple variants
   let priceDisplay = '0 đ';
@@ -33,6 +34,7 @@ const TabOverview = ({ product }) => {
 
   const barcodeDisplay = product.variants?.length === 1 ? product.variants[0].barcode : 'Theo biến thể';
 
+  // Chuẩn hóa HTML hoặc text mô tả thành nội dung an toàn để hiển thị.
   const normalizeDescription = (rawDescription) => {
     const emptyDescription = 'Chưa có mô tả';
 

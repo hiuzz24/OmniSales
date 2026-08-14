@@ -21,6 +21,7 @@ public class OrderReturnWorkflowHandler {
     private final OrderReturnRepository returnRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** Cập nhật trạng thái hoàn tiền đã xác nhận và nhập kho hàng hoàn đủ điều kiện độc lập. */
     public void handle(OrderReturnWorkflowMessage message) {
         RuntimeException paymentFailure = null;
         try {

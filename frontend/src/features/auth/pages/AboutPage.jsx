@@ -109,6 +109,7 @@ const TECH_STACK = [
 
 // ─── Navigation ─────────────────────────────────────────────────────────────
 
+/** Hiển thị thanh điều hướng của trang giới thiệu dự án. */
 const PublicNav = () => {
   const [open, setOpen] = useState(false);
 
@@ -184,6 +185,7 @@ const PublicNav = () => {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
+/** Giới thiệu tổng quan dự án và nhóm thực hiện. */
 const HeroSection = () => (
   <section className={styles.hero}>
     <div className={styles.heroInner}>
@@ -211,6 +213,7 @@ const HeroSection = () => (
 
 // ─── Mission ─────────────────────────────────────────────────────────────────
 
+/** Trình bày mục tiêu nghiệp vụ của dự án. */
 const MissionSection = () => (
   <section className={styles.mission}>
     <div className={styles.missionInner}>
@@ -241,6 +244,7 @@ const MissionSection = () => (
 
 // ─── Values ──────────────────────────────────────────────────────────────────
 
+/** Trình bày các nguyên tắc định hướng thiết kế hệ thống. */
 const ValuesSection = () => (
   <section className={styles.values}>
     <div className={styles.valuesInner}>
@@ -271,6 +275,7 @@ const ValuesSection = () => (
 
 // ─── Timeline ───────────────────────────────────────────────────────────────
 
+/** Hiển thị các mốc thực hiện đồ án. */
 const TimelineSection = () => (
   <section className={styles.timeline}>
     <div className={styles.timelineInner}>
@@ -297,6 +302,7 @@ const TimelineSection = () => (
 
 // ─── Tech Stack ─────────────────────────────────────────────────────────────
 
+/** Liệt kê các công nghệ chính được sử dụng. */
 const TechSection = () => (
   <section className={styles.tech}>
     <div className={styles.techInner}>
@@ -331,6 +337,7 @@ const TechSection = () => (
 
 // ─── Team ───────────────────────────────────────────────────────────────────
 
+/** Giới thiệu thành viên thực hiện dự án. */
 const TeamSection = () => (
   <section className={styles.team}>
     <div className={styles.teamInner}>
@@ -356,6 +363,7 @@ const TeamSection = () => (
 
 // ─── CTA ─────────────────────────────────────────────────────────────────────
 
+/** Điều hướng người dùng sang màn hình đăng nhập. */
 const CtaSection = () => (
   <section className={styles.cta}>
     <div className={styles.ctaInner}>
@@ -375,6 +383,7 @@ const CtaSection = () => (
 
 // ─── AboutPage ──────────────────────────────────────────────────────────────
 
+/** Ghép các section thành trang giới thiệu dự án. */
 const AboutPage = () => (
   <div>
     <PublicNav />

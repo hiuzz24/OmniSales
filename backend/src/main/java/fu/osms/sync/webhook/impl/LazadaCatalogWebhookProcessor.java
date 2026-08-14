@@ -7,7 +7,6 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductVariantRepository;
-import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelCredentialRepository;
@@ -401,7 +400,9 @@ public class LazadaCatalogWebhookProcessor implements PlatformCatalogWebhookProc
         if (price != null) {
             variant.setPrice(WebhookPayloadUtils.decimal(price));
         }
-        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
+        if (variant.getId() == null && variant.getCostPrice() == null) {
+            variant.setCostPrice(BigDecimal.ZERO);
+        }
         variant.setOptionValues(optionValues(payload));
         variant.setIsActive(true);
         variant.setDeletedAt(null);

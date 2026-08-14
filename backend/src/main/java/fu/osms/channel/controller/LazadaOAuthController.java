@@ -37,6 +37,7 @@ public class LazadaOAuthController {
 
     @GetMapping("/authorize")
     @PreAuthorize("hasRole('OWNER')")
+    /* Tạo URL ủy quyền người bán Lazada từ app credentials đã cấu hình. */
     public ResponseEntity<ApiResponse<Map<String, String>>> authorize() {
         try {
             String authUrl = lazadaChannelConnectionService.buildAuthorizationUrl();
@@ -51,6 +52,7 @@ public class LazadaOAuthController {
     }
 
     @GetMapping("/callback")
+    /** Đổi code Lazada, xác định người bán và kết nối kênh. */
     public void callback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String error,
