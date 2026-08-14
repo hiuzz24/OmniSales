@@ -51,6 +51,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
     private final EventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
+    /** Xác minh, chống trùng và lưu webhook trước khi lên lịch xử lý nghiệp vụ. */
     @Override
     @Transactional
     public WebhookReceiveResult receive(PlatformType platform, Map<String, String> headers, String rawBody) {
@@ -145,6 +146,7 @@ public class WebhookReceiverServiceImpl implements WebhookReceiverService {
         return RabbitMQConstants.SYNC_PRODUCT;
     }
 
+    /** Tìm webhook đã lưu để chẩn đoán vấn đề kết nối kênh. */
     @Override
     @Transactional(readOnly = true)
     public PageResponse<WebhookEventResponse> search(PlatformType platform,

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 
+/** Quản lý cây category, gợi ý và từ khóa tìm kiếm riêng cho từng platform. */
 const usePlatformCategoryBrowser = () => {
   const [categoryState, setCategoryState] = useState({});
   const [suggestionState, setSuggestionState] = useState({});

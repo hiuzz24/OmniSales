@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import authService from '../services/authService';
 import styles from './ForgotPasswordPage.module.css';
 
+/** Cho phép yêu cầu email đặt lại mật khẩu mà không tiết lộ tài khoản tồn tại. */
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -11,6 +12,7 @@ const ForgotPasswordPage = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const emailInputRef = useRef(null);
 
+  // Gửi yêu cầu tạo token đặt lại mật khẩu cho email đã nhập.
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');

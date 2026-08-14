@@ -30,6 +30,7 @@ public class OrderReturnActionStateService {
     private final OrderReturnRepository returnRepository;
     private final OrderReturnItemRepository itemRepository;
 
+    /** Lưu trạng thái PROCESSING và request ID bền vững trước khi gọi platform. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ReturnActionContext beginNew(UUID returnId, ReturnAction action, ReturnRejectCommand rejectCommand) {
         OrderReturn orderReturn = lock(returnId);
@@ -52,6 +53,7 @@ public class OrderReturnActionStateService {
         return context(orderReturn);
     }
 
+    /** Tái sử dụng request identity trước đó cho lần thử lại được phép. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ReturnActionContext beginRetry(UUID returnId) {
         OrderReturn orderReturn = lock(returnId);
@@ -71,6 +73,7 @@ public class OrderReturnActionStateService {
         return context(orderReturn);
     }
 
+    /** Tạo action context chỉ đọc để xác minh kết quả từ xa. */
     @Transactional(readOnly = true)
     public ReturnActionContext contextForCheck(UUID returnId) {
         OrderReturn orderReturn = returnRepository.findById(returnId)
@@ -98,6 +101,7 @@ public class OrderReturnActionStateService {
         return context(orderReturn);
     }
 
+    /** Đánh dấu action đã ổn định sau khi lưu snapshot platform. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markIdle(UUID returnId) {
         OrderReturn orderReturn = lock(returnId);
@@ -106,6 +110,7 @@ public class OrderReturnActionStateService {
         returnRepository.save(orderReturn);
     }
 
+    /** Lưu lỗi từ chối chắc chắn của platform mà không đổi business status trả hàng. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markFailed(UUID returnId, String error) {
         OrderReturn orderReturn = lock(returnId);
@@ -118,6 +123,7 @@ public class OrderReturnActionStateService {
         returnRepository.save(orderReturn);
     }
 
+    /** Lưu kết quả chưa xác định để không thử lại platform một cách mù quáng. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void markUnknown(UUID returnId, String error) {
         OrderReturn orderReturn = lock(returnId);

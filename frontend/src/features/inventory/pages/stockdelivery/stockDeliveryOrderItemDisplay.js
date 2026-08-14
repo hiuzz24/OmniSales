@@ -1,5 +1,7 @@
+/** Chuẩn hóa chuỗi làm khóa gộp item hiển thị. */
 const normalized = (value) => String(value ?? '').trim().toLowerCase();
 
+/** Cộng field số và giữ null khi mọi item đều không có giá trị. */
 const sumNullable = (items, field) => {
   const values = items
     .map((item) => item[field])
@@ -9,6 +11,7 @@ const sumNullable = (items, field) => {
     : values.reduce((total, value) => total + Number(value), 0);
 };
 
+/** Gộp các dòng cùng sản phẩm/SKU để modal order không hiển thị trùng tên. */
 export const groupStockDeliveryOrderItems = (items = []) => {
   const groups = new Map();
 

@@ -9,6 +9,7 @@ import java.time.Duration;
 @Service
 public class CookieServiceImpl implements CookieService {
     @Override
+    /** Ghi refresh token vào cookie HTTP-only được bảo vệ. */
     public void addRefreshTokenCookie(String refreshToken, HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie
                 .from("refreshToken",refreshToken)
@@ -22,6 +23,7 @@ public class CookieServiceImpl implements CookieService {
     }
 
     @Override
+    /** Làm cookie refresh token hết hạn ngay lập tức. */
     public void clearRefreshTokenCookie(HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie
                 .from("refreshToken", "")

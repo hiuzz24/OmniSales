@@ -16,6 +16,7 @@ const HEADER_STYLE = {
   border: allBorders,
 };
 
+/** Định dạng thời gian order để ghi vào Excel. */
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -23,6 +24,7 @@ const formatDate = (dateStr) => {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+/** Định dạng số tiền theo VND. */
 const formatCurrency = (amount) => {
   if (amount == null) return '';
   return new Intl.NumberFormat('vi-VN', {
@@ -80,6 +82,7 @@ export const ORDER_EXPORT_COLUMNS = [
   },
 ];
 
+/** Xuất danh sách order và các cột được chọn ra file Excel. */
 export const exportOrdersToExcel = (orders, selectedColumnKeys = null, filename = 'danh-sach-don-hang') => {
   const columns = selectedColumnKeys
     ? ORDER_EXPORT_COLUMNS.filter((c) => selectedColumnKeys.includes(c.key))

@@ -19,6 +19,7 @@ public class OrderReturnWorkflowListener {
     private final EventPublisher eventPublisher;
     private final OrderReturnWorkflowHandler handler;
 
+    /** Phát tác vụ payment/restock sau commit qua chế độ messaging đã cấu hình. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onChanged(OrderReturnChangedEvent event) {
         OrderReturnWorkflowMessage message = new OrderReturnWorkflowMessage(

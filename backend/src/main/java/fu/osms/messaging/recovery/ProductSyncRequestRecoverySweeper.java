@@ -25,6 +25,7 @@ public class ProductSyncRequestRecoverySweeper {
     private final ProductSyncRequestHandler handler;
 
     @Scheduled(fixedDelayString = "${app.messaging.recovery.product-sync-delay-ms:300000}")
+    /** Đánh dấu thất bại các yêu cầu cha bị bỏ dở mà không gọi lại API sàn. */
     public void sweep() {
         OffsetDateTime now = OffsetDateTime.now();
         List<SyncLog> stale = syncLogRepository.findStaleRequests(

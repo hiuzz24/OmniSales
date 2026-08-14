@@ -19,6 +19,7 @@ public class OrderPullDispatchService {
     private final EventPublisher eventPublisher;
     private final OrderPullLocalFallback localFallback;
 
+    /** Đánh dấu job bền vững đã publish trước khi gửi message RabbitMQ. */
     public void dispatch(UUID jobId) {
         if (!jobStore.prepareDispatch(jobId)) {
             return;
@@ -26,6 +27,7 @@ public class OrderPullDispatchService {
         publishPrepared(jobId);
     }
 
+    /** Gửi job đã chuẩn bị qua RabbitMQ với cùng handler fallback nội bộ. */
     public void publishPrepared(UUID jobId) {
         log.info("[OrderPullDispatch] Publishing order pull jobId={}", jobId);
         eventPublisher.publish(
@@ -34,4 +36,3 @@ public class OrderPullDispatchService {
                 () -> localFallback.processAsync(jobId));
     }
 }
-

@@ -9,12 +9,14 @@ import {
   MapPin,
   Package,
   Phone,
+  Plus,
   RefreshCw,
   Store,
   User,
   X,
 } from 'lucide-react';
 import orderApi from '../../../../api/orderApi';
+import OrderGiftProductPickerModal from './OrderGiftProductPickerModal';
 import { groupStockDeliveryOrderItems } from './stockDeliveryOrderItemDisplay';
 import styles from './OrderDetailPreviewModal.module.css';
 
@@ -34,12 +36,15 @@ const PAYMENT_LABELS = {
   REFUNDED: 'Đã hoàn tiền',
 };
 
+/** Loại bỏ giá trị rỗng trước khi ghép chuỗi hiển thị. */
 const compact = (values) => values
   .filter((value) => value != null && String(value).trim() !== '')
   .map((value) => String(value).trim());
 
+/** Loại bỏ các giá trị trùng nhưng giữ nguyên thứ tự. */
 const unique = (values) => [...new Set(values)];
 
+/** Định dạng ngày giờ của order theo locale Việt Nam. */
 const formatDate = (value) => {
   if (!value) return '-';
   const date = new Date(value);
@@ -53,6 +58,7 @@ const formatDate = (value) => {
   });
 };
 
+/** Định dạng tiền theo currency của order. */
 const formatCurrency = (value, currency) => {
   if (value == null) return '-';
   const amount = Number(value);
@@ -69,6 +75,7 @@ const formatCurrency = (value, currency) => {
   }
 };
 
+/** Chuẩn hóa địa chỉ platform thành các dòng dễ đọc trong modal. */
 const addressLines = (address) => {
   if (!address) return ['Chưa có địa chỉ giao hàng'];
   if (typeof address === 'string') return [address];
@@ -96,18 +103,28 @@ const addressLines = (address) => {
   return lines.length > 0 ? lines : ['Chưa có địa chỉ giao hàng'];
 };
 
+/** Tính thành tiền item khi platform không trả sẵn totalPrice. */
 const itemTotal = (item) => {
   if (item?.totalPrice != null) return item.totalPrice;
   return (Number(item?.unitPrice) || 0) * (Number(item?.quantity) || 0)
     - (Number(item?.discountAmount) || 0);
 };
 
-export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClose }) {
+/** Hiển thị nhanh chi tiết order và quà tặng trước khi tạo phiếu xuất. */
+export default function OrderDetailPreviewModal({ orderId, giftItems = [], onConfirmGifts, onClose }) {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [draftGiftItems, setDraftGiftItems] = useState(() => giftItems.map((item) => ({ ...item })));
+  const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const displayItems = useMemo(() => groupStockDeliveryOrderItems(order?.items), [order]);
 
+  const confirmGiftSelection = () => {
+    onConfirmGifts?.(draftGiftItems);
+    onClose();
+  };
+
+  // Tải order detail rồi gộp các item chỉ phục vụ hiển thị.
   const loadOrder = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -143,8 +160,14 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
+    // Đóng modal khi người dùng nhấn Escape.
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Escape') return;
+      if (giftPickerOpen) {
+        setGiftPickerOpen(false);
+        return;
+      }
+      onClose();
     };
 
     document.body.style.overflow = 'hidden';
@@ -153,7 +176,7 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [onClose]);
+  }, [giftPickerOpen, onClose]);
 
   const shippingLines = useMemo(
     () => addressLines(order?.shippingAddress),
@@ -245,10 +268,15 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
             <section className={styles.itemsSection}>
               <div className={styles.sectionHeader}>
                 <h3><Package size={16} /> Sản phẩm trong phiếu xuất</h3>
-                <span>
-                  {displayItems.length} sản phẩm đặt
-                  {giftItems.length > 0 ? ` · ${giftItems.length} quà tặng` : ''}
-                </span>
+                <div className={styles.sectionActions}>
+                  <span>
+                    {displayItems.length} sản phẩm đặt
+                    {draftGiftItems.length > 0 ? ` · ${draftGiftItems.length} quà tặng` : ''}
+                  </span>
+                  <button type="button" className={styles.addGiftButton} onClick={() => setGiftPickerOpen(true)}>
+                    <Plus size={14} /> Thêm sản phẩm
+                  </button>
+                </div>
               </div>
               <div className={styles.itemsTableWrap}>
                 <table className={styles.itemsTable}>
@@ -274,7 +302,7 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
                         <td className={styles.numberCell}>{formatCurrency(itemTotal(item), order.currency)}</td>
                       </tr>
                     ))}
-                    {giftItems.map((item) => (
+                    {draftGiftItems.map((item) => (
                       <tr key={`gift-${item.productVariantId}`} className={styles.giftRow}>
                         <td>
                           <div className={styles.giftProductName}>
@@ -289,7 +317,7 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
                         <td className={styles.numberCell}>-</td>
                       </tr>
                     ))}
-                    {displayItems.length === 0 && giftItems.length === 0 && (
+                    {displayItems.length === 0 && draftGiftItems.length === 0 && (
                       <tr><td colSpan={5} className={styles.emptyItems}>Đơn hàng chưa có sản phẩm.</td></tr>
                     )}
                   </tbody>
@@ -306,9 +334,30 @@ export default function OrderDetailPreviewModal({ orderId, giftItems = [], onClo
                 <div className={styles.grandTotal}><dt>Tổng cộng</dt><dd>{formatCurrency(order.totalAmount, order.currency)}</dd></div>
               </dl>
             </section>
+
+            <footer className={styles.confirmFooter}>
+              <p>Quà tặng không được cộng vào tổng tiền của đơn hàng.</p>
+              <div>
+                <button type="button" className={styles.cancelButton} onClick={onClose}>Đóng</button>
+                <button type="button" className={styles.confirmButton} onClick={confirmGiftSelection}>
+                  Xác nhận
+                </button>
+              </div>
+            </footer>
           </div>
         )}
       </section>
+      {giftPickerOpen && order && (
+        <OrderGiftProductPickerModal
+          order={order}
+          value={draftGiftItems}
+          onConfirm={(items) => {
+            setDraftGiftItems(items);
+            setGiftPickerOpen(false);
+          }}
+          onClose={() => setGiftPickerOpen(false)}
+        />
+      )}
     </div>,
     document.body,
   );

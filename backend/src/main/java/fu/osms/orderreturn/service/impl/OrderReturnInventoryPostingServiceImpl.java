@@ -37,6 +37,7 @@ public class OrderReturnInventoryPostingServiceImpl implements OrderReturnInvent
     private final InventoryTransactionRepository transactionRepository;
     private final MarketplaceInventoryPropagationService propagationService;
 
+    /** Nhập số lượng hàng đạt đúng một lần sau khi process và refund được xác nhận. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 10)
     public void postIfReady(UUID returnId) {
@@ -105,6 +106,7 @@ public class OrderReturnInventoryPostingServiceImpl implements OrderReturnInvent
         }
     }
 
+    /** Ghi lỗi nhập kho có thể phục hồi mà không rollback trạng thái payment đã xác nhận. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW, timeout = 10)
     public void markPending(UUID returnId, String error) {

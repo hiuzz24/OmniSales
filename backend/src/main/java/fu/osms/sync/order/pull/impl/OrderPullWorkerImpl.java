@@ -21,6 +21,7 @@ public class OrderPullWorkerImpl implements OrderPullWorker {
     private final OrderPullRecoveryProperties recoveryProperties;
     private final List<PlatformOrderImporter> importers;
 
+    /** Nhận job idempotent, chuyển cho importer của platform và lưu số liệu kết thúc. */
     @Override
     public void process(UUID orderPullJobId) {
         OrderPullJobContext job = jobStore.claim(orderPullJobId, recoveryProperties.getMaxAttempts())

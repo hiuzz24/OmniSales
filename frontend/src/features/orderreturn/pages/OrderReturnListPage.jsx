@@ -27,6 +27,7 @@ import styles from './OrderReturnListPage.module.css';
 
 const PAGE_SIZE = 6;
 
+/** Hiển thị danh sách phiếu trả hàng và polling phiếu mới mỗi năm giây. */
 const OrderReturnListPage = () => {
   const navigate = useNavigate();
   const [page, setPage] = useState(0);
@@ -34,6 +35,7 @@ const OrderReturnListPage = () => {
   const [loading, setLoading] = useState(true);
   const [lastLoadedAt, setLastLoadedAt] = useState(null);
 
+  // Làm mới danh sách trả hàng có phân trang để polling hiển thị phiếu mới từ platform.
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -60,6 +62,7 @@ const OrderReturnListPage = () => {
 
   const rows = result.content ?? [];
   const totalPages = Math.max(result.totalPages ?? 0, 1);
+  // Điều hướng tới chi tiết phiếu trả được chọn.
   const openDetail = (returnId) => {
     navigate(ROUTES.ORDER_RETURN_DETAIL.replace(':id', returnId));
   };

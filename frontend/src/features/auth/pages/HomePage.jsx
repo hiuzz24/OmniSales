@@ -102,6 +102,7 @@ const STATS = [
 
 // ─── Navigation ─────────────────────────────────────────────────────────────
 
+/** Điều hướng công khai và chuyển người đã đăng nhập về Dashboard. */
 const PublicNav = () => {
   const { isAuthenticated } = useAuth();
   const [open, setOpen] = useState(false);
@@ -212,6 +213,7 @@ const PublicNav = () => {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
+/** Giới thiệu giá trị chính của hệ thống trên màn hình đầu. */
 const HeroSection = () => (
   <section className={styles.hero}>
     <div className={styles.heroInner}>
@@ -301,6 +303,7 @@ const HeroSection = () => (
 
 // ─── Stats Bar ───────────────────────────────────────────────────────────────
 
+/** Hiển thị các chỉ số giới thiệu ngắn của hệ thống. */
 const StatsBar = () => (
   <div className={styles.statsBar}>
     <div className={styles.statsInner}>
@@ -319,6 +322,7 @@ const StatsBar = () => (
 
 // ─── Features ─────────────────────────────────────────────────────────────────
 
+/** Trình bày các nhóm chức năng nổi bật. */
 const FeaturesSection = () => (
   <section id="features" className={styles.features}>
     <div className={styles.featuresInner}>
@@ -354,6 +358,7 @@ const FeaturesSection = () => (
 
 // ─── How It Works ─────────────────────────────────────────────────────────────
 
+/** Mô tả ba bước bắt đầu sử dụng hệ thống. */
 const HowItWorksSection = () => (
   <section id="how-it-works" className={styles.howItWorks}>
     <div className={styles.howItWorksInner}>
@@ -381,6 +386,7 @@ const HowItWorksSection = () => (
 
 // ─── CTA ─────────────────────────────────────────────────────────────────────
 
+/** Hiển thị lời kêu gọi đăng nhập vào hệ thống nội bộ. */
 const CtaSection = () => (
   <section className={styles.cta}>
     <div className={styles.ctaInner}>
@@ -400,6 +406,7 @@ const CtaSection = () => (
 
 // ─── HomePage ─────────────────────────────────────────────────────────────────
 
+/** Ghép các section thành trang giới thiệu công khai. */
 const HomePage = () => (
   <div>
     <PublicNav />

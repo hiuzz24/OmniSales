@@ -20,6 +20,7 @@ public class ProductLogController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Trả về lịch sử thay đổi có phân trang của một sản phẩm. */
     public ResponseEntity<ApiResponse<PageResponse<ProductLogResponse>>> getLogs(
             @RequestParam(required = false) UUID productId,
             @RequestParam(defaultValue = "0") int page,

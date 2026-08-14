@@ -26,6 +26,7 @@ public class ChannelConnectionValidatorImpl implements ChannelConnectionValidato
     private final ChannelCredentialRepository credentialRepository;
 
     @Override
+    /** Tải kênh và từ chối bản ghi không tồn tại, đã xóa hoặc đã ngắt kết nối. */
     public Channel requireConnected(UUID channelId) {
         Channel channel = channelRepository.findById(channelId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
@@ -34,6 +35,7 @@ public class ChannelConnectionValidatorImpl implements ChannelConnectionValidato
     }
 
     @Override
+    /** Kiểm tra yêu cầu credential riêng của platform đối với kênh đã kết nối. */
     public void validateConnected(Channel channel) {
         if (channel.getDeletedAt() != null || !"CONNECTED".equals(channel.getStatus())) {
             throw new AppException(ErrorCode.CHANNEL_NOT_CONNECTED);

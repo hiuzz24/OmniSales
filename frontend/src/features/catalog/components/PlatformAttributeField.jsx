@@ -3,6 +3,7 @@ import styles from './PlatformConfigSection.module.css';
 
 const TIKTOK_FREE_TEXT_ATTRIBUTE_IDS = new Set(['101489', '101490']);
 
+/** Kiểm tra chuỗi có phải URL HTTP(S) hợp lệ hay không. */
 const isHttpUrl = (value) => {
   if (!value?.trim()) return false;
   try {
@@ -12,6 +13,7 @@ const isHttpUrl = (value) => {
   }
 };
 
+/** Render đúng loại input cho một attribute của TikTok hoặc Lazada. */
 const PlatformAttributeField = ({
   channel,
   attribute,

@@ -12,6 +12,7 @@ import { ROLES } from '../../auth/constants/roles';
 import useAuth from '../../auth/hooks/useAuth';
 import styles from './ProductManagementPage.module.css';
 
+/** Hiển thị danh sách, bộ lọc và các thao tác quản lý sản phẩm. */
 const ProductManagementPage = () => {
   const { user } = useAuth();
   const canManageProducts = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;

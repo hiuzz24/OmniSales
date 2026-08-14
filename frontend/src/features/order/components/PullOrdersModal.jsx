@@ -3,11 +3,13 @@ import { Download, X } from 'lucide-react';
 import styles from './PullOrdersModal.module.css';
 
 const supportedPlatforms = new Set(['LAZADA', 'SHOPIFY', 'TIKTOK']);
+/** Chuyển Date sang định dạng dùng cho input datetime-local. */
 const localDateTime = (date) => {
   const offset = date.getTimezoneOffset();
   return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
 };
 
+/** Cho phép chọn kênh và khoảng tối đa bảy ngày để kéo đơn thủ công. */
 const PullOrdersModal = ({ open, channels, submitting, onClose, onSubmit }) => {
   const availableChannels = useMemo(() => channels.filter((channel) =>
     channel.status === 'CONNECTED' && supportedPlatforms.has(channel.platform)), [channels]);
@@ -26,8 +28,10 @@ const PullOrdersModal = ({ open, channels, submitting, onClose, onSubmit }) => {
   }, [open]);
 
   if (!open) return null;
+  // Thêm hoặc bỏ một kênh khỏi yêu cầu kéo đơn.
   const toggle = (id) => setSelected((current) =>
     current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  // Kiểm tra giới hạn bảy ngày trước khi tạo job kéo đơn cho từng kênh.
   const submit = (event) => {
     event.preventDefault();
     const fromDate = new Date(from);

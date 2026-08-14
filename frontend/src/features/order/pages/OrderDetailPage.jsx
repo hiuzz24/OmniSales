@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ROUTES } from '../../../app/router/routes';
@@ -42,6 +42,7 @@ const CHANNEL_CONFIG = {
   Manual:  { icon: PenTool,     bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
 };
 
+/** Trả về cấu hình màu và nhãn của channel trên trang chi tiết. */
 const getChannelStyle = (name) => {
   if (!name) return null;
   const key = Object.keys(CHANNEL_CONFIG).find((k) =>
@@ -50,6 +51,7 @@ const getChannelStyle = (name) => {
   return CHANNEL_CONFIG[key] || { icon: Store, bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
 };
 
+/** Hiển thị chi tiết đơn và điều phối status, payment, cancellation cùng readiness xuất kho. */
 const OrderDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -77,6 +79,7 @@ const OrderDetailPage = () => {
   const [readinessLoading, setReadinessLoading] = useState(true);
   const [readinessError, setReadinessError] = useState(null);
 
+  // Tải lại trạng thái đơn từ platform mà không làm giật màn chi tiết khi polling.
   const fetchOrder = async ({ silent = false } = {}) => {
     if (!silent) {
       setLoading(true);
@@ -96,6 +99,7 @@ const OrderDetailPage = () => {
     }
   };
 
+  // Tải lịch sử thay đổi trạng thái và thanh toán của đơn.
   const fetchHistory = async () => {
     try {
       const data = await orderService.getHistory(id, 0, 50);
@@ -105,6 +109,7 @@ const OrderDetailPage = () => {
     }
   };
 
+  // Kiểm tra đơn đã sẵn sàng tạo hoặc hoàn thành phiếu xuất hay chưa.
   const fetchReadiness = async ({ silent = false } = {}) => {
     if (!silent) {
       setReadinessLoading(true);
@@ -139,11 +144,13 @@ const OrderDetailPage = () => {
     return () => window.clearInterval(refreshInterval);
   }, [id]);
 
+  // Mở bước xác nhận cho trạng thái mới được chọn.
   const handleUpdateStatus = async (newStatus) => {
     setShowStatusMenu(false);
     setConfirmStatus(newStatus);
   };
 
+  // Gửi chuyển trạng thái đã chọn qua chính sách platform của backend.
   const handleConfirmStatus = async () => {
     if (!confirmStatus) return;
     const targetStatus = confirmStatus;
@@ -164,11 +171,13 @@ const OrderDetailPage = () => {
     }
   };
 
+  // Mở bước xác nhận cập nhật payment status nội bộ.
   const handleUpdatePaymentStatus = (newStatus) => {
     setShowPaymentMenu(false);
     setConfirmPayment(newStatus);
   };
 
+  // Gửi payment status sau khi người dùng xác nhận.
   const handleConfirmPaymentStatus = async () => {
     if (!confirmPayment) return;
     setUpdating(true);
@@ -185,10 +194,14 @@ const OrderDetailPage = () => {
     }
   };
 
+  // Kiểm tra đơn thuộc Lazada.
   const isLazadaOrder = (value) => value?.platform === 'LAZADA';
+  // Kiểm tra đơn thuộc Shopify.
   const isShopifyOrder = (value) => value?.platform === 'SHOPIFY';
+  // Kiểm tra đơn thuộc TikTok.
   const isTikTokOrder = (value) => value?.platform === 'TIKTOK';
 
+  // Tải lý do hủy riêng của platform trước khi mở modal.
   const handleOpenCancelModal = async () => {
     setShowCancelModal(true);
     setCancelReasonId('');
@@ -220,6 +233,7 @@ const OrderDetailPage = () => {
     }
   };
 
+  // Gửi yêu cầu hủy qua endpoint chuyên dụng, không dùng cập nhật trạng thái chung.
   const handleCancel = async () => {
     if (!isLazadaOrder(order) && !isShopifyOrder(order) && !isTikTokOrder(order) && !cancelReason.trim()) {
       toast.error('Vui lòng nhập lý do hủy');
@@ -266,6 +280,7 @@ const OrderDetailPage = () => {
     }
   };
 
+  // Định dạng số tiền theo locale Việt Nam.
   const formatCurrency = (amount) => {
     if (amount == null) return '-';
     return new Intl.NumberFormat('vi-VN', {
@@ -273,6 +288,7 @@ const OrderDetailPage = () => {
     }).format(amount);
   };
 
+  // Định dạng timestamp đơn hàng để hiển thị.
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('vi-VN', {
@@ -281,13 +297,16 @@ const OrderDetailPage = () => {
     });
   };
 
+  // Nối các phần địa chỉ có giá trị và bỏ phần trống.
   const compact = (parts) => parts.filter(Boolean).join(', ');
 
+  // Chuyển dữ liệu platform sang số an toàn để tính tiền.
   const toNumber = (value) => {
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
   };
 
+  // Tính tổng tiền một dòng đơn từ giá, số lượng và giảm giá.
   const itemLineTotal = (item) => {
     if (item?.totalPrice != null) {
       return toNumber(item.totalPrice);
@@ -295,6 +314,7 @@ const OrderDetailPage = () => {
     return toNumber(item?.unitPrice) * toNumber(item?.quantity || 1) - toNumber(item?.discountAmount);
   };
 
+  // Gộp các dòng cùng định danh sản phẩm để hiển thị số lượng tổng.
   const groupOrderItems = (items = []) => {
     const grouped = new Map();
 
@@ -327,12 +347,14 @@ const OrderDetailPage = () => {
     return Array.from(grouped.values());
   };
 
+  // Lấy tên người nhận từ các alias địa chỉ của nhiều platform.
   const fullNameFromAddress = (address) => {
     if (!address || typeof address === 'string') return null;
     const fullName = compact([address.first_name, address.last_name]);
     return address.name || fullName || null;
   };
 
+  // Chuẩn hóa địa chỉ platform thành các dòng hiển thị.
   const formatAddressLines = (address) => {
     if (!address) return ['-'];
     if (typeof address === 'string') return [address];
@@ -354,13 +376,16 @@ const OrderDetailPage = () => {
     ].filter(Boolean);
   };
 
+  // Xác định bước hiện tại trên timeline trạng thái đơn.
   const getCurrentStep = () => {
     const idx = STATUS_FLOW.indexOf(order?.status);
     return idx >= 0 ? idx : -1;
   };
 
+  // Phân biệt đơn từ sàn với đơn MANUAL cũ.
   const isPlatformOrder = (value) => value?.platform && value.platform !== 'MANUAL';
 
+  // Trả về các trạng thái người dùng được phép chọn từ trạng thái hiện tại.
   const getAvailableStatusOptions = () => {
     if (!order) {
       return [];

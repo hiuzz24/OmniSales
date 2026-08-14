@@ -19,6 +19,7 @@ import java.util.UUID;
 public class OrderPullController {
     private final OrderPullService service;
 
+    /** Tạo một job kéo đơn bền vững cho mỗi kênh và trả ngay trạng thái job. */
     @PostMapping
     public ResponseEntity<ApiResponse<List<SyncLogResponse>>> start(@Valid @RequestBody OrderPullRequest request) {
         List<SyncLogResponse> created = service.start(request);
@@ -26,11 +27,13 @@ public class OrderPullController {
         return ResponseEntity.ok(ApiResponse.success("Order pull jobs started", latest));
     }
 
+    /** Trả về tiến độ mới nhất của một job kéo đơn thủ công. */
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<SyncLogResponse>> get(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.get(id)));
     }
 
+    /** Liệt kê job kéo đơn đang chờ để frontend tiếp tục polling sau khi chuyển trang. */
     @GetMapping("/active")
     public ResponseEntity<ApiResponse<List<SyncLogResponse>>> active() {
         return ResponseEntity.ok(ApiResponse.success(service.active()));

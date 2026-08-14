@@ -50,12 +50,14 @@ const NOTE_STYLE = {
   border: allBorders,
 };
 
+/** Gắn style vào một ô Excel mà không làm mất dữ liệu hiện có. */
 const setCellStyle = (worksheet, ref, style) => {
   const cell = worksheet[ref] || { t: 's', v: '' };
   cell.s = { ...(cell.s || {}), ...style };
   worksheet[ref] = cell;
 };
 
+/** Chuyển chỉ số cột dạng số sang ký hiệu cột Excel. */
 const colLetter = (index) => {
   let s = '';
   let n = index;
@@ -66,12 +68,14 @@ const colLetter = (index) => {
   return s;
 };
 
+/** Áp dụng cùng style cho toàn bộ ô trong một hàng. */
 const applyRowStyle = (worksheet, rowIndex, style, numCols) => {
   for (let c = 0; c < numCols; c += 1) {
     setCellStyle(worksheet, `${colLetter(c)}${rowIndex}`, style);
   }
 };
 
+/** Tạo sheet ví dụ để người dùng tham khảo cấu trúc Product/Variant. */
 const buildTemplateSheet = () => {
   const header = IMPORT_TEMPLATE_COLUMNS.map((c) => c.label);
   const aoa = [header];
@@ -134,6 +138,7 @@ const buildTemplateSheet = () => {
   return worksheet;
 };
 
+/** Tạo sheet trống dùng để nhập dữ liệu thực tế. */
 const buildInputSheet = () => {
   const numCols = IMPORT_TEMPLATE_COLUMNS.length;
   const header = IMPORT_TEMPLATE_COLUMNS.map((c) => c.label);
@@ -153,6 +158,7 @@ const buildInputSheet = () => {
   return worksheet;
 };
 
+/** Tạo sheet hướng dẫn cách chuẩn bị dữ liệu import. */
 const buildInstructionsSheet = () => {
   const numCols = IMPORT_TEMPLATE_COLUMNS.length;
   const aoa = [];
@@ -237,6 +243,7 @@ const buildInstructionsSheet = () => {
   return worksheet;
 };
 
+/** Tạo sheet mô tả ý nghĩa và mức bắt buộc của từng cột. */
 const buildColumnsSheet = () => {
   const aoa = [
     ['#', 'Tên cột (header)', 'Key', 'Bắt buộc?', 'Ví dụ', 'Mô tả'],
@@ -279,6 +286,7 @@ const buildColumnsSheet = () => {
   return worksheet;
 };
 
+/** Sinh và tải xuống workbook mẫu import Product. */
 export const downloadImportTemplate = () => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, buildInstructionsSheet(), 'Hướng dẫn');

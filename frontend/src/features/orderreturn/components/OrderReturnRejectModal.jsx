@@ -4,6 +4,7 @@ import modalStyles from './OrderReturnModal.module.css';
 
 const styles = { ...pageStyles, ...modalStyles };
 
+/** Thu thập reason code hợp lệ và ghi chú để từ chối yêu cầu trả hàng. */
 const OrderReturnRejectModal = ({
   options,
   loading,

@@ -31,7 +31,7 @@ const ISSUE_TYPES = {
 };
 
 const STATUS_CFG = {
-  DRAFT: { label: 'Đang xử lý', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
+  DRAFT: { label: 'Lưu tạm', color: '#d97706', bg: '#fffbeb', border: '#fcd34d' },
   CONFIRMED: { label: 'Hoàn thành', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
   CANCELLED: { label: 'Đã hủy', color: '#e11d48', bg: '#fff1f2', border: '#fecdd3' },
 };
@@ -63,11 +63,8 @@ const formatDateOnly = (value) => {
 
 const getResponseData = (response) => response?.data?.data ?? response?.data ?? response ?? {};
 
-const StatusBadge = ({ status, issueType }) => {
-  const base = STATUS_CFG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
-  const config = issueType === 'ORDER' && status === 'DRAFT'
-    ? { ...base, label: 'Chờ xuất kho' }
-    : base;
+const StatusBadge = ({ status }) => {
+  const config = STATUS_CFG[status] ?? { label: status ?? '-', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
   return (
     <span style={{
       display: 'inline-flex',
@@ -173,7 +170,7 @@ export default function StockDeliveryDetailPage() {
     if (!delivery || delivery.status !== 'DRAFT' || !canComplete) return;
     const ok = await confirm({
       title: 'Hoàn thành phiếu xuất?',
-      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Đang xử lý.`,
+      message: `Xác nhận hoàn thành phiếu "${delivery.issueCode}". Sau khi hoàn thành sẽ không thể chuyển lại trạng thái Lưu tạm.`,
       confirmText: 'Hoàn thành',
     });
     if (!ok) {
@@ -314,7 +311,7 @@ export default function StockDeliveryDetailPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>
             <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>Trạng thái</div>
-            <StatusBadge status={delivery.status} issueType={delivery.issueType} />
+            <StatusBadge status={delivery.status} />
           </div>
 
           <div style={{ backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0', padding: '16px 18px' }}>

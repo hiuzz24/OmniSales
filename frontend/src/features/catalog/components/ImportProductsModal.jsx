@@ -6,6 +6,7 @@ import { parseImportFile, IMPORT_TEMPLATE_COLUMNS } from '../utils/importProduct
 import { downloadImportTemplate } from '../utils/downloadImportTemplate';
 import styles from './ImportProductsModal.module.css';
 
+/** Định dạng dung lượng file để hiển thị dễ đọc. */
 const formatFileSize = (bytes) => {
   if (!bytes) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
@@ -13,6 +14,7 @@ const formatFileSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 };
 
+/** Kiểm tra file Excel và gửi import sản phẩm vào OSMS. */
 const ImportProductsModal = ({ isOpen, onClose, onSuccess }) => {
   const [step, setStep] = useState(1);
   const [file, setFile] = useState(null);
@@ -31,6 +33,7 @@ const ImportProductsModal = ({ isOpen, onClose, onSuccess }) => {
     }
   }, [isOpen]);
 
+  // Xóa file, lỗi và kết quả của lần import hiện tại.
   const reset = () => {
     setStep(1);
     setFile(null);
@@ -42,15 +45,18 @@ const ImportProductsModal = ({ isOpen, onClose, onSuccess }) => {
     setCategoryErrors([]);
   };
 
+  // Reset trạng thái trước khi đóng modal.
   const handleClose = () => {
     reset();
     onClose();
   };
 
+  // Mở trình chọn file Excel của trình duyệt.
   const handlePickFile = () => {
     fileInputRef.current?.click();
   };
 
+  // Kiểm tra định dạng và nội dung cơ bản của file được chọn.
   const handleFileChange = async (selected) => {
     if (!selected) return;
     setParseError('');
@@ -80,6 +86,7 @@ const ImportProductsModal = ({ isOpen, onClose, onSuccess }) => {
     setStep(2);
   };
 
+  // Nhận file Excel được kéo thả vào modal.
   const handleDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
@@ -87,6 +94,7 @@ const ImportProductsModal = ({ isOpen, onClose, onSuccess }) => {
     if (dropped) handleFileChange(dropped);
   };
 
+  // Gửi file hợp lệ tới endpoint import và hiển thị kết quả.
   const handleSubmit = async () => {
     if (!file) return;
     setSubmitting(true);

@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import authService from '../services/authService';
 import styles from './InviteRegisterPage.module.css';
 
+/** Hoàn tất đăng ký tài khoản từ lời mời có thời hạn. */
 const InviteRegisterPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -29,6 +30,7 @@ const InviteRegisterPage = () => {
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
+    // Xác thực token lời mời và tải thông tin người được mời.
     const checkToken = async () => {
       if (!token) {
         setValidationError('Không tìm thấy mã xác thực lời mời trong liên kết.');
@@ -63,6 +65,7 @@ const InviteRegisterPage = () => {
     checkToken();
   }, [token]);
 
+  // Kiểm tra mật khẩu và xác nhận mật khẩu trước khi kích hoạt tài khoản.
   const validateForm = () => {
     const newErrors = {};
 
@@ -91,6 +94,7 @@ const InviteRegisterPage = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  // Gửi thông tin đăng ký và tiêu thụ token lời mời.
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;

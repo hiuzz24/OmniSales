@@ -585,6 +585,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                 ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), localSku)
                         .orElseGet(ProductVariant::new)
                 : mappedVariant;
+        boolean newVariant = variant.getId() == null;
         variant.setProduct(product);
         variant.setSku(localSku);
         String variantName = product.getName();
@@ -593,7 +594,9 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
         if (!shouldPreserveLocalPrice(channelProduct, externalVariantId) || variant.getPrice() == null) {
             variant.setPrice(firstDecimal(skuNode, "price", "special_price", "sale_price", "salePrice"));
         }
-        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
+        if (newVariant) {
+            variant.setCostPrice(BigDecimal.ZERO);
+        }
         variant.setIsActive(true);
         variant.setOptionValues(resolveOptionValues(skuNode, variantName, product.getName()));
         variant.setWeightGrams(firstInteger(skuNode, "package_weight", "packageWeight", "weight"));

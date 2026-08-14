@@ -39,6 +39,7 @@ const CHANNEL_CONFIG = {
   Manual:  { icon: PenTool,     bg: '#f5f3ff', color: '#7c3aed', label: 'Manual'  },
 };
 
+/** Chọn icon platform tương ứng để hiển thị trong bảng order. */
 const getChannelIcon = (channelName) => {
   if (!channelName) return null;
   const name = channelName.trim();
@@ -58,6 +59,7 @@ const PAYMENT_CONFIG = {
   PAID:    { label: 'Đã thanh toán',   className: 'payPaid'    },
 };
 
+/** Xác định order đã đủ điều kiện lấy phiếu vận chuyển hay chưa. */
 const getShippingLabelAvailability = (order) => {
   if (order?.platform === 'TIKTOK') {
     return order.status === 'SHIPPED'
@@ -72,6 +74,7 @@ const getShippingLabelAvailability = (order) => {
   return { enabled: false, title: 'V1 chưa hỗ trợ in phiếu cho kênh này' };
 };
 
+/** Hiển thị danh sách đơn, polling trạng thái, kéo đơn và in phiếu vận chuyển. */
 const OrderListPage = () => {
   const { user } = useAuth();
   const canPullOrders = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
@@ -99,6 +102,7 @@ const OrderListPage = () => {
   const pullFailuresRef = useRef(0);
   const pullStartedAtRef = useRef(Date.now());
 
+  // Tải danh sách kênh phục vụ bộ lọc và modal kéo đơn.
   const fetchChannels = useCallback(async () => {
     try {
       const response = await channelApi.getAll();
@@ -108,6 +112,7 @@ const OrderListPage = () => {
     }
   }, []);
 
+  // Tải trang đơn hiện tại; chế độ silent hỗ trợ polling nền không làm nhấp nháy UI.
   const fetchOrders = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
@@ -132,6 +137,7 @@ const OrderListPage = () => {
     }
   }, [page, keyword, statusFilter, channelFilter, fromDate, toDate]);
 
+  // Tải các chỉ số tổng hợp trên đầu màn danh sách.
   const fetchStats = useCallback(async () => {
     try {
       const data = await orderService.getStats();
@@ -164,6 +170,7 @@ const OrderListPage = () => {
       return undefined;
     }
     let cancelled = false;
+    // Khôi phục polling cho các job kéo đơn còn PENDING sau khi tải lại trang.
     const recover = async () => {
       try {
         const storedIds = JSON.parse(sessionStorage.getItem(PULL_JOB_STORAGE_KEY) || '[]');
@@ -209,6 +216,7 @@ const OrderListPage = () => {
     return () => window.clearInterval(timer);
   }, [pullJobs, fetchOrders, fetchStats]);
 
+  // Khởi tạo job kéo đơn thủ công bền vững và để modal polling tiến độ.
   const handlePullOrders = async (payload) => {
     if (!canPullOrders) return;
     setIsStartingPull(true);
@@ -226,6 +234,7 @@ const OrderListPage = () => {
     }
   };
 
+  // Xóa toàn bộ bộ lọc và quay về trang đầu.
   const handleReset = () => {
     setKeyword('');
     setStatusFilter('');
@@ -235,6 +244,7 @@ const OrderListPage = () => {
     setPage(0);
   };
 
+  // Mở tab chờ trước rồi chuyển tới URL phiếu vận chuyển có chữ ký của platform.
   const handlePrintShippingLabel = async (order) => {
     const availability = getShippingLabelAvailability(order);
     if (!availability.enabled || printingOrderIds.has(order.id)) return;
@@ -268,6 +278,7 @@ const OrderListPage = () => {
     }
   };
 
+  // Định dạng giá trị tiền theo locale Việt Nam.
   const formatCurrency = (amount) => {
     if (amount == null) return '-';
     return new Intl.NumberFormat('vi-VN', {
@@ -275,6 +286,7 @@ const OrderListPage = () => {
     }).format(amount);
   };
 
+  // Định dạng thời gian tạo đơn để hiển thị trong bảng.
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('vi-VN', {
@@ -282,13 +294,17 @@ const OrderListPage = () => {
     });
   };
 
+  // Lấy nhãn và màu hiển thị của trạng thái đơn.
   const getStatusConfig = (status) => STATUS_CONFIG[status] || { label: status, color: 'slate' };
+  // Ghép class CSS tương ứng với trạng thái đơn.
   const getStatusClassName = (status) => {
     if (status === 'IN_TRANSIT') return 'statusInTransit';
     return `status${status.charAt(0) + status.slice(1).toLowerCase()}`;
   };
+  // Lấy nhãn và class của trạng thái thanh toán.
   const getPaymentConfig = (status) => PAYMENT_CONFIG[status] || { label: status, className: 'payUnpaid' };
 
+  // Gộp tên và số lượng item thành nội dung tóm tắt trong một ô bảng.
   const getItemsSummary = (items) => {
     if (!items || items.length === 0) return '-';
     if (items.length === 1) return items[0].name;

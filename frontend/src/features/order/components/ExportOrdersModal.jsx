@@ -9,9 +9,11 @@ import styles from './ExportOrdersModal.module.css';
 
 const PAGE_SIZE = 20;
 
+/** Lấy các cột được bật mặc định khi mở modal export. */
 const getDefaultColumnKeys = () =>
   ORDER_EXPORT_COLUMNS.filter((c) => c.defaultChecked).map((c) => c.key);
 
+/** Cho phép chọn đơn hàng và xuất dữ liệu theo bộ lọc hiện tại. */
 const ExportOrdersModal = ({ isOpen, onClose, currentFilters = {} }) => {
   const [orders, setOrders] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -35,6 +37,7 @@ const ExportOrdersModal = ({ isOpen, onClose, currentFilters = {} }) => {
     fetchPage(0);
   }, [isOpen]);
 
+  // Tải một trang đơn phục vụ việc lựa chọn dữ liệu xuất.
   const fetchPage = async (pageNum) => {
     setLoading(true);
     try {
@@ -53,6 +56,7 @@ const ExportOrdersModal = ({ isOpen, onClose, currentFilters = {} }) => {
     }
   };
 
+  // Chọn hoặc bỏ toàn bộ đơn trên trang hiện tại.
   const toggleSelectAll = () => {
     if (selectedIds.size === orders.length) {
       setSelectedIds(new Set());
@@ -61,6 +65,7 @@ const ExportOrdersModal = ({ isOpen, onClose, currentFilters = {} }) => {
     }
   };
 
+  // Chọn hoặc bỏ một đơn cụ thể.
   const toggleSelect = (id) => {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id);
@@ -68,6 +73,7 @@ const ExportOrdersModal = ({ isOpen, onClose, currentFilters = {} }) => {
     setSelectedIds(next);
   };
 
+  // Tải và chọn mọi đơn khớp bộ lọc trên tất cả trang.
   const handleSelectAllMatching = async () => {
     setLoading(true);
     try {
@@ -86,6 +92,7 @@ const ExportOrdersModal = ({ isOpen, onClose, currentFilters = {} }) => {
     }
   };
 
+  // Tạo file xuất từ các đơn đã chọn.
   const handleExport = async () => {
     if (selectedIds.size === 0) return;
     setExporting(true);

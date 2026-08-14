@@ -39,6 +39,7 @@ public class ProductChannelConfigController {
 
     @GetMapping("/api/products/{productId}/channels/{channelId}/config")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Tải cấu hình đăng bán riêng của platform cho một product mapping. */
     public ResponseEntity<ApiResponse<ChannelProductConfigResponse>> getConfig(
             @PathVariable UUID productId,
             @PathVariable UUID channelId) {
@@ -47,6 +48,7 @@ public class ProductChannelConfigController {
 
     @PutMapping("/api/products/{productId}/channels/{channelId}/config")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Kiểm tra và lưu các field bắt buộc để đăng sản phẩm lên kênh. */
     public ResponseEntity<ApiResponse<ChannelProductConfigResponse>> updateConfig(
             @PathVariable UUID productId,
             @PathVariable UUID channelId,
@@ -60,6 +62,7 @@ public class ProductChannelConfigController {
     @GetMapping("/api/platform-lookups/{platform}/categories")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     // MANUAL_CATEGORY_BROWSER_FALLBACK: kept while suggestion-first is verified.
+    /** Tra cứu danh mục sàn mà không thay đổi cây danh mục OSMS. */
     public ResponseEntity<ApiResponse<List<PlatformCategoryNodeResponse>>> categories(
             @PathVariable PlatformType platform,
             @RequestParam UUID channelId,
@@ -72,6 +75,7 @@ public class ProductChannelConfigController {
 
     @GetMapping("/api/platform-lookups/{platform}/categories/{categoryId}/attributes")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Trả về các thuộc tính sàn bắt buộc theo danh mục đã chọn. */
     public ResponseEntity<ApiResponse<List<PlatformAttributeResponse>>> attributes(
             @PathVariable PlatformType platform,
             @PathVariable String categoryId,
@@ -83,6 +87,7 @@ public class ProductChannelConfigController {
 
     @GetMapping("/api/platform-lookups/{platform}/brands")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Tìm thương hiệu trên sàn cho biểu mẫu đăng sản phẩm. */
     public ResponseEntity<ApiResponse<PlatformBrandPageResponse>> brands(
             @PathVariable PlatformType platform,
             @RequestParam UUID channelId,
@@ -100,6 +105,7 @@ public class ProductChannelConfigController {
 
     @PostMapping("/api/platform-lookups/{platform}/category-suggestions")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    /** Gợi ý danh mục sàn từ thông tin sản phẩm hiện tại. */
     public ResponseEntity<ApiResponse<List<PlatformCategorySuggestionResponse>>> categorySuggestions(
             @PathVariable PlatformType platform,
             @RequestBody CategorySuggestionRequest request) {
@@ -110,6 +116,7 @@ public class ProductChannelConfigController {
 
     @PutMapping("/api/platform-lookups/{platform}/cache")
     @PreAuthorize("hasRole('OWNER')")
+    /** Xóa cache tra cứu khi metadata của platform đã cũ. */
     public ResponseEntity<ApiResponse<Void>> clearCache(
             @PathVariable PlatformType platform,
             @RequestParam UUID channelId) {

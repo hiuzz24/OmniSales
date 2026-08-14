@@ -144,14 +144,33 @@
   white-space: nowrap;
 }
 
+.amountCell {
+  width: 138px;
+  text-align: right !important;
+  white-space: nowrap;
+}
+
+.amountCell strong {
+  display: block;
+  color: #172033;
+  font-size: 12px;
+}
+
+.amountCell span {
+  display: block;
+  margin-top: 3px;
+  color: #8b6745;
+  font-size: 10px;
+}
+
 .actionCell {
-  width: 178px;
+  width: 64px;
   text-align: center !important;
 }
 
 .actionButtons {
   display: flex;
-  min-width: 166px;
+  min-width: 32px;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
@@ -179,27 +198,6 @@
 .viewButton:focus-visible {
   outline: 3px solid rgba(53, 109, 169, 0.2);
   outline-offset: 2px;
-}
-
-.giftButton {
-  display: inline-flex;
-  height: 32px;
-  align-items: center;
-  gap: 5px;
-  padding: 0 9px;
-  border: 1px solid #d6a36f;
-  border-radius: 7px;
-  background: #fff8ef;
-  color: #96551f;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.giftButton:hover {
-  border-color: #bb7a3c;
-  background: #fff1df;
 }
 
 .orderCode {
@@ -232,18 +230,6 @@
   border-radius: 5px;
   background: #fff8ef;
   color: #8d5527 !important;
-}
-
-.giftItem button {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #a76631;
-  cursor: pointer;
 }
 
 .platform {

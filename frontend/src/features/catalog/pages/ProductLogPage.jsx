@@ -30,6 +30,7 @@ const ACTION_CONFIG = {
   },
 };
 
+/** Trả về cấu hình nhãn và màu tương ứng với loại thay đổi Product. */
 const getActionBadge = (action) => {
   const config = ACTION_CONFIG[action] || { label: action, className: '', icon: null, color: '#6b7280', bg: '#f3f4f6' };
   return (
@@ -40,6 +41,7 @@ const getActionBadge = (action) => {
   );
 };
 
+/** Hiển thị một chỉ số tổng hợp trong lịch sử sản phẩm. */
 const StatCard = ({ icon, label, value, color }) => (
   <div className={styles.statCard} style={{ '--stat-color': color }}>
     <div className={styles.statIcon}>{icon}</div>
@@ -50,6 +52,7 @@ const StatCard = ({ icon, label, value, color }) => (
   </div>
 );
 
+/** Hiển thị lịch sử thay đổi sản phẩm và biến thể theo bộ lọc. */
 const ProductLogPage = () => {
   const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
@@ -58,6 +61,7 @@ const ProductLogPage = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [stats, setStats] = useState({ total: 0, create: 0, update: 0, delete: 0 });
 
+  // Tải trang product log hiện tại theo từ khóa và loại hành động.
   const fetchLogs = async () => {
     try {
       setLoading(true);
@@ -85,6 +89,7 @@ const ProductLogPage = () => {
     fetchLogs();
   }, [page]);
 
+  // Định dạng thời gian log theo múi giờ hiển thị của trình duyệt.
   const formatTime = (dateStr) => {
     const date = new Date(dateStr);
     const now = new Date();

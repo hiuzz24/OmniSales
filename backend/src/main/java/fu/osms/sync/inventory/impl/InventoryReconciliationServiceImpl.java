@@ -24,6 +24,7 @@ public class InventoryReconciliationServiceImpl implements InventoryReconciliati
     private final MarketplaceStockQuantityResolver quantityResolver;
     private final InventoryReconciliationProperties properties;
 
+    /** Ghi nhận thay đổi tồn từ xa và debounce bước xác minh hoặc hiệu chỉnh sau đó. */
     @Override
     @Transactional
     public void observe(InventoryObservation observation) {

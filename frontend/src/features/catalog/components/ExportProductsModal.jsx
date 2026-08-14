@@ -17,6 +17,7 @@ import styles from './ExportProductsModal.module.css';
 
 const PAGE_SIZE = 20;
 
+/** Chuyển trạng thái Product thành thông tin badge trong bảng chọn export. */
 const getStatusBadge = (status) => {
   switch (status?.toUpperCase()) {
     case 'ACTIVE':
@@ -30,9 +31,11 @@ const getStatusBadge = (status) => {
   }
 };
 
+/** Lấy danh sách cột được chọn mặc định khi mở modal. */
 const getDefaultColumnKeys = () =>
   PRODUCT_EXPORT_COLUMNS.filter((c) => c.defaultChecked).map((c) => c.key);
 
+/** Cho phép chọn sản phẩm, cột dữ liệu và xuất catalog ra Excel. */
 const ExportProductsModal = ({ isOpen, onClose }) => {
   const [products, setProducts] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -57,6 +60,7 @@ const ExportProductsModal = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     if (!isOpen) return;
+    // Tải một trang sản phẩm để lựa chọn xuất file.
     const fetchPage = async () => {
       try {
         setLoading(true);
@@ -97,6 +101,7 @@ const ExportProductsModal = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     if (!isColumnMenuOpen) return undefined;
+    // Đóng menu lựa chọn khi người dùng bấm ra ngoài.
     const handleClickOutside = (event) => {
       if (columnMenuRef.current && !columnMenuRef.current.contains(event.target)) {
         setIsColumnMenuOpen(false);
@@ -106,6 +111,7 @@ const ExportProductsModal = ({ isOpen, onClose }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isColumnMenuOpen]);
 
+  // Chọn hoặc bỏ chọn một sản phẩm trên trang hiện tại.
   const toggleOne = (id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -121,6 +127,7 @@ const ExportProductsModal = ({ isOpen, onClose }) => {
   const allOnPageSelected =
     products.length > 0 && products.every((p) => p.id && selectedIds.has(p.id));
 
+  // Chọn hoặc bỏ chọn toàn bộ sản phẩm của trang hiện tại.
   const toggleAllOnPage = () => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -133,6 +140,7 @@ const ExportProductsModal = ({ isOpen, onClose }) => {
     });
   };
 
+  // Tải và chọn toàn bộ sản phẩm khớp bộ lọc trên mọi trang.
   const handleSelectAllMatching = async () => {
     if (totalElements <= products.length && !keyword) {
       setSelectedIds(new Set(products.map((p) => p.id).filter(Boolean)));
@@ -156,24 +164,29 @@ const ExportProductsModal = ({ isOpen, onClose }) => {
     }
   };
 
+  // Bật hoặc tắt một cột trong file Excel.
   const toggleColumn = (key) => {
     setSelectedColumnKeys((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
     );
   };
 
+  // Chọn tất cả cột có thể xuất.
   const selectAllColumns = () => {
     setSelectedColumnKeys(PRODUCT_EXPORT_COLUMNS.map((c) => c.key));
   };
 
+  // Khôi phục tập cột xuất mặc định.
   const selectDefaultColumns = () => {
     setSelectedColumnKeys(getDefaultColumnKeys());
   };
 
+  // Bỏ chọn toàn bộ cột tùy chọn.
   const deselectAllColumns = () => {
     setSelectedColumnKeys([]);
   };
 
+  // Tạo và tải file Excel từ sản phẩm cùng các cột đã chọn.
   const handleExport = async () => {
     if (selectedIds.size === 0) return;
     if (selectedColumnKeys.length === 0) {

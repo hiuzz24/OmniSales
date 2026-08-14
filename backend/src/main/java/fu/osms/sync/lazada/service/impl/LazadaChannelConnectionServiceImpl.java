@@ -19,11 +19,13 @@ public class LazadaChannelConnectionServiceImpl implements LazadaChannelConnecti
     private final ChannelService channelService;
 
     @Override
+    /** Trả về URL ủy quyền người bán Lazada cho ứng dụng đã cấu hình. */
     public String buildAuthorizationUrl() {
         return lazadaOAuthService.buildAuthorizationUrl();
     }
 
     @Override
+    /** Đổi code, tải hồ sơ người bán và tạo hoặc khôi phục kênh. */
     public ChannelResponse connect(String authorizationCode) {
         Map<String, Object> tokenData = lazadaOAuthService.exchangeToken(authorizationCode);
         String accessToken = stringValue(tokenData.get("access_token"));

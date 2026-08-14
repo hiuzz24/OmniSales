@@ -4,7 +4,6 @@ import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.enums.ProductStatus;
 import fu.osms.catalog.repository.ProductVariantRepository;
-import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.ChannelProduct;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductRepository;
@@ -279,7 +278,9 @@ public class ShopifyCatalogWebhookProcessor implements PlatformCatalogWebhookPro
         if (price != null) {
             variant.setPrice(WebhookPayloadUtils.decimal(price));
         }
-        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
+        if (variant.getId() == null && variant.getCostPrice() == null) {
+            variant.setCostPrice(BigDecimal.ZERO);
+        }
         Integer weight = WebhookPayloadUtils.integer(WebhookPayloadUtils.firstPresent(variantPayload, "grams", "weight"), 0);
         if (weight != null && weight > 0) {
             variant.setWeightGrams(weight);

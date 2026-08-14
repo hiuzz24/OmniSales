@@ -34,6 +34,7 @@ public class AuthController {
     private final JwtService jwtService;
 
     @PostMapping("/login")
+    /** Xác thực người dùng và lưu refresh token mới trong cookie HTTP-only. */
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request,
                                                            HttpServletResponse response) {
         TokenPairDTO tokenPairDTO = authService.login(request);
@@ -53,6 +54,7 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
+    /** Luân chuyển refresh token hợp lệ và trả về cặp access token mới. */
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@CookieValue String refreshToken, HttpServletResponse response) {
         TokenPairDTO pair = authService.refreshToken(refreshToken);
         cookieService.addRefreshTokenCookie(pair.getRefreshToken(), response);
@@ -68,6 +70,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    /** Thu hồi refresh token hiện tại và xóa cookie khỏi trình duyệt. */
     public ResponseEntity<ApiResponse<Void>> logout(
             @CookieValue(name = "refreshToken", required = false) String refreshToken,
             HttpServletResponse response) {
@@ -79,6 +82,7 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
+    /** Khởi tạo luồng đặt lại mật khẩu mà không tiết lộ email có tồn tại hay không. */
     public ResponseEntity<?> forgotPassword(
             @Valid @RequestBody ForgotPasswordRequest request) {
 
@@ -99,6 +103,7 @@ public class AuthController {
         }
     }
     @PostMapping("/invite-user")
+    /** Tạo lời mời người dùng và gán vai trò được yêu cầu. */
     public ResponseEntity<?> InviteUser(
             @Valid @RequestBody InviteUserRequest inviteUserRequest) {
 
@@ -120,6 +125,7 @@ public class AuthController {
     }
 
     @GetMapping("/accept-invite/validate")
+    /** Kiểm tra token lời mời tồn tại, còn hiệu lực và chưa hết hạn. */
     public ResponseEntity<?> validateInviteToken(@RequestParam String token) {
         try {
             UserInviteToken inviteToken = authService.validateInviteToken(token);
@@ -139,6 +145,7 @@ public class AuthController {
     }
 
     @PostMapping("/accept-invite")
+    /** Kích hoạt tài khoản được mời sau khi người dùng đặt mật khẩu hợp lệ. */
     public ResponseEntity<?> acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
         try {
             authService.acceptInvite(request);
@@ -155,6 +162,7 @@ public class AuthController {
     }
 
     @GetMapping("/change-password/validate")
+    /** Xác thực token đặt lại mật khẩu trước khi gửi biểu mẫu. */
     public ResponseEntity<?> validateToken(@RequestParam String token) {
 
         try {
@@ -172,6 +180,7 @@ public class AuthController {
     }
 
     @PostMapping("/change-password")
+    /** Đổi mật khẩu thông qua luồng đặt lại bằng token. */
     public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         try {
             authService.updatePassword(request);
@@ -188,6 +197,7 @@ public class AuthController {
     }
 
     @PostMapping("/reset-password")
+    /** Cho phép quản trị viên có quyền đặt lại mật khẩu của người dùng khác. */
     public ResponseEntity<?> resetPassword(
             @Valid @RequestBody ResetPasswordRequest request,
             Authentication authentication) {
@@ -205,6 +215,7 @@ public class AuthController {
     }
 
     @PostMapping("/changes-password-after-login")
+    /** Đổi mật khẩu người dùng hiện tại sau khi xác minh mật khẩu cũ. */
     public ResponseEntity<?> changePasswordAfterLogin(
             @Valid @RequestBody ChangePasswordAfterLoginRequest request,
             Authentication authentication) {

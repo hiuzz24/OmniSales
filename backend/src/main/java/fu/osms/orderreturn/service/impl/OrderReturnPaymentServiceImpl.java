@@ -31,6 +31,7 @@ public class OrderReturnPaymentServiceImpl implements OrderReturnPaymentService 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
 
+    /** Cập nhật Order.paymentStatus khi platform xác nhận hoàn đủ; OSMS không trực tiếp hoàn tiền. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void projectPayment(UUID returnId) {

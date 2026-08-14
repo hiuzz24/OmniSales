@@ -20,6 +20,7 @@ const ACTION_BADGE_MAP = {
   PAYMENT_UPDATE: { label: 'Payment',className: 'badgeOrange' },
 };
 
+/** Hiển thị audit log của order theo bộ lọc và phân trang. */
 const OrderLogPage = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -30,6 +31,7 @@ const OrderLogPage = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // Tải một trang audit log theo bộ lọc hiện tại.
   const fetchLogs = async (pg = page) => {
     setLoading(true);
     try {
@@ -53,12 +55,14 @@ const OrderLogPage = () => {
   useEffect(() => { fetchLogs(0); }, [dateFrom, dateTo]);
   useEffect(() => { fetchLogs(page); }, [page]);
 
+  // Xóa bộ lọc và tải lại trang đầu.
   const handleReset = () => {
     setDateFrom('');
     setDateTo('');
     setPage(0);
   };
 
+  // Chọn nhãn badge theo loại hành động audit.
   const getBadge = (action) => {
     const cfg = ACTION_BADGE_MAP[action] || { label: action, className: 'badgeSlate' };
     return (
@@ -68,6 +72,7 @@ const OrderLogPage = () => {
     );
   };
 
+  // Định dạng thời gian thực hiện hành động.
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('vi-VN', {
@@ -92,16 +97,19 @@ const OrderLogPage = () => {
     REFUNDED: { bg: '#f1f5f9', color: '#475569', label: 'Đã hoàn tiền' },
   };
 
+  // Chọn style cho trạng thái order trong dữ liệu thay đổi.
   const getOrderStatusStyle = (s) => {
     if (!s) return null;
     return ORDER_STATUS_STYLE_MAP[s] || { bg: '#f1f5f9', color: '#475569', label: s };
   };
 
+  // Chọn style cho trạng thái payment trong dữ liệu thay đổi.
   const getPaymentStatusStyle = (s) => {
     if (!s) return null;
     return PAYMENT_STATUS_STYLE_MAP[s] || { bg: '#f1f5f9', color: '#475569', label: s };
   };
 
+  // Render badge trạng thái order hoặc payment.
   const StatusBadge = ({ status, isPayment }) => {
     const styleMap = isPayment ? getPaymentStatusStyle(status) : getOrderStatusStyle(status);
     if (!styleMap) return <span style={{ color: '#94a3b8', fontSize: '12px' }}>—</span>;
@@ -118,6 +126,7 @@ const OrderLogPage = () => {
     );
   };
 
+  // Chuẩn hóa JSON fieldChanges thành object có thể hiển thị.
   const getChangesData = (changes) => {
     if (!changes) return { oldStatus: null, newStatus: null, isPayment: false, extra: null };
 
@@ -145,6 +154,7 @@ const OrderLogPage = () => {
     return { oldStatus: null, newStatus: null, isPayment: false, extra: changes };
   };
 
+  // Chuyển các field thay đổi thành mô tả trực quan trên bảng.
   const formatChanges = (changes) => {
     if (!changes) return null;
     if (typeof changes !== 'object') return String(changes);

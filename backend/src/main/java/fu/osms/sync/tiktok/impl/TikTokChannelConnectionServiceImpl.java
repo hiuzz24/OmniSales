@@ -19,6 +19,7 @@ public class TikTokChannelConnectionServiceImpl implements TikTokChannelConnecti
     private final ChannelService channelService;
 
     @Override
+    /** Đổi code TikTok, chọn cửa hàng đã ủy quyền và tạo hoặc khôi phục kênh. */
     public ChannelResponse connect(String authorizationCode, String state) {
         TikTokTokenData token = tikTokOAuthService.exchangeTokenAndResolveShop(authorizationCode);
         Map<String, Object> metadata = new HashMap<>(token.getMetadata());

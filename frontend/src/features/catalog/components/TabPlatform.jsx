@@ -13,6 +13,7 @@ const statusLabel = {
   OUT_OF_SYNC: 'Cần đồng bộ',
 };
 
+/** Chuyển dữ liệu mapping/sync thành cấu hình form của từng platform. */
 const configFromSync = (sync) => ({
   channelId: sync.channelId,
   categoryId: sync.platformConfig?.categoryId || '',
@@ -28,6 +29,7 @@ const configFromSync = (sync) => ({
   variantAttributeValueMappings: sync.platformConfig?.variantAttributeValueMappings || {},
 });
 
+/** Hiển thị mapping, cấu hình và thao tác đồng bộ theo từng platform. */
 const TabPlatform = ({ product, onRefresh, canConfigure, canSync }) => {
   const mappings = useMemo(() => product?.channelSyncs || [], [product?.channelSyncs]);
   const [syncing, setSyncing] = useState({});
@@ -68,6 +70,7 @@ const TabPlatform = ({ product, onRefresh, canConfigure, canSync }) => {
     displayName: mapping.channelName,
   })), [mappings]);
 
+  // Lưu cấu hình listing của sản phẩm trên kênh được chọn.
   const saveConfig = async (channel, config) => {
     try {
       await productApi.updateChannelConfig(product.id, channel.channelId, config);
@@ -78,6 +81,7 @@ const TabPlatform = ({ product, onRefresh, canConfigure, canSync }) => {
     }
   };
 
+  // Đưa yêu cầu đồng bộ riêng một channel mapping vào hàng đợi.
   const syncChannel = async (mapping) => {
     if (!mapping.readyToSync) {
       toast.error(mapping.configurationError || 'Hoàn tất cấu hình trước khi đồng bộ');

@@ -1,14 +1,17 @@
 import { z } from 'zod';
 
+/** Chuẩn hóa input số rỗng thành null và chặn số âm. */
 const numberOrNull = z.union([z.string(), z.number(), z.null(), z.undefined()])
   .transform((value) => value === '' || value == null ? null : Number(value))
   .refine((value) => value == null || (!Number.isNaN(value) && value >= 0), 'Giá trị phải là số không âm');
 
+/** Tạo schema chuỗi bắt buộc với độ dài tối đa. */
 const requiredText = (message, max = 500) => z.string()
   .trim()
   .min(1, message)
   .max(max, `Tối đa ${max} ký tự`);
 
+/** Tạo schema số bắt buộc và tùy chọn điều kiện lớn hơn 0. */
 const requiredNumber = (message, { positive = false } = {}) => numberOrNull.refine(
   (value) => value != null && (positive ? value > 0 : value >= 0),
   message,
@@ -111,12 +114,15 @@ export const defaultProductFormValues = {
   packageHeightCm: '', packageLengthCm: '', lowStockThreshold: '5', images: [], variants: [], channelIds: [], channelConfigs: {},
 };
 
+/** Chuẩn hóa optionValues bằng cách loại các giá trị rỗng. */
 const optionValues = (values) => Object.fromEntries(Object.entries(values).filter(([, value]) => value));
 
+/** Tìm giá trị đầu tiên theo danh sách tên option tương đương. */
 const firstOptionValue = (options, keys) => keys
   .map((key) => options?.[key])
   .find((value) => value != null && String(value).trim());
 
+/** Chuẩn hóa tên option Size/Màu từ dữ liệu cũ hoặc dữ liệu platform. */
 export function normalizeVariantForEditor(variant = {}) {
   const options = { ...(variant.optionValues || {}) };
   const size = firstOptionValue(options, ['Size', 'size', 'Kích thước', 'Option 2']);
@@ -134,6 +140,7 @@ export function normalizeVariantForEditor(variant = {}) {
   };
 }
 
+/** Khởi tạo Variant đầu tiên từ dữ liệu Product khi bật chế độ biến thể. */
 export function seedVariantFromProduct(values) {
   const currentVariants = values.variants || [];
   if (currentVariants.length > 1) return currentVariants;
@@ -162,6 +169,7 @@ export function seedVariantFromProduct(values) {
   }];
 }
 
+/** Chuyển dữ liệu form thành request đúng contract create/update Product. */
 export function buildProductRequest(values, { mode, existingAttributes = {} }) {
   const isCreate = mode === 'create';
   const images = values.images.map((image, index) => ({ id: image.id || null, url: image.url, sortOrder: index, isPrimary: index === 0 }));

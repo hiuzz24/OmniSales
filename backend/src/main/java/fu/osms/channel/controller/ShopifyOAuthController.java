@@ -35,6 +35,7 @@ public class ShopifyOAuthController {
 
     @GetMapping("/authorize")
     @PreAuthorize("hasRole('OWNER')")
+    /** Tạo URL cài đặt Shopify từ tên miền cửa hàng đã chuẩn hóa. */
     public ResponseEntity<ApiResponse<Map<String, String>>> authorize(@RequestParam String shop) {
         try {
             String authUrl = shopifyChannelConnectionService.buildAuthorizationUrl(shop);
@@ -49,6 +50,7 @@ public class ShopifyOAuthController {
     }
 
     @GetMapping("/callback")
+    /** Đổi authorization code Shopify, kết nối cửa hàng và đăng ký webhook. */
     public ResponseEntity<Void> callback(
             @RequestParam String code,
             @RequestParam String shop,

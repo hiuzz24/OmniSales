@@ -3,6 +3,7 @@ import OAuthConnectionSection from './OAuthConnectionSection';
 import { canonicalShopifyDomain } from '../utils/shopifyShop';
 import styles from './ChannelFormModal.module.css';
 
+/** Nhận tên miền Shopify và bắt đầu luồng cài đặt ứng dụng. */
 const ShopifyConnectionSection = ({ value, error, isRedirecting, onChange, onConnect, onCancel }) => {
   const preview = useMemo(() => {
     if (!value.trim()) return null;

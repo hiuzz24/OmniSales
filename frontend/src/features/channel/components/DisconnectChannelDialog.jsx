@@ -1,6 +1,7 @@
 import { Link2Off } from 'lucide-react';
 import styles from '../pages/ChannelConnectionPage.module.css';
 
+/** Yêu cầu xác nhận trước khi thu hồi kết nối của một kênh. */
 const DisconnectChannelDialog = ({ channel, isDisconnecting, onCancel, onConfirm }) => {
   if (!channel) return null;
 
