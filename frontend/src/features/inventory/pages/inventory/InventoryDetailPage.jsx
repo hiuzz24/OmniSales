@@ -209,14 +209,17 @@ const InventoryDetailPage = () => {
           </div>
         </div>
         <div className={styles.headerActions}>
-          {canEdit && (
+          {/*
+                {canEdit && (
             <button className={styles.btnOutline} onClick={handleReceiveStock}>
               <Download size={16} /> Nhập kho
             </button>
           )}
-          <button className={styles.btnOutline}>
+            <button className={styles.btnOutline}>
             <ArrowRightLeft size={16} /> Chuyển kho
           </button>
+*/}
+
         </div>
       </div>
 
