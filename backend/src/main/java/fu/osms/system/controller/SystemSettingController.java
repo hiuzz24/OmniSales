@@ -17,9 +17,11 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/settings")
 @RequiredArgsConstructor
-// Cho phép ADMIN và OWNER (business owner có full access tới settings).
-// KHÔNG dùng SYSTEM_ADMIN — role này không tồn tại trong DB (xem RenderDataSeeder.SEED_ROLES).
-@PreAuthorize("hasAnyRole('ADMIN', 'OWNER')")
+// Cho phép SYSTEM_ADMIN, ADMIN và OWNER (full system access).
+// LÝ DO: schema-postgresql.sql seed roles bao gồm SYSTEM_ADMIN + OWNER;
+// RenderDataSeeder seed thêm ADMIN. Tất cả 3 role đều là "system administrator".
+// KHÔNG dùng đơn lẻ hasRole() vì user có thể có role nào trong 3 role trên.
+@PreAuthorize("hasAnyRole('SYSTEM_ADMIN', 'ADMIN', 'OWNER')")
 public class SystemSettingController {
 
     private final SystemSettingService systemSettingService;
