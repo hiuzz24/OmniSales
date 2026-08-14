@@ -37,10 +37,13 @@ cache:
 
 # -----------------------------------------------------------------------------
 # Stage 1: Compile & package Spring Boot JAR
+# Chỉ chạy trên branch main để tiết kiệm CI minutes.
 # -----------------------------------------------------------------------------
 build-backend:
   stage: build
   image: maven:3.9.6-eclipse-temurin-17
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
   script:
     # GitLab CI đã tự động checkout full repo (pom.xml + backend/) ở workspace root.
     # Build đa-module từ root, -pl backend -am để chỉ build module backend.
@@ -57,6 +60,7 @@ build-backend:
 # -----------------------------------------------------------------------------
 # Stage 2: Build Docker image (chỉ chứa JRE + JAR — KHÔNG có Maven)
 # Size: ~250MB thay vì ~500MB như cũ.
+# Chỉ chạy trên branch main.
 # -----------------------------------------------------------------------------
 package-backend:
   stage: package
@@ -67,6 +71,8 @@ package-backend:
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: ["/busybox/sh", "-c"]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
   needs:
     # artifacts: true → download JAR từ build-backend vào workspace
     - job: build-backend
