@@ -22,14 +22,21 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class BackupServiceImpl implements BackupService {
+
+    private static final String BACKUP_METADATA_TABLE = "backup_files";
+    private static final Pattern BACKUP_METADATA_TOC_ENTRY =
+            Pattern.compile("(?i).*\\b" + BACKUP_METADATA_TABLE + "\\b.*");
 
     private final BackupFileRepository backupFileRepository;
     private final UserRepository userRepository;
@@ -105,6 +112,9 @@ public class BackupServiceImpl implements BackupService {
             commands.add("-U"); commands.add(dbUsername);
             commands.add("-F"); commands.add("c");
             commands.add("-b");
+            // Danh mục file backup là dữ liệu vận hành hiện tại, không phải dữ liệu
+            // nghiệp vụ cần quay ngược khi restore.
+            commands.add("--exclude-table=public." + BACKUP_METADATA_TABLE);
             commands.add("-v");
             commands.add("-f"); commands.add(backupFile.getAbsolutePath());
             commands.add(dbName);
@@ -190,7 +200,12 @@ public class BackupServiceImpl implements BackupService {
         terminateConnections(dbName);
 
         // 3. Thực thi pg_restore
+        File restoreListFile = null;
         try {
+            // Các archive cũ có thể vẫn chứa backup_files. Tạo TOC đã lọc để
+            // pg_restore không drop/restore bảng này và làm mất danh sách backup hiện tại.
+            restoreListFile = createFilteredRestoreList(file);
+
             List<String> commands = new ArrayList<>();
             commands.add(getPgRestorePath());
             commands.add("-h"); commands.add(host);
@@ -199,6 +214,7 @@ public class BackupServiceImpl implements BackupService {
             commands.add("-d"); commands.add(dbName);
             commands.add("-c");
             commands.add("--if-exists");
+            commands.add("-L"); commands.add(restoreListFile.getAbsolutePath());
             commands.add("-v");
             commands.add(file.getAbsolutePath());
 
@@ -232,7 +248,48 @@ public class BackupServiceImpl implements BackupService {
         } catch (Exception e) {
             log.error("Lỗi trong quá trình khôi phục cơ sở dữ liệu", e);
             throw new RuntimeException("Lỗi khôi phục dữ liệu: " + e.getMessage());
+        } finally {
+            if (restoreListFile != null) {
+                try {
+                    Files.deleteIfExists(restoreListFile.toPath());
+                } catch (Exception cleanupError) {
+                    log.warn("Không thể xóa file danh sách restore tạm: {}", restoreListFile, cleanupError);
+                }
+            }
         }
+    }
+
+    private File createFilteredRestoreList(File archiveFile) throws Exception {
+        File directory = archiveFile.getParentFile() != null ? archiveFile.getParentFile() : new File(backupDirectory);
+        File listFile = File.createTempFile("pg_restore_", ".list", directory);
+        try {
+            ProcessBuilder listProcessBuilder = new ProcessBuilder(
+                    getPgRestorePath(), "-l", archiveFile.getAbsolutePath());
+            listProcessBuilder.redirectOutput(listFile);
+            listProcessBuilder.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+            Process listProcess = listProcessBuilder.start();
+            int exitCode = listProcess.waitFor();
+            if (exitCode != 0) {
+                throw new RuntimeException("Không thể đọc danh sách nội dung file backup, mã lỗi: " + exitCode);
+            }
+
+            List<String> filteredLines = Files.readAllLines(listFile.toPath(), StandardCharsets.UTF_8)
+                    .stream()
+                    .map(line -> isBackupMetadataTocEntry(line) && !line.startsWith(";") ? ";" + line : line)
+                    .toList();
+            Files.write(listFile.toPath(), filteredLines, StandardCharsets.UTF_8);
+
+            log.info("Đã loại bảng {} khỏi danh sách restore", BACKUP_METADATA_TABLE);
+            return listFile;
+        } catch (Exception e) {
+            Files.deleteIfExists(listFile.toPath());
+            throw e;
+        }
+    }
+
+    static boolean isBackupMetadataTocEntry(String tocLine) {
+        return tocLine != null && BACKUP_METADATA_TOC_ENTRY.matcher(tocLine).matches();
     }
 
     private void terminateConnections(String dbName) {
