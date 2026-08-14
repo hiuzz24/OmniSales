@@ -1,5 +1,11 @@
-import StockDeliveryCreatePage from './StockDeliveryCreatePage';
+import { lazy, Suspense } from 'react';
+
+const StockDeliveryCreatePage = lazy(() => import('./StockDeliveryCreatePage'));
 
 export default function StockDeliveryEditPage() {
-  return <StockDeliveryCreatePage mode="edit" />;
+  return (
+    <Suspense fallback={null}>
+      <StockDeliveryCreatePage mode="edit" />
+    </Suspense>
+  );
 }

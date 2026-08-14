@@ -1,0 +1,63 @@
+# =============================================================================
+# .dockerignore cho backend image
+#
+# File này nằm ở root (cùng cấp render.yaml) vì dockerContext trong Render
+# được set về ".". Docker sẽ loại bỏ các path match pattern này khỏi build
+# context — giảm thời gian upload và cache size, đặc biệt trên Render free
+# tier (build chậm, datadog ngợp).
+# =============================================================================
+
+# ----- Git -----
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# ----- Maven build output -----
+# Ignore root target/ (nếu có từ Maven parent chạy tại root)
+target/
+# NHƯNG giữ lại backend/target/*.jar — cần cho COPY JAR_FILE trong Dockerfile.ci
+!backend/
+backend/target/*.jar.original
+backend/target/*.jar.sha1
+backend/target/*.jar.md5
+.mvn/
+mvnw
+mvnw.cmd
+
+# ----- IDE -----
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+
+# ----- Frontend (sẽ build riêng image khác) -----
+frontend/
+
+# ----- Docs (không cần trong image) -----
+docs/
+ORDER_RETURN_V1_IMPLEMENTATION_REPORT.md
+temp-db-query/
+
+# ----- Env files (không commit secret vào image) -----
+.env
+.env.*
+!.env.example
+
+# ----- Tests -----
+**/src/test/
+**/*.log
+logs/
+
+# ----- OS / misc -----
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.tmp
+out/

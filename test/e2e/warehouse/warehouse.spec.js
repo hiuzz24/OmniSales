@@ -268,8 +268,8 @@ test.describe('Warehouse E2E Tests', () => {
       await managerPage.goto(`${BASE_URL}/warehouse/transfers/create`);
       await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
 
-      const sourceField = managerPage.locator('select[id*="from"], [class*="from"]').first();
-      const destField = managerPage.locator('select[id*="to"], [class*="to"]').first();
+      const sourceField = managerPage.locator('#from-warehouse').first();
+      const destField = managerPage.locator('#to-warehouse').first();
 
       const hasSource = await sourceField.isVisible({ timeout: 3000 });
       const hasDest = await destField.isVisible({ timeout: 3000 });
@@ -283,8 +283,8 @@ test.describe('Warehouse E2E Tests', () => {
 
       const swapBtn = managerPage.locator('button:has-text("Doi cho"), button:has-text("Swap"), [class*="swap"]').first();
       if (await swapBtn.isVisible({ timeout: 3000 })) {
-        const sourceField = managerPage.locator('select[id*="from"]').first();
-        const destField = managerPage.locator('select[id*="to"]').first();
+        const sourceField = managerPage.locator('#from-warehouse').first();
+        const destField = managerPage.locator('#to-warehouse').first();
 
         const initialSource = await sourceField.inputValue().catch(() => '');
         const initialDest = await destField.inputValue().catch(() => '');

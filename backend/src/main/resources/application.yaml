@@ -1,17 +1,21 @@
 server:
   port: 8080
 spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   application:
     name: OSMS
   datasource:
-    url: jdbc:postgresql://localhost:5432/OSMS
-    username: postgres
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:OSMS}
+    username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none  # TẮT Hibernate DDL mặc định — schema do SQL script tạo.
     properties:
       hibernate:
+        # Hardcode dialect để tránh "Unable to determine Dialect" khi DB env
+        # chưa được Render inject (vd: sau khi delete DB, env vẫn còn host cũ).
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
         jdbc:
@@ -31,34 +35,28 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:osms}
     password: ${RABBITMQ_PASSWORD:osms}
+    virtual-host: ${RABBITMQ_VHOST:/}
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:3000}
+    ssl:
+      enabled: ${RABBITMQ_SSL_ENABLED:false}
     listener:
       simple:
+        auto-startup: ${RABBITMQ_LISTENER_AUTOSTART:true}
         retry:
           enabled: ${RABBITMQ_LISTENER_RETRY_ENABLED:true}
           max-attempts: ${RABBITMQ_LISTENER_MAX_ATTEMPTS:5}
           initial-interval: 1s
           multiplier: 2
           max-interval: 30s
+    template:
+      retry:
+        enabled: ${RABBITMQ_TEMPLATE_RETRY_ENABLED:true}
+        max-attempts: ${RABBITMQ_TEMPLATE_MAX_ATTEMPTS:3}
+        initial-interval: 500ms
+        multiplier: 2
+        max-interval: 5s
 
-  # Cấu hình SMTP Server cho Gmail
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${GMAIL_USERNAME}
-    password: ${GMAIL_PASSWORD}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-            required: true
-          connection timeout: 5000
-          timeout: 5000
-          write timeout: 5000
-
-# OpenAPI / Swagger UI: spec nội bộ auto-generate + spec tĩnh của các sàn
+  # Cấu hình RabbitMQ cho các luồng đồng bộ (webhook, push inventory/product)
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -78,6 +76,8 @@ springdoc:
         url: /openapi/rest-countries.yaml
 
 app:
+  admin:
+    migration-key: ${ADMIN_MIGRATION_KEY:}  # Set on Render to enable /api/admin/run-migrations/**. Delete after migration.
   messaging:
     mode: ${APP_MESSAGING_MODE:broker}
   inventory-extra-import:

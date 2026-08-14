@@ -1007,9 +1007,8 @@ public class InventoryServiceImpl implements InventoryService {
             if (request.getProductVariantName() != null) {
                 variant.setName(request.getProductVariantName());
             }
-            if (request.getPrice() != null) {
-                variant.setPrice(request.getPrice());
-            }
+            // Sale price (variant.price) must NOT be changed from the inventory
+            // detail page. It is only editable on the product update page.
             if (request.getAverageCost() != null) {
                 variant.setCostPrice(request.getAverageCost());
             }
@@ -1044,6 +1043,45 @@ public class InventoryServiceImpl implements InventoryService {
                 .collect(Collectors.toList());
         enrichAvailableVariantChannelInfo(variants, warehousePlatform);
         return aggregateAvailableVariantsBySku(variants);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<AvailableVariantDTO> getAvailableVariantsByWarehousePaged(UUID warehouseId, String keyword, int page, int size) {
+        List<AvailableVariantDTO> all = getAvailableVariantsByWarehouse(warehouseId);
+        if (keyword != null && !keyword.isBlank()) {
+            String kw = keyword.trim().toLowerCase(Locale.ROOT);
+            all = all.stream()
+                    .filter(variant -> matchesVariantKeyword(variant, kw))
+                    .toList();
+        }
+
+        int total = all.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / size);
+        int from = Math.min(page * size, total);
+        int to = Math.min(from + size, total);
+        List<AvailableVariantDTO> content = total == 0 ? List.of() : all.subList(from, to);
+
+        return PageResponse.<AvailableVariantDTO>builder()
+                .content(content)
+                .page(page)
+                .size(size)
+                .totalElements(total)
+                .totalPages(totalPages)
+                .first(page <= 0)
+                .last(page >= totalPages - 1)
+                .build();
+    }
+
+    private boolean matchesVariantKeyword(AvailableVariantDTO variant, String kw) {
+        return containsKeyword(variant.getSku(), kw)
+                || containsKeyword(variant.getMarketplaceSku(), kw)
+                || containsKeyword(variant.getVariantName(), kw)
+                || containsKeyword(variant.getProductName(), kw);
+    }
+
+    private boolean containsKeyword(String value, String kw) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(kw);
     }
 
     private List<AvailableVariantDTO> getMarketplaceVariantsForWarehouse(Warehouse warehouse, PlatformType platform) {

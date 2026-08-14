@@ -4,6 +4,9 @@ import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.channel.entity.ChannelProductVariant;
+import fu.osms.channel.repository.ChannelProductVariantRepository;
+import fu.osms.common.enums.PlatformType;
 import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.dto.request.StocktakeItemRequest;
@@ -26,6 +29,7 @@ import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.inventory.service.StocktakeService;
 import fu.osms.auth.repository.UserRoleRepository;
 import fu.osms.notification.service.NotificationService;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -61,6 +65,8 @@ public class StocktakeServiceImpl implements StocktakeService {
     private final StocktakeMapper mapper;
     private final InventoryAlertService inventoryAlertService;
     private final NotificationService notificationService;
+    private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
+    private final ChannelProductVariantRepository channelProductVariantRepository;
 
     @Override
     @Transactional
@@ -182,6 +188,32 @@ public class StocktakeServiceImpl implements StocktakeService {
         return stats;
     }
 
+    @Override
+    @Transactional
+    public int syncPendingMarketplaceInventory() {
+        List<UUID> variantIds = itemRepository.findCompletedVariantIdsPendingMarketplaceSync();
+        if (variantIds.isEmpty()) {
+            return 0;
+        }
+        marketplaceInventoryPropagationService.pushAvailableStock(variantIds);
+        return variantIds.size();
+    }
+
+    @Override
+    @Transactional
+    public int syncStocktakeMarketplaceInventory(UUID sessionId) {
+        StocktakeSession session = findSession(sessionId);
+        if (!"COMPLETED".equals(session.getStatus())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Chỉ phiếu kiểm đã hoàn thành mới được đồng bộ lên sàn.");
+        }
+        List<UUID> variantIds = itemRepository.findCompletedVariantIdsBySessionId(sessionId);
+        if (variantIds.isEmpty()) {
+            return 0;
+        }
+        marketplaceInventoryPropagationService.pushAvailableStock(variantIds);
+        return variantIds.size();
+    }
+
     private void replaceItems(StocktakeSession session, List<StocktakeItemRequest> items) {
         itemRepository.deleteBySession_Id(session.getId());
         if (items == null || items.isEmpty()) {
@@ -300,7 +332,34 @@ public class StocktakeServiceImpl implements StocktakeService {
         response.setTotalActualQuantity(totalActual);
         response.setTotalDifference(totalDiff);
         response.setTotalDifferenceValue(totalDiffValue);
+        enrichMarketplaceInfo(response);
         return response;
+    }
+
+    private void enrichMarketplaceInfo(StocktakeSessionResponse response) {
+        response.setMarketplaceSyncAvailable(false);
+        response.setMarketplacePlatforms(List.of());
+        if (response.getId() == null || !"COMPLETED".equals(response.getStatus())) {
+            return;
+        }
+        List<UUID> variantIds = itemRepository.findCompletedVariantIdsBySessionId(response.getId());
+        if (variantIds.isEmpty()) {
+            return;
+        }
+        List<String> platforms = channelProductVariantRepository
+                .findActiveByVariantIdInWithChannel(variantIds).stream()
+                .map(ChannelProductVariant::getChannelProduct)
+                .filter(java.util.Objects::nonNull)
+                .map(item -> item.getChannel())
+                .filter(java.util.Objects::nonNull)
+                .map(item -> item.getPlatform())
+                .filter(platform -> platform == PlatformType.SHOPIFY
+                        || platform == PlatformType.LAZADA || platform == PlatformType.TIKTOK)
+                .map(Enum::name).distinct().toList();
+        response.setMarketplacePlatforms(platforms);
+        boolean hasPendingSync = !platforms.isEmpty()
+                && itemRepository.countPendingMarketplaceSyncVariantsBySessionId(response.getId()) > 0;
+        response.setMarketplaceSyncAvailable(hasPendingSync);
     }
 
     private StocktakeSession findSession(UUID id) {

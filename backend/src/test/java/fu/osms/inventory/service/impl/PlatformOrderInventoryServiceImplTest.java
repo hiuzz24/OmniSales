@@ -133,7 +133,7 @@ class PlatformOrderInventoryServiceImplTest {
     @DisplayName("syncReservations: order with existing ORDER_DEDUCT transactions is a no-op (idempotent)")
     void syncReservations_idempotent() {
         UUID orderId = UUID.randomUUID();
-        Order order = Order.builder().id(orderId).status(OrderStatus.PROCESSING).build();
+        Order order = Order.builder().id(orderId).status(OrderStatus.CONFIRMED).build();
 
         Warehouse wh = Warehouse.builder().id(UUID.randomUUID()).build();
         ProductVariant variant = ProductVariant.builder().id(UUID.randomUUID()).sku("V1").build();
@@ -152,7 +152,7 @@ class PlatformOrderInventoryServiceImplTest {
     @DisplayName("syncReservations: order with no items to reserve does not propagate stock changes")
     void syncReservations_noItems() {
         UUID orderId = UUID.randomUUID();
-        Order order = Order.builder().id(orderId).status(OrderStatus.PROCESSING).build();
+        Order order = Order.builder().id(orderId).status(OrderStatus.CONFIRMED).build();
         when(inventoryTransactionRepository.findByReferenceTypeAndReferenceId("ORDER", orderId))
                 .thenReturn(List.of());
         when(orderItemRepository.findByOrderId(orderId)).thenReturn(List.of());

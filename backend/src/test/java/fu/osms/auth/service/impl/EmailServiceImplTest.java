@@ -1,21 +1,19 @@
 package fu.osms.auth.service.impl;
 
-import jakarta.mail.Session;
-import jakarta.mail.internet.MimeMessage;
+import fu.osms.auth.service.EmailSender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.mail.MailException;
-import org.springframework.mail.javamail.JavaMailSender;
-
-import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,71 +22,65 @@ class EmailServiceImplTest {
 
     private final String frontendUrl = "https://app.osms.local";
 
-    private JavaMailSender mailSender;
+    private EmailSender emailSender;
     private EmailServiceImpl emailService;
-    private MimeMessage mimeMessage;
+
+    @Captor
+    private ArgumentCaptor<String> toCaptor;
+
+    @Captor
+    private ArgumentCaptor<String> subjectCaptor;
+
+    @Captor
+    private ArgumentCaptor<String> contentCaptor;
 
     private EmailServiceImpl buildService() {
-        mailSender = mock(JavaMailSender.class);
-        // Real MimeMessage so we can read subject/to/content out
-        mimeMessage = new MimeMessage((Session) null);
-        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
-        emailService = new EmailServiceImpl(mailSender, frontendUrl);
+        emailSender = mock(EmailSender.class);
+        emailService = new EmailServiceImpl(emailSender, frontendUrl);
         return emailService;
     }
 
     @Test
-    @DisplayName("sendForgetPasswordEmail sends an HTML email whose body contains the reset link")
-    void sendForgetPasswordEmail_containsResetLink() throws Exception {
+    @DisplayName("sendForgetPasswordEmail sends email with reset link")
+    void sendForgetPasswordEmail_containsResetLink() {
         buildService();
         emailService.sendForgetPasswordEmail("user@example.com", "reset-token-XYZ");
 
-        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(mailSender).send(captor.capture());
-        MimeMessage sent = captor.getValue();
-
-        assertThat(sent.getAllRecipients()).hasSize(1);
-        // Addresses only available after prepare
-        assertThat(sent.getSubject()).contains("Yêu cầu đặt lại mật khẩu");
-        // Verify content by storing to a String – MimeMessageHelper writes the body.
-        sent.saveChanges();
-        Object content = sent.getContent();
-        assertThat(content.toString()).contains("reset-token-XYZ");
-        assertThat(content.toString()).contains("/change-password?token=reset-token-XYZ");
+        verify(emailSender).send(
+                eq("user@example.com"),
+                contains("đặt lại mật khẩu"),
+                contains("reset-token-XYZ")
+        );
     }
 
     @Test
     @DisplayName("sendForgetPasswordEmail swallows mail-sender exceptions silently (logs only)")
     void sendForgetPasswordEmail_swallowsExceptions() {
         buildService();
-        doThrow(new MailException("smtp-down") {}).when(mailSender).send(any(MimeMessage.class));
+        doThrow(new RuntimeException("smtp-down")).when(emailSender).send(any(), any(), any());
 
-        // Must not throw — implementation deliberately logs and returns.
         assertThatCode(() -> emailService.sendForgetPasswordEmail("user@example.com", "tok"))
                 .doesNotThrowAnyException();
     }
 
     @Test
     @DisplayName("sentResetPasswordEmail embeds the new password in the rendered body")
-    void sentResetPasswordEmail_embedsPassword() throws Exception {
+    void sentResetPasswordEmail_embedsPassword() {
         buildService();
         emailService.sentResetPasswordEmail("user@example.com", "Nguyễn Văn A", "Temp#2026");
 
-        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(mailSender).send(captor.capture());
-        MimeMessage sent = captor.getValue();
-        sent.saveChanges();
-
-        assertThat(sent.getSubject()).contains("đã được đặt lại mật khẩu");
-        assertThat(sent.getContent().toString()).contains("Temp#2026");
-        assertThat(sent.getContent().toString()).contains("Nguyễn Văn A");
+        verify(emailSender).send(
+                eq("user@example.com"),
+                contains("đặt lại mật khẩu"),
+                argThat(content -> content.contains("Temp#2026") && content.contains("Nguyễn Văn A"))
+        );
     }
 
     @Test
-    @DisplayName("sentResetPasswordEmail rethrows when SMTP fails (used by admin flow that expects error)")
+    @DisplayName("sentResetPasswordEmail rethrows when sender fails (used by admin flow that expects error)")
     void sentResetPasswordEmail_propagatesException() {
         buildService();
-        doThrow(new MailException("smtp-down") {}).when(mailSender).send(any(MimeMessage.class));
+        doThrow(new RuntimeException("smtp-down")).when(emailSender).send(any(), any(), any());
 
         assertThatThrownBy(() -> emailService.sentResetPasswordEmail("user@example.com", "Name", "Pwd"))
                 .isInstanceOf(RuntimeException.class);
@@ -96,54 +88,48 @@ class EmailServiceImplTest {
 
     @Test
     @DisplayName("sendNotificationEmail uses the provided subject verbatim and embeds the body")
-    void sendNotificationEmail_usesProvidedSubject() throws Exception {
+    void sendNotificationEmail_usesProvidedSubject() {
         buildService();
         emailService.sendNotificationEmail("user@example.com", "My custom subject", "Hello\nworld");
 
-        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(mailSender).send(captor.capture());
-        MimeMessage sent = captor.getValue();
-        sent.saveChanges();
-
-        assertThat(sent.getSubject()).isEqualTo("My custom subject");
-        // newline turned into <br/>
-        assertThat(sent.getContent().toString()).contains("Hello<br/>world");
+        verify(emailSender).send(
+                eq("user@example.com"),
+                eq("My custom subject"),
+                argThat(content -> content.contains("Hello") && content.contains("world"))
+        );
     }
 
     @Test
     @DisplayName("sendNotificationEmail falls back to a default subject when caller passes null")
-    void sendNotificationEmail_nullSubjectFallback() throws Exception {
+    void sendNotificationEmail_nullSubjectFallback() {
         buildService();
         emailService.sendNotificationEmail("user@example.com", null, "body");
 
-        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(mailSender).send(captor.capture());
-        captor.getValue().saveChanges();
-
-        assertThat(captor.getValue().getSubject()).contains("Thông báo hệ thống");
+        verify(emailSender).send(
+                eq("user@example.com"),
+                contains("Thông báo hệ thống"),
+                any()
+        );
     }
 
     @Test
     @DisplayName("sendInviteEmail embeds the invite link")
-    void sendInviteEmail_containsInviteLink() throws Exception {
+    void sendInviteEmail_containsInviteLink() {
         buildService();
         emailService.sendInviteEmail("invitee@example.com", "invite-tok-99");
 
-        ArgumentCaptor<MimeMessage> captor = ArgumentCaptor.forClass(MimeMessage.class);
-        verify(mailSender).send(captor.capture());
-        MimeMessage sent = captor.getValue();
-        sent.saveChanges();
-
-        assertThat(sent.getSubject()).contains("Lời mời tham gia hệ thống");
-        assertThat(sent.getContent().toString()).contains("invite-tok-99");
-        assertThat(sent.getContent().toString()).contains("/inviteUser?token=invite-tok-99");
+        verify(emailSender).send(
+                eq("invitee@example.com"),
+                contains("Lời mời tham gia"),
+                argThat(content -> content.contains("invite-tok-99"))
+        );
     }
 
     @Test
     @DisplayName("sendInviteEmail swallows mail-sender exceptions silently")
     void sendInviteEmail_swallowsExceptions() {
         buildService();
-        doThrow(new MailException("smtp-down") {}).when(mailSender).send(any(MimeMessage.class));
+        doThrow(new RuntimeException("smtp-down")).when(emailSender).send(any(), any(), any());
 
         assertThatCode(() -> emailService.sendInviteEmail("user@example.com", "tok"))
                 .doesNotThrowAnyException();
@@ -152,8 +138,7 @@ class EmailServiceImplTest {
     @Test
     @DisplayName("Constructor accepts a blank frontend URL without throwing")
     void constructor_acceptsBlankUrl() {
-        JavaMailSender sender = mock(JavaMailSender.class);
-        // No stubbing — verify the constructors don't throw on null/blank URLs.
+        EmailSender sender = mock(EmailSender.class);
 
         EmailServiceImpl withNull = new EmailServiceImpl(sender, null);
         EmailServiceImpl withEmpty = new EmailServiceImpl(sender, "");

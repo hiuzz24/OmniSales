@@ -58,6 +58,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/webhooks/**").permitAll()
                         .requestMatchers("/api/products/**").authenticated()
                         .requestMatchers("/api/address/**").permitAll()
+                        // One-shot admin migration endpoint (must also pass X-Admin-Migration-Key header).
+                        // Remove after migration is applied.
+                        .requestMatchers("/api/admin/run-migrations/**").permitAll()
                         // OpenAPI / Swagger UI
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Static OpenAPI specs của các sàn
@@ -100,7 +103,12 @@ public class SecurityConfig {
                 "http://localhost:517*",
                 "http://localhost:300*",
                 "http://127.0.0.1:517*",
-                "http://127.0.0.1:300*"
+                "http://127.0.0.1:300*",
+                // Render.com (production frontend on HTTPS).
+                // App-osms is the primary frontend service; the wildcard covers
+                // any preview / branch URLs Render may spin up for PRs.
+                "https://app-osms.onrender.com",
+                "https://*.onrender.com"
         ));
         corsConfiguration.addExposedHeader("Authorization");
 

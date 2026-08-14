@@ -1,0 +1,59 @@
+# =============================================================================
+# Render.com production profile
+#
+# Kích hoạt bằng env: SPRING_PROFILES_ACTIVE=render (xem render.yaml)
+# File này merge đè lên application.yaml — chỉ override những gì cần thay đổi
+# cho môi trường Render (free tier, ephemeral, no local DB).
+#
+# Khác biệt chính so với application.yaml:
+#   * server.port  : dùng ${PORT} (Render inject, mặc định 10000)
+#   * ddl-auto     : 'none' — KHÔNG để Hibernate generate/validate DDL
+#   * sql.init     : Dùng SchemaEnvironmentPostProcessor (TRƯỚC Spring Boot)
+#                    + spring.sql.init (sau Spring context) cho safety net
+#   * multipart    : giữ nguyên 20MB từ application.yaml
+# =============================================================================
+
+server:
+  # Render set PORT env (thường là 10000 cho web service). Bind theo env.
+  port: ${PORT:10000}
+  # Bind trên 0.0.0.0 để Render health check detect được (mặc định localhost).
+  address: 0.0.0.0
+
+spring:
+  # datasource: KHÔNG override ở đây — để application.yaml xử lý.
+  # Render env inject DB_HOST/DB_PORT/DB_USERNAME/DB_PASSWORD/DB_NAME từ Database resource.
+
+  jpa:
+    hibernate:
+      ddl-auto: none  # TẮT Hibernate DDL. Schema do SQL scripts tạo.
+    show-sql: false
+    properties:
+      hibernate:
+        # Hardcode dialect để tránh "Unable to determine Dialect".
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  main:
+    banner-mode: off
+
+  # ====================================================================
+  # spring.sql.init: TẮT trên render profile.
+  # SchemaEnvironmentPostProcessor + main() đã chạy schema.sql TRƯỚC Spring Boot.
+  # Nếu bật mode: always, Spring Boot sẽ chạy LẠI schema.sql mỗi lần restart
+  # → file có DROP TABLE IF EXISTS → MẤT DATA!
+  # mode: never → Spring Boot KHÔNG chạy schema.sql.
+  # main() check categories table EXISTS → skip schema.sql nếu có.
+  # ====================================================================
+  sql:
+    init:
+      mode: never
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
+    org.hibernate.SQL: WARN
+    fu.osms: INFO
+    # Debug schema init
+    org.springframework.jdbc.datasource.init: DEBUG
+    org.springframework.boot.sql.init: DEBUG
+    fu.osms.config.SchemaEnvironmentPostProcessor: DEBUG

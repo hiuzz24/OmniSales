@@ -16,6 +16,7 @@ import useNotifications from '../providers/useNotifications';
 // ── Role-based nav config ─────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { name: 'Dashboard', href: ROUTES.DASHBOARD, icon: LayoutDashboard, roles: [] },
+  { name: 'Đơn đặt hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Đơn hàng',       href: '/orders', icon: ShoppingCart, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
   {
     name: 'Sản phẩm',
@@ -42,7 +43,6 @@ const NAV_ITEMS = [
       { name: 'Nhật ký kho', href: ROUTES.INVENTORY_LOGS, icon: RefreshCw, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
     ],
   },
-  { name: 'Đơn đặt hàng', href: ROUTES.PURCHASE_ORDERS, icon: ShoppingBag, roles: [ROLES.OWNER, ROLES.OPERATIONS, ROLES.SALES] },
   { name: 'Khách hàng',     href: ROUTES.CUSTOMER_LIST, icon: Users,        roles: [] },
   { name: 'Trả hàng', href: ROUTES.ORDER_RETURNS, icon: RotateCcw, roles: [ROLES.OWNER, ROLES.SALES, ROLES.OPERATIONS] },
   { name: 'Kênh bán hàng', href: ROUTES.CHANNELS, icon: Share2, roles: [ROLES.OWNER, ROLES.SYSTEM_ADMIN] },

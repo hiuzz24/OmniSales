@@ -24,4 +24,5 @@ public class PurchaseOrderItemResponse {
     private BigDecimal unitCost;
     private BigDecimal totalCost;
     private BigDecimal salePrice;
+    private BigDecimal costPrice;
 }

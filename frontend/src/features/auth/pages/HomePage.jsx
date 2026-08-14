@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Menu,
   X,
+  Store,
 } from 'lucide-react';
 import Footer from '../components/Footer';
 import styles from './HomePage.module.css';
@@ -25,9 +26,9 @@ const HERO_IMG =
   'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1600&h=800&fit=crop&auto=format&q=90';
 
 const PLATFORMS = [
-  { name: 'Shopee', color: '#EE4D2D', logo: 'SP' },
-  { name: 'TikTok Shop', color: '#010101', logo: 'TT' },
-  { name: 'Lazada', color: '#0F146D', logo: 'LZ' },
+  { name: 'Shopify', color: '#95BF47', Icon: Store },
+  { name: 'TikTok Shop', color: '#010101', Icon: Zap },
+  { name: 'Lazada', color: '#0F146D', Icon: Layers },
 ];
 
 const FEATURES = [
@@ -41,7 +42,7 @@ const FEATURES = [
   {
     icon: ShoppingCart,
     title: 'Xử lý đơn hàng tập trung',
-    desc: 'Nhận, xác nhận và quản lý đơn hàng từ Shopee, TikTok Shop, Lazada trên một màn hình.',
+    desc: 'Nhận, xác nhận và quản lý đơn hàng từ Shopify, TikTok Shop, Lazada trên một màn hình.',
     iconBg: '#f0fdf4',
     iconColor: '#16a34a',
   },
@@ -79,7 +80,7 @@ const STEPS = [
   {
     num: '01',
     title: 'Kết nối gian hàng',
-    desc: 'Liên kết tài khoản Shopee, TikTok Shop, Lazada chỉ trong vài phút với vài click đơn giản.',
+    desc: 'Liên kết tài khoản Shopify, TikTok Shop, Lazada chỉ trong vài phút với vài click đơn giản.',
   },
   {
     num: '02',
@@ -230,7 +231,7 @@ const HeroSection = () => (
 
       {/* Subtitle */}
       <p className={styles.heroSubtitle}>
-        Kết nối Shopee, TikTok Shop và Lazada, đồng bộ sản phẩm, đơn hàng và tồn kho tự
+        Kết nối Shopify, TikTok Shop và Lazada, đồng bộ sản phẩm, đơn hàng và tồn kho tự
         động — tất cả trên một nền tảng duy nhất.
       </p>
 
@@ -244,15 +245,15 @@ const HeroSection = () => (
 
       {/* Platforms */}
       <div className={styles.heroPlatforms}>
-        {PLATFORMS.map((p) => (
-          <div key={p.name} className={styles.platformBadge}>
+        {PLATFORMS.map(({ name, color, Icon }) => (
+          <div key={name} className={styles.platformBadge}>
             <div
               className={styles.platformLogo}
-              style={{ backgroundColor: p.color }}
+              style={{ backgroundColor: color }}
             >
-              {p.logo}
+              <Icon className="w-4 h-4" />
             </div>
-            <span className={styles.platformName}>{p.name}</span>
+            <span className={styles.platformName}>{name}</span>
           </div>
         ))}
       </div>

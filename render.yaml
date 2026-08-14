@@ -1,0 +1,179 @@
+# =============================================================================
+# Render.com Blueprint — OmniSales
+#
+# Triển khai toàn bộ stack lên Render.com với 1 cú click:
+#   1. PostgreSQL database (free tier, 90 ngày)
+#   2. Backend (Spring Boot Java) — web service
+#   3. Frontend (React + Vite) — static site
+#
+# Cách dùng:
+#   1. Đẩy repo lên GitLab (hoặc GitHub).
+#   2. Vào https://dashboard.render.com/blueprints → New Blueprint Instance.
+#   3. Connect repo, chọn nhánh `main`.
+#   4. Render sẽ đọc file này và tạo 3 resource.
+#   5. Sau khi tạo, vào từng service → Environment → điền các biến `sync: false`.
+#
+# Giá: $0 trên free tier (Postgres 90 ngày, Web + Static miễn phí vĩnh viễn).
+# =============================================================================
+
+databases:
+  - name: omnisales-db
+    databaseName: osms
+    plan: free
+    ipAllowList: []
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend (Spring Boot, Java 17) — Pull pre-built image từ GitLab Container Registry
+  #
+  # Render KHÔNG build ở đây. Build được thực hiện bởi GitLab CI
+  # (8GB RAM Shared Runner) — xem .gitlab-ci.yml.
+  # Image được push lên GitLab Container Registry, Render chỉ pull về chạy.
+  # Lợi ích: tránh hoàn toàn lỗi "Ran out of memory 512MB" trên Render free tier.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: api-osms
+    runtime: image
+    # Image path: docker.io/$DOCKERHUB_USERNAME/osms-backend:latest
+    # GitLab CI push image này với tag :latest tới Docker Hub (PUBLIC).
+    # Render pull từ Docker Hub public → KHÔNG CẦN Secret File / PAT.
+    # Lưu ý: Docker Hub repo phải PUBLIC (default khi push lần đầu).
+    image:
+      url: duydz1604/osms-backend:latest
+    plan: free
+    region: oregon
+    autoDeploy: false  # GitLab CI sẽ trigger deploy qua Deploy Hook
+    healthCheckPath: /api/address/countries
+    # Registry credentials dùng Render Secret (set 1 lần trong Dashboard):
+    #   api-osms → Environment → Secret Files → thêm GITLAB_REGISTRY_PASSWORD
+    # Hoặc dùng envVars DOCKER_REGISTRY_* (xem note bên dưới).
+    # Lưu ý: Render cần image public HOẶC Secret File chứa password.
+    envVars:
+      # JVM heap tune cho Render Free (512MB).
+      # Native + metaspace + Spring Boot 3.5 vượt 512MB nếu để mặc định → OOM boot.
+      # JAVA_TOOL_OPTIONS được JVM tự đọc, ghi đè lên Dockerfile.ci.
+      # QUAN TRỌNG: -Dspring.jpa.hibernate.ddl-auto=none để KHÔNG để Hibernate
+      # tự generate DDL. Schema do SchemaEnvironmentPostProcessor tạo TRƯỚC Spring Boot.
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Xmx180m -Xms128m -XX:MaxRAMPercentage=35.0 -XX:MaxMetaspaceSize=180m -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom -Dspring.jpa.hibernate.ddl-auto=none"
+      # ----- Database (auto-fill từ database resource phía trên) -----
+      - key: DB_HOST
+        fromDatabase:
+          name: omnisales-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: omnisales-db
+          property: port
+      # QUAN TRỌNG: Render tự động append suffix vào database name (vd osms_i9cf)
+      # → KHÔNG hardcode DB_NAME, mà lấy từ Render auto-inject.
+      # Render property names: connectionString, host, port, user, password, database
+      - key: DB_NAME
+        fromDatabase:
+          name: omnisales-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: omnisales-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: omnisales-db
+          property: password
+      # ----- Spring profile -----
+      - key: SPRING_PROFILES_ACTIVE
+        value: render
+      # ----- JWT -----
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRATION_MS
+        value: 86400000
+      - key: JWT_REFRESH_EXPIRATION_MS
+        value: 604800000
+      # ----- Admin user seed (RenderDataSeeder sẽ đọc) -----
+      - key: ADMIN_EMAIL
+        value: admin@osms.local
+      - key: ADMIN_PASSWORD
+        value: ChangeMe123!
+      - key: OWNER_EMAIL
+        value: owner1@osms.local
+      - key: OWNER_PASSWORD
+        value: nguyentheduy2004
+      # ----- Frontend / CORS -----
+      - key: FRONTEND_URL
+        value: https://app-osms.onrender.com
+      # ----- Email (tắt mặc định, bật sau khi nhập Gmail App Password) -----
+      - key: NOTIFICATION_EMAIL_ENABLED
+        value: false
+      - key: GMAIL_USERNAME
+        sync: false
+      - key: GMAIL_PASSWORD
+        sync: false
+      # ----- Country API -----
+      - key: REST_COUNTRIES_API_KEY
+        sync: false
+      # ----- Shopify -----
+      - key: SHOPIFY_API_KEY
+        sync: false
+      - key: SHOPIFY_API_SECRET
+        sync: false
+      - key: SHOPIFY_REDIRECT_URI
+        value: https://api-osms.onrender.com/api/channels/shopify/callback
+      - key: SHOPIFY_SCOPES
+        value: write_products,read_products,write_inventory,read_inventory,read_orders,write_orders
+      - key: SHOPIFY_WEBHOOK_CALLBACK_URL
+        value: https://api-osms.onrender.com/api/channels/shopify/webhook
+      # ----- Lazada -----
+      - key: LAZADA_APP_KEY
+        sync: false
+      - key: LAZADA_APP_SECRET
+        sync: false
+      - key: LAZADA_REDIRECT_URI
+        value: https://api-osms.onrender.com/api/channels/lazada/callback
+      - key: LAZADA_WEBHOOK_CALLBACK_URL
+        value: https://api-osms.onrender.com/api/channels/lazada/webhook
+      # ----- TikTok -----
+      - key: TIKTOK_APP_KEY
+        sync: false
+      - key: TIKTOK_APP_SECRET
+        sync: false
+      - key: TIKTOK_TOKEN_URL
+        value: https://auth.tiktok-shops.com/api/v2/token/get
+      - key: TIKTOK_REFRESH_TOKEN_URL
+        value: https://auth.tiktok-shops.com/api/v2/token/refresh
+      - key: TIKTOK_API_URL
+        value: https://open-api.tiktokglobalshop.com
+      # ----- Backup -----
+      - key: APP_BACKUP_DIRECTORY
+        value: /app/backups
+      # JVM heap được set ở JAVA_TOOL_OPTIONS trên cùng (200m + 80m metaspace).
+      # Dockerfile.ci không override vì Render envVars ghi đè cuối cùng.
+
+  # ---------------------------------------------------------------------------
+  # Frontend (React + Vite SPA) — static site
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: app-osms
+    runtime: static
+    rootDir: ./frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeploy: false  # Tắt auto deploy để tránh build tự động fail trên free tier (OOM)
+    # SPA fallback: mọi route không match file tĩnh → trả về /index.html để React Router xử lý
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://api-osms.onrender.com/api
+      - key: VITE_FRONTEND_URL
+        value: https://app-osms.onrender.com
+      - key: VITE_API_TIMEOUT
+        value: 30000
+      - key: VITE_USE_MOCK
+        value: false
+      - key: VITE_CLOUDINARY_CLOUD_NAME
+        value: dwf1n70ew
+      - key: VITE_CLOUDINARY_UPLOAD_PRESET
+        sync: false

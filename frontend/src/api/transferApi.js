@@ -7,9 +7,11 @@ const transferApi = {
         return response.data?.data ?? response.data;
     },
 
-    // Lấy danh sách variant có tồn kho tại kho xuất
-    getAvailableVariants: async (warehouseId) => {
-        const response = await axiosClient.get('/transfer/available-variants', { params: { warehouseId } });
+    // Lấy danh sách variant có tồn kho tại kho xuất (phân trang + tìm kiếm)
+    getAvailableVariants: async (warehouseId, params = {}) => {
+        const response = await axiosClient.get('/transfer/available-variants', {
+            params: { warehouseId, ...params }
+        });
         return response.data;
     },
 

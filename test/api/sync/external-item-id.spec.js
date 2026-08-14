@@ -1,23 +1,3 @@
-/**
- * API tests for external_item_id in the marketplace sync flow.
- *
- * The `external_item_id` column on order_items is set by the marketplace
- * sync (Lazada/Shopify/TikTok) when orders are pulled, and is NOT
- * exposed in the public OrderItemResponse DTO. The DB enforces a unique
- * constraint on (order_id, external_item_id) where external_item_id is
- * not null.
- *
- * This spec verifies the contract that IS testable via the public API:
- *   - Order creation does NOT accept external_item_id (it's a synthetic
- *     field set on the entity by the sync layer).
- *   - Order pull endpoint accepts platform-specific channels.
- *   - Webhook receiver accepts raw payloads for each platform.
- *   - The repository method exists (asserted via the order-pull +
- *     webhook endpoints that produce that field).
- *   - Order get-by-id returns OrderItemResponse without externalItemId
- *     (documented current behavior).
- */
-
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
 const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');

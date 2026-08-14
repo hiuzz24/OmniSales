@@ -30,7 +30,7 @@ const Footer = () => {
               <span className={styles.brandName}>OmniSales</span>
             </Link>
             <p className={styles.tagline}>
-              Nền tảng quản lý bán hàng đa kênh thông minh — kết nối Shopee, TikTok Shop và
+              Nền tảng quản lý bán hàng đa kênh thông minh — kết nối Shopify, TikTok Shop và
               Lazada trên một nền tảng duy nhất.
             </p>
           </div>

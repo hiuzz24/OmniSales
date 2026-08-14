@@ -2,9 +2,9 @@ package fu.osms.purchase.service.impl;
 
 import fu.osms.auth.entity.User;
 import fu.osms.auth.repository.UserRepository;
-import fu.osms.auth.repository.UserRoleRepository;
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
+import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelProductVariant;
 import fu.osms.channel.repository.ChannelProductVariantRepository;
@@ -19,7 +19,6 @@ import fu.osms.inventory.entity.Supplier;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.SupplierRepository;
-import fu.osms.notification.service.NotificationService;
 import fu.osms.purchase.dto.*;
 import fu.osms.purchase.entity.PurchaseOrder;import fu.osms.purchase.entity.PurchaseOrderItem;
 import fu.osms.purchase.enums.PurchaseOrderStatus;
@@ -43,7 +42,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class PurchaseOrderServiceImpl implements PurchaseOrderService {
-    private static final long SUPPLIER_SEND_DELAY_SECONDS = 10;
     private static final SecureRandom ORDER_CODE_RANDOM = new SecureRandom();
     private static final List<PlatformType> PURCHASE_PLATFORMS = List.of(
             PlatformType.SHOPIFY, PlatformType.LAZADA, PlatformType.TIKTOK
@@ -57,8 +55,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final ChannelRepository channelRepository;
     private final ChannelProductVariantRepository channelVariantRepository;
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
-    private final NotificationService notificationService;
     private final MarketplaceWarehouseConsistencyService warehouseConsistencyService;
 
     @Override
@@ -218,9 +214,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 "Chỉ đơn ở trạng thái Đã gửi NCC mới có thể xác nhận vận chuyển.");
         order.setStatus(PurchaseOrderStatus.RECEIVING);
         order.setReceivingAt(OffsetDateTime.now());
-        PurchaseOrder saved = purchaseOrderRepository.save(order);
-        notifyOperations(saved);
-        return toResponse(saved);
+        return toResponse(purchaseOrderRepository.save(order));
     }
 
     @Override
@@ -595,12 +589,15 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return value != null && !value.isBlank();
     }
 
-    private void notifyOperations(PurchaseOrder order) {
-        userRoleRepository.findByRoleNameIn(List.of("OPERATIONS", "OWNER")).forEach(userRole ->
-                notificationService.createNotification(
-                        userRole.getUser().getId(), "INVENTORY", "Đơn đặt hàng đang vận chuyển",
-                        order.getOrderCode() + " đã chuyển sang Đang vận chuyển. Vui lòng tạo phiếu nhập kho.",
-                        "PURCHASE", order.getId()));
+    private BigDecimal resolveCurrentCost(Map<UUID, BigDecimal> currentCostByVariant, ProductVariant variant) {
+        BigDecimal inventoryCost = currentCostByVariant.get(variant.getId());
+        if (ProductCostPolicy.isPositive(inventoryCost)) {
+            return inventoryCost;
+        }
+        if (ProductCostPolicy.isPositive(variant.getCostPrice())) {
+            return variant.getCostPrice();
+        }
+        return variant.getPrice() != null ? variant.getPrice() : BigDecimal.ZERO;
     }
 
     private PurchaseOrderResponse toResponse(PurchaseOrder order) {
@@ -629,6 +626,17 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                         mapping -> mapping.getVariant().getId(),
                         LinkedHashMap::new,
                         Collectors.toList()));
+
+        Map<UUID, BigDecimal> currentCostByVariant = variantIds.isEmpty()
+                ? Map.of()
+                : inventoryItemRepository
+                .findByWarehouseIdAndVariantIdIn(order.getWarehouse().getId(), variantIds)
+                .stream()
+                .filter(item -> ProductCostPolicy.isPositive(item.getAverageCost()))
+                .collect(Collectors.toMap(
+                        item -> item.getVariant().getId(),
+                        InventoryItem::getAverageCost,
+                        (first, second) -> first));
 
         List<PurchaseOrderItemResponse> items = logicalItems.entrySet().stream()
                 .map(entry -> {
@@ -660,6 +668,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                             .unitCost(item.getUnitCost())
                             .totalCost(item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity())))
                             .salePrice(item.getVariant().getPrice())
+                            .costPrice(resolveCurrentCost(currentCostByVariant, item.getVariant()))
                             .build();
                 })
                 .toList();

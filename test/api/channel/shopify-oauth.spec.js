@@ -1,15 +1,3 @@
-/**
- * API tests for ShopifyOAuthController (/api/channels/shopify).
- *
- * Covers:
- *   - GET /api/channels/shopify/authorize
- *   - GET /api/channels/shopify/callback
- *
- * The OAuth exchange itself requires real Shopify credentials, so we
- * exercise the URL builder and the redirect/error branches, not the
- * real token exchange.
- */
-
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
 

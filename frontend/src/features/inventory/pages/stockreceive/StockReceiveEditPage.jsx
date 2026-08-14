@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,6 +16,7 @@ import inventoryApi from '../../../../api/inventoryApi';
 import { ROUTES } from '../../../../app/router/routes';
 import useConfirmDialog from '../../hooks/useConfirmDialog';
 import useUnsavedChangesGuard from '../../hooks/useUnsavedChangesGuard';
+import usePagedVariants from '../../hooks/usePagedVariants';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const formatVND = (v) =>
@@ -78,7 +79,7 @@ const normalizeWarehouseVariant = (item) => {
     sku, variantSku: internalSku, marketplaceSku,
     productName: item.productName ?? item.product?.name ?? sku,
     name: item.variantName ?? item.name ?? '',
-    unitPrice: item.unitPrice ?? item.price ?? 0,
+    unitPrice: item.averageCost ?? item.costPrice ?? 0,
     salePrice: item.salePrice ?? item.currentSalePrice ?? item.price ?? 0,
     availableQuantity: item.availableQuantity ?? 0,
     platforms: itemPlatforms(item),
@@ -240,15 +241,15 @@ const schema = z.object({
 });
 
 // ── Add Product Modal (same as CreatePage) ────────────────────────────────────
-function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], loading = false }) {
+function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], existingSkus = [], products = [], totalItems = 0, loading = false, loadingMore = false, hasMore = false, onLoadMore, onKeywordChange }) {
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState({});
 
   useEffect(() => {
     if (isOpen) return undefined;
-    const timer = window.setTimeout(() => { setKeyword(''); setSelected({}); }, 0);
+    const timer = window.setTimeout(() => { setKeyword(''); setSelected({}); onKeywordChange?.(''); }, 0);
     return () => window.clearTimeout(timer);
-  }, [isOpen]);
+  }, [isOpen, onKeywordChange]);
 
   const results = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -265,6 +266,13 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
   };
   const count = Object.keys(selected).length;
 
+  const handleScroll = (event) => {
+    const el = event.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 80 && hasMore && !loading && !loadingMore) {
+      onLoadMore?.();
+    }
+  };
+
   if (!isOpen) return null;
   return (
     <div onClick={(e) => e.target === e.currentTarget && onClose()}
@@ -273,7 +281,7 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div>
             <span style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Chọn sản phẩm bổ sung</span>
-            {results.length > 0 && <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{results.length} sản phẩm trong kho</span>}
+            <span style={{ marginLeft: 8, fontSize: 12, color: '#94a3b8' }}>{totalItems} sản phẩm</span>
           </div>
           <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
             <X size={18} />
@@ -282,12 +290,12 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-            <input autoFocus value={keyword} onChange={(e) => setKeyword(e.target.value)}
+            <input autoFocus value={keyword} onChange={(e) => { setKeyword(e.target.value); onKeywordChange?.(e.target.value); }}
               placeholder="Tìm theo tên sản phẩm hoặc SKU..."
               style={{ width: '100%', padding: '8px 10px 8px 34px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, color: '#0f172a', outline: 'none', boxSizing: 'border-box' }} />
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} onScroll={handleScroll}>
           {loading && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
               <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải sản phẩm kho...
@@ -326,6 +334,11 @@ function AddProductModal({ isOpen, onClose, onConfirm, existingVariantIds = [], 
               </div>
             );
           })}
+          {loadingMore && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 0', color: '#94a3b8', fontSize: 12 }}>
+              <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải thêm...
+            </div>
+          )}
         </div>
         <div style={{ padding: '14px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 12, color: '#94a3b8' }}>{count > 0 ? `Đã chọn ${count} sản phẩm` : 'Chưa chọn sản phẩm nào'}</span>
@@ -361,8 +374,6 @@ export default function StockReceiveEditPage() {
   const [warehouses, setWarehouses] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
-  const [warehouseVariants, setWarehouseVariants] = useState([]);
-  const [loadingVariants, setLoadingVariants] = useState(false);
   const importFileRef = useRef(null);
 
   const { register, handleSubmit, formState: { errors, isSubmitting }, setValue } = useForm({
@@ -373,6 +384,32 @@ export default function StockReceiveEditPage() {
     () => items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0),
     [items]
   );
+
+  const fetchWarehouseVariants = useCallback(async ({ page, size, keyword }) => {
+      return inventoryApi.getInventoryList(page, size, 'updatedAt', 'desc', null, null, false, {
+        ...(keyword ? { keyword } : {}),
+      });
+  }, []);
+
+  const pagedVariants = usePagedVariants({
+    enabled: true,
+    fetcher: fetchWarehouseVariants,
+  });
+
+  const warehouseVariants = useMemo(
+    () => aggregateVariantsBySku(
+      pagedVariants.items.map(normalizeWarehouseVariant).filter((v) => v.id),
+    ),
+    [pagedVariants.items],
+  );
+  const loadingVariants = pagedVariants.loading || pagedVariants.loadingMore;
+
+  const closeAddModal = () => {
+    setModalOpen(false);
+    pagedVariants.close();
+    pagedVariants.setKeyword('');
+  };
+
   const hasUnsavedChanges = Boolean(receipt);
   const { runWithoutGuard } = useUnsavedChangesGuard({ when: hasUnsavedChanges, confirm });
 
@@ -408,19 +445,6 @@ export default function StockReceiveEditPage() {
       const hasPO = Boolean(receiptData.purchaseOrderId);
       setItems(groupReceiptItems(receiptData.items || [], hasPO));
 
-      // Load warehouse variants for the Add Product modal
-      const warehouseId = masterWarehouse?.id ?? receiptData.warehouseId;
-      if (warehouseId) {
-        setLoadingVariants(true);
-        inventoryApi.getInventoryList(0, 10000, 'updatedAt', 'desc', null, null, false, { warehouseId })
-          .then((response) => {
-            const data = response?.content ?? (Array.isArray(response) ? response : []);
-            setWarehouseVariants(aggregateVariantsBySku(data.map(normalizeWarehouseVariant).filter((v) => v.id)));
-          })
-          .catch(() => setWarehouseVariants([]))
-          .finally(() => setLoadingVariants(false));
-      }
-      
       // Extract data from responses
       const extractData = (r) => {
         const d = r?.data?.data ?? r?.data;
@@ -471,7 +495,7 @@ export default function StockReceiveEditPage() {
         }),
       ];
     });
-    setModalOpen(false);
+    closeAddModal();
   };
 
   const downloadBlob = (blob, name) => {
@@ -489,8 +513,9 @@ export default function StockReceiveEditPage() {
     if (!file) return;
     if (loadingVariants) { toast.info('Đang tải sản phẩm kho, vui lòng thử lại.'); return; }
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
+        await pagedVariants.loadAll('');
         const wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array', cellFormula: false, cellNF: false });
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: undefined }).slice(1);
         const parsed = parseExcelImportRows(rows, warehouseVariants, items);
@@ -620,7 +645,7 @@ export default function StockReceiveEditPage() {
               <button type="button" onClick={() => importFileRef.current?.click()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><FileSpreadsheet size={14} /> Import Excel</button>
               <input ref={importFileRef} type="file" accept=".xlsx,.xls" onChange={onImportFile} style={{ display: 'none' }} />
             </div>
-            <button type="button" onClick={() => setModalOpen(true)}
+            <button type="button" onClick={() => { pagedVariants.open(); setModalOpen(true); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 7, border: 'none',
                 background: '#009688', color: '#fff',
                 fontSize: 12, fontWeight: 600,
@@ -780,12 +805,17 @@ export default function StockReceiveEditPage() {
       </div>
       <AddProductModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeAddModal}
         onConfirm={onAddProducts}
         existingVariantIds={items.flatMap((item) => item.variantIds ?? [item.variantId])}
         existingSkus={items.map((item) => String(item.sku ?? '').trim().toLowerCase()).filter(Boolean)}
         products={warehouseVariants}
-        loading={loadingVariants}
+        totalItems={pagedVariants.totalItems}
+        loading={pagedVariants.loading}
+        loadingMore={pagedVariants.loadingMore}
+        hasMore={pagedVariants.hasMore}
+        onLoadMore={pagedVariants.loadMore}
+        onKeywordChange={pagedVariants.setKeyword}
       />
       {ConfirmDialog}
     </div>

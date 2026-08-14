@@ -73,7 +73,7 @@ class TikTokOrderPersistenceServiceImplTest {
 
     private TikTokOrderWriteModel model(String extId, OrderStatus status, String paymentStatus) {
         return new TikTokOrderWriteModel(
-                extId, CREATED_AT, status, "RAW_STATUS",
+                extId, (OffsetDateTime) null, status, "RAW_STATUS",
                 paymentStatus,
                 "Buyer", "0901", Map.of("city", "HCMC"),
                 BigDecimal.valueOf(100), BigDecimal.ZERO, BigDecimal.ZERO,

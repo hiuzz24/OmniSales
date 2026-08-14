@@ -77,7 +77,7 @@ const MILESTONES = [
   {
     label: 'Giai đoạn 4',
     title: 'Kết nối các nền tảng thương mại điện tử',
-    desc: 'Tích hợp API Shopee, TikTok Shop và Lazada để đồng bộ sản phẩm, đơn hàng và tồn kho tự động giữa các kênh.',
+    desc: 'Tích hợp API Shopify, TikTok Shop và Lazada để đồng bộ sản phẩm, đơn hàng và tồn kho tự động giữa các kênh.',
   },
   {
     label: 'Giai đoạn 5',

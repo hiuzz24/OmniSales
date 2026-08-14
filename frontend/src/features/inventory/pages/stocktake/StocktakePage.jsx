@@ -8,6 +8,7 @@ import {
   Eye,
   MoreHorizontal,
   PlayCircle,
+  RefreshCw,
   TrendingDown,
   TrendingUp,
   XCircle,
@@ -176,7 +177,7 @@ const ResultCell = ({ surplus, shortage }) => {
   );
 };
 
-const ActionMenu = ({ stocktake, onStatus, onView }) => {
+const ActionMenu = ({ stocktake, onStatus, onView, onCheck }) => {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -196,9 +197,14 @@ const ActionMenu = ({ stocktake, onStatus, onView }) => {
       <ActionMenuItem onClick={() => { setOpen(false); onView(stocktake); }}>
         <Eye size={14} /> Xem chi tiết
       </ActionMenuItem>
+      {stocktake.status === 'IN_PROGRESS' && (
+        <ActionMenuItem color="#2563eb" onClick={() => { setOpen(false); onCheck(stocktake); }}>
+          <PlayCircle size={14} /> Kiểm tra
+        </ActionMenuItem>
+      )}
       {!isClosed && stocktake.status !== 'IN_PROGRESS' && (
         <ActionMenuItem color="#2563eb" onClick={() => { setOpen(false); onStatus(stocktake, 'IN_PROGRESS'); }}>
-          <PlayCircle size={14} /> Chuyển đang kiểm
+          <PlayCircle size={14} /> Bắt đầu kiểm
         </ActionMenuItem>
       )}
       {!isClosed && (
@@ -228,6 +234,25 @@ export default function StocktakePage() {
   const [rowsPerPage] = useState(10);
   const [totalElements, setTotalElements] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
+  const [syncingMarketplace, setSyncingMarketplace] = useState(false);
+
+  const handleSyncMarketplaceInventory = async () => {
+    if (syncingMarketplace) return;
+    setSyncingMarketplace(true);
+    try {
+      const response = await stocktakeService.syncPendingMarketplaceInventory();
+      const data = getResponseData(response);
+      const count = Number(data.syncedVariantCount ?? 0);
+      toast.success(count > 0
+        ? `Đã đồng bộ tồn kho ${formatNumber(count)} SKU từ phiếu kiểm lên các sàn liên kết.`
+        : 'Không có SKU phiếu kiểm nào cần đồng bộ.');
+      await refresh();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || 'Không thể đồng bộ tồn kho phiếu kiểm lên sàn.');
+    } finally {
+      setSyncingMarketplace(false);
+    }
+  };
 
   const fetchStocktakes = async () => {
     setLoading(true);
@@ -296,6 +321,10 @@ export default function StocktakePage() {
     navigate(ROUTES.STOCKTAKE_DETAIL.replace(':id', stocktake.id));
   };
 
+  const handleCheck = (stocktake) => {
+    navigate(ROUTES.STOCKTAKE_CHECK.replace(':id', stocktake.id));
+  };
+
   const handleStatus = async (stocktake, nextStatus) => {
     if (nextStatus === 'COMPLETED') {
       const hasMissingActual = (stocktake.items ?? []).some((item) => item.actualQuantity === null || item.actualQuantity === undefined || item.actualQuantity < 0);
@@ -307,6 +336,10 @@ export default function StocktakePage() {
     try {
       await stocktakeService.changeStatus(stocktake.id, nextStatus);
       toast.success('Cập nhật trạng thái phiếu kiểm thành công.');
+      if (nextStatus === 'IN_PROGRESS') {
+        navigate(ROUTES.STOCKTAKE_CHECK.replace(':id', stocktake.id));
+        return;
+      }
       refresh();
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Không thể cập nhật trạng thái phiếu kiểm.');
@@ -325,9 +358,21 @@ export default function StocktakePage() {
     const checkedCount = items.filter((item) => item.actualQuantity !== null && item.actualQuantity !== undefined).length;
     const surplus = items.reduce((sum, item) => sum + Math.max(Number(item.difference ?? item.actualQuantity - item.systemQuantity) || 0, 0), 0);
     const shortage = items.reduce((sum, item) => sum + Math.abs(Math.min(Number(item.difference ?? item.actualQuantity - item.systemQuantity) || 0, 0)), 0);
+    const needsSync = stocktake.status === 'COMPLETED' && stocktake.marketplaceSyncAvailable === true;
+    const rowStyle = needsSync ? { backgroundColor: '#fffbeb' } : {};
     return (
-      <tr key={stocktake.id}>
-        <td style={{ ...tableCellStyle, color: '#009688', fontFamily: 'monospace', fontWeight: 700 }}>{stocktake.sessionCode}</td>
+      <tr key={stocktake.id} style={rowStyle}>
+        <td style={{ ...tableCellStyle, color: '#009688', fontFamily: 'monospace', fontWeight: 700 }}>
+          {stocktake.sessionCode}
+          {needsSync && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
+              <AlertTriangle size={11} color="#d97706" />
+              <span style={{ fontSize: 10.5, color: '#d97706', fontWeight: 600, fontFamily: 'inherit' }}>
+                Chưa đồng bộ lên sàn
+              </span>
+            </div>
+          )}
+        </td>
         <td style={tableCellStyle}>{stocktake.warehouseName ?? '-'}</td>
         <td style={{ ...tableCellStyle, textAlign: 'right' }}>{formatNumber(items.length)}</td>
         <td style={{ ...tableCellStyle, textAlign: 'right', fontWeight: 700 }}>{formatNumber(checkedCount)}</td>
@@ -338,7 +383,7 @@ export default function StocktakePage() {
         <td style={tableCellStyle}>{stocktake.createdByName ?? '-'}</td>
         <td style={tableCellStyle}>{formatDateTime(stocktake.createdAt) || formatDate(stocktake.scheduledDate)}</td>
         <td style={{ ...tableCellStyle, textAlign: 'right' }}>
-          <ActionMenu stocktake={stocktake} onStatus={handleStatus} onView={handleView} />
+          <ActionMenu stocktake={stocktake} onStatus={handleStatus} onView={handleView} onCheck={handleCheck} />
         </td>
       </tr>
     );
@@ -359,6 +404,31 @@ export default function StocktakePage() {
       createLabel="Tạo phiếu kiểm"
       onCreate={() => navigate(ROUTES.STOCKTAKE_CREATE)}
       onExport={() => setExportOpen(true)}
+      extraActions={(
+        <button
+          type="button"
+          onClick={handleSyncMarketplaceInventory}
+          disabled={syncingMarketplace}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            height: 40,
+            padding: '0 14px',
+            border: '1px solid #99f6e4',
+            borderRadius: 12,
+            background: syncingMarketplace ? '#f0fdfa' : '#0d9488',
+            color: syncingMarketplace ? '#0f766e' : '#ffffff',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: syncingMarketplace ? 'not-allowed' : 'pointer',
+            boxShadow: syncingMarketplace ? 'none' : '0 8px 18px rgba(13, 148, 136, 0.22)',
+          }}
+        >
+          <RefreshCw size={15} style={{ animation: syncingMarketplace ? 'spin 1s linear infinite' : undefined }} />
+          {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn kho'}
+        </button>
+      )}
       stats={stats}
       filters={(
         <>

@@ -51,7 +51,7 @@ class StockReceiveControllerIT {
 
     @Autowired MockMvc mvc;
     @MockitoBean StockReceiveService stockReceiveService;
-    @MockitoBean StockReceiveExtraItemImportService extraItemImportService;
+    @MockitoBean StockReceiveExtraItemImportService stockReceiveExtraItemImportService;
     @MockitoBean JwtService jwtService;
     @MockitoBean UserRepository userRepository;
     @MockitoBean UserService userService;

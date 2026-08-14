@@ -5,6 +5,7 @@ import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
+import fu.osms.common.exception.AppException;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.mapper.SyncLogMapper;
 import fu.osms.sync.order.pull.OrderPullJobStore;
@@ -68,25 +69,25 @@ class OrderPullServiceImplTest {
     }
 
     @Test
-    @DisplayName("start: throws IllegalArgumentException when from > to")
+    @DisplayName("start: throws AppException when from > to")
     void start_invalidRange() {
         OrderPullRequest request = new OrderPullRequest(
                 List.of(UUID.randomUUID()),
                 OffsetDateTime.now(),
                 OffsetDateTime.now().minusHours(1));
 
-        assertThatThrownBy(() -> service.start(request)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.start(request)).isInstanceOf(AppException.class);
     }
 
     @Test
-    @DisplayName("start: throws IllegalArgumentException when range exceeds 7 days")
+    @DisplayName("start: throws AppException when range exceeds 7 days")
     void start_rangeTooLarge() {
         OrderPullRequest request = new OrderPullRequest(
                 List.of(UUID.randomUUID()),
                 OffsetDateTime.now().minusDays(10),
                 OffsetDateTime.now());
 
-        assertThatThrownBy(() -> service.start(request)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.start(request)).isInstanceOf(AppException.class);
     }
 
     @Test

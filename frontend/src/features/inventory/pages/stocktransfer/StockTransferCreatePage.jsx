@@ -635,6 +635,7 @@ export default function StockTransferCreatePage() {
                 </div>
               ) : (
                 <select
+                  id="from-warehouse"
                   value={fromWarehouseId}
                   onChange={(e) => {
                     setFromWarehouseId(e.target.value);
@@ -692,6 +693,7 @@ export default function StockTransferCreatePage() {
                 Nhập tại kho <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <select
+                id="to-warehouse"
                 value={toWarehouseId}
                 onChange={(e) => setToWarehouseId(e.target.value)}
                 style={selectStyle(!toWarehouseId && submitting)}

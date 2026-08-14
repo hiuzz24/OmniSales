@@ -1,11 +1,57 @@
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { cleanupAllTestData, getAuthTokenCached } = require('../../utils/cleanup-helpers');
 
+const BASE_USERS = ['admin@osms.vn', 'manager@osms.vn', 'staff@osms.vn', 'viewer@osms.vn'];
+
+async function restoreBaseUsers(request) {
+  // Some tests (e.g. USR-E2E-11 "Disable User button changes status")
+  // exercise the user-status dropdown and may accidentally deactivate a
+  // base fixture user (admin/manager/staff/viewer). Without a restore,
+  // every subsequent spec that logs in via managerPage/adminPage fails
+  // with HTTP 500 from /auth/login ("account inactive").  Hit the
+  // API to flip them back to ACTIVE so the rest of the suite stays green.
+  try {
+    const token = await getAuthTokenCached(request);
+    // Re-fetch a fresh token in case the cached one was issued before
+    // the manager was deactivated.
+    let liveToken = token;
+    try {
+      const resp = await request.post(`${process.env.API_BASE || 'http://localhost:8080/api'}/auth/login`, {
+        data: { email: 'admin@osms.vn', password: '11111111' },
+      });
+      if (resp.status() === 200) {
+        liveToken = (await resp.json()).data.accessToken;
+      }
+    } catch (_) { /* fall back to cached token */ }
+    for (const email of BASE_USERS) {
+      try {
+        // Find user id by email
+        const listResp = await request.get(
+          `${process.env.API_BASE || 'http://localhost:8080/api'}/users?page=0&size=200&keyword=${encodeURIComponent(email)}`,
+          { headers: { Authorization: `Bearer ${liveToken}` } },
+        );
+        if (listResp.status() !== 200) continue;
+        const listBody = await listResp.json();
+        const users = listBody.data?.content || listBody.data || [];
+        const u = users.find((x) => (x.email || '').toLowerCase() === email.toLowerCase());
+        if (!u || !u.id) continue;
+        if ((u.status || '').toUpperCase() === 'ACTIVE') continue;
+        // PUT status back to ACTIVE (matches the controller's status-update path).
+        await request.put(
+          `${process.env.API_BASE || 'http://localhost:8080/api'}/users/${u.id}/status?status=ACTIVE`,
+          { headers: { Authorization: `Bearer ${liveToken}` } },
+        );
+      } catch (_) { /* best-effort */ }
+    }
+  } catch (_) { /* never fail the suite on a cleanup miss */ }
+}
+
 test.describe('User List E2E Tests', () => {
 
   test.afterEach(async ({ request }) => {
     const token = await getAuthTokenCached(request);
     await cleanupAllTestData(request, token);
+    await restoreBaseUsers(request);
   });
 
   // USR-E2E-1
@@ -215,17 +261,35 @@ test.describe('User List E2E Tests', () => {
     await managerPage.goto('/users', { waitUntil: 'domcontentloaded' });
     await managerPage.waitForSelector('table, [role="table"]', { timeout: 10000 });
 
-    // Skip the first N rows because they are base fixtures (admin,
-    // manager, viewer, staff, owner1). Targeting the *first* edit button
-    // would disable the manager and break every subsequent test that
-    // logs in via the managerPage fixture. We instead pick the last edit
-    // button — most likely a recently created test user.
-    const editButtons = managerPage.locator('button:has-text("Sửa"), button:has-text("Edit")');
-    const editCount = await editButtons.count();
-    // Treat rows 1-5 as base fixtures and prefer a row from index >=5.
-    const targetIdx = editCount > 5 ? 5 : Math.max(0, editCount - 1);
-    const editBtn = editButtons.nth(targetIdx);
-    if ((await editBtn.count()) > 0) {
+    // Skip rows whose email matches a base fixture (admin/manager/staff/
+    // viewer/owner1). Targeting the *first* edit button would disable the
+    // manager and break every subsequent test that logs in via the
+    // managerPage fixture. Pick the first row that is NOT a base fixture.
+    const baseEmails = new Set([
+      'admin@osms.vn',
+      'manager@osms.vn',
+      'staff@osms.vn',
+      'viewer@osms.vn',
+      'owner1@osms.vn',
+    ]);
+    const rows = managerPage.locator('table tbody tr, [role="row"]');
+    const rowCount = await rows.count();
+    let targetRow = null;
+    for (let i = 0; i < rowCount; i++) {
+      const rowText = await rows.nth(i).textContent().catch(() => '');
+      if (!rowText) continue;
+      const matched = Array.from(baseEmails).some((e) =>
+        rowText.toLowerCase().includes(e.toLowerCase()),
+      );
+      if (!matched) {
+        targetRow = rows.nth(i);
+        break;
+      }
+    }
+    const editBtn = targetRow
+      ? targetRow.locator('button:has-text("Sửa"), button:has-text("Edit")').first()
+      : null;
+    if (editBtn && (await editBtn.count()) > 0) {
       await editBtn.click();
       await managerPage.waitForTimeout(500);
 

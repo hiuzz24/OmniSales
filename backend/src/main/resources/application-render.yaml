@@ -1,0 +1,16 @@
+# Cấu hình cho môi trường production (Render)
+# Sử dụng SendGrid HTTP API để gửi email
+
+# Không cấu hình SMTP ở prod - server production thường chặn outbound SMTP
+spring:
+  mail:
+    host: localhost
+    port: 25
+
+# SendGrid API configuration
+email:
+  api:
+    key: ${SENDGRID_API_KEY}
+    url: https://api.sendgrid.com/v3/mail/send
+    from: ${EMAIL_FROM:duynguyenthe195@gmail.com}
+    from-name: ${EMAIL_FROM_NAME:OmniSales}

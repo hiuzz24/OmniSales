@@ -1,18 +1,3 @@
-/**
- * API tests for ProductChannelConfigController (/api/products/{id}/channels/{id}/config).
- *
- * The controller exposes two endpoints:
- *   - GET  /api/products/{productId}/channels/{channelId}/config
- *   - PUT  /api/products/{productId}/channels/{channelId}/config
- *
- * These require a *channel-product mapping* to exist. Without one, the
- * service returns 404 "Active product channel mapping not found". The
- * tests below verify that contract:
- *   - 404 when the mapping does not exist (random UUIDs)
- *   - 403 without auth
- *   - 500/400 with malformed UUIDs
- */
-
 const { test, expect } = require('../../fixtures/auth-fixtures');
 const { API_BASE } = require('../../utils/env-config');
 
