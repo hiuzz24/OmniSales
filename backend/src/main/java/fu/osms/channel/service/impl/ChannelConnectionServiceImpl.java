@@ -50,6 +50,7 @@ public class ChannelConnectionServiceImpl implements ChannelConnectionService {
 
     @Override
     @Transactional
+    /** Kết nối hoặc khôi phục kênh Shopify sau khi OAuth cấp access token. */
     public ChannelResponse connectShopify(String shop, String accessToken) {
         String handle = shopDomainNormalizer.normalizeHandle(shop);
         Channel channel = reconnectResolver.resolveShopify(handle);
@@ -69,6 +70,7 @@ public class ChannelConnectionServiceImpl implements ChannelConnectionService {
     }
 
     @Override
+    /** Đăng ký Shopify webhook subscription và lưu kết quả đăng ký. */
     public void registerShopifyWebhooks(String shop, String accessToken, UUID channelId) {
         try {
             safeUpdateShopifyWebhookMetadata(channelId,
@@ -83,6 +85,7 @@ public class ChannelConnectionServiceImpl implements ChannelConnectionService {
 
     @Override
     @Transactional
+    /** Kết nối hoặc khôi phục người bán Lazada theo định danh trong token response. */
     public ChannelResponse connectLazada(String accessToken, String refreshToken, int expiresIn,
                                          int refreshExpiresIn, String accountId, String accountName) {
         String resolvedName = firstNonBlank(accountName, accountId, "Connected");
@@ -114,6 +117,7 @@ public class ChannelConnectionServiceImpl implements ChannelConnectionService {
 
     @Override
     @Transactional
+    /** Kết nối hoặc khôi phục cửa hàng TikTok theo authorized-shop response. */
     public ChannelResponse connectTikTok(String accessToken, String refreshToken, int expiresIn,
                                          int refreshExpiresIn, String accountId, String accountName,
                                          Map<String, Object> metadata) {
@@ -145,6 +149,7 @@ public class ChannelConnectionServiceImpl implements ChannelConnectionService {
 
     @Override
     @Transactional
+    /** Lưu định danh webhook và lỗi đăng ký để dọn dẹp hoặc chẩn đoán sau này. */
     public void updateShopifyWebhookMetadata(UUID channelId, WebhookRegistrationResult result) {
         Channel channel = activeChannel(channelId);
         Map<String, Object> metadata = mutableMetadata(channel);
@@ -157,6 +162,7 @@ public class ChannelConnectionServiceImpl implements ChannelConnectionService {
 
     @Override
     @Transactional
+    /** Lưu trữ mapping, thu hồi credentials, xóa webhook và xóa mềm kênh. */
     public void disconnect(UUID channelId) {
         Channel channel = channelRepository.findById(channelId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));

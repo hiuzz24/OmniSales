@@ -9,6 +9,7 @@ const PLATFORM_ICONS = {
   SHOPIFY: { label: 'SH', className: 'channelIconShopify' },
 };
 
+/** Cho phép chọn các kênh sẽ được cấu hình và liên kết với sản phẩm. */
 const ProductChannelSidebar = ({
   channels = [],
   onSubmit,
@@ -25,8 +26,10 @@ const ProductChannelSidebar = ({
     name: ['channelIds', 'status', 'channelConfigs'],
   });
   const selectedCount = selectedChannels.length;
+  // Trả về biểu tượng hiển thị theo platform.
   const getIcon = (platform) => PLATFORM_ICONS[platform?.toUpperCase()] || { label: '?', className: 'channelIconDefault' };
 
+  // Thêm hoặc bỏ channel ID khỏi danh sách kênh đã chọn.
   const toggleChannel = (channelId, isSelected) => {
     setValue(
       'channelIds',

@@ -1,6 +1,7 @@
 import { Boxes, Image, LayoutDashboard, PanelsTopLeft } from 'lucide-react';
 import styles from './ProductDetailTabs.module.css';
 
+/** Điều hướng giữa tổng quan, biến thể, hình ảnh và platform của sản phẩm. */
 const ProductDetailTabs = ({ activeTab, onChange, variantsCount }) => {
   const tabs = [
     { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },

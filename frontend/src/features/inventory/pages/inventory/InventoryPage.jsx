@@ -104,12 +104,16 @@ const nextSort = (current) =>
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 /**
  * Derive a status string from BE fields for display purposes.
- * BE trả về: quantityOnHand, availableQuantity, lowStockThreshold, isLowStock
+ * Trạng thái tồn kho phải dựa trên số lượng thực tế trong kho. Số lượng có thể
+ * bán có thể bằng 0 khi toàn bộ hàng đang được giữ, nhưng sản phẩm chưa hết hàng.
  */
 const deriveStatus = (item) => {
-  if (item.availableQuantity < 0) return 'negative';
-  if (item.availableQuantity === 0) return 'out-of-stock';
-  if (item.isLowStock) return 'low-stock';
+  const quantityOnHand = Number(item?.quantityOnHand ?? 0);
+  const lowStockThreshold = Number(item?.lowStockThreshold ?? 0);
+
+  if (quantityOnHand < 0) return 'negative';
+  if (quantityOnHand === 0) return 'out-of-stock';
+  if (quantityOnHand <= lowStockThreshold) return 'low-stock';
   return 'in-stock';
 };
 
@@ -138,123 +142,29 @@ const getItemPlatforms = (item) => {
   ].map(normalizePlatform));
 };
 
-const getItemChannelNames = (item) => {
-  const names = uniqueValues(item?.channelNames);
-  if (names.length > 0) return names;
-  return item?.channelName ? [item.channelName] : [];
-};
-
 const getChannelLabel = (item) => {
   const platforms = getItemPlatforms(item);
   if (platforms.length === 0) return 'Ứng dụng';
   return platforms.map(getPlatformLabel).join(', ');
 };
 
-const getProductDisplayName = (item) => item?.productName || item?.variantName || 'Sản phẩm chưa đặt tên';
+const buildDisplayGroups = (groups) => (groups ?? []).map((group) => ({
+  groupKey: group.groupKey,
+  parentRow: {
+    ...group.parent,
+    type: 'product',
+    id: `product-${group.groupKey}`,
+    items: group.children ?? [],
+  },
+  childRows: (group.children ?? []).map((item) => ({
+    ...item,
+    type: 'variant',
+    inventoryItemId: item.id,
+    id: `variant-${item.id}`,
+  })),
+}));
 
-const normalizeSkuKey = (value) => String(value ?? '').trim().toLowerCase();
-
-const getProductGroupKeys = (item) => {
-  const keys = [];
-  const productIds = Array.isArray(item?.productIds) ? item.productIds.filter(Boolean) : [];
-  if (item?.productId) productIds.push(item.productId);
-  uniqueValues(productIds).forEach((productId) => keys.push(`product:${productId}`));
-
-  const sku = normalizeSkuKey(item?.marketplaceSku ?? item?.variantSku);
-  if (sku) keys.push(`sku:${sku}`);
-
-  return keys.length > 0 ? keys : [item?.variantId ? `variant:${item.variantId}` : `name:${getProductDisplayName(item)}`];
-};
-
-const buildProductGroupKeyResolver = (rows) => {
-  const parent = new Map();
-  const rowKeys = [];
-
-  const find = (key) => {
-    if (!parent.has(key)) parent.set(key, key);
-    const current = parent.get(key);
-    if (current === key) return key;
-    const root = find(current);
-    parent.set(key, root);
-    return root;
-  };
-
-  const union = (a, b) => {
-    const rootA = find(a);
-    const rootB = find(b);
-    if (rootA !== rootB) parent.set(rootB, rootA);
-  };
-
-  rows.forEach((item) => {
-    const keys = getProductGroupKeys(item);
-    rowKeys.push(keys);
-    keys.forEach(find);
-    for (let index = 1; index < keys.length; index += 1) {
-      union(keys[0], keys[index]);
-    }
-  });
-
-  return (index) => find(rowKeys[index][0]);
-};
-
-const buildInventoryGroups = (rows) => {
-  const groups = new Map();
-  const resolveGroupKey = buildProductGroupKeyResolver(rows);
-  rows.forEach((item, index) => {
-    const key = resolveGroupKey(index);
-    if (!groups.has(key)) {
-      groups.set(key, {
-        type: 'product',
-        id: `product-${key}`,
-        productId: item.productId,
-        productName: getProductDisplayName(item),
-        platforms: [],
-        channelNames: [],
-        channelIds: [],
-        items: [],
-      });
-    }
-    const group = groups.get(key);
-    group.platforms = uniqueValues([...group.platforms, ...getItemPlatforms(item)]);
-    group.channelNames = uniqueValues([...group.channelNames, ...getItemChannelNames(item)]);
-    group.channelIds = uniqueValues([...(group.channelIds ?? []), ...(item.channelIds ?? []), item.channelId]);
-    group.items.push(item);
-  });
-
-  return [...groups.values()].map((group) => {
-    const quantityOnHand = group.items.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0);
-    const incomingQuantity = group.items.reduce((sum, item) => sum + Number(item.incomingQuantity ?? 0), 0);
-    const outgoingQuantity = group.items.reduce((sum, item) => sum + Number(item.outgoingQuantity ?? 0), 0);
-    const reservedQuantity = group.items.reduce((sum, item) => sum + Number(item.reservedQuantity ?? 0), 0);
-    const availableQuantity = group.items.reduce((sum, item) => sum + Number(item.availableQuantity ?? 0), 0);
-    const lowStockThreshold = group.items.reduce((sum, item) => sum + Number(item.lowStockThreshold ?? 0), 0);
-    const parentRow = {
-      ...group,
-      quantityOnHand,
-      incomingQuantity,
-      outgoingQuantity,
-      reservedQuantity,
-      availableQuantity,
-      lowStockThreshold,
-      isLowStock: group.items.some((item) => item.isLowStock),
-      warehouseName: group.items.length === 1 ? group.items[0].warehouseName : `${group.items.length} SKU`,
-      platform: group.platforms.length === 1 ? group.platforms[0] : null,
-      channelName: group.channelNames.join(', '),
-      channelId: group.channelIds.length === 1 ? group.channelIds[0] : null,
-    };
-    return {
-      parentRow,
-      childRows: group.items.map((item) => ({
-        ...item,
-        type: 'variant',
-        inventoryItemId: item.id,
-        id: `variant-${item.id}`,
-      })),
-    };
-  });
-};
-
-const flattenInventoryGroups = (groups) => groups.flatMap((group) => [group.parentRow, ...group.childRows]);
+const flattenDisplayGroups = (groups) => groups.flatMap((group) => [group.parentRow, ...group.childRows]);
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const StatusBadge = ({ status, item }) => {
@@ -269,7 +179,7 @@ const StatusBadge = ({ status, item }) => {
   const subLabel = useMemo(() => {
     if (status === 'low-stock') return 'Dưới mức tồn';
     if (status === 'negative') {
-      const absVal = Math.abs(item?.availableQuantity ?? 0);
+      const absVal = Math.abs(item?.quantityOnHand ?? 0);
       return `Âm ${absVal}`;
     }
     if (status === 'out-of-stock') return 'Hết hàng';
@@ -333,8 +243,9 @@ const InventoryPage = () => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   // ── Data state
-  const [items, setItems] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [backendTotalProducts, setBackendTotalProducts] = useState(0);
+  const [backendTotalPages, setBackendTotalPages] = useState(1);
   const [totalSkuElements, setTotalSkuElements] = useState(0);
   const [categoryTree, setCategoryTree] = useState([]);
   const [lowStockItems, setLowStockItems] = useState([]);
@@ -342,6 +253,9 @@ const InventoryPage = () => {
     totalProducts: 0,
     totalSkus: 0,
     totalQuantity: 0,
+    lowStockSkus: 0,
+    outOfStockSkus: 0,
+    negativeStockSkus: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -375,74 +289,61 @@ const InventoryPage = () => {
     platforms: selectedPlatformFilters,
   }), [search, statusFilter, selectedPlatformFilters]);
 
-  // Fetch the complete filtered SKU set, then paginate product groups on the client.
-  // Paginating SKUs before grouping caused a 10-product page to show only 9 groups.
+  // Fetch the current product-group page directly from the backend.
+  // Pagination + sorting by product group are now server-side.
+  const getSortParams = useCallback(() => {
+    if (nameSort !== 'none') return { sortBy: 'productName', sortDir: nameSort };
+    if (qtySort !== 'none') return { sortBy: 'quantityOnHand', sortDir: qtySort };
+    return { sortBy: 'updatedAt', sortDir: 'desc' };
+  }, [nameSort, qtySort]);
+
   const fetchInventory = useCallback(async (categoryId, filters = {}) => {
     setLoading(true);
     setError(null);
     try {
       const { catIdParam, channelIdParam, localOnlyParam } = getInventoryScope(categoryId);
-      const firstPage = await inventoryService.getInventoryList(
-        0,
-        INVENTORY_FETCH_SIZE,
-        'updatedAt',
-        'desc',
+      const { sortBy, sortDir } = getSortParams();
+      const data = await inventoryService.getInventoryGroups(
+        currentPage,
+        pageSize,
+        sortBy,
+        sortDir,
         catIdParam,
         channelIdParam,
         localOnlyParam,
         filters,
       );
-      const allRows = [...(firstPage.content ?? [])];
-      const pageCount = Number(firstPage.totalPages ?? 1);
-
-      for (let page = 1; page < pageCount; page += 1) {
-        const data = await inventoryService.getInventoryList(
-          page,
-          INVENTORY_FETCH_SIZE,
-          'updatedAt',
-          'desc',
-          catIdParam,
-          channelIdParam,
-          localOnlyParam,
-          filters,
-        );
-        allRows.push(...(data.content ?? []));
-      }
-
-      setItems(allRows);
-      setBackendTotalProducts(Number(firstPage.totalProducts ?? buildInventoryGroups(allRows).length));
-      setTotalSkuElements(Number(firstPage.totalSkus ?? firstPage.totalElements ?? allRows.length));
+      const pageGroups = buildDisplayGroups(data.content ?? []);
+      setGroups(pageGroups);
+      setBackendTotalProducts(Number(data.totalProducts ?? pageGroups.length));
+      setBackendTotalPages(Math.max(Number(data.totalPages ?? 1), 1));
+      setTotalSkuElements(Number(data.totalSkus ?? 0));
     } catch (err) {
       console.error('Lỗi tải tồn kho:', err);
       setError('Không thể tải dữ liệu tồn kho. Vui lòng thử lại.');
-      setItems([]);
+      setGroups([]);
       setBackendTotalProducts(0);
+      setBackendTotalPages(1);
       setTotalSkuElements(0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentPage, pageSize, getSortParams]);
 
   const fetchSummaryStats = useCallback(async () => {
     try {
-      const firstPage = await inventoryService.getInventoryList(0, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc');
-      const allRows = [...(firstPage.content ?? [])];
-      console.log('First page of inventory for summary stats:', firstPage);
-      const pageCount = Number(firstPage.totalPages ?? 1);
-
-      for (let page = 1; page < pageCount; page += 1) {
-        const data = await inventoryService.getInventoryList(page, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc');
-        allRows.push(...(data.content ?? []));
-      }
-
+      const data = await inventoryService.getInventorySummary();
       setSummaryStats({
-        totalProducts: Number(firstPage.totalProducts ?? buildInventoryGroups(allRows).length),
-        totalSkus: Number(firstPage.totalSkus ?? firstPage.totalElements ?? allRows.length),
-        totalQuantity: allRows.reduce((sum, item) => sum + Number(item.quantityOnHand ?? 0), 0),
+        totalProducts: Number(data.totalProducts ?? 0),
+        totalSkus: Number(data.totalSkus ?? 0),
+        totalQuantity: Number(data.totalQuantity ?? 0),
+        lowStockSkus: Number(data.lowStockSkus ?? 0),
+        outOfStockSkus: Number(data.outOfStockSkus ?? 0),
+        negativeStockSkus: Number(data.negativeStockSkus ?? 0),
       });
     } catch (err) {
       console.error('Lỗi tải thống kê tồn kho:', err);
-      setSummaryStats({ totalProducts: 0, totalSkus: 0, totalQuantity: 0 });
+      setSummaryStats({ totalProducts: 0, totalSkus: 0, totalQuantity: 0, lowStockSkus: 0, outOfStockSkus: 0, negativeStockSkus: 0 });
     }
   }, []);
 
@@ -502,83 +403,42 @@ const InventoryPage = () => {
     });
   };
 
-  const sortInventoryRows = useCallback((source) => {
-    let result = source;
-    // Sort by name (takes priority over qty sort if both active)
-    if (nameSort !== 'none') {
-      result = [...result].sort((a, b) => {
-        const cmp = (a.variantName ?? '').localeCompare(b.variantName ?? '', 'vi');
-        return nameSort === 'asc' ? cmp : -cmp;
-      });
-    } else if (qtySort !== 'none') {
-      result = [...result].sort((a, b) =>
-        qtySort === 'asc'
-          ? a.quantityOnHand - b.quantityOnHand
-          : b.quantityOnHand - a.quantityOnHand
-      );
-    }
-
-    return result;
-  }, [nameSort, qtySort]);
-
-  const sortInventoryGroups = useCallback((source) => {
-    if (nameSort !== 'none') {
-      return [...source].sort((a, b) => {
-        const cmp = (a.parentRow.productName ?? '').localeCompare(b.parentRow.productName ?? '', 'vi');
-        return nameSort === 'asc' ? cmp : -cmp;
-      });
-    }
-
-    if (qtySort !== 'none') {
-      return [...source].sort((a, b) => {
-        const qtyA = Number(a.parentRow.quantityOnHand ?? 0);
-        const qtyB = Number(b.parentRow.quantityOnHand ?? 0);
-        return qtySort === 'asc' ? qtyA - qtyB : qtyB - qtyA;
-      });
-    }
-
-    return source;
-  }, [nameSort, qtySort]);
-
-  const productGroups = useMemo(() => {
-    const groups = buildInventoryGroups(items);
-    return sortInventoryGroups(groups);
-  }, [items, sortInventoryGroups]);
+  const displayRows = useMemo(() => flattenDisplayGroups(groups), [groups]);
   const visibleItems = useMemo(
-    () => sortInventoryRows(flattenInventoryGroups(productGroups).filter((row) => row.type !== 'product')),
-    [productGroups, sortInventoryRows]
+    () => groups.flatMap((group) => group.childRows),
+    [groups]
   );
-  const totalProducts = backendTotalProducts || productGroups.length;
-  const totalPages = Math.ceil(totalProducts / pageSize);
-  const paginatedProductGroups = useMemo(() => {
-    const start = currentPage * pageSize;
-    return productGroups.slice(start, start + pageSize);
-  }, [currentPage, pageSize, productGroups]);
-  const displayRows = useMemo(() => flattenInventoryGroups(paginatedProductGroups), [paginatedProductGroups]);
   const currentSkuCount = useMemo(
-    () => paginatedProductGroups.reduce((sum, group) => sum + group.childRows.length, 0),
-    [paginatedProductGroups]
+    () => groups.reduce((sum, group) => sum + group.childRows.length, 0),
+    [groups]
   );
+  const hasActiveFilters = search.trim() !== ''
+    || statusFilter !== 'all'
+    || selectedPlatformFilters.length > 0
+    || categoryFilter !== 'all';
 
   useEffect(() => {
-    if (currentPage > 0 && totalPages > 0 && currentPage >= totalPages) {
-      const timer = window.setTimeout(() => setCurrentPage(Math.max(totalPages - 1, 0)), 0);
+    if (currentPage > 0 && backendTotalPages > 0 && currentPage >= backendTotalPages) {
+      const timer = window.setTimeout(() => setCurrentPage(Math.max(backendTotalPages - 1, 0)), 0);
       return () => window.clearTimeout(timer);
     }
     return undefined;
-  }, [currentPage, totalPages]);
+  }, [currentPage, backendTotalPages]);
 
   const loadInventoryExportRows = async () => {
     const { catIdParam, channelIdParam, localOnlyParam } = getInventoryScope(categoryFilter);
-    const firstPage = await inventoryService.getInventoryList(0, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc', catIdParam, channelIdParam, localOnlyParam, getInventoryFilters());
-    const allRows = [...(firstPage.content ?? [])];
+    const firstPage = await inventoryService.getInventoryGroups(
+      0, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc', catIdParam, channelIdParam, localOnlyParam, getInventoryFilters(),
+    );
+    const groups = [...(firstPage.content ?? [])];
     const pageCount = Number(firstPage.totalPages ?? 1);
     for (let page = 1; page < pageCount; page += 1) {
-      const data = await inventoryService.getInventoryList(page, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc', catIdParam, channelIdParam, localOnlyParam, getInventoryFilters());
-      allRows.push(...(data.content ?? []));
+      const data = await inventoryService.getInventoryGroups(
+        page, INVENTORY_FETCH_SIZE, 'updatedAt', 'desc', catIdParam, channelIdParam, localOnlyParam, getInventoryFilters(),
+      );
+      groups.push(...(data.content ?? []));
     }
-    const groups = buildInventoryGroups(allRows);
-    return sortInventoryRows(flattenInventoryGroups(groups).filter((row) => row.type !== 'product'));
+    return groups.flatMap((group) => (group.children ?? []).map((item) => ({ ...item, inventoryItemId: item.id })));
   };
 
   const loadInventoryExportExtraSheets = async ({ fromDate, toDate } = {}) => {
@@ -607,14 +467,13 @@ const InventoryPage = () => {
     }];
   };
 
-  // ── Derived alert counts from the full inventory snapshot
-  const negativeStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) < 0);
+  // ── Stock notice list (detailed rows) + counts come from the summary API
   const outOfStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) === 0);
   const lowStockAlerts = lowStockItems.filter(r => Number(r.availableQuantity ?? 0) > 0);
-  const negativeCount = negativeStockAlerts.length;
-  const lowStockCount = lowStockAlerts.length;
-  const outOfStockCount = outOfStockAlerts.length;
   const stockNoticeItems = [...outOfStockAlerts, ...lowStockAlerts];
+  const negativeCount = summaryStats.negativeStockSkus;
+  const lowStockCount = summaryStats.lowStockSkus;
+  const outOfStockCount = summaryStats.outOfStockSkus;
   const totalQuantityAll = summaryStats.totalQuantity;
 
   const quantityColor = (v) => {
@@ -950,7 +809,7 @@ const InventoryPage = () => {
                 Danh sách tồn kho
               </h2>
               <p className={styles.tableSubtitle}>
-                <strong>{totalProducts.toLocaleString('vi-VN')}</strong> sản phẩm · <strong>{totalSkuElements.toLocaleString('vi-VN')}</strong> sản phẩm con (SKU)
+                <strong>{backendTotalProducts.toLocaleString('vi-VN')}</strong> sản phẩm · <strong>{totalSkuElements.toLocaleString('vi-VN')}</strong> sản phẩm con (SKU)
               </p>
             </div>
           </div>
@@ -1089,7 +948,7 @@ const InventoryPage = () => {
                   {!loading && displayRows.length === 0 && (
                     <tr>
                       <td colSpan={10} className={styles.emptyRow}>
-                        {items.length === 0
+                        {!hasActiveFilters
                           ? 'Không có dữ liệu tồn kho.'
                           : 'Không tìm thấy kết quả phù hợp với bộ lọc.'}
                       </td>
@@ -1103,7 +962,7 @@ const InventoryPage = () => {
           <div className={styles.tableFooter}>
             <span className={styles.footerMetric}>
               <span className={styles.footerMetricLabel}>Trang hiện tại</span>
-              <strong>{paginatedProductGroups.length} sản phẩm</strong>
+              <strong>{groups.length} sản phẩm</strong>
             </span>
             <span className={styles.footerMetric}>
               <span className={styles.footerMetricLabel}>Sản phẩm con trên trang</span>
@@ -1114,10 +973,10 @@ const InventoryPage = () => {
           {!loading && (
             <Pagination
               currentPage={currentPage}
-              totalPages={totalPages}
-              totalElements={totalProducts}
+              totalPages={backendTotalPages}
+              totalElements={backendTotalProducts}
               pageSize={pageSize}
-              currentCount={paginatedProductGroups.length}
+              currentCount={groups.length}
               itemLabel="sản phẩm"
               onPageChange={handlePageChange}
               showPageSizeSelector

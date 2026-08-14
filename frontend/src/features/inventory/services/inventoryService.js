@@ -14,6 +14,14 @@ const inventoryService = {
     return await inventoryApi.getInventoryList(page, size, sortBy, sortDir, categoryId, channelId, localOnly, filters);
   },
 
+  getInventoryGroups: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null, channelId = null, localOnly = false, filters = {}) => {
+    return await inventoryApi.getInventoryGroups(page, size, sortBy, sortDir, categoryId, channelId, localOnly, filters);
+  },
+
+  getInventorySummary: async () => {
+    return await inventoryApi.getInventorySummary();
+  },
+
   getLowStockItems: async () => {
     return await inventoryApi.getLowStockItems();
   },

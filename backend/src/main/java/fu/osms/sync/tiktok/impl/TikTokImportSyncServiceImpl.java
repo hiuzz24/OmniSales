@@ -421,7 +421,8 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 ? productVariantRepository.findByProductIdAndSkuAndDeletedAtIsNull(product.getId(), sellerSku)
                         .orElseGet(ProductVariant::new)
                 : mappedVariant;
-        if (variant.getId() == null) {
+        boolean newVariant = variant.getId() == null;
+        if (newVariant) {
             variant.setProduct(product);
             variant.setSku(uniqueSku(sellerSku, externalSkuId));
             variant.setOptionValues(Map.of("source", "TikTok Shop"));
@@ -434,7 +435,9 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
             variant.setPrice(moneyAmount(price.get("tax_exclusive_price")));
         }
 
-        variant.setCostPrice(ProductCostPolicy.initialCost(variant.getCostPrice(), variant.getPrice()));
+        if (newVariant) {
+            variant.setCostPrice(BigDecimal.ZERO);
+        }
         variant.setIsActive(true);
         return productVariantRepository.save(variant);
     }

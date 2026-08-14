@@ -3,7 +3,6 @@ package fu.osms.sync.shopify.impl;
 import fu.osms.catalog.entity.Product;
 import fu.osms.catalog.entity.ProductImage;
 import fu.osms.catalog.entity.ProductVariant;
-import fu.osms.catalog.util.ProductCostPolicy;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
 import fu.osms.channel.entity.ChannelProduct;
@@ -242,7 +241,9 @@ public class ShopifySyncServiceImpl implements PlatformSyncService {
             }
 
             BigDecimal price = localVariant.getPrice() != null ? localVariant.getPrice() : BigDecimal.ZERO;
-            BigDecimal cost = ProductCostPolicy.initialCost(localVariant.getCostPrice(), price);
+            BigDecimal cost = localVariant.getCostPrice() != null
+                    ? localVariant.getCostPrice()
+                    : BigDecimal.ZERO;
 
             Map<String, Object> inventoryItemInput = new HashMap<>();
             inventoryItemInput.put("cost", cost);

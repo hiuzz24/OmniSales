@@ -45,6 +45,7 @@ public class InventoryReconciliationWorker {
     private final InventoryReconciliationSyncLogService syncLogService;
 
     @Scheduled(fixedDelayString = "${app.inventory-reconciliation.fixed-delay-ms:5000}")
+    /** Đọc số lượng từ xa đến hạn và đẩy available tuyệt đối của OSMS khi có sai lệch. */
     public void reconcileDueMappings() {
         if (!properties.isEnabled()) {
             return;

@@ -5,6 +5,7 @@ import { Eye, EyeOff, Lock, XCircle, Loader2 } from 'lucide-react';
 import authService from '../services/authService';
 import styles from './ChangePasswordPage.module.css';
 
+/** Xác thực token và cho phép đặt mật khẩu mới từ liên kết email. */
 const ChangePasswordPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -24,6 +25,7 @@ const ChangePasswordPage = () => {
 
   // Validate token on mount
   useEffect(() => {
+    // Kiểm tra token trước khi hiển thị biểu mẫu đổi mật khẩu.
     const checkToken = async () => {
       if (!token) {
         setIsValidToken(false);
@@ -47,6 +49,7 @@ const ChangePasswordPage = () => {
     checkToken();
   }, [token]);
 
+  // Gửi mật khẩu mới kèm token đặt lại đã xác thực.
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (password.length < 6) {

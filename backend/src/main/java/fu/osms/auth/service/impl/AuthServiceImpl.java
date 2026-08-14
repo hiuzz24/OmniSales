@@ -39,7 +39,6 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.util.*;
-import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -69,6 +68,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional(noRollbackFor = {AuthenticationException.class, AppException.class})
+    /** Xác minh thông tin đăng nhập, áp dụng chính sách tài khoản và mở phiên refresh token. */
     public TokenPairDTO login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new AppException(ErrorCode.INVALID_CREDENTIALS));
@@ -99,16 +99,25 @@ public class AuthServiceImpl implements AuthService {
             int maxFailed = systemSettingService.getInteger("max_failed_login_attempts", 5);
 
             if(attempts >= maxFailed){
-                user.setLockedUntil(OffsetDateTime.now().plusMinutes(lockTimeDuration));
+                int configuredLockMinutes = systemSettingService.getInteger("account_lock_minutes", lockTimeDuration);
+                user.setLockedUntil(OffsetDateTime.now().plusMinutes(configuredLockMinutes));
                 user.setStatus(UserStatus.LOCKED);
                 userRepository.save(user);
-                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Bạn đã nhập sai " + maxFailed + " lần. Tài khoản bị khóa " + lockTimeDuration + " phút.");
+                throw new AppException(ErrorCode.ACCOUNT_LOCKED, "Bạn đã nhập sai " + maxFailed + " lần. Tài khoản bị khóa " + configuredLockMinutes + " phút.");
             }else{
                 userRepository.save(user);
                 throw new AppException(ErrorCode.INVALID_CREDENTIALS, "Sai mật khẩu. Bạn còn " + (maxFailed - attempts) + " lần thử.");
             }
         }
 
+        int passwordExpirationDays = systemSettingService.getInteger("password_expiration_days", 90);
+        if (!Boolean.TRUE.equals(user.getPasswordExpired())
+                && passwordExpirationDays > 0
+                && user.getPasswordChangedAt() != null
+                && user.getPasswordChangedAt().plusDays(passwordExpirationDays).isBefore(OffsetDateTime.now())) {
+            user.setPasswordExpired(true);
+            userRepository.save(user);
+        }
         if (Boolean.TRUE.equals(user.getPasswordExpired())) {
             log.info("User {} đăng nhập bằng mật khẩu tạm thời. Yêu cầu đổi mật khẩu sau khi đăng nhập.", user.getEmail());
         }
@@ -129,7 +138,7 @@ public class AuthServiceImpl implements AuthService {
         RefreshToken refreshToken = RefreshToken.builder()
                 .user(user)
                 .tokenHash(tokenHash)
-                .expiresAt(OffsetDateTime.now().plusDays(7))
+                .expiresAt(OffsetDateTime.now().plusSeconds(jwtService.getRefreshTokenExpirationMs() / 1000L))
                 .build();
         refreshTokenRepository.save(refreshToken);
 
@@ -142,6 +151,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    /** Luân chuyển refresh token đã lưu để token không thể được tái sử dụng vô thời hạn. */
     public TokenPairDTO refreshToken(String refreshToken) {
         String tokenHash = hashToken(refreshToken);
         RefreshToken storedToken = refreshTokenRepository.findByTokenHash(tokenHash)
@@ -166,7 +176,7 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenRepository.save(RefreshToken.builder()
                 .user(user)
                 .tokenHash(newHash)
-                .expiresAt(OffsetDateTime.now().plusDays(7))
+                .expiresAt(OffsetDateTime.now().plusSeconds(jwtService.getRefreshTokenExpirationMs() / 1000L))
                 .build());
 
         return TokenPairDTO.builder()
@@ -178,6 +188,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    /** Thu hồi bản ghi refresh token tương ứng khi người dùng đăng xuất. */
     public void logout(String refreshToken) {
         String tokenHash = hashToken(refreshToken);
         refreshTokenRepository.findByTokenHash(tokenHash).ifPresent(token -> {
@@ -187,6 +198,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    /** Tạo và gửi token đặt lại mật khẩu dùng một lần cho tài khoản hợp lệ. */
     public void processForgotPassword(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() ->
@@ -206,6 +218,7 @@ public class AuthServiceImpl implements AuthService {
     }
     @Override
     @Transactional
+    /** Tạo hoặc làm mới lời mời trong khi vẫn giữ các ràng buộc vai trò và tài khoản. */
     public void processInviteUser(String email, String roleName) {
         String normRole = roleName.trim().toUpperCase();
         if ("SALES STAFF".equals(normRole)) {
@@ -290,6 +303,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    /** Đối chiếu token lời mời đã băm và từ chối lời mời đã dùng hoặc hết hạn. */
     public UserInviteToken validateInviteToken(String tokenStr) {
         UserInviteToken inviteToken = userInviteTokenRepository.findByToken(tokenStr)
                 .orElseThrow(() -> new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng"));
@@ -311,6 +325,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    /** Hoàn tất lời mời bằng cách đặt mật khẩu và kích hoạt tài khoản. */
     public void acceptInvite(AcceptInviteRequest request) {
         if (!request.getPassword().equals(request.getConfirmPassword())) {
             throw new IllegalArgumentException("Mật khẩu xác nhận không khớp");
@@ -329,6 +344,8 @@ public class AuthServiceImpl implements AuthService {
             }
             user.setFullName(request.getFullName().trim());
             user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+            user.setPasswordChangedAt(OffsetDateTime.now());
+            user.setPasswordExpired(false);
             user.setStatus(UserStatus.ACTIVE);
             user.setDeletedAt(null);
             user.setUpdatedAt(OffsetDateTime.now());
@@ -338,6 +355,8 @@ public class AuthServiceImpl implements AuthService {
                     .email(inviteToken.getEmail())
                     .fullName(request.getFullName().trim())
                     .passwordHash(passwordEncoder.encode(request.getPassword()))
+                    .passwordChangedAt(OffsetDateTime.now())
+                    .passwordExpired(false)
                     .status(UserStatus.ACTIVE)
                     .build();
             userRepository.save(user);
@@ -381,6 +400,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    /** Kiểm tra token đặt lại mật khẩu vẫn còn khả dụng. */
     public void validateToken(String tokenStr) {
         PasswordResetToken token = tokenRepository.findByToken(tokenStr)
                 .orElseThrow(() -> new IllegalArgumentException("Liên kết không hợp lệ hoặc đã bị sử dụng"));
@@ -395,6 +415,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    /** Tiêu thụ token đặt lại và thay mật khẩu người dùng. */
     public void updatePassword(ChangePasswordRequest request) {
         if (!request.getPassword().equals(request.getConfirmPassword())) {
             throw new IllegalArgumentException("Mật khẩu xác nhận không trùng khớp");
@@ -415,6 +436,8 @@ public class AuthServiceImpl implements AuthService {
         // Tiến hành cập nhật mật khẩu mới của User
         User user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setPasswordChangedAt(OffsetDateTime.now());
+        user.setPasswordExpired(false);
 
         user.setUpdatedAt(OffsetDateTime.now());
         userRepository.save(user);
@@ -437,12 +460,18 @@ public class AuthServiceImpl implements AuthService {
     }
 
     public boolean isValidPasswordFormat(String password) {
-        if (password == null || password.length() < 8) {
+        int minLength = Math.max(systemSettingService.getInteger("password_min_length", 8), 6);
+        if (password == null || password.length() < minLength) {
             return false;
         }
-        String passwordRegex = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@#$%^&+=!\\-_]).{8,}$";
-        Pattern pattern = Pattern.compile(passwordRegex);
-        return pattern.matcher(password).matches();
+        if (systemSettingService.getBoolean("password_require_lowercase", true)
+                && password.chars().noneMatch(Character::isLowerCase)) return false;
+        if (systemSettingService.getBoolean("password_require_uppercase", true)
+                && password.chars().noneMatch(Character::isUpperCase)) return false;
+        if (systemSettingService.getBoolean("password_require_number", true)
+                && password.chars().noneMatch(Character::isDigit)) return false;
+        return !systemSettingService.getBoolean("password_require_special_character", true)
+                || password.chars().anyMatch(ch -> !Character.isLetterOrDigit(ch));
     }
 
     private String generateTemporaryPassword() {
@@ -460,7 +489,8 @@ public class AuthServiceImpl implements AuthService {
         passwordChars.add(specialChars.charAt(random.nextInt(specialChars.length())));
 
         String allChars = upperCaseChars + lowerCaseChars + numberChars + specialChars;
-        for (int i = 0; i < 8; i++) {
+        int targetLength = Math.max(systemSettingService.getInteger("password_min_length", 8), 8);
+        for (int i = passwordChars.size(); i < targetLength; i++) {
             passwordChars.add(allChars.charAt(random.nextInt(allChars.length())));
         }
 
@@ -475,6 +505,7 @@ public class AuthServiceImpl implements AuthService {
     }
     @Override
     @Transactional
+    /** Đặt lại mật khẩu người dùng khác và vô hiệu hóa các phiên hiện có. */
     public ResetPasswordResponse resetUserPassword(ResetPasswordRequest request, UUID userRequestId) {
         UUID targetUserId = request.getUserId();
         Optional<Role> userRole = roleRepository.findRoleByUserId(targetUserId);
@@ -524,6 +555,7 @@ public class AuthServiceImpl implements AuthService {
 
         targetUser.setPasswordHash(passwordEncoder.encode(tempPassword));
         targetUser.setPasswordExpired(true);
+        targetUser.setPasswordChangedAt(OffsetDateTime.now());
         userRepository.save(targetUser);
 
 
@@ -568,6 +600,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    /** Đổi mật khẩu người dùng đang đăng nhập sau khi kiểm tra mật khẩu hiện tại. */
     public void changePasswordAfterLogin(UUID userId, String oldPassword, String newPassword, String confirmPassword) {
         if (!newPassword.equals(confirmPassword)) {
             throw new IllegalArgumentException("Mật khẩu xác nhận không trùng khớp");
@@ -586,6 +619,7 @@ public class AuthServiceImpl implements AuthService {
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setPasswordExpired(false);
+        user.setPasswordChangedAt(OffsetDateTime.now());
         user.setUpdatedAt(OffsetDateTime.now());
 
         userRepository.save(user);

@@ -4,6 +4,7 @@ import { Plus, ImageIcon, Upload, Loader2 } from 'lucide-react';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './ProductImageUploader.module.css';
 
+/** Kiểm tra URL ảnh có dùng giao thức HTTP(S) hợp lệ. */
 const isHttpUrl = (value) => {
   try {
     const url = new URL(value);
@@ -13,6 +14,7 @@ const isHttpUrl = (value) => {
   }
 };
 
+/** Quản lý danh sách ảnh sản phẩm và ảnh chính trong product form. */
 const ProductImageUploader = () => {
   const { control, formState: { errors } } = useFormContext();
   const { fields, append, replace } = useFieldArray({ control, name: 'images', keyName: 'formId' });
@@ -22,6 +24,7 @@ const ProductImageUploader = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Thêm một ô ảnh URL mới vào form.
   const handleAddImage = () => {
     if (!urlValue.trim()) return;
     if (!isHttpUrl(urlValue.trim())) {
@@ -38,6 +41,7 @@ const ProductImageUploader = () => {
     setShowUrlInput(false);
   };
 
+  // Xóa ảnh tại vị trí được chọn và cập nhật ảnh chính nếu cần.
   const handleRemoveImage = (index) => {
     const updated = images.filter((_, i) => i !== index);
     // If we removed the primary, make first image primary
@@ -47,6 +51,7 @@ const ProductImageUploader = () => {
     replace(updated.map((image, sortOrder) => ({ ...image, sortOrder })));
   };
 
+  // Tải file ảnh lên Cloudinary rồi ghi URL nhận được vào form.
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;

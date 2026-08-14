@@ -23,12 +23,14 @@ public class ShopifyChannelConnectionServiceImpl implements ShopifyChannelConnec
     private final ChannelService channelService;
 
     @Override
+    /** Chuẩn hóa shop handle trước khi tạo URL OAuth Shopify. */
     public String buildAuthorizationUrl(String shop) {
         String normalizedShop = shopDomainNormalizer.normalizeHandle(shop);
         return shopifyOAuthService.buildAuthorizationUrl(normalizedShop);
     }
 
     @Override
+    /** Đổi code, kiểm tra scope bắt buộc, kết nối cửa hàng và đăng ký webhook. */
     public ChannelResponse connect(String shop, String authorizationCode) {
         String normalizedShop = shopDomainNormalizer.normalizeHandle(shop);
         String accessToken = shopifyOAuthService.exchangeCodeForToken(normalizedShop, authorizationCode);

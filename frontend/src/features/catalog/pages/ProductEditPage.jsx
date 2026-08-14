@@ -18,9 +18,12 @@ import PlatformConfigSection from '../components/PlatformConfigSection';
 import { buildProductRequest, defaultProductFormValues, normalizeVariantForEditor, productEditorSchema, seedVariantFromProduct } from '../models/Product';
 import styles from './ProductCreatePage.module.css';
 
+/** Bóc payload nghiệp vụ từ response API. */
 const unwrap = (response) => response?.data?.data || response?.data || response;
+/** Lấy khóa ổn định dùng để liên kết cấu hình với channel. */
 const channelId = (channel, index) => channel.id || channel._id || `${channel.platform}${index}`;
 
+/** Chuyển trạng thái sync đã lưu thành cấu hình có thể chỉnh sửa trên form. */
 const toChannelConfig = (sync) => ({
   channelId: sync.channelId,
   categoryId: sync.platformConfig?.categoryId || '',
@@ -36,6 +39,7 @@ const toChannelConfig = (sync) => ({
   variantAttributeValueMappings: sync.platformConfig?.variantAttributeValueMappings || {},
 });
 
+/** Tải sản phẩm hiện có và điều phối luồng chỉnh sửa hoặc chỉnh sửa rồi đồng bộ. */
 const ProductEditPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -122,6 +126,7 @@ const ProductEditPage = () => {
     }
   }, [loading, location.state]);
 
+  // Lưu thay đổi, sau đó tùy chọn đưa yêu cầu đồng bộ vào hàng đợi.
   const saveProduct = async (values, shouldSync = false) => {
     try {
       await productApi.update(id, buildProductRequest(values, { mode: 'edit', existingAttributes }));
@@ -142,6 +147,7 @@ const ProductEditPage = () => {
 
   const selectedDetails = channels.filter((channel, index) => (selectedChannels || []).includes(channelId(channel, index)));
 
+  // Bật hoặc tắt chế độ biến thể và giữ dữ liệu sản phẩm đơn phù hợp.
   const toggleVariants = () => {
     if (!hasVariants) {
       setValue('variants', seedVariantFromProduct(getValues()), {

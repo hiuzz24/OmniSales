@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import styles from './ProductForm.module.css';
 
+/** Quản lý các field catalog cơ bản dùng chung cho màn tạo và sửa sản phẩm. */
 const ProductForm = ({ categories = [] }) => {
   const { register, control, formState: { errors } } = useFormContext();
   const [hasOrders, hasVariants, currentCategoryId] = useWatch({

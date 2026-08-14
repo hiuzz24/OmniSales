@@ -26,6 +26,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
     Page<AuditLog> findByEntityTypeAndAction(String entityType, String action, Pageable pageable);
 
+    long deleteByPerformedAtBefore(OffsetDateTime performedAt);
+
     @Query(value = """
         SELECT * FROM audit_logs a
         WHERE a.entity_type = 'ORDER'

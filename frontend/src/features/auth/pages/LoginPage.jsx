@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import LoginForm from '../components/LoginForm';
 import styles from './LoginPage.module.css';
 
+/** Hiển thị trang đăng nhập và phần nhận diện của hệ thống. */
 const LoginPage = () => {
   return (
     <div className={styles.page}>

@@ -24,6 +24,7 @@ public class OrderReturnPersistenceServiceImpl implements OrderReturnPersistence
 
     private final OrderReturnPersistenceTransactionService transactionService;
 
+    /** Chỉ thử lại xung đột lock/version nội bộ, không bao giờ gọi lại API platform. */
     @Override
     public Optional<UUID> upsert(Channel channel, OrderReturnSnapshot snapshot) {
         RuntimeException lastFailure = null;

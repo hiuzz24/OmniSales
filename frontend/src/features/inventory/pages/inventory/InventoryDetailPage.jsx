@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Download,
   ArrowRightLeft,
-  Info,
   MapPin,
   TrendingUp,
   Clock,
@@ -142,8 +141,13 @@ const InventoryDetailPage = () => {
 
   if (!detail) return null;
 
-  const isLowStock = detail.quantityOnHand < detail.lowStockThreshold;
-  const progressPercent = Math.min(100, Math.max(0, (detail.quantityOnHand / (detail.lowStockThreshold * 3)) * 100));
+  const quantityOnHand = Number(detail.quantityOnHand) || 0;
+  const lowStockThreshold = Number(detail.lowStockThreshold) || 0;
+  const stockScaleMaximum = Math.max(lowStockThreshold * 3, 1);
+  const isOutOfStock = quantityOnHand <= 0;
+  const isLowStock = !isOutOfStock && quantityOnHand <= lowStockThreshold;
+  const stockStatusLabel = isOutOfStock ? 'Hết hàng' : isLowStock ? 'Sắp hết' : 'Đủ hàng';
+  const progressPercent = Math.min(100, Math.max(0, (quantityOnHand / stockScaleMaximum) * 100));
 
   const handleUpdateDetail = async (e) => {
     e.preventDefault();
@@ -217,66 +221,14 @@ const InventoryDetailPage = () => {
       </div>
 
       {/* Warning Banner */}
-      {isLowStock && (
+      {(isOutOfStock || isLowStock) && (
         <div className={styles.warningBanner}>
           <AlertTriangle size={18} className={styles.warningIcon} />
-          Tồn kho đang ở mức thấp ({detail.quantityOnHand} / tối thiểu {detail.lowStockThreshold}). Cần nhập thêm hàng sớm.
+          {isOutOfStock
+            ? `Sản phẩm đã hết hàng (0 / tối thiểu ${lowStockThreshold}). Cần nhập thêm hàng.`
+            : `Tồn kho đang ở mức thấp (${quantityOnHand} / tối thiểu ${lowStockThreshold}). Cần nhập thêm hàng sớm.`}
         </div>
       )}
-
-      {/* Summary Cards */}
-      <div className={styles.summaryGrid}>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Tồn kho</span>
-            <span className={styles.summaryValue}>
-              {detail.quantityOnHand}
-              <span className={styles.summarySubLabel}>Cái</span>
-            </span>
-          </div>
-          <div className={styles.summaryIconWrap} style={{ background: '#fef3c7', color: '#d97706' }}>
-            <Package size={16} />
-          </div>
-        </div>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Giá vốn</span>
-            <span className={styles.summaryValue}>
-              {formatCurrency(detail.averageCost)}
-              <span className={styles.summarySubLabel}>/ Cái</span>
-            </span>
-          </div>
-          <div className={styles.summaryIconWrap} style={{ background: '#f1f5f9', color: '#64748b' }}>
-            <Info size={16} />
-          </div>
-        </div>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Giá trị tồn</span>
-            <span className={styles.summaryValue}>
-              {formatCurrency(detail.totalInventoryValue)}
-              <span >tồn x giá vốn</span>
-            </span>
-          </div>
-          <div className={styles.summaryIconWrap} style={{ background: '#eff6ff', color: '#3b82f6' }}>
-            <span style={{ fontWeight: 'bold', fontSize: '14px' }}>$</span>
-          </div>
-        </div>
-        <div className={styles.summaryCard}>
-          <div className={styles.summaryInfo}>
-            <span className={styles.summaryLabel}>Biên lợi nhuận</span>
-            <span className={styles.summaryValue}>
-              {detail.profitMargin}%
-              <span className={styles.summarySubLabel}>
-                {formatCurrency(detail.price - detail.averageCost)} / cái
-              </span>
-            </span>
-          </div>
-          <div className={styles.summaryIconWrap} style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
-            <TrendingUp size={16} />
-          </div>
-        </div>
-      </div>
 
       {/* Main Grid */}
       <div className={styles.mainGrid}>
@@ -344,25 +296,32 @@ const InventoryDetailPage = () => {
             </div>
 
             <div className={styles.stockLevelBlock}>
-              <span className={styles.stockLargeValue}>{detail.quantityOnHand}</span>
+              <span className={styles.stockLargeValue}>{quantityOnHand}</span>
               <span className={styles.stockSubLabel}>Cái hiện có</span>
             </div>
 
             <div className={styles.progressBarContainer}>
               <div className={styles.progressLabels}>
                 <span>0</span>
-                <span>Tối thiểu: {detail.lowStockThreshold}</span>
-                <span>{detail.lowStockThreshold * 3}</span>
+                <span>Tối thiểu: {lowStockThreshold}</span>
+                <span>{lowStockThreshold * 3}</span>
               </div>
               <div className={styles.progressBarTrack}>
-                <div className={styles.progressBarFill} style={{ width: `${progressPercent}%`, backgroundColor: isLowStock ? '#f59e0b' : '#10b981' }}></div>
-                <div style={{ position: 'absolute', left: `${(detail.lowStockThreshold / (detail.lowStockThreshold * 3)) * 100}%`, top: 0, bottom: 0, width: 2, backgroundColor: '#cbd5e1' }}></div>
+                <div className={styles.progressBarFill} style={{ width: `${progressPercent}%`, backgroundColor: isOutOfStock ? '#ef4444' : isLowStock ? '#f59e0b' : '#10b981' }}></div>
+                <div style={{ position: 'absolute', left: `${(lowStockThreshold / stockScaleMaximum) * 100}%`, top: 0, bottom: 0, width: 2, backgroundColor: '#cbd5e1' }}></div>
               </div>
               <div className={styles.progressStatus}>
-                <span className={styles.statusBadge} style={isLowStock ? {} : { borderColor: '#bbf7d0', color: '#16a34a', backgroundColor: '#dcfce7' }}>
-                  {isLowStock ? 'Sắp hết' : 'Đủ hàng'}
+                <span
+                  className={styles.statusBadge}
+                  style={isOutOfStock
+                    ? { borderColor: '#fecaca', color: '#dc2626', backgroundColor: '#fef2f2' }
+                    : isLowStock
+                      ? {}
+                      : { borderColor: '#bbf7d0', color: '#16a34a', backgroundColor: '#dcfce7' }}
+                >
+                  {stockStatusLabel}
                 </span>
-                <span className={styles.progressMinMax}>Tối thiểu: {detail.lowStockThreshold}</span>
+                <span className={styles.progressMinMax}>Tối thiểu: {lowStockThreshold}</span>
               </div>
             </div>
 

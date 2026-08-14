@@ -4,8 +4,10 @@ import inventoryApi from '../../../../api/inventoryApi';
 import warehouseService from '../../services/warehouseService';
 import styles from './OrderGiftProductPickerModal.module.css';
 
+/** Bóc payload nghiệp vụ từ response API kho. */
 const unwrap = (response) => response?.data?.data ?? response?.data ?? response;
 
+/** Chuẩn hóa Inventory Variant thành item có thể chọn làm quà. */
 const normalizeProduct = (item) => ({
   productVariantId: item.variantId ?? item.id,
   variantIds: item.variantIds ?? [],
@@ -17,6 +19,7 @@ const normalizeProduct = (item) => ({
   quantity: 1,
 });
 
+/** Cho phép chọn biến thể và số lượng quà riêng cho một order. */
 export default function OrderGiftProductPickerModal({ order, value = [], onConfirm, onClose }) {
   const [products, setProducts] = useState([]);
   const [selected, setSelected] = useState(() => Object.fromEntries(
@@ -28,6 +31,7 @@ export default function OrderGiftProductPickerModal({ order, value = [], onConfi
 
   useEffect(() => {
     let active = true;
+    // Tải các biến thể còn available trong kho mặc định đa sàn.
     const load = async () => {
       setLoading(true);
       setError('');
@@ -61,6 +65,7 @@ export default function OrderGiftProductPickerModal({ order, value = [], onConfi
     (item) => Number(item.quantity) > Number(item.availableQuantity ?? 0),
   );
 
+  // Thêm hoặc bỏ một biến thể khỏi danh sách quà.
   const toggle = (product) => {
     setSelected((current) => {
       const next = { ...current };
@@ -70,6 +75,7 @@ export default function OrderGiftProductPickerModal({ order, value = [], onConfi
     });
   };
 
+  // Cập nhật số lượng quà và giới hạn tối thiểu là một.
   const updateQuantity = (variantId, rawValue) => {
     const quantity = Math.max(1, Number.parseInt(rawValue, 10) || 1);
     setSelected((current) => ({
@@ -78,6 +84,7 @@ export default function OrderGiftProductPickerModal({ order, value = [], onConfi
     }));
   };
 
+  // Kiểm tra số lượng rồi trả danh sách quà về order selector.
   const confirm = () => {
     if (hasInvalidQuantity) return;
     onConfirm(selectedItems.map((item) => ({
@@ -165,7 +172,7 @@ export default function OrderGiftProductPickerModal({ order, value = [], onConfi
           <div className={styles.footerActions}>
             <button type="button" className={styles.cancelButton} onClick={onClose}>Hủy</button>
             <button type="button" className={styles.confirmButton} disabled={loading || hasInvalidQuantity} onClick={confirm}>
-              Xác nhận
+              Áp dụng
             </button>
           </div>
         </footer>

@@ -9,6 +9,11 @@ const settingsApi = {
     return unwrap(res);
   },
 
+  getPublicPreferences: async () => {
+    const res = await axiosClient.get('/system/preferences');
+    return unwrap(res);
+  },
+
   updateSetting: async (key, value) => {
     const res = await axiosClient.put(`/admin/settings/${key}`, { value });
     return unwrap(res);

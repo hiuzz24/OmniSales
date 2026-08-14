@@ -1,6 +1,5 @@
 package fu.osms.order.mapper;
 
-import fu.osms.order.dto.request.OrderRequest;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.entity.Order;
 import org.mapstruct.*;
@@ -8,19 +7,6 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring",
         uses = {OrderItemMapper.class})
 public interface OrderMapper {
-
-    @Mapping(target = "id", ignore = true)
-    @Mapping(target = "channel", ignore = true)
-    @Mapping(target = "customer", ignore = true)
-    @Mapping(target = "statusChangedAt", ignore = true)
-    @Mapping(target = "totalAmount", ignore = true)
-    @Mapping(target = "version", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
-    @Mapping(target = "cancelledBy", ignore = true)
-    @Mapping(target = "cancelReason", ignore = true)
-    @Mapping(target = "platformMetadata", ignore = true)
-    Order toEntity(OrderRequest request);
 
     @Mapping(target = "channelId", source = "channel.id")
     @Mapping(target = "customerId", source = "customer.id")
@@ -38,16 +24,4 @@ public interface OrderMapper {
     @Mapping(target = "items", ignore = true)
     OrderResponse toResponseWithItems(Order order);
 
-    @Mapping(target = "id", ignore = true)
-    @Mapping(target = "channel", ignore = true)
-    @Mapping(target = "customer", ignore = true)
-    @Mapping(target = "statusChangedAt", ignore = true)
-    @Mapping(target = "totalAmount", ignore = true)
-    @Mapping(target = "version", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
-    @Mapping(target = "cancelledBy", ignore = true)
-    @Mapping(target = "cancelReason", ignore = true)
-    @Mapping(target = "platformMetadata", ignore = true)
-    void updateEntityFromRequest(OrderRequest request, @MappingTarget Order order);
 }

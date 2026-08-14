@@ -6,6 +6,7 @@ import { ROLES } from '../../auth/constants/roles';
 import useAuth from '../../auth/hooks/useAuth';
 import { groupOrderReturnItems } from '../utils/orderReturnDisplay';
 
+/** Điều phối dữ liệu, polling và mọi action của màn chi tiết trả hàng. */
 const useOrderReturnDetailController = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ const useOrderReturnDetailController = () => {
     || data?.actionState === 'UNKNOWN'
   );
 
+  // Tải đầy đủ snapshot trả hàng; chế độ silent được dùng khi polling mỗi năm giây.
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
@@ -63,6 +65,7 @@ const useOrderReturnDetailController = () => {
     if (!returnStatus || ['COMPLETED', 'REJECTED', 'FAILED'].includes(returnStatus)) {
       return undefined;
     }
+    // Làm mới trạng thái từ xa khi action hoặc refund trên platform chưa ổn định.
     const poll = async () => {
       if (pollingRequestRef.current) return;
       pollingRequestRef.current = true;
@@ -108,6 +111,7 @@ const useOrderReturnDetailController = () => {
     refunded: 0,
   });
 
+  // Chạy action chung, cập nhật snapshot và chuẩn hóa thông báo lỗi/thành công.
   const run = async (operation, successMessage) => {
     setWorking(true);
     try {
@@ -122,6 +126,7 @@ const useOrderReturnDetailController = () => {
     }
   };
 
+  // Gửi mã lý do riêng của platform cùng ghi chú tùy chọn của nhân viên.
   const submitReject = async () => {
     if (rejectOptions?.requiresReasonCode && !rejectReasonCode) {
       toast.error('Vui lòng chọn lý do từ chối');
@@ -145,6 +150,7 @@ const useOrderReturnDetailController = () => {
     }
   };
 
+  // Tải lại điều kiện từ chối để không gửi lý do TikTok đã hết hiệu lực.
   const loadRejectOptions = async () => {
     setRejectOptionsLoading(true);
     setRejectOptionsError('');
@@ -162,6 +168,7 @@ const useOrderReturnDetailController = () => {
     }
   };
 
+  // Mở modal từ chối và tải reason option mới nhất nếu cần.
   const openRejectModal = () => {
     setRejectOpen(true);
     setRejectReasonCode('');
@@ -169,6 +176,7 @@ const useOrderReturnDetailController = () => {
     loadRejectOptions();
   };
 
+  // Kiểm tra snapshot platform mà không lặp lại action trước đó.
   const checkPlatform = () => run(
     () => (shouldCheckUnknownAction
       ? orderReturnApi.checkAction(id)
@@ -176,6 +184,7 @@ const useOrderReturnDetailController = () => {
     'Đã kiểm tra trạng thái mới nhất trên sàn',
   );
 
+  // Khởi tạo số lượng QC từ các dòng đã duyệt trước khi kiểm hàng.
   const openInspection = () => {
     setInspection(displayItems.map((item) => ({
       groupId: item.id,
@@ -194,12 +203,14 @@ const useOrderReturnDetailController = () => {
     setInspectOpen(true);
   };
 
+  // Cập nhật một số lượng QC trong dòng kiểm hàng đang nhập.
   const updateInspection = (index, field, value) => {
     setInspection((current) => current.map((item, itemIndex) => (
       itemIndex === index ? { ...item, [field]: Math.max(0, Number(value) || 0) } : item
     )));
   };
 
+  // Lưu số lượng nhận, đạt, hỏng và thiếu trước khi xử lý trên platform.
   const submitInspection = async () => {
     const invalid = inspection.some((item) => (
       item.receivedQuantity !== item.restockableQuantity + item.damagedQuantity

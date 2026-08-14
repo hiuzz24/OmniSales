@@ -28,6 +28,8 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     long countByReadAtIsNull();
 
+    long deleteByCreatedAtBefore(OffsetDateTime createdAt);
+
     Optional<Notification> findByIdAndUserId(UUID id, UUID userId);
 
     boolean existsByUserIdAndEntityTypeAndEntityIdAndReadAtIsNull(UUID userId, String entityType, UUID entityId);

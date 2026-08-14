@@ -52,11 +52,13 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
     @Qualifier("syncJobExecutor")
     private final Executor syncJobExecutor;
 
+    /** Lên lịch đẩy available tuyệt đối sau khi transaction hiện tại commit. */
     @Override
     public void schedulePushAvailableStock(Collection<UUID> variantIds) {
         schedulePushAvailableStock(variantIds, null);
     }
 
+    /** Lên lịch đồng bộ và loại trừ kênh đã phát sinh observation. */
     @Override
     public void schedulePushAvailableStock(Collection<UUID> variantIds, UUID excludedChannelId) {
         Set<UUID> scopedVariantIds = marketplaceStockQuantityResolver.expandVariantIdsBySkuGroup(
@@ -103,11 +105,13 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
         }
     }
 
+    /** Đẩy available hiện tại của OSMS tới mọi marketplace mapping đã kết nối. */
     @Override
     public void pushAvailableStock(Collection<UUID> variantIds) {
         pushAvailableStock(variantIds, null);
     }
 
+    /** Đẩy available hiện tại của OSMS và loại trừ một kênh nguồn. */
     @Override
     public void pushAvailableStock(Collection<UUID> variantIds, UUID excludedChannelId) {
         Set<UUID> scopedVariantIds = sanitizeVariantIds(variantIds);

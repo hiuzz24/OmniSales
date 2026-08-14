@@ -19,8 +19,10 @@ import PlatformConfigSection from '../components/PlatformConfigSection';
 import { buildProductRequest, defaultProductFormValues, productEditorSchema, seedVariantFromProduct } from '../models/Product';
 import styles from './ProductCreatePage.module.css';
 
+/** Bóc phần payload nghiệp vụ từ các kiểu response API đang được hỗ trợ. */
 const unwrap = (response) => response?.data?.data || response?.data || response;
 
+/** Thu thập dữ liệu catalog, biến thể và cấu hình kênh để tạo sản phẩm mới. */
 const ProductCreatePage = () => {
   const navigate = useNavigate();
   const methods = useForm({ resolver: zodResolver(productEditorSchema), mode: 'onBlur', reValidateMode: 'onChange', defaultValues: defaultProductFormValues });
@@ -38,6 +40,7 @@ const ProductCreatePage = () => {
     }).catch(() => toast.error('Không thể tải dữ liệu tạo sản phẩm'));
   }, []);
 
+  // Chuẩn hóa dữ liệu form rồi gửi yêu cầu tạo sản phẩm.
   const onSubmit = async (values) => {
     try {
       const response = await productApi.create(buildProductRequest(values, { mode: 'create' }));
@@ -49,7 +52,9 @@ const ProductCreatePage = () => {
       toast.error(error.response?.data?.message || 'Đã xảy ra lỗi khi tạo sản phẩm');
     }
   };
+  // Thông báo khi form còn field không hợp lệ.
   const onInvalid = () => toast.error('Vui lòng kiểm tra lại thông tin');
+  // Chuyển giữa sản phẩm đơn và sản phẩm có nhiều biến thể.
   const toggleVariants = () => {
     if (!hasVariants) {
       setValue('variants', seedVariantFromProduct(getValues()), {

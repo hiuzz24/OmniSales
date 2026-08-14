@@ -31,6 +31,7 @@ public class TikTokOAuthController {
     private String frontendUrl;
 
     @GetMapping("/callback")
+    /** Hoàn tất ủy quyền TikTok và chuyển người bán về màn hình kênh. */
     public void callback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String error,

@@ -1,11 +1,13 @@
 const HANDLE_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
+/** Tạo lỗi validation riêng để UI phân biệt lỗi nhập tên shop. */
 const validationError = (message) => {
   const error = new Error(message);
   error.name = 'ShopifyShopValidationError';
   return error;
 };
 
+/** Chuẩn hóa URL/domain Shopify thành shop handle hợp lệ. */
 export const normalizeShopifyHandle = (input) => {
   const raw = String(input ?? '').trim().toLowerCase();
   if (!raw) throw validationError('Vui lòng nhập tên shop Shopify.');
@@ -46,4 +48,5 @@ export const normalizeShopifyHandle = (input) => {
   return handle;
 };
 
+/** Chuyển shop handle hoặc URL về domain chuẩn `{shop}.myshopify.com`. */
 export const canonicalShopifyDomain = (input) => `${normalizeShopifyHandle(input)}.myshopify.com`;

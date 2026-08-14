@@ -1,6 +1,7 @@
 import { Info } from 'lucide-react';
 import styles from './ProductPriceStock.module.css';
 
+/** Hiển thị và cập nhật giá, giá vốn cùng thông tin tồn của sản phẩm đơn. */
 const ProductPriceStock = ({
   price,
   costPrice,
@@ -11,6 +12,7 @@ const ProductPriceStock = ({
   disablePrice = false,
   disableCostPrice = false,
 }) => {
+  // Hiển thị giá gợi ý theo cấu hình tỷ giá của từng platform.
   const renderSuggestedPrices = () => {
     const numPrice = Number(price);
     if (!numPrice || isNaN(numPrice) || numPrice <= 0) return null;

@@ -32,6 +32,7 @@ const initialForm = (channel) => ({
   tiktokWarehouseId: channel?.metadata?.tiktokWarehouseId || '',
 });
 
+/** Thu thập cấu hình kênh và khởi tạo luồng OAuth theo platform. */
 const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSuccess }) => {
   const isEdit = mode === 'edit';
   const [form, setForm] = useState(() => initialForm(channelData));
@@ -53,11 +54,13 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
       .catch(() => setWarehouses([]));
   }, [isEdit]);
 
+  // Cập nhật một field và xóa lỗi validation tương ứng.
   const handleChange = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => current[field] ? { ...current, [field]: '' } : current);
   };
 
+  // Kiểm tra các field bắt buộc theo platform và chế độ modal.
   const validate = () => {
     const nextErrors = {};
     if (!form.platform) nextErrors.platform = 'Vui lòng chọn nền tảng';
@@ -70,6 +73,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     return nextErrors;
   };
 
+  // Lưu kênh thủ công hoặc cập nhật cấu hình kênh hiện tại.
   const handleSubmit = async (event) => {
     event.preventDefault();
     if ((isShopify || isLazada || isTikTok) && !isEdit) return;
@@ -107,6 +111,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     }
   };
 
+  // Lấy URL ủy quyền từ backend rồi chuyển trình duyệt tới platform.
   const redirectToOAuth = async (authorize, fallbackMessage) => {
     setIsRedirecting(true);
     try {
@@ -120,6 +125,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     }
   };
 
+  // Chuẩn hóa tên miền shop và bắt đầu OAuth Shopify.
   const handleShopifyConnect = () => {
     try {
       const domain = canonicalShopifyDomain(form.shopDomain);
@@ -130,11 +136,13 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     }
   };
 
+  // Bắt đầu OAuth Lazada bằng URL do backend tạo.
   const handleLazadaConnect = () => redirectToOAuth(
     () => channelApi.authorizeLazada(),
     'Không thể kết nối với Lazada.',
   );
 
+  // Chuyển tới trang ủy quyền TikTok đã cấu hình cho ứng dụng.
   const handleTikTokConnect = () => {
     const url = import.meta.env.VITE_TIKTOK_AUTHORIZE_URL;
     if (!url) {
@@ -145,6 +153,7 @@ const ChannelFormModal = ({ mode = 'create', channelData = null, onClose, onSucc
     window.location.href = url;
   };
 
+  // Render phần kết nối OAuth phù hợp với platform và trạng thái reconnect.
   const oauthSection = (platform, reconnect = false) => {
     const lazada = platform === 'LAZADA';
     const platformName = lazada ? 'Lazada' : 'TikTok Shop';

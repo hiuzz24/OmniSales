@@ -7,6 +7,7 @@ const PLATFORM_LABELS = {
   TIKTOK: 'TikTok Shop',
 };
 
+/** Hiển thị bộ lọc từ khóa, trạng thái và nhiều platform của danh sách sản phẩm. */
 const ProductFilterBar = ({
   searchInput,
   onSearchChange,
@@ -15,6 +16,7 @@ const ProductFilterBar = ({
   platformFilters = [],
   onPlatformChange,
 }) => {
+  // Thêm hoặc bỏ một platform khỏi tập điều kiện lọc.
   const togglePlatform = (platform) => {
     onPlatformChange(
       platformFilters.includes(platform)

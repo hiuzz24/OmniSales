@@ -4,6 +4,7 @@ import { Plus, X, ImageIcon, Upload, Loader2, RefreshCcw } from 'lucide-react';
 import { uploadImageToCloudinary } from '../../../api/cloudinaryApi';
 import styles from './ProductVariantForm.module.css';
 
+/** Kiểm tra URL ảnh Variant có hợp lệ hay không. */
 const isHttpUrl = (value) => {
   if (!value?.trim()) return false;
   try {
@@ -14,6 +15,7 @@ const isHttpUrl = (value) => {
   }
 };
 
+/** Tạo một dòng Variant trống với cấu trúc form chuẩn. */
 const emptyVariant = () => ({
   sku: '',
   barcode: '',
@@ -24,6 +26,7 @@ const emptyVariant = () => ({
   images: [],
 });
 
+/** Quản lý bảng biến thể, option, ảnh và giá của sản phẩm. */
 const ProductVariantForm = ({
   hasOrders = false,
   channels = [],
@@ -41,14 +44,17 @@ const ProductVariantForm = ({
   const [failedImageUrls, setFailedImageUrls] = useState({});
   const fileInputRef = useRef(null);
 
+  // Cập nhật một field của biến thể theo chỉ số dòng.
   const handleFieldChange = (index, field, value) => {
     setValue(`variants.${index}.${field}`, value, { shouldDirty: true, shouldValidate: true });
   };
 
+  // Cập nhật option như size hoặc màu của một biến thể.
   const handleOptionChange = (index, optionKey, value) => {
     setValue(`variants.${index}.optionValues.${optionKey}`, value, { shouldDirty: true, shouldValidate: true });
   };
 
+  // Gán ảnh đang chọn cho biến thể và đóng trình chọn ảnh.
   const handleSaveImage = () => {
     if (!urlValue.trim() || editingImageIndex === null) return;
     if (!isHttpUrl(urlValue)) {
@@ -63,6 +69,7 @@ const ProductVariantForm = ({
     setUrlValue('');
   };
 
+  // Tải ảnh biến thể lên Cloudinary trước khi gán vào dòng.
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file || editingImageIndex === null) return;
@@ -89,6 +96,7 @@ const ProductVariantForm = ({
     }
   };
 
+  // Hiển thị giá quy đổi được gợi ý cho từng platform.
   const renderSuggestedPrices = (price) => {
     const numPrice = Number(price);
     if (!numPrice || isNaN(numPrice) || numPrice <= 0) return '-';

@@ -129,7 +129,8 @@ CREATE TABLE users (
                        verification_token    VARCHAR(255),
                        failed_login_attempts INT          DEFAULT 0,
                        locked_until          TIMESTAMPTZ,
-                       password_expired      BOOLEAN
+                       password_expired      BOOLEAN,
+                       password_changed_at   TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE UNIQUE INDEX uq_users_email_active ON users(email) WHERE deleted_at IS NULL;
 
@@ -1305,6 +1306,33 @@ INSERT INTO system_settings (key, value, description, category) VALUES
     ('default_reorder_level', '10', 'Mức cảnh báo tồn kho tối thiểu mặc định cho sản phẩm', 'INVENTORY'),
     ('reserved_timeout_minutes', '30', 'Thời gian giữ chỗ hàng (phút) trước khi tự động hoàn trả', 'INVENTORY'),
     ('low_stock_repeat_hours', '12', 'Khoảng thời gian nhắc nhở (giờ) giữa các lần gửi cảnh báo tồn kho', 'NOTIFICATION'),
+    ('notification_order_enabled', 'true', 'Gửi cảnh báo về đơn hàng', 'NOTIFICATION'),
+    ('notification_return_enabled', 'true', 'Gửi cảnh báo về yêu cầu trả hàng', 'NOTIFICATION'),
+    ('notification_low_stock_enabled', 'true', 'Gửi cảnh báo khi tồn kho thấp hoặc hết hàng', 'NOTIFICATION'),
+    ('notification_sync_failure_enabled', 'true', 'Gửi cảnh báo khi đồng bộ dữ liệu thất bại', 'NOTIFICATION'),
+    ('notification_channel_disconnected_enabled', 'true', 'Gửi cảnh báo khi kênh bán hàng mất kết nối', 'NOTIFICATION'),
+    ('notification_email_enabled', 'false', 'Gửi thêm thông báo qua email', 'NOTIFICATION'),
+    ('notification_retention_days', '90', 'Số ngày lưu thông báo trước khi tự động xóa', 'NOTIFICATION'),
+    ('account_lock_minutes', '5', 'Thời gian khóa tài khoản sau khi đăng nhập sai (phút)', 'SECURITY'),
+    ('access_token_expiration_minutes', '1440', 'Thời gian hiệu lực access token (phút)', 'SECURITY'),
+    ('refresh_token_expiration_days', '7', 'Thời gian hiệu lực refresh token (ngày)', 'SECURITY'),
+    ('password_min_length', '8', 'Độ dài mật khẩu tối thiểu', 'SECURITY'),
+    ('password_require_uppercase', 'true', 'Yêu cầu mật khẩu có chữ hoa', 'SECURITY'),
+    ('password_require_lowercase', 'true', 'Yêu cầu mật khẩu có chữ thường', 'SECURITY'),
+    ('password_require_number', 'true', 'Yêu cầu mật khẩu có chữ số', 'SECURITY'),
+    ('password_require_special_character', 'true', 'Yêu cầu mật khẩu có ký tự đặc biệt', 'SECURITY'),
+    ('password_expiration_days', '90', 'Số ngày mật khẩu có hiệu lực; nhập 0 để không hết hạn', 'SECURITY'),
+    ('system_name', 'OmniSales', 'Tên hiển thị của hệ thống', 'SYSTEM'),
+    ('support_email', 'contact@omnisales.vn', 'Email hỗ trợ', 'SYSTEM'),
+    ('support_phone', '0987654321', 'Số điện thoại hỗ trợ', 'SYSTEM'),
+    ('business_address', '123 Nguyễn Trãi, Thanh Xuân, Hà Nội', 'Địa chỉ doanh nghiệp', 'SYSTEM'),
+    ('tax_code', '0101234567', 'Mã số thuế', 'SYSTEM'),
+    ('date_format', 'dd/MM/yyyy', 'Định dạng ngày tháng mặc định', 'SYSTEM'),
+    ('default_page_size', '20', 'Số bản ghi mặc định trên mỗi trang', 'SYSTEM'),
+    ('audit_log_retention_days', '180', 'Số ngày lưu nhật ký hệ thống', 'SYSTEM'),
+    ('maintenance_mode', 'false', 'Bật chế độ bảo trì hệ thống', 'SYSTEM'),
+    ('maintenance_message', 'Hệ thống đang bảo trì. Vui lòng thử lại sau.', 'Thông báo hiển thị khi bảo trì', 'SYSTEM'),
+    ('backup_schedule_enabled', 'true', 'Bật sao lưu dữ liệu tự động hằng ngày', 'SYSTEM'),
     ('timezone', 'Asia/Ho_Chi_Minh', 'Timezone hoạt động chính thức của hệ thống', 'SYSTEM'),
     ('max_failed_login_attempts', '5', 'Số lần đăng nhập sai tối đa trước khi khóa tài khoản', 'SECURITY')
 ON CONFLICT (key) DO NOTHING;

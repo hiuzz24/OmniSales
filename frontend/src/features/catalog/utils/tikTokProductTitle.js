@@ -1,11 +1,13 @@
 export const TIKTOK_TITLE_MIN_LENGTH = 25;
 export const TIKTOK_TITLE_MAX_LENGTH = 255;
 
+/** Chuẩn hóa khoảng trắng trước khi xây dựng tiêu đề TikTok. */
 const normalize = (value) => {
   const normalized = String(value || '').trim().replace(/\s+/g, ' ');
   return normalized || '';
 };
 
+/** Cắt chuỗi tại ranh giới từ gần nhất để không vượt giới hạn. */
 const truncateAtWord = (value, maxLength) => {
   const normalized = normalize(value);
   if (normalized.length <= maxLength) return normalized;
@@ -13,6 +15,7 @@ const truncateAtWord = (value, maxLength) => {
   return normalized.slice(0, boundary > 0 ? boundary : maxLength).trim();
 };
 
+/** Tạo tiêu đề TikTok từ cấu hình riêng hoặc thông tin Product hiện có. */
 export const resolveTikTokProductTitle = ({
   listingTitle,
   productName,

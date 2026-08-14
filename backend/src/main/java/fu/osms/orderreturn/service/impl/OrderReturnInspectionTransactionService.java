@@ -30,6 +30,7 @@ public class OrderReturnInspectionTransactionService {
     private final OrderReturnItemRepository itemRepository;
     private final MarketplaceWarehouseConsistencyService warehouseConsistencyService;
 
+    /** Khóa phiếu trả, kiểm tra công thức QC rồi lưu kho nhận và số lượng. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public UUID saveInspection(UUID returnId, OrderReturnInspectionRequest request) {
         OrderReturn orderReturn = returnRepository.findForUpdateById(returnId)

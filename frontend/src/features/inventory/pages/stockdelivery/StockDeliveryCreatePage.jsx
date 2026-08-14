@@ -523,7 +523,7 @@ export default function StockDeliveryCreatePage({ mode = 'create' }) {
       const savedResponse = isEdit ? await stockDeliveryService.updateStockDelivery(id, payload) : await stockDeliveryService.createStockDelivery(payload);
       const savedDelivery = getResponseData(savedResponse);
       if (submitAction === 'complete') { await stockDeliveryService.confirmStockDelivery(savedDelivery.id); toast.success('Hoàn thành phiếu xuất kho thành công.'); }
-      else { toast.success(isEdit ? 'Cập nhật phiếu xuất kho thành công.' : 'Đã tạo phiếu xuất kho ở trạng thái Đang xử lý.'); }
+      else { toast.success(isEdit ? 'Cập nhật phiếu xuất kho thành công.' : 'Đã tạo phiếu xuất kho ở trạng thái Lưu tạm.'); }
       runWithoutGuard(() => navigate(ROUTES.STOCK_DELIVERIES));
     } catch (error) {
       if (error?.response?.data?.data && typeof error.response.data.data === 'object') { toast.error(Object.values(error.response.data.data)[0] || 'Có lỗi xảy ra.'); }

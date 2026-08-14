@@ -26,6 +26,7 @@ public class ProductLogServiceImpl implements ProductLogService {
 
     @Override
     @Transactional(readOnly = true)
+    /** Tải lịch sử thay đổi của sản phẩm theo thứ tự ổn định được yêu cầu. */
     public PageResponse<ProductLogResponse> getLogs(UUID productId, int page, int size, String sortParam) {
         String[] sortParts = sortParam != null ? sortParam.split(",") : new String[]{"performedAt", "desc"};
         String sortField = sortParts[0];

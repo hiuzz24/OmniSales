@@ -22,6 +22,7 @@ public class OrderReturnController {
 
     private final OrderReturnService service;
 
+    /** Liệt kê yêu cầu trả hàng từ platform cho màn nghiệp vụ. */
     @GetMapping
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<PageResponse<OrderReturnResponse>>> getAll(
@@ -30,18 +31,21 @@ public class OrderReturnController {
         return ResponseEntity.ok(ApiResponse.success(service.getAll(page, size)));
     }
 
+    /** Trả về đầy đủ vòng đời, số lượng và trạng thái action của phiếu trả hàng. */
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> getById(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.getById(id)));
     }
 
+    /** Duyệt yêu cầu trả hàng đang chờ qua gateway của sàn. */
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> approve(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.approve(id)));
     }
 
+    /** Từ chối yêu cầu trả hàng bằng lý do hợp lệ của platform. */
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> reject(
@@ -50,12 +54,14 @@ public class OrderReturnController {
         return ResponseEntity.ok(ApiResponse.success(service.reject(id, request)));
     }
 
+    /** Tải lý do từ chối hợp lệ từ sàn khi cần. */
     @GetMapping("/{id}/reject-options")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
     public ResponseEntity<ApiResponse<OrderReturnRejectOptionsResponse>> getRejectOptions(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.getRejectOptions(id)));
     }
 
+    /** Lưu số lượng kiểm hàng tại kho trước khi bắt đầu xử lý trên platform. */
     @PostMapping("/{id}/inspect")
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> inspect(
@@ -64,24 +70,28 @@ public class OrderReturnController {
         return ResponseEntity.ok(ApiResponse.success(service.inspect(id, request)));
     }
 
+    /** Lấy snapshot mới nhất từ platform mà không lặp lại action. */
     @PostMapping("/{id}/refresh")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> refresh(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.refresh(id)));
     }
 
+    /** Xác định action UNKNOWN bằng cách kiểm tra side effect trên platform. */
     @PostMapping("/{id}/check-action")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> checkAction(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.checkAction(id)));
     }
 
+    /** Chỉ thử lại action đã được chứng minh an toàn và giữ nguyên request identity. */
     @PostMapping("/{id}/retry-action")
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> retryAction(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(service.retryAction(id)));
     }
 
+    /** Thử lại nhập kho nội bộ idempotent sau lỗi nhập kho trước đó. */
     @PostMapping("/{id}/retry-stock")
     @PreAuthorize("hasAnyRole('OWNER', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderReturnResponse>> retryStock(@PathVariable UUID id) {

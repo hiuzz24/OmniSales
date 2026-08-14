@@ -1,5 +1,6 @@
 import styles from './ChannelFormModal.module.css';
 
+/** Hiển thị các field cấu hình chung của kênh và kho liên kết. */
 const ChannelSettingsFields = ({ form, errors, warehouses, isEdit, onChange }) => {
   const isLazada = form.platform === 'LAZADA';
   const isTikTok = form.platform === 'TIKTOK';

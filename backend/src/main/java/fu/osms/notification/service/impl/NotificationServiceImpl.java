@@ -11,6 +11,7 @@ import fu.osms.notification.entity.Notification;
 import fu.osms.notification.mapper.NotificationMapper;
 import fu.osms.notification.repository.NotificationRepository;
 import fu.osms.notification.service.NotificationService;
+import fu.osms.system.service.SystemSettingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
@@ -30,6 +31,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepository userRepository;
     private final NotificationMapper notificationMapper;
     private final EmailService emailService;
+    private final SystemSettingService systemSettingService;
 
     @Value("${app.notifications.email-enabled:false}")
     private boolean emailEnabled;
@@ -109,6 +111,9 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public void createNotification(UUID userId, String type, String title, String body, String entityType, UUID entityId) {
+        if (!isNotificationTypeEnabled(type)) {
+            return;
+        }
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         Notification notification = Notification.builder()
@@ -121,7 +126,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .build();
         notificationRepository.save(notification);
 
-        if (emailEnabled) {
+        if (systemSettingService.getBoolean("notification_email_enabled", emailEnabled)) {
             emailService.sendNotificationEmail(user.getEmail(), "[OmniSales] " + title, body);
         }
     }
@@ -130,12 +135,34 @@ public class NotificationServiceImpl implements NotificationService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean createNotificationIfAbsent(UUID userId, String type, String title, String body,
                                               String entityType, UUID entityId) {
+        if (!isNotificationTypeEnabled(type)) {
+            return false;
+        }
         if (entityId != null && notificationRepository
                 .existsByUserIdAndTypeAndEntityTypeAndEntityId(userId, type, entityType, entityId)) {
             return false;
         }
         createNotification(userId, type, title, body, entityType, entityId);
         return true;
+    }
+
+    private boolean isNotificationTypeEnabled(String type) {
+        if (type == null) {
+            return true;
+        }
+        if (type.startsWith("ORDER_RETURN_")) {
+            return systemSettingService.getBoolean("notification_return_enabled", true);
+        }
+        if (type.startsWith("ORDER_")) {
+            return systemSettingService.getBoolean("notification_order_enabled", true);
+        }
+        return switch (type) {
+            case "LOW_STOCK" -> systemSettingService.getBoolean("notification_low_stock_enabled", true);
+            case "SYNC_FAILED" -> systemSettingService.getBoolean("notification_sync_failure_enabled", true);
+            case "CHANNEL_DISCONNECTED" -> systemSettingService.getBoolean(
+                    "notification_channel_disconnected_enabled", true);
+            default -> true;
+        };
     }
 
     private PageResponse<NotificationResponse> toPageResponse(Page<Notification> page) {

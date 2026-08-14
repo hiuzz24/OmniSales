@@ -4,6 +4,7 @@ import modalStyles from './OrderReturnModal.module.css';
 
 const styles = { ...pageStyles, ...modalStyles };
 
+/** Nhập và kiểm tra số lượng nhận, đạt, hỏng, thiếu cho từng return item. */
 const OrderReturnInspectionModal = ({
   inspection,
   working,

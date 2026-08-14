@@ -1,6 +1,7 @@
 import { Image as ImageIcon } from 'lucide-react';
 import styles from './TabImages.module.css';
 
+/** Tổng hợp và hiển thị ảnh sản phẩm cùng ảnh biến thể. */
 const TabImages = ({ product }) => {
   const images = product.images || [];
 

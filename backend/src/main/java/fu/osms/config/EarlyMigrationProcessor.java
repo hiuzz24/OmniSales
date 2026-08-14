@@ -34,6 +34,16 @@ public class EarlyMigrationProcessor implements EnvironmentPostProcessor {
                     ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'
                 """);
                 log.info("EarlyMigration: added metadata column to channel_products table");
+                stmt.execute("""
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ
+                """);
+                stmt.execute("""
+                    UPDATE users
+                    SET password_changed_at = COALESCE(updated_at, created_at, NOW())
+                    WHERE password_changed_at IS NULL
+                """);
+                log.info("EarlyMigration: added and initialized users.password_changed_at");
             }
         } catch (Exception e) {
             log.warn("EarlyMigration: failed or column already exists: {}", e.getMessage());

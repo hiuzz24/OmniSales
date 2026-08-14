@@ -40,6 +40,7 @@ public class OrderReturnPersistenceTransactionService {
     private final OrderReturnItemRepository returnItemRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** Khóa Order rồi Return, chặn dữ liệu cũ/trùng và commit một snapshot platform. */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Optional<UUID> upsertOnce(UUID channelId, OrderReturnSnapshot snapshot) {
         Channel channel = channelRepository.findById(channelId)

@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
-import { 
-  Settings, Warehouse, Bell, Shield, Info, Save, RefreshCw 
+import {
+  Settings, Bell, Shield, Info, Save, RefreshCw
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import settingsApi from '../../../api/settingsApi';
 import styles from './SystemSettingsPage.module.css';
 
 const CATEGORIES = [
-  { id: 'INVENTORY', label: 'Kho & Hàng hóa', icon: Warehouse },
   { id: 'NOTIFICATION', label: 'Cảnh báo', icon: Bell },
   { id: 'SECURITY', label: 'Bảo mật', icon: Shield },
   { id: 'SYSTEM', label: 'Hệ thống', icon: Info },
@@ -22,35 +21,70 @@ const TIMEZONES = [
   { value: 'UTC', label: 'Coordinated Universal Time (UTC)' },
 ];
 
+const BOOLEAN_SETTING_KEYS = new Set([
+  'notification_order_enabled',
+  'notification_return_enabled',
+  'notification_low_stock_enabled',
+  'notification_sync_failure_enabled',
+  'notification_channel_disconnected_enabled',
+  'notification_email_enabled',
+  'password_require_uppercase',
+  'password_require_lowercase',
+  'password_require_number',
+  'password_require_special_character',
+  'maintenance_mode',
+  'backup_schedule_enabled',
+]);
+
+const NUMBER_SETTING_KEYS = new Set([
+  'default_reorder_level',
+  'reserved_timeout_minutes',
+  'low_stock_repeat_hours',
+  'notification_retention_days',
+  'max_failed_login_attempts',
+  'account_lock_minutes',
+  'access_token_expiration_minutes',
+  'refresh_token_expiration_days',
+  'password_min_length',
+  'password_expiration_days',
+  'default_page_size',
+  'audit_log_retention_days',
+]);
+
 const SystemSettingsPage = () => {
-  const [activeTab, setActiveTab] = useState('INVENTORY');
+  const [activeTab, setActiveTab] = useState('NOTIFICATION');
   const [settings, setSettings] = useState([]);
   const [formValues, setFormValues] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const fetchSettings = async () => {
-    setLoading(true);
-    try {
-      const data = await settingsApi.getSettings();
-      setSettings(data || []);
-      
-      // Initialize form values map
-      const values = {};
-      data.forEach(item => {
-        values[item.key] = item.value;
-      });
-      setFormValues(values);
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      toast.error('Không thể tải cấu hình hệ thống');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchSettings();
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const data = await settingsApi.getSettings();
+        if (cancelled) return;
+
+        const loadedSettings = data || [];
+        const values = {};
+        loadedSettings.forEach(item => {
+          values[item.key] = item.value;
+        });
+        setSettings(loadedSettings);
+        setFormValues(values);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error loading settings:', error);
+          toast.error('Không thể tải cấu hình hệ thống');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadSettings();
+    return () => { cancelled = true; };
   }, []);
 
   const handleInputChange = (key, val) => {
@@ -83,10 +117,53 @@ const SystemSettingsPage = () => {
         return false;
       }
     }
+    if (formValues.notification_retention_days !== undefined) {
+      const val = Number(formValues.notification_retention_days);
+      if (!Number.isInteger(val) || val <= 0) {
+        toast.warning('Số ngày lưu thông báo phải là số nguyên lớn hơn 0');
+        return false;
+      }
+    }
     if (formValues.max_failed_login_attempts !== undefined) {
       const val = Number(formValues.max_failed_login_attempts);
       if (isNaN(val) || val <= 0) {
         toast.warning('Số lần đăng nhập sai tối đa phải là số lớn hơn 0');
+        return false;
+      }
+    }
+    const positiveIntegerFields = [
+      ['account_lock_minutes', 'Thời gian khóa tài khoản'],
+      ['access_token_expiration_minutes', 'Thời hạn access token'],
+      ['refresh_token_expiration_days', 'Thời hạn refresh token'],
+      ['audit_log_retention_days', 'Số ngày lưu nhật ký'],
+    ];
+    for (const [key, label] of positiveIntegerFields) {
+      if (formValues[key] !== undefined) {
+        const val = Number(formValues[key]);
+        if (!Number.isInteger(val) || val <= 0) {
+          toast.warning(`${label} phải là số nguyên lớn hơn 0`);
+          return false;
+        }
+      }
+    }
+    if (formValues.password_min_length !== undefined) {
+      const val = Number(formValues.password_min_length);
+      if (!Number.isInteger(val) || val < 6 || val > 128) {
+        toast.warning('Độ dài mật khẩu tối thiểu phải từ 6 đến 128 ký tự');
+        return false;
+      }
+    }
+    if (formValues.password_expiration_days !== undefined) {
+      const val = Number(formValues.password_expiration_days);
+      if (!Number.isInteger(val) || val < 0) {
+        toast.warning('Số ngày hết hạn mật khẩu phải là số nguyên lớn hơn hoặc bằng 0');
+        return false;
+      }
+    }
+    if (formValues.default_page_size !== undefined) {
+      const val = Number(formValues.default_page_size);
+      if (!Number.isInteger(val) || val < 10 || val > 100) {
+        toast.warning('Số bản ghi mỗi trang phải từ 10 đến 100');
         return false;
       }
     }
@@ -110,6 +187,9 @@ const SystemSettingsPage = () => {
 
       await settingsApi.updateSettingsBatch(payload);
       toast.success('Đã lưu cấu hình thành công!');
+      if (activeTab === 'SYSTEM') {
+        window.dispatchEvent(new Event('system-preferences:updated'));
+      }
       
       // Update persistent settings state to match form values
       setSettings(prev => prev.map(s => {
@@ -154,7 +234,10 @@ const SystemSettingsPage = () => {
       <div className={styles.formGrid}>
         {activeSettings.map(setting => {
           const isTimezone = setting.key === 'timezone';
-          const isNumber = ['default_reorder_level', 'reserved_timeout_minutes', 'low_stock_repeat_hours', 'max_failed_login_attempts'].includes(setting.key);
+          const isDateFormat = setting.key === 'date_format';
+          const isEmail = setting.key === 'support_email';
+          const isBoolean = BOOLEAN_SETTING_KEYS.has(setting.key);
+          const isNumber = NUMBER_SETTING_KEYS.has(setting.key);
 
           return (
             <div key={setting.key} className={styles.formGroup}>
@@ -163,7 +246,16 @@ const SystemSettingsPage = () => {
                 <span className={styles.fieldKey}>{setting.key}</span>
               </div>
               
-              {isTimezone ? (
+              {isBoolean ? (
+                <select
+                  className={styles.fieldSelect}
+                  value={formValues[setting.key] ?? 'false'}
+                  onChange={(e) => handleInputChange(setting.key, e.target.value)}
+                >
+                  <option value="true">Bật</option>
+                  <option value="false">Tắt</option>
+                </select>
+              ) : isTimezone ? (
                 <select
                   className={styles.fieldSelect}
                   value={formValues[setting.key] || ''}
@@ -173,13 +265,23 @@ const SystemSettingsPage = () => {
                     <option key={tz.value} value={tz.value}>{tz.label}</option>
                   ))}
                 </select>
+              ) : isDateFormat ? (
+                <select
+                  className={styles.fieldSelect}
+                  value={formValues[setting.key] || 'dd/MM/yyyy'}
+                  onChange={(e) => handleInputChange(setting.key, e.target.value)}
+                >
+                  <option value="dd/MM/yyyy">dd/MM/yyyy</option>
+                  <option value="MM/dd/yyyy">MM/dd/yyyy</option>
+                  <option value="yyyy-MM-dd">yyyy-MM-dd</option>
+                </select>
               ) : (
                 <input
-                  type={isNumber ? 'number' : 'text'}
+                  type={isNumber ? 'number' : isEmail ? 'email' : 'text'}
                   className={styles.fieldInput}
                   value={formValues[setting.key] !== undefined ? formValues[setting.key] : ''}
                   onChange={(e) => handleInputChange(setting.key, e.target.value)}
-                  min={isNumber ? "0" : undefined}
+                  min={isNumber ? (setting.key === 'password_expiration_days' ? "0" : "1") : undefined}
                 />
               )}
               <p className={styles.fieldDescription}>Phân hệ: {setting.category}</p>

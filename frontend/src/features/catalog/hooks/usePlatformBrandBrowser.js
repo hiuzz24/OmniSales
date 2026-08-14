@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 
+/** Quản lý trạng thái tìm kiếm và phân trang brand riêng cho từng channel. */
 const usePlatformBrandBrowser = () => {
   const [brandState, setBrandState] = useState({});
   const [brandPages, setBrandPages] = useState({});

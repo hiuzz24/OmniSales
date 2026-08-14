@@ -40,6 +40,7 @@ public class OrderGiftReservationServiceImpl implements OrderGiftReservationServ
     private final InventoryAlertService inventoryAlertService;
     private final OrderGiftSharedStockSupport sharedStockSupport;
 
+    /** Giữ số lượng quà tặng tách biệt với reservation của hàng trong đơn. */
     @Override
     @Transactional
     public Set<UUID> reserveGiftReservations(
@@ -102,6 +103,7 @@ public class OrderGiftReservationServiceImpl implements OrderGiftReservationServ
         return changedVariantIds;
     }
 
+    /** Giải phóng reservation quà đúng một lần và không tác động reservation của đơn. */
     @Override
     @Transactional
     public Set<UUID> releaseGiftReservations(InventoryIssue issue, User actor) {
@@ -154,6 +156,7 @@ public class OrderGiftReservationServiceImpl implements OrderGiftReservationServ
         return changedVariantIds;
     }
 
+    /** Chuyển reservation quà đã xác thực thành giao dịch xuất kho OUTBOUND. */
     @Override
     @Transactional
     public void commitGiftReservations(InventoryIssue issue, User actor) {

@@ -12,9 +12,11 @@ import { ROLES } from '../../auth/constants/roles';
 import useAuth from '../../auth/hooks/useAuth';
 import styles from './ProductManagementPage.module.css';
 
+/** Hiển thị danh sách, bộ lọc và các thao tác quản lý sản phẩm. */
 const ProductManagementPage = () => {
   const { user } = useAuth();
   const canManageProducts = user?.role === ROLES.OWNER || user?.role === ROLES.SALES;
+  const canImportProducts = user?.role === ROLES.OWNER;
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [platformFilters, setPlatformFilters] = useState([]);
@@ -49,16 +51,18 @@ const ProductManagementPage = () => {
           Nhật ký hệ thống
         </button>
       )}
-      <button
-        type="button"
-        aria-label="Nhập Excel"
-        title="Nhập Excel"
-        className={`${styles.actionBtn} ${styles.importBtn}`}
-        onClick={() => setIsImportModalOpen(true)}
-      >
-        <FileUp className={styles.importIcon} />
-        Nhập Excel
-      </button>
+      {canImportProducts && (
+        <button
+          type="button"
+          aria-label="Nhập Excel"
+          title="Nhập Excel"
+          className={`${styles.actionBtn} ${styles.importBtn}`}
+          onClick={() => setIsImportModalOpen(true)}
+        >
+          <FileUp className={styles.importIcon} />
+          Nhập Excel
+        </button>
+      )}
       <button
         type="button"
         aria-label="Xuất Excel"
@@ -112,11 +116,13 @@ const ProductManagementPage = () => {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
       />
-      <ImportProductsModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onSuccess={() => setTableRefreshKey((k) => k + 1)}
-      />
+      {canImportProducts && (
+        <ImportProductsModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onSuccess={() => setTableRefreshKey((k) => k + 1)}
+        />
+      )}
     </div>
   );
 };

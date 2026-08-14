@@ -24,6 +24,7 @@ public class WebhookBusinessProcessorImpl implements WebhookBusinessProcessor {
     private final List<PlatformCatalogWebhookProcessor> catalogWebhookProcessors;
     private final List<PlatformReturnWebhookProcessor> returnWebhookProcessors;
 
+    /** Điều phối webhook đã lưu tới luồng return, order hoặc catalog theo thứ tự ưu tiên. */
     @Override
     public String process(WebhookEvent event) {
         String eventType = event.getEventType() != null ? event.getEventType().toUpperCase() : "";

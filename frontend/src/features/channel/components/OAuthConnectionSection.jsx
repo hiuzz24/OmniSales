@@ -1,6 +1,7 @@
 import { ExternalLink, Loader2 } from 'lucide-react';
 import styles from './ChannelFormModal.module.css';
 
+/** Hiển thị hướng dẫn và nút kết nối OAuth dùng chung cho Lazada/TikTok. */
 const OAuthConnectionSection = ({
   platformName,
   description,

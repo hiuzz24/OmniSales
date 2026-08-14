@@ -66,6 +66,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
     private final OrderStockDeliveryBatchService batchService;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** Liệt kê đơn PROCESSING chưa có phiếu xuất theo đơn đang hoạt động. */
     @Override
     @Transactional(readOnly = true)
     public Page<OrderStockDeliveryCandidateResponse> getCandidates(
@@ -75,11 +76,13 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
                 OrderStatus.PROCESSING, orderId, normalizedKeyword, pageable).map(this::toCandidate);
     }
 
+    /** Xử lý mỗi đơn đã chọn trong transaction riêng và tổng hợp kết quả. */
     @Override
     public OrderStockDeliveryBatchResponse createFromOrders(OrderStockDeliveryBatchRequest request) {
         return batchService.create(request);
     }
 
+    /** Tạo phiếu DRAFT, sao chép hàng trong đơn và giữ thêm quà tặng nếu có. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public StockDeliveryResponse createFromOrder(
@@ -126,7 +129,10 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
                 .notes("Quà tặng: " + resolveVariantDisplayName(resolved.variant()))
                 .isGift(true)
                 .build()));
-        issue.calculateTotals();
+        issue.setTotalCost(issue.getItems().stream()
+                .filter(item -> !isGift(item))
+                .map(this::resolveIssueItemCost)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
         InventoryIssue savedIssue = issueRepository.save(issue);
         Set<UUID> changedVariantIds = orderGiftReservationService.reserveGiftReservations(
                 savedIssue,
@@ -140,6 +146,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
         return stockDeliveryMapper.toResponse(savedIssue);
     }
 
+    /** Chuyển reservation của đơn DELIVERED thành phiếu OUTBOUND idempotent. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeForOrder(UUID orderId) {
@@ -158,6 +165,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
         commitOrderReservation(issue, order);
     }
 
+    /** Hủy phiếu DRAFT và chỉ giải phóng reservation quà thuộc phiếu đó. */
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void cancelDraftForOrder(UUID orderId) {
@@ -350,7 +358,8 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
         int totalQuantity = items.stream().mapToInt(item -> safeQuantity(item.getQuantity())).sum();
         return new OrderStockDeliveryCandidateResponse(
                 order.getId(), order.getExternalOrderId(), order.getPlatform(), order.getChannelName(),
-                order.getBuyerName(), order.getBuyerPhone(), order.getCreatedAt(), totalQuantity, itemResponses);
+                order.getBuyerName(), order.getBuyerPhone(), order.getCreatedAt(),
+                order.getTotalAmount(), order.getCurrency(), totalQuantity, itemResponses);
     }
 
     private User getCurrentUser() {
@@ -394,6 +403,17 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
 
     private boolean isGift(InventoryIssueItem item) {
         return Boolean.TRUE.equals(item.getIsGift());
+    }
+
+    /** Tính giá trị hàng bán của một dòng; quà được loại khỏi tổng tiền phiếu ở caller. */
+    private BigDecimal resolveIssueItemCost(InventoryIssueItem item) {
+        if (item.getTotalCost() != null) {
+            return item.getTotalCost();
+        }
+        if (item.getQuantity() == null || item.getUnitCost() == null) {
+            return BigDecimal.ZERO;
+        }
+        return item.getUnitCost().multiply(BigDecimal.valueOf(item.getQuantity()));
     }
 
     private String generateIssueCode() {

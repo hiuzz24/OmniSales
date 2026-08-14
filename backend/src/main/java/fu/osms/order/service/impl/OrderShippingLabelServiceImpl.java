@@ -33,6 +33,7 @@ public class OrderShippingLabelServiceImpl implements OrderShippingLabelService 
         gateways.forEach(gateway -> this.gateways.put(gateway.getPlatform(), gateway));
     }
 
+    /** Chọn gateway sàn và trả về URL phiếu vận chuyển chính thức có thời hạn. */
     @Override
     public OrderShippingLabelResponse createLabel(UUID orderId) {
         Order order = orderRepository.findByIdWithChannel(orderId)

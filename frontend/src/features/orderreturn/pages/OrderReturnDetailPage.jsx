@@ -43,6 +43,7 @@ const PROGRESS_LEVELS = {
   FAILED: 1,
 };
 
+/** Định dạng số tiền hoàn theo VND khi platform cung cấp giá trị. */
 const formatCurrency = (value) => {
   if (value == null || value === '') return null;
   return new Intl.NumberFormat('vi-VN', {
@@ -52,6 +53,7 @@ const formatCurrency = (value) => {
   }).format(Number(value));
 };
 
+/** Hiển thị timeline, sản phẩm, action và trạng thái kho của một phiếu trả hàng. */
 const OrderReturnDetailPage = () => {
   const {
     id, navigate, data, loading, working,
