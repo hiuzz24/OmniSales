@@ -17,7 +17,9 @@ import fu.osms.inventory.dto.request.InventoryItemRequest;
 import fu.osms.inventory.dto.request.InventoryItemUpdateRequest;
 import fu.osms.inventory.dto.request.InventoryTransactionRequest;
 import fu.osms.inventory.dto.response.InventoryDetailDTO;
+import fu.osms.inventory.dto.response.InventoryGroupResponse;
 import fu.osms.inventory.dto.response.InventoryItemResponse;
+import fu.osms.inventory.dto.response.InventorySummaryResponse;
 import fu.osms.inventory.dto.response.InventoryTransactionResponse;
 import fu.osms.inventory.dto.response.StockSummaryDTO;
 import fu.osms.inventory.entity.InventoryItem;
@@ -47,7 +49,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.sql.Array;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -56,6 +62,8 @@ import java.util.stream.Collectors;
 public class InventoryServiceImpl implements InventoryService {
 
     private static final String SHARED_WAREHOUSE_NAME = "Kho mặc định đa sàn";
+    private static final UUID SENTINEL_CATEGORY_UUID = new UUID(0L, 0L);
+    private static final String SENTINEL_PLATFORM = "__NONE__";
 
     private final InventoryItemRepository inventoryItemRepository;
     private final InventoryTransactionRepository transactionRepository;
@@ -102,6 +110,320 @@ public class InventoryServiceImpl implements InventoryService {
                 .first(page <= 0)
                 .last(page >= totalPages(dtoList.size(), size) - 1)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public PageResponse<InventoryGroupResponse> getInventoryGroupsPage(int page, int size, String sortBy, String sortDir,
+                                                                      UUID channelId, boolean localOnly, String keyword,
+                                                                      String status, UUID warehouseId,
+                                                                      Collection<PlatformType> platforms, UUID categoryId) {
+        ensureInventoryItemsForExistingVariants();
+
+        boolean categoryFiltered = categoryId != null;
+        List<UUID> categoryIds = categoryFiltered ? List.of(categoryId) : List.of(SENTINEL_CATEGORY_UUID);
+        List<String> platformNames = platforms == null ? List.of() : platforms.stream()
+                .filter(Objects::nonNull)
+                .map(Enum::name)
+                .distinct()
+                .toList();
+        boolean platformFiltered = !platformNames.isEmpty();
+        int platformCount = platformFiltered ? platformNames.size() : 0;
+
+        List<Object[]> universeRows = inventoryItemRepository.findInventoryGroupUniverse(
+                channelId,
+                localOnly,
+                normalizeSearch(keyword),
+                normalizeStatus(status),
+                warehouseId,
+                categoryFiltered,
+                categoryFiltered ? categoryIds : List.of(SENTINEL_CATEGORY_UUID),
+                platformFiltered,
+                platformFiltered ? platformNames : List.of(SENTINEL_PLATFORM),
+                platformCount);
+
+        List<InventoryGroupRow> groups = new ArrayList<>(parseGroupUniverse(universeRows));
+        long totalProducts = groups.size();
+        long totalSkus = groups.stream().mapToLong(InventoryGroupRow::skuCount).sum();
+
+        groups.sort(groupComparator(sortBy, sortDir));
+
+        int safeSize = Math.max(size, 1);
+        int totalPages = totalPages(groups.size(), size);
+        int from = Math.min(Math.max(page, 0) * safeSize, groups.size());
+        int to = Math.min(from + safeSize, groups.size());
+        List<InventoryGroupRow> pageGroups = groups.subList(from, to);
+
+        List<UUID> pageVariantIds = pageGroups.stream()
+                .flatMap(row -> row.variantIds().stream())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        List<InventoryItemResponse> skuRows = pageVariantIds.isEmpty()
+                ? List.of()
+                : aggregateInventoryItems(inventoryItemRepository.findByVariantIdInFetchAll(pageVariantIds), channelId);
+
+        List<InventoryGroupResponse> content = buildPageGroups(pageGroups, skuRows);
+
+        return PageResponse.<InventoryGroupResponse>builder()
+                .content(content)
+                .page(page)
+                .size(size)
+                .totalElements(totalProducts)
+                .totalProducts(totalProducts)
+                .totalSkus(totalSkus)
+                .totalPages(totalPages)
+                .first(page <= 0)
+                .last(page >= totalPages - 1)
+                .build();
+    }
+
+    private List<InventoryGroupRow> parseGroupUniverse(List<Object[]> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+        List<InventoryGroupRow> result = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            if (row == null || row.length < 8) {
+                continue;
+            }
+            String groupKey = (String) row[0];
+            String productName = (String) row[1];
+            String variantSku = (String) row[2];
+            UUID groupCategoryId = (UUID) row[3];
+            List<UUID> variantIds = parseVariantIds(row[4]);
+            int skuCount = row[5] instanceof Number number ? number.intValue() : 0;
+            int sortQuantityOnHand = row[6] instanceof Number number ? number.intValue() : 0;
+            OffsetDateTime sortUpdatedAt = row[7] instanceof Timestamp timestamp
+                    ? timestamp.toInstant().atOffset(ZoneOffset.UTC)
+                    : null;
+            result.add(new InventoryGroupRow(groupKey, productName, variantSku, groupCategoryId,
+                    variantIds, skuCount, sortQuantityOnHand, sortUpdatedAt));
+        }
+        return result;
+    }
+
+    private List<UUID> parseVariantIds(Object value) {
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof Array array) {
+            try {
+                Object[] raw = (Object[]) array.getArray();
+                return parseVariantIdStrings(raw);
+            } catch (SQLException ex) {
+                return List.of();
+            }
+        }
+        if (value instanceof String[] strings) {
+            return parseVariantIdStrings(strings);
+        }
+        return List.of();
+    }
+
+    private List<UUID> parseVariantIdStrings(Object[] raw) {
+        if (raw == null) {
+            return List.of();
+        }
+        List<UUID> ids = new ArrayList<>(raw.length);
+        for (Object element : raw) {
+            if (element == null) {
+                continue;
+            }
+            try {
+                ids.add(UUID.fromString(element.toString()));
+            } catch (IllegalArgumentException ignored) {
+                // skip unparseable id
+            }
+        }
+        return ids;
+    }
+
+    private Comparator<InventoryGroupRow> groupComparator(String sortBy, String sortDir) {
+        Comparator<InventoryGroupRow> comparator;
+        String property = sortBy == null ? "" : sortBy;
+        switch (property) {
+            case "productName" -> comparator = Comparator.comparing(
+                    row -> safeText(row.productName()), String.CASE_INSENSITIVE_ORDER);
+            case "variantSku" -> comparator = Comparator.comparing(
+                    row -> safeText(row.variantSku()), String.CASE_INSENSITIVE_ORDER);
+            case "quantityOnHand" -> comparator = Comparator.comparing(InventoryGroupRow::sortQuantityOnHand);
+            default -> comparator = Comparator.comparing(InventoryGroupRow::sortUpdatedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+        }
+        if ("desc".equalsIgnoreCase(sortDir)) {
+            comparator = comparator.reversed();
+        }
+        return comparator;
+    }
+
+    private List<InventoryGroupResponse> buildPageGroups(List<InventoryGroupRow> pageGroups,
+                                                         List<InventoryItemResponse> skuRows) {
+        if (pageGroups == null || pageGroups.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, String> variantGroupKey = new HashMap<>();
+        for (InventoryGroupRow group : pageGroups) {
+            for (UUID variantId : group.variantIds()) {
+                if (variantId != null) {
+                    variantGroupKey.putIfAbsent(variantId, group.groupKey());
+                }
+            }
+        }
+
+        Map<String, List<InventoryItemResponse>> childrenByGroup = new LinkedHashMap<>();
+        for (InventoryItemResponse row : skuRows) {
+            String groupKey = rowGroupKey(row, variantGroupKey);
+            if (groupKey == null) {
+                continue;
+            }
+            childrenByGroup.computeIfAbsent(groupKey, ignored -> new ArrayList<>()).add(row);
+        }
+
+        List<InventoryGroupResponse> content = new ArrayList<>(pageGroups.size());
+        for (InventoryGroupRow group : pageGroups) {
+            List<InventoryItemResponse> children = childrenByGroup.getOrDefault(group.groupKey(), List.of());
+            content.add(InventoryGroupResponse.builder()
+                    .groupKey(group.groupKey())
+                    .parent(aggregateGroupParent(children, group))
+                    .children(children)
+                    .build());
+        }
+        return content;
+    }
+
+    private String rowGroupKey(InventoryItemResponse row, Map<UUID, String> variantGroupKey) {
+        if (row.getVariantIds() != null) {
+            for (UUID variantId : row.getVariantIds()) {
+                String key = variantGroupKey.get(variantId);
+                if (key != null) {
+                    return key;
+                }
+            }
+        }
+        if (row.getVariantId() != null) {
+            String key = variantGroupKey.get(row.getVariantId());
+            if (key != null) {
+                return key;
+            }
+        }
+        return null;
+    }
+
+    private InventoryItemResponse aggregateGroupParent(List<InventoryItemResponse> children,
+                                                       InventoryGroupRow group) {
+        if (children == null || children.isEmpty()) {
+            return InventoryItemResponse.builder()
+                    .productName(group == null ? null : group.productName())
+                    .quantityOnHand(0)
+                    .reservedQuantity(0)
+                    .availableQuantity(0)
+                    .incomingQuantity(0)
+                    .outgoingQuantity(0)
+                    .lowStockThreshold(0)
+                    .isLowStock(false)
+                    .build();
+        }
+
+        InventoryItemResponse first = children.get(0);
+        int quantityOnHand = children.stream().mapToInt(item -> safeInt(item.getQuantityOnHand())).sum();
+        int reservedQuantity = children.stream().mapToInt(item -> safeInt(item.getReservedQuantity())).sum();
+        int availableQuantity = children.stream().mapToInt(item -> safeInt(item.getAvailableQuantity())).sum();
+        int incomingQuantity = children.stream().mapToInt(item -> safeInt(item.getIncomingQuantity())).sum();
+        int outgoingQuantity = children.stream().mapToInt(item -> safeInt(item.getOutgoingQuantity())).sum();
+        int lowStockThreshold = children.stream().mapToInt(item -> safeInt(item.getLowStockThreshold())).sum();
+
+        List<UUID> channelIds = new ArrayList<>();
+        List<String> channelNames = new ArrayList<>();
+        List<PlatformType> platforms = new ArrayList<>();
+        List<UUID> productIds = new ArrayList<>();
+        List<UUID> variantIds = new ArrayList<>();
+        for (InventoryItemResponse child : children) {
+            if (child.getChannelIds() != null) {
+                channelIds.addAll(child.getChannelIds());
+            }
+            if (child.getChannelId() != null) {
+                channelIds.add(child.getChannelId());
+            }
+            if (child.getChannelNames() != null) {
+                channelNames.addAll(child.getChannelNames());
+            }
+            if (child.getChannelName() != null && !child.getChannelName().isBlank()) {
+                channelNames.add(child.getChannelName());
+            }
+            if (child.getPlatforms() != null) {
+                platforms.addAll(child.getPlatforms());
+            }
+            if (child.getPlatform() != null) {
+                platforms.add(child.getPlatform());
+            }
+            if (child.getProductIds() != null) {
+                productIds.addAll(child.getProductIds());
+            }
+            if (child.getProductId() != null) {
+                productIds.add(child.getProductId());
+            }
+            if (child.getVariantIds() != null) {
+                variantIds.addAll(child.getVariantIds());
+            }
+            if (child.getVariantId() != null) {
+                variantIds.add(child.getVariantId());
+            }
+        }
+        List<UUID> distinctChannelIds = channelIds.stream().distinct().toList();
+        List<String> distinctChannelNames = channelNames.stream().distinct().toList();
+        List<PlatformType> distinctPlatforms = platforms.stream().distinct().toList();
+        List<UUID> distinctProductIds = productIds.stream().distinct().toList();
+        List<UUID> distinctVariantIds = variantIds.stream().distinct().toList();
+
+        OffsetDateTime updatedAt = children.stream()
+                .map(InventoryItemResponse::getUpdatedAt)
+                .filter(Objects::nonNull)
+                .max(OffsetDateTime::compareTo)
+                .orElse(first.getUpdatedAt());
+
+        return InventoryItemResponse.builder()
+                .id(first.getId())
+                .warehouseId(null)
+                .warehouseName(children.size() == 1 ? first.getWarehouseName() : children.size() + " SKU")
+                .productId(distinctProductIds.size() == 1 ? distinctProductIds.get(0) : null)
+                .productIds(distinctProductIds)
+                .variantId(first.getVariantId())
+                .variantIds(distinctVariantIds)
+                .variantSku(firstNonBlank(group == null ? null : group.variantSku(), first.getVariantSku()))
+                .internalVariantSku(first.getInternalVariantSku())
+                .marketplaceSku(first.getMarketplaceSku())
+                .productName(firstNonBlank(group == null ? null : group.productName(), first.getProductName(), first.getVariantName()))
+                .variantName(first.getVariantName())
+                .categoryId(first.getCategoryId())
+                .categoryName(first.getCategoryName())
+                .channelId(distinctChannelIds.size() == 1 ? distinctChannelIds.get(0) : null)
+                .channelName(distinctChannelNames.size() == 1 ? distinctChannelNames.get(0) : String.join(", ", distinctChannelNames))
+                .platform(distinctPlatforms.size() == 1 ? distinctPlatforms.get(0) : null)
+                .channelIds(distinctChannelIds)
+                .channelNames(distinctChannelNames)
+                .platforms(distinctPlatforms)
+                .unitPrice(first.getUnitPrice())
+                .salePrice(first.getSalePrice())
+                .currentSalePrice(first.getCurrentSalePrice())
+                .mergedInventoryItemCount(children.size())
+                .mergedVariantCount(distinctVariantIds.size())
+                .quantityOnHand(quantityOnHand)
+                .reservedQuantity(reservedQuantity)
+                .availableQuantity(availableQuantity)
+                .incomingQuantity(incomingQuantity)
+                .outgoingQuantity(outgoingQuantity)
+                .averageCost(first.getAverageCost())
+                .lowStockThreshold(lowStockThreshold)
+                .isLowStock(children.stream().anyMatch(child -> Boolean.TRUE.equals(child.getIsLowStock())))
+                .updatedAt(updatedAt)
+                .build();
+    }
+
+    private record InventoryGroupRow(String groupKey, String productName, String variantSku, UUID categoryId,
+                                     List<UUID> variantIds, int skuCount, int sortQuantityOnHand,
+                                     OffsetDateTime sortUpdatedAt) {
     }
 
     @Override
@@ -160,6 +482,29 @@ public class InventoryServiceImpl implements InventoryService {
                         .comparing((InventoryItemResponse item) -> safeInt(item.getAvailableQuantity()))
                         .thenComparing(InventoryItemResponse::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InventorySummaryResponse getInventorySummary() {
+        ensureInventoryItemsForExistingVariants();
+        List<Object[]> rows = inventoryItemRepository.findInventorySummary();
+        if (rows == null || rows.isEmpty()) {
+            return InventorySummaryResponse.builder().build();
+        }
+        Object[] row = rows.get(0);
+        return InventorySummaryResponse.builder()
+                .totalProducts(toLong(row[0]))
+                .totalSkus(toLong(row[1]))
+                .totalQuantity(toLong(row[2]))
+                .lowStockSkus(toLong(row[3]))
+                .outOfStockSkus(toLong(row[4]))
+                .negativeStockSkus(toLong(row[5]))
+                .build();
+    }
+
+    private long toLong(Object value) {
+        return value instanceof Number number ? number.longValue() : 0L;
     }
 
     @Override

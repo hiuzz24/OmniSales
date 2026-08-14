@@ -27,6 +27,24 @@ const inventoryApi = {
     return res.data?.data ?? res.data;
   },
 
+  getInventoryGroups: async (page = 0, size = 10, sortBy = 'updatedAt', sortDir = 'desc', categoryId = null, channelId = null, localOnly = false, filters = {}) => {
+    const params = { page, size, sortBy, sortDir };
+    if (categoryId) params.categoryId = categoryId;
+    if (channelId) params.channelId = channelId;
+    if (localOnly) params.localOnly = true;
+    if (filters.keyword) params.keyword = filters.keyword;
+    if (filters.status && filters.status !== 'all') params.status = filters.status;
+    if (filters.warehouseId && filters.warehouseId !== 'all') params.warehouseId = filters.warehouseId;
+    if (filters.platforms?.length) params.platforms = filters.platforms.join(',');
+    const res = await axiosClient.get('/inventory/groups', { params });
+    return res.data?.data ?? res.data;
+  },
+
+  getInventorySummary: async () => {
+    const res = await axiosClient.get('/inventory/summary');
+    return res.data?.data ?? res.data;
+  },
+
   getLowStockItems: async () => {
     const res = await axiosClient.get('/inventory/items/low-stock');
     return res.data?.data ?? res.data;
