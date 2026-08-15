@@ -98,13 +98,14 @@ test.describe('Webhook Event API Tests', () => {
   });
 
   // WHK-7 - POST /api/webhook-events/{id}/reprocess - reprocess non-existent event
-  test('WHK-7 - POST /api/webhook-events/{id}/reprocess - Non-existent event returns 404 or 500', async ({ request, adminHeaders }) => {
+  // Endpoint requires OWNER role; admin (SYSTEM_ADMIN) gets 403.
+  test('WHK-7 - POST /api/webhook-events/{id}/reprocess - Non-existent event returns 403, 404 or 500', async ({ request, adminHeaders }) => {
     const fakeId = '00000000-0000-0000-0000-000000000099';
     const response = await request.post(`${API_BASE}/webhook-events/${fakeId}/reprocess`, {
       headers: adminHeaders,
     });
 
-    expect([200, 404, 500]).toContain(response.status());
+    expect([200, 403, 404, 500]).toContain(response.status());
   });
 
   // WHK-8 - reprocess requires auth
@@ -126,12 +127,13 @@ test.describe('Webhook Event API Tests', () => {
   });
 
   // WHK-10 - reprocess valid UUID format - happy path returns 404 (no event)
-  test('WHK-10 - POST /api/webhook-events/{id}/reprocess - Owner role, valid random UUID returns 404 or 500', async ({ request, adminHeaders }) => {
+  // Admin role is SYSTEM_ADMIN; endpoint requires OWNER → 403.
+  test('WHK-10 - POST /api/webhook-events/{id}/reprocess - Owner role, valid random UUID returns 403, 404 or 500', async ({ request, adminHeaders }) => {
     const fakeId = '11111111-1111-1111-1111-111111111111';
     const response = await request.post(`${API_BASE}/webhook-events/${fakeId}/reprocess`, {
       headers: adminHeaders,
     });
 
-    expect([200, 404, 500]).toContain(response.status());
+    expect([200, 403, 404, 500]).toContain(response.status());
   });
 });

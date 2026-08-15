@@ -26,36 +26,57 @@ const dateOnly = (v) => v ? new Date(v).toLocaleDateString('vi-VN', { day: '2-di
 function printOrder(order) {
   const win = window.open('', '_blank');
   if (!win) return;
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const amount = Number(order.totalAmount ?? 0);
+  const amountText = new Intl.NumberFormat('vi-VN').format(amount);
+  const paymentMethods = { COD: 'Tiền mặt', BANK_TRANSFER: 'Chuyển khoản', CREDIT: 'Công nợ' };
+  const threeDigitsToWords = (value, full) => {
+    const digits = ['không', 'một', 'hai', 'ba', 'bốn', 'năm', 'sáu', 'bảy', 'tám', 'chín'];
+    const hundreds = Math.floor(value / 100);
+    const tens = Math.floor((value % 100) / 10);
+    const ones = value % 10;
+    let result = '';
+    if (full || hundreds) result += `${digits[hundreds]} trăm`;
+    if (tens > 1) result += `${result ? ' ' : ''}${digits[tens]} mươi${ones === 1 ? ' mốt' : ones === 5 ? ' lăm' : ones ? ` ${digits[ones]}` : ''}`;
+    else if (tens === 1) result += `${result ? ' ' : ''}mười${ones === 5 ? ' lăm' : ones ? ` ${digits[ones]}` : ''}`;
+    else if (ones) result += `${result ? (hundreds ? ' lẻ ' : ' ') : ''}${digits[ones]}`;
+    return result.trim();
+  };
+  const amountInWords = (value) => {
+    if (!Number.isFinite(value) || value === 0) return 'Không đồng';
+    const units = ['', ' nghìn', ' triệu', ' tỷ'];
+    const groups = [];
+    let remainder = Math.floor(Math.abs(value));
+    while (remainder) { groups.push(remainder % 1000); remainder = Math.floor(remainder / 1000); }
+    const words = groups.map((group, index) => group ? `${threeDigitsToWords(group, index < groups.length - 1)}${units[index]}` : '').filter(Boolean).reverse().join(' ');
+    return `${words.charAt(0).toUpperCase()}${words.slice(1)} đồng`;
+  };
   const rows = (order.items ?? []).map((item, i) => `<tr>
-    <td style="text-align:center;padding:6px 8px;border:1px solid #cbd5e1">${i + 1}</td>
-    <td style="padding:6px 8px;border:1px solid #cbd5e1"><strong>${item.productName ?? ''}</strong>${item.variantName ? `<br/><small style="color:#64748b">${item.variantName}</small>` : ''}</td>
-    <td style="text-align:center;padding:6px 8px;border:1px solid #cbd5e1">${item.marketplaceSku ?? item.sku ?? ''}</td>
-    <td style="text-align:center;padding:6px 8px;border:1px solid #cbd5e1">cái</td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #cbd5e1">${num(item.quantity)}</td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #cbd5e1">${new Intl.NumberFormat('vi-VN').format(item.unitCost ?? 0)}</td>
-    <td style="text-align:right;padding:6px 8px;border:1px solid #cbd5e1">${new Intl.NumberFormat('vi-VN').format(item.totalCost ?? 0)}</td>
+    <td>${i + 1}</td>
+    <td>${escapeHtml([item.productName, item.variantName].filter(Boolean).join(' - '))}</td>
+    <td>cái</td>
+    <td>${num(item.quantity)}</td>
+    <td>${new Intl.NumberFormat('vi-VN').format(item.unitCost ?? 0)}</td>
+    <td>${new Intl.NumberFormat('vi-VN').format(item.totalCost ?? 0)}</td>
   </tr>`).join('');
-  const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Phiếu đặt hàng ${order.orderCode}</title>
-    <style>body{font-family:'Times New Roman',serif;font-size:13px;margin:0;padding:24px}h2{text-align:center;font-size:16px;margin:8px 0}
-    .hi{width:100%;margin-bottom:16px}.hi td{padding:2px 8px;font-size:13px}table.it{width:100%;border-collapse:collapse;margin:12px 0}
-    table.it th{background:#f1f5f9;padding:7px 8px;border:1px solid #cbd5e1;text-align:center}
-    .sr{display:flex;justify-content:space-around;margin-top:40px;text-align:center}.sr div{flex:1}.sr p{font-weight:700;margin-bottom:4px}
-    @media print{body{padding:8px}}</style></head><body>
-    <p style="text-align:center;font-size:12px;margin:0">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
-    <p style="text-align:center;font-size:12px;margin:0;margin-bottom:16px">Độc lập – Tự do – Hạnh phúc</p>
-    <h2>PHIẾU ĐẶT HÀNG</h2>
-    <table class="hi"><tbody>
-      <tr><td><strong>Kính gửi:</strong> ${order.supplierName ?? ''}</td><td><strong>Ngày lập:</strong> ${dt(order.orderDate ?? order.createdAt)}</td></tr>
-      <tr><td><strong>Kho nhận hàng:</strong> ${order.warehouseName ?? ''}${order.warehouseAddress ? ` — ${order.warehouseAddress}` : ''}</td><td><strong>Dự kiến nhận:</strong> ${dateOnly(order.expectedReceiptDate)}</td></tr>
-      <tr><td><strong>Người lập:</strong> ${order.createdByName ?? ''}</td><td><strong>Thanh toán:</strong> ${order.paymentMethod ?? '—'}</td></tr>
-      ${order.notes ? `<tr><td colspan="2"><strong>Ghi chú:</strong> ${order.notes}</td></tr>` : ''}
-    </tbody></table>
-    <table class="it"><thead><tr><th>STT</th><th>Tên hàng hóa</th><th>SKU</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <p style="text-align:right;font-weight:700">Tổng cộng: ${new Intl.NumberFormat('vi-VN').format(order.totalAmount ?? 0)} VNĐ</p>
-    <div class="sr"><div><p>Người lập phiếu</p><small>(Ký, ghi rõ họ tên)</small><br/><br/><br/></div>
-    <div><p>Trưởng bộ phận</p><small>(Ký duyệt)</small><br/><br/><br/></div>
-    <div><p>Bên nhận đơn hàng</p><small>(Ký xác nhận)</small><br/><br/><br/></div></div>
+  const html = `<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8"><title>Phiếu đặt hàng</title>
+    <style>
+      @page{size:A4 portrait;margin:2.54cm}*{box-sizing:border-box}body{font-family:'Times New Roman',serif;font-size:13pt;line-height:1.15;margin:0;color:#000}.national{text-align:center;font-weight:700;margin:0}.motto{text-align:center;margin:2px 0 24px}.title{text-align:center;font-size:16pt;font-weight:700;margin:0 0 24px}.line{margin:0 0 9px}.items{width:100%;border-collapse:collapse;margin:12px 0 10px}.items th,.items td{border:1px solid #000;padding:5px 6px}.items th{text-align:center;font-weight:700;vertical-align:middle}.items td:nth-child(1),.items td:nth-child(3),.items td:nth-child(4){text-align:center}.items td:nth-child(5),.items td:nth-child(6){text-align:right}.items th:nth-child(1){width:7%}.items th:nth-child(2){width:37%}.items th:nth-child(3){width:13%}.items th:nth-child(4){width:12%}.items th:nth-child(5),.items th:nth-child(6){width:15.5%}.total{text-align:right;margin:0 0 9px}.signatures{display:flex;margin-top:38px;text-align:center}.signatures>div{width:33.333%}.signatures p{font-weight:700;margin:0 0 3px}.signatures small{font-size:11pt}@media print{body{font-size:13pt}}
+    </style></head><body>
+    <p class="national">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+    <p class="motto">Độc lập – Tự do – Hạnh phúc</p>
+    <p class="title">PHIẾU ĐẶT HÀNG</p>
+    <p class="line">Kính gửi: Công ty ${escapeHtml(order.supplierName)}</p>
+    <p class="line">MST: ${escapeHtml(order.supplierTaxCode)}</p>
+    <p class="line">Nội dung đặt hàng như sau:</p>
+    <table class="items"><thead><tr><th>STT</th><th>Tên hàng hóa/dịch vụ</th><th>Đơn vị tính</th><th>Số lượng</th><th>Đơn giá (VNĐ)</th><th>Thành tiền (VNĐ)</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="total">Tổng cộng: ${amountText} VNĐ</p>
+    <p class="line">(Bằng chữ): ${amountInWords(amount)}</p>
+    <p class="line">Thời gian giao hàng: ${escapeHtml(dt(order.completedAt))}</p>
+    <p class="line">Địa điểm giao hàng: ${escapeHtml([order.warehouseName, order.warehouseAddress].filter(Boolean).join(' - '))}</p>
+    <p class="line">Hình thức thanh toán: ${escapeHtml(paymentMethods[order.paymentMethod] ?? order.paymentMethod)}</p>
+    <p class="line">Ghi chú thêm: ${escapeHtml(order.notes)}</p>
+    <div class="signatures"><div><p>Người lập phiếu</p><small>(Ký, ghi rõ họ tên)</small></div><div><p>Trưởng bộ phận</p><small>(Ký duyệt)</small></div><div><p>Bên nhận đơn hàng</p><small>(Ký xác nhận)</small></div></div>
     </body></html>`;
   win.document.open(); win.document.write(html); win.document.close();
   win.focus(); setTimeout(() => win.print(), 400);

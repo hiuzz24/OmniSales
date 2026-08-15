@@ -17,6 +17,7 @@ public class PurchaseOrderResponse {
     private String orderCode;
     private UUID supplierId;
     private String supplierName;
+    private String supplierTaxCode;
     private UUID warehouseId;
     private String warehouseName;
     private String warehouseAddress;

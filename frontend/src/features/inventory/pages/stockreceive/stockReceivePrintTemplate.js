@@ -129,8 +129,7 @@ export const buildStockReceivePrintHtml = (receipt) => {
     return sum + Number(item.totalCost ?? quantity * unitCost);
   }, 0);
   const totalQuantity = items.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0);
-  const date = formatDateParts(receipt?.receivedAt ?? receipt?.confirmedAt ?? receipt?.createdAt);
-  const printDate = formatDateParts(new Date());
+  const date = formatDateParts(receipt?.receiptDate ?? receipt?.receivedAt ?? receipt?.confirmedAt ?? receipt?.createdAt);
 
   return `<!doctype html>
 <html lang="vi">
@@ -158,18 +157,20 @@ export const buildStockReceivePrintHtml = (receipt) => {
     }
     .unit-block div { min-height: 20px; }
     .template-note { text-align: center; font-weight: 700; }
-    .template-note div:last-child { font-weight: 400; font-style: italic; font-size: 12px; }
+    .template-note div:last-child { font-weight: 400; font-style: italic; font-size: 12px; line-height: 1.3; }
     h1 {
-      margin: 10px 0 4px;
+      margin: 8px 0 2px;
       text-align: center;
       font-size: 22px;
       font-weight: 700;
       letter-spacing: 0;
     }
+    .receipt-date { text-align: center; font-style: italic; margin: 0 0 6px; }
+    .receipt-number { width: 210px; margin-left: auto; margin-bottom: 2px; }
     .debit-credit {
       width: 210px;
       margin-left: auto;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       line-height: 1.6;
     }
     .line { margin: 7px 0; }
@@ -235,6 +236,7 @@ export const buildStockReceivePrintHtml = (receipt) => {
     .signature-title { font-weight: 700; }
     .signature-note { font-style: italic; font-size: 12px; }
     .signature-space { height: 72px; }
+    .template-footer-note { margin-top: 10px; font-style: italic; font-size: 11px; }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .sheet { break-inside: avoid; }
@@ -249,12 +251,14 @@ export const buildStockReceivePrintHtml = (receipt) => {
         <div>Bộ phận: <span class="dots medium">${escapeHtml(receipt?.departmentName ?? receipt?.warehouseName ?? '')}</span></div>
       </div>
       <div class="template-note">
-        <div>Mẫu số 01 - VT</div>
-        <div>(Ban hành theo Thông tư số 200/2014/TT-BTC<br/>ngày 22/12/2014 của Bộ Tài chính)</div>
+        <div>Mẫu số: 01 - VT</div>
+        <div>(Kèm theo Thông tư số 99/2025/TT-BTC<br/>ngày 27 tháng 10 năm 2025 của Bộ trưởng Bộ Tài chính)</div>
       </div>
     </section>
 
     <h1>PHIẾU NHẬP KHO</h1>
+    <div class="receipt-date">Ngày ${date.day} tháng ${date.month} năm ${date.year}</div>
+    <div class="receipt-number">Số: <span class="dots">${escapeHtml(receipt?.receiptCode ?? '')}</span></div>
     <div class="debit-credit">
       <div>Nợ <span class="dots">${escapeHtml(receipt?.debitAccount ?? '')}</span></div>
       <div>Có <span class="dots">${escapeHtml(receipt?.creditAccount ?? '')}</span></div>
@@ -262,13 +266,13 @@ export const buildStockReceivePrintHtml = (receipt) => {
 
     <div class="form-line">
       <span class="label">- Họ và tên người giao:</span>
-      <span class="fill long"></span>
+      <span class="fill long">${escapeHtml(receipt?.supplierName ?? '')}</span>
     </div>
     <div class="form-line">
       <span class="label">- Theo</span>
-      <span class="fill medium"></span>
+      <span class="fill medium">${escapeHtml(receipt?.purchaseOrderCode ?? '')}</span>
       <span class="label">số</span>
-      <span class="fill short">${escapeHtml(receipt?.invoiceNumber ?? receipt?.receiptCode ?? '')}</span>
+      <span class="fill short">${escapeHtml(receipt?.invoiceNumber ?? '')}</span>
       <span class="label">ngày ${date.day} tháng ${date.month} năm ${date.year} của</span>
     </div>
     <div class="form-line">
@@ -327,9 +331,7 @@ export const buildStockReceivePrintHtml = (receipt) => {
 
     <div class="footer-line">- Tổng số tiền (viết bằng chữ): <span>${escapeHtml(numberToVietnameseWords(receipt?.totalCost ?? totalAmount))}</span></div>
     <div class="footer-line">- Số chứng từ gốc kèm theo: <span class="dots long">${escapeHtml(receipt?.invoiceNumber ?? '')}</span></div>
-    ${receipt?.notes ? `<div class="footer-line">- Ghi chú: <span>${escapeHtml(receipt.notes)}</span></div>` : ''}
-
-    <div class="date-line">Ngày ${printDate.day} tháng ${printDate.month} năm ${printDate.year}</div>
+    <div class="date-line">Ngày ${date.day} tháng ${date.month} năm ${date.year}</div>
     <section class="signatures">
       <div>
         <div class="signature-title">Người lập phiếu</div>
@@ -354,6 +356,7 @@ export const buildStockReceivePrintHtml = (receipt) => {
         <div>${escapeHtml(receipt?.approvedByName ?? '')}</div>
       </div>
     </section>
+    <div class="template-footer-note">Ghi chú: Tùy theo đặc điểm hoạt động sản xuất kinh doanh và yêu cầu quản lý của đơn vị mình, doanh nghiệp được xây dựng, thiết kế biểu mẫu chứng từ kế toán.</div>
   </main>
 </body>
 </html>`;
