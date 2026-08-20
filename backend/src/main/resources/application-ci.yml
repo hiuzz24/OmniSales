@@ -34,3 +34,6 @@ app:
     enabled: false
   notifications:
     email-enabled: false
+  # REST Countries API key (placeholder for CI; no real external call required for tests)
+  rest-countries:
+    api-key: "ci-demo-key-not-used-for-real-calls"
