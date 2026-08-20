@@ -138,24 +138,13 @@ e2e:
         exit 1
       }
       echo "Frontend ready!"
-      echo "=== Hard-warming Vite 8 optimizer across all routes ==="
-      cd frontend
-      # Hit entry chain first so main.jsx + its deps get optimized.
-      curl -s -o /dev/null http://localhost:5174/
-      curl -s -o /dev/null http://localhost:5174/src/main.jsx
-      # Hit every primary route from tests so each route's chunk gets optimized.
-      for route in login dashboard admin admin/api-monitor products inventory orders customers purchase suppliers settings; do
-        curl -s -o /dev/null "http://localhost:5174/${route}" || true
-      done
-      # Re-hit entry to confirm cache (deps should now be hot).
-      curl -s -o /dev/null http://localhost:5174/
-      curl -s -o /dev/null http://localhost:5174/src/main.jsx
-      # Vite 8 / Rolldown still finalizes optimize asynchronously, so we give it a generous buffer.
-      sleep 15
+      echo "=== Hard-warming Vite 8 optimizer with REAL chromium ==="
+      echo "(curl alone does not trigger Vite's on-demand optimize; we need a real browser)"
+      cd test && node warmup-browser.js
       cd ..
       echo "=== Warmup complete ==="
       echo "=== Running E2E tests ==="
-      cd test && npx playwright test --project=chromium
+      cd test && npx playwright test --project=chromium --reporter=list,junit,html
   artifacts:
     when: always
     reports:
