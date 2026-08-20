@@ -37,7 +37,7 @@ variables:
 # =============================================================================
 e2e:
   stage: test
-  image: mcr.microsoft.com/playwright:v1.47.0-jammy
+  image: mcr.microsoft.com/playwright:v1.61.1-jammy
   services:
     - name: postgres:15-alpine
       variables:
