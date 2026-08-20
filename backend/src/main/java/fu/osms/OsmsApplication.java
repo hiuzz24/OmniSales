@@ -203,6 +203,117 @@ public class OsmsApplication {
 	}
 
 	/**
+	 * Robust SQL statement splitter that respects:
+	 *   - single-quoted string literals (' ... '' ... ')
+	 *   - double-quoted identifiers
+	 *   - PostgreSQL dollar-quoted strings ($$ ... $$)
+	 *   - line comments (-- ...) that are NOT inside a string/quote
+	 *
+	 * Returns a list of trimmed, non-empty, non-comment-only statements
+	 * (the trailing ';' of each statement is removed).
+	 */
+	private static java.util.List<String> splitSqlStatements(String sql) {
+		java.util.List<String> result = new java.util.ArrayList<>();
+		StringBuilder cur = new StringBuilder();
+		char[] arr = sql.toCharArray();
+		int n = arr.length;
+		int i = 0;
+		boolean inSingle = false;
+		boolean inDouble = false;
+		String dollarTag = null; // null when not in dollar-quote, else e.g. "$", "$$", "$tag$"
+
+		while (i < n) {
+			char c = arr[i];
+			char next = (i + 1 < n) ? arr[i + 1] : '\0';
+
+			// Handle line comments only when not inside any quote / string.
+			if (!inSingle && !inDouble && dollarTag == null && c == '-' && next == '-') {
+				// skip until end of line
+				while (i < n && arr[i] != '\n') i++;
+				continue;
+			}
+
+			if (dollarTag != null) {
+				// We're inside a dollar-quoted block. Look for the matching closing tag.
+				if (c == '$') {
+					// Try to match a closing dollar tag starting at i.
+					int j = i;
+					while (j < n && (Character.isLetterOrDigit(arr[j]) || arr[j] == '_')) j++;
+					String tagCandidate = new String(arr, i, j - i);
+					String fullTag = "$" + tagCandidate + "$";
+					if (fullTag.equals(dollarTag) && i + fullTag.length() <= n
+							&& new String(arr, i, fullTag.length()).equals(fullTag)) {
+						// closing tag matched
+						cur.append(arr, i, fullTag.length());
+						i += fullTag.length();
+						dollarTag = null;
+						continue;
+					}
+					// not a real closing tag — just append the char and advance
+					cur.append(c);
+					i++;
+					continue;
+				}
+				cur.append(c);
+				i++;
+				continue;
+			}
+
+			// Detect start of a dollar-quoted string at this position (e.g. $tag$).
+			if (!inSingle && !inDouble && c == '$') {
+				int j = i + 1;
+				while (j < n && (Character.isLetterOrDigit(arr[j]) || arr[j] == '_')) j++;
+				String tagCandidate = new String(arr, i + 1, j - (i + 1));
+				String fullTag = "$" + tagCandidate + "$";
+				if (j < n && arr[j] == '$') {
+					// opening dollar-quoted block
+					cur.append(fullTag);
+					i = j + 1;
+					dollarTag = fullTag;
+					continue;
+				}
+			}
+
+			// Single-quoted string: ' escapes '' inside
+			if (!inDouble && c == '\'') {
+				inSingle = !inSingle;
+				cur.append(c);
+				i++;
+				continue;
+			}
+
+			// Double-quoted identifier: "
+			if (!inSingle && c == '"') {
+				inDouble = !inDouble;
+				cur.append(c);
+				i++;
+				continue;
+			}
+
+			// Statement terminator (only outside any quote / string)
+			if (!inSingle && !inDouble && dollarTag == null && c == ';') {
+				String stmt = cur.toString().trim();
+				// Strip comment-only statements (line comments already filtered, but be safe)
+				if (!stmt.isEmpty()) {
+					result.add(stmt);
+				}
+				cur.setLength(0);
+				i++;
+				continue;
+			}
+
+			cur.append(c);
+			i++;
+		}
+		// Trailing statement without ';' (rare, but possible if file ends without semicolon)
+		String tail = cur.toString().trim();
+		if (!tail.isEmpty()) {
+			result.add(tail);
+		}
+		return result;
+	}
+
+	/**
 	 * Chạy schema.sql qua raw JDBC. Schema đã strip PL/pgSQL nên safe.
 	 */
 	private static void runSchemaSql(Connection conn) {
@@ -215,22 +326,21 @@ public class OsmsApplication {
 			String sql = new String(resource.openStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
 			System.out.println("[main] Read " + sql.length() + " bytes from schema.sql");
 
-			String[] parts = sql.split(";");
+			java.util.List<String> parts = splitSqlStatements(sql);
 			int success = 0, errors = 0;
 			try (Statement stmt = conn.createStatement()) {
-				for (int i = 0; i < parts.length; i++) {
-					String s = parts[i].trim();
-					if (s.isEmpty() || s.startsWith("--")) continue;
-
-					// Strip comment lines
-					StringBuilder sb = new StringBuilder();
-					for (String line : s.split("\n")) {
-						String trimmed = line.trim();
-						if (trimmed.startsWith("--")) continue;
-						sb.append(line).append("\n");
-					}
-					String clean = sb.toString().trim();
+				for (int i = 0; i < parts.size(); i++) {
+					String clean = parts.get(i);
 					if (clean.isEmpty()) continue;
+					// Skip pure comment statements (defensive)
+					boolean onlyComments = true;
+					for (String line : clean.split("\n")) {
+						if (!line.trim().isEmpty() && !line.trim().startsWith("--")) {
+							onlyComments = false;
+							break;
+						}
+					}
+					if (onlyComments) continue;
 
 					try {
 						stmt.execute(clean);
