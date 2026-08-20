@@ -81,8 +81,8 @@ e2e:
     - if: $CI_COMMIT_BRANCH == "test_duy"
   before_script:
     - |
-      # Install Maven and Java (Playwright image only has Node.js)
-      apt-get update && apt-get install -y maven openjdk-17-jdk-headless
+      # Install Maven, Java, and PostgreSQL client
+      apt-get update && apt-get install -y maven openjdk-17-jdk-headless postgresql-client
       # Verify installation
       java -version
       mvn -version
