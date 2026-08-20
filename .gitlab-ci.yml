@@ -91,6 +91,8 @@ e2e:
       cd ..
       # Install test dependencies
       cd test && npm ci && cd ..
+      # Install frontend dependencies (needed for npm run dev)
+      cd frontend && npm ci && cd ..
       # Install wait-on globally
       npm install -g wait-on
       # Create test database
@@ -101,15 +103,27 @@ e2e:
     - |
       # Verify JAR
       ls -lh backend/target/*.jar
-      # Start backend
+      # Start backend in background, capture PID
       nohup java -Dserver.port=8080 -jar backend/target/backend-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
       echo "Backend PID: $!"
-      # Start frontend dev server
-      cd frontend && npm ci && nohup npm run dev > frontend.log 2>&1 &
+      # Start frontend dev server (npm ci already done in before_script)
+      cd frontend && nohup npm run dev > frontend.log 2>&1 &
       echo "Frontend PID: $!"
       cd ..
-      # Wait for both servers
-      wait-on http://localhost:8080/api/address/countries http://localhost:5174 --timeout 120000
+      # Wait for both servers with extended timeout for CI environment
+      # Add debug logging to see what's happening
+      echo "Waiting for backend at http://localhost:8080/api/address/countries..."
+      wait-on http://localhost:8080/api/address/countries --timeout 180000 --verbose || {
+        echo "Backend failed to start. Checking backend.log:"
+        tail -100 backend.log
+        exit 1
+      }
+      echo "Waiting for frontend at http://localhost:5174..."
+      wait-on http://localhost:5174 --timeout 60000 --verbose || {
+        echo "Frontend failed to start. Checking frontend.log:"
+        tail -50 frontend.log
+        exit 1
+      }
       echo "Both servers ready — running Playwright E2E"
       # Run E2E tests
       cd test && npx playwright test --project=chromium
