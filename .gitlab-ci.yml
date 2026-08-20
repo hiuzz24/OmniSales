@@ -40,6 +40,9 @@ e2e:
   image: mcr.microsoft.com/playwright:v1.47.0-jammy
   services:
     - name: postgres:15-alpine
+      variables:
+        POSTGRES_PASSWORD: $CI_DB_PASSWORD
+        POSTGRES_USER: $CI_DB_USERNAME
   variables:
     # GitLab service alias — Postgres chạy ở host `postgres`, port 5432.
     DB_HOST: postgres
@@ -78,6 +81,11 @@ e2e:
     - if: $CI_COMMIT_BRANCH == "test_duy"
   before_script:
     - |
+      # Install Maven and Java (Playwright image only has Node.js)
+      apt-get update && apt-get install -y maven openjdk-17-jdk-headless
+      # Verify installation
+      java -version
+      mvn -version
       # Build backend JAR inline
       cd backend && mvn $MAVEN_CLI_OPTS -DskipTests package -B -T 1C
       cd ..
