@@ -3,7 +3,7 @@ const { FRONTEND_URL: DEFAULT_FRONTEND_URL } = require('./utils/env-config');
 
 module.exports = defineConfig({
   testDir: './',
-  timeout: 30000,
+  timeout: 90000,
   retries: process.env.CI ? 2 : 0,
   workers: 1, // serialize so concurrent code-generation races (receipt/delivery/transfer codes)
                // in the backend do not flake the tests; the underlying race is a separate issue.

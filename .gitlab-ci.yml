@@ -138,6 +138,14 @@ e2e:
         exit 1
       }
       echo "Frontend ready!"
+      echo "=== Warming up Vite 8 optimizer ==="
+      cd frontend
+      curl -s -o /dev/null http://localhost:5174/login
+      curl -s -o /dev/null http://localhost:5174/src/main.jsx
+      curl -s -o /dev/null http://localhost:5174/login
+      sleep 5
+      cd ..
+      echo "=== Warmup complete ==="
       echo "=== Running E2E tests ==="
       cd test && npx playwright test --project=chromium
   artifacts:

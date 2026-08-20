@@ -21,14 +21,14 @@ const API_BASE = process.env.API_BASE || ENV_API_BASE;
  */
 async function loginAsManager(page) {
   await page.goto('/login');
-  // Vite first-load re-optimization can take 30s+; wait up to 60s for the form.
-  await page.locator('#login-email').waitFor({ state: 'visible', timeout: 60000 });
+  // Vite first-load re-optimization can take 30s+; wait up to 90s for the form.
+  await page.locator('#login-email').waitFor({ state: 'visible', timeout: 90000 });
   await page.locator('#login-email').fill(TEST_EMAIL);
   await page.locator('#login-password').waitFor({ state: 'visible', timeout: 5000 });
   await page.locator('#login-password').fill(TEST_PASSWORD);
 
   await Promise.all([
-    page.waitForURL('**/dashboard', { timeout: 30000 }),
+    page.waitForURL('**/dashboard', { timeout: 60000 }),
     page.locator('#login-submit-btn').click(),
   ]);
 
