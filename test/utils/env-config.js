@@ -21,8 +21,12 @@ function readEnv(key, fallback) {
   return value;
 }
 
+// Passwords are seeded by backend/src/main/resources/schema.sql with
+// crypt('11111111', gen_salt('bf', 10)) for every demo account. Keep
+// these aligned with the DB seed so the warmup + fixtures can actually
+// log in. Override via env vars when running against a different DB.
 const TEST_EMAIL = readEnv('TEST_EMAIL', 'manager@osms.vn');
-const TEST_PASSWORD = readEnv('TEST_PASSWORD', 'Duy16042004%');
+const TEST_PASSWORD = readEnv('TEST_PASSWORD', '11111111');
 const API_BASE = readEnv('API_BASE', 'http://localhost:8080/api');
 const FRONTEND_URL = readEnv('FRONTEND_URL', 'http://localhost:5174');
 const ADMIN_EMAIL = readEnv('ADMIN_EMAIL', 'admin@osms.vn');

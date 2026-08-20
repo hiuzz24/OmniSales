@@ -143,7 +143,7 @@ shopify:
 
 
 rest-countries:
-    api-key: ${REST_COUNTRIES_API_KEY}
+    api-key: ${REST_COUNTRIES_API_KEY:ci-demo-key-not-used-for-real-calls}
 
 lazada:
   app-key: ${LAZADA_APP_KEY:}
