@@ -14,6 +14,17 @@ export default defineConfig({
       }
     }
   },
+  preview: {
+    port: 5174,
+    host: '127.0.0.1',
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      }
+    }
+  },
   optimizeDeps: {
     include: [
       'react',

@@ -118,9 +118,12 @@ e2e:
       cat backend.log
       echo "=== Checking port 8080 ==="
       curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/address/countries 2>/dev/null || echo "Backend not responding"
-      echo "=== Starting frontend ==="
+      echo "=== Building frontend (pre-bundle all deps via Vite build) ==="
+      # Build once up-front so Rolldown pre-bundles EVERY dependency, not on-demand.
       cd frontend
-      nohup npm run dev > ../frontend.log 2>&1 &
+      npm run build
+      echo "=== Starting frontend (vite preview = serve pre-built files) ==="
+      nohup npm run preview -- --host 127.0.0.1 --strictPort > ../frontend.log 2>&1 &
       FRONTEND_PID=$!
       echo "Frontend PID: $FRONTEND_PID"
       cd ..
@@ -138,11 +141,13 @@ e2e:
         exit 1
       }
       echo "Frontend ready!"
-      echo "=== Hard-warming Vite 8 optimizer with REAL chromium ==="
-      echo "(curl alone does not trigger Vite's on-demand optimize; we need a real browser)"
-      cd test && node warmup-browser.js
+      echo "=== Cold-warming React SPA with REAL chromium ==="
+      # Even with vite preview, the React Router SPA still needs the JS bundle
+      # evaluated once in a real browser so the dev-login form is rendered.
+      # We do this in a try-block so a warmup failure does NOT block tests.
+      cd test && node warmup-browser.js || echo "[warmup] non-fatal: warmup script failed, continuing"
       cd ..
-      echo "=== Warmup complete ==="
+      echo "=== Warmup complete (or skipped) ==="
       echo "=== Running E2E tests ==="
       cd test && npx playwright test --project=chromium --reporter=list,junit,html
   artifacts:
