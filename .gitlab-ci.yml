@@ -101,27 +101,43 @@ e2e:
       PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "CREATE DATABASE $CI_DB_NAME;"
   script:
     - |
-      # Verify JAR
-      ls -lh backend/target/*.jar
+      # Debug: verify environment
+      echo "=== DEBUG: Current directory ==="
+      pwd
+      echo "=== DEBUG: Java availability ==="
+      which java || echo "Java not found!"
+      java -version || echo "Java version check failed"
+      echo "=== DEBUG: Check JAR file ==="
+      ls -lh backend/target/*.jar || echo "JAR NOT FOUND!"
+      echo "=== DEBUG: Check backend directory ==="
+      ls -la backend/target/ || echo "backend/target/ NOT FOUND!"
       # Start backend in background, capture PID
       nohup java -Dserver.port=8080 -jar backend/target/backend-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
-      echo "Backend PID: $!"
+      BACKEND_PID=$!
+      echo "Backend PID: $BACKEND_PID"
+      echo "=== DEBUG: Backend process status ==="
+      ps aux | grep java | grep -v grep || echo "No java process found"
+      sleep 5
+      echo "=== DEBUG: Backend log after 5s ==="
+      cat backend.log 2>/dev/null || echo "backend.log empty or not created"
+      echo "=== DEBUG: Port 8080 status ==="
+      netstat -tlnp 2>/dev/null | grep 8080 || ss -tlnp 2>/dev/null | grep 8080 || echo "Port 8080 not listening"
       # Start frontend dev server (npm ci already done in before_script)
       cd frontend && nohup npm run dev > frontend.log 2>&1 &
-      echo "Frontend PID: $!"
+      FRONTEND_PID=$!
+      echo "Frontend PID: $FRONTEND_PID"
       cd ..
-      # Wait for both servers with extended timeout for CI environment
-      # Add debug logging to see what's happening
+      # Wait for backend with extended timeout
       echo "Waiting for backend at http://localhost:8080/api/address/countries..."
       wait-on http://localhost:8080/api/address/countries --timeout 180000 --verbose || {
-        echo "Backend failed to start. Checking backend.log:"
-        tail -100 backend.log
+        echo "Backend failed to start. Full backend.log:"
+        cat backend.log
         exit 1
       }
       echo "Waiting for frontend at http://localhost:5174..."
       wait-on http://localhost:5174 --timeout 60000 --verbose || {
-        echo "Frontend failed to start. Checking frontend.log:"
-        tail -50 frontend.log
+        echo "Frontend failed to start. Full frontend.log:"
+        cat frontend.log
         exit 1
       }
       echo "Both servers ready — running Playwright E2E"
