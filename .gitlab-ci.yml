@@ -15,6 +15,7 @@
 
 stages:
   - build
+  - test
   - package
   - deploy
 
@@ -24,6 +25,94 @@ variables:
   # Image name dùng GitLab Container Registry (sẵn với mọi repo gitlab.com)
   BACKEND_IMAGE: "$CI_REGISTRY_IMAGE/backend"
   BACKEND_IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+
+# =============================================================================
+# Stage test: Playwright E2E trên GitLab CI
+#
+# - Dùng Postgres service ephemeral (alias: postgres) — mỗi pipeline có DB riêng.
+# - Backend + frontend khởi động inline trong job, không phụ thuộc external service.
+# - PostgreSQL init credentials: gitlab-ci / gitlab-ci (đặt trong CI Variables).
+# - SPRING_PROFILES_ACTIVE=ci → application-ci.yml disable RabbitMQ.
+# - deploy-render KHÔNG phụ thuộc job này (deploy chạy độc lập).
+# =============================================================================
+e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.47.0-jammy
+  services:
+    - name: postgres:15-alpine
+  variables:
+    # GitLab service alias — Postgres chạy ở host `postgres`, port 5432.
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_NAME: $CI_DB_NAME
+    DB_USERNAME: $CI_DB_USERNAME
+    DB_PASSWORD: $CI_DB_PASSWORD
+    # Backend
+    API_BASE: http://localhost:8080/api
+    SPRING_PROFILES_ACTIVE: ci
+    # JWT secret cho CI — giá trị随便, chỉ cần đủ 32 ký tự
+    JWT_SECRET: ci_dummy_jwt_secret_key_minimum_32_chars_long_for_testing_only
+    # Frontend
+    FRONTEND_URL: http://localhost:5174
+    # Tắt RabbitMQ trong CI
+    APP_MESSAGING_MODE: disabled
+    RABBITMQ_LISTENER_AUTOSTART: "false"
+    # Tắt notification email
+    NOTIFICATION_EMAIL_ENABLED: "false"
+    # Tắt webhook retry (không cần trong E2E test)
+    WEBHOOK_RETRY_ENABLED: "false"
+    # Tắt channel token refresh
+    CHANNEL_TOKEN_REFRESH_ENABLED: "false"
+    # Tắt inventory reconciliation
+    INVENTORY_RECONCILIATION_ENABLED: "false"
+    # Tắt order pull recovery
+    ORDER_PULL_RECOVERY_ENABLED: "false"
+    # Database init script credentials
+    CI_DB_NAME: omnisales_e2e
+    CI_DB_USERNAME: gitlab-ci
+    CI_DB_PASSWORD: gitlab-ci
+  rules:
+    # Chạy trên mọi MR, branch main, và branch test_duy
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "test_duy"
+  before_script:
+    # Build backend JAR inline — chạy trên cả MR (build-backend chỉ chạy trên main).
+    # GitLab cache giữ .m2/repository giữa các pipeline → không tốn thời gian download lại.
+    - cd backend && mvn $MAVEN_CLI_OPTS -DskipTests package -B -T 1C && cd ..
+    # Install Node dependencies cho frontend (Vite dev)
+    - cd test && npm ci && cd ..
+    # Install wait-on để đợi server sẵn sàng trước khi chạy test
+    - npm install -g wait-on
+    # Create test database (Postgres service không auto-create DB)
+    - PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '$CI_DB_NAME' AND pid <> pg_backend_pid();" || true
+    - PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "DROP DATABASE IF EXISTS $CI_DB_NAME;"
+    - PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "CREATE DATABASE $CI_DB_NAME;"
+  script:
+    # Verify JAR vừa build
+    - ls -lh backend/target/*.jar
+    # Start backend (nohup) — Spring main() tự tạo DB + init schema
+    - nohup java -Dserver.port=8080 -jar backend/target/backend-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
+    - echo "Backend PID: $!"
+    # Install frontend deps và start Vite dev server
+    - cd frontend && npm ci && nohup npm run dev > frontend.log 2>&1 &
+    - echo "Frontend PID: $!"
+    - cd ..
+    # Đợi cả 2 server sẵn sàng (tối đa 120s)
+    - wait-on http://localhost:8080/api/address/countries http://localhost:5174 --timeout 120000
+    - echo "Both servers ready — running Playwright E2E"
+    # Chạy E2E test (chromium project)
+    - cd test && npx playwright test --project=chromium
+  artifacts:
+    when: always
+    reports:
+      junit: test/test-results/junit.xml
+    paths:
+      - test/test-results/
+      - test/playwright-report/
+      - backend.log
+      - frontend.log
+    expire_in: 7 days
 
 # -----------------------------------------------------------------------------
 # Cache Maven dependencies giữa các pipeline để build nhanh hơn.
