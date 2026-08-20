@@ -1,0 +1,36 @@
+# =============================================================================
+# CI environment profile
+#
+# Kích hoạt bằng SPRING_PROFILES_ACTIVE=ci (đặt trong GitLab CI job).
+#
+# Mục đích:
+#   * Tắt RabbitMQ listener (CI không có RabbitMQ).
+#   * Tắt async scheduler (order pull, inventory reconciliation).
+#   * Giữ nguyên mọi thứ khác từ application.yaml.
+#
+# Lưu ý: Không override datasource — dùng DB_HOST/DB_NAME/DB_USERNAME/DB_PASSWORD
+# từ env vars (GitLab CI service alias = "postgres").
+# =============================================================================
+
+spring:
+  # Tắt RabbitMQ — CI không có RabbitMQ service.
+  # APP_MESSAGING_MODE=disabled ở trên env var override ở đây.
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
+
+app:
+  # Tắt async scheduler vì CI không có message broker.
+  messaging:
+    mode: disabled
+  webhook-retry:
+    enabled: false
+  channel-token-refresh:
+    enabled: false
+  inventory-reconciliation:
+    enabled: false
+  order-pull-recovery:
+    enabled: false
+  notifications:
+    email-enabled: false
