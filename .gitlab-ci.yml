@@ -77,32 +77,34 @@ e2e:
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH == "test_duy"
   before_script:
-    # Build backend JAR inline — chạy trên cả MR (build-backend chỉ chạy trên main).
-    # GitLab cache giữ .m2/repository giữa các pipeline → không tốn thời gian download lại.
-    - cd backend && mvn $MAVEN_CLI_OPTS -DskipTests package -B -T 1C && cd ..
-    # Install Node dependencies cho frontend (Vite dev)
-    - cd test && npm ci && cd ..
-    # Install wait-on để đợi server sẵn sàng trước khi chạy test
-    - npm install -g wait-on
-    # Create test database (Postgres service không auto-create DB)
-    - PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '$CI_DB_NAME' AND pid <> pg_backend_pid();" || true
-    - PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "DROP DATABASE IF EXISTS $CI_DB_NAME;"
-    - PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "CREATE DATABASE $CI_DB_NAME;"
+    - |
+      # Build backend JAR inline
+      cd backend && mvn $MAVEN_CLI_OPTS -DskipTests package -B -T 1C
+      cd ..
+      # Install test dependencies
+      cd test && npm ci && cd ..
+      # Install wait-on globally
+      npm install -g wait-on
+      # Create test database
+      PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '$CI_DB_NAME' AND pid <> pg_backend_pid();" || true
+      PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "DROP DATABASE IF EXISTS $CI_DB_NAME;"
+      PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "CREATE DATABASE $CI_DB_NAME;"
   script:
-    # Verify JAR vừa build
-    - ls -lh backend/target/*.jar
-    # Start backend (nohup) — Spring main() tự tạo DB + init schema
-    - nohup java -Dserver.port=8080 -jar backend/target/backend-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
-    - echo "Backend PID: $!"
-    # Install frontend deps và start Vite dev server
-    - cd frontend && npm ci && nohup npm run dev > frontend.log 2>&1 &
-    - echo "Frontend PID: $!"
-    - cd ..
-    # Đợi cả 2 server sẵn sàng (tối đa 120s)
-    - wait-on http://localhost:8080/api/address/countries http://localhost:5174 --timeout 120000
-    - echo "Both servers ready — running Playwright E2E"
-    # Chạy E2E test (chromium project)
-    - cd test && npx playwright test --project=chromium
+    - |
+      # Verify JAR
+      ls -lh backend/target/*.jar
+      # Start backend
+      nohup java -Dserver.port=8080 -jar backend/target/backend-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
+      echo "Backend PID: $!"
+      # Start frontend dev server
+      cd frontend && npm ci && nohup npm run dev > frontend.log 2>&1 &
+      echo "Frontend PID: $!"
+      cd ..
+      # Wait for both servers
+      wait-on http://localhost:8080/api/address/countries http://localhost:5174 --timeout 120000
+      echo "Both servers ready — running Playwright E2E"
+      # Run E2E tests
+      cd test && npx playwright test --project=chromium
   artifacts:
     when: always
     reports:
