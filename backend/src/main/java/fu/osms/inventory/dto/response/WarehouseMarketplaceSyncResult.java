@@ -25,6 +25,8 @@ public class WarehouseMarketplaceSyncResult {
         private String channelName;
         private String platform;
         private boolean success;
+        /** True when platform API does not support warehouse update (Lazada, TikTok). */
+        private boolean savedLocallyOnly;
         /** Human-readable error message when success=false. */
         private String error;
         /** What was sent to the channel (for audit/display). */

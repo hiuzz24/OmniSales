@@ -1,8 +1,10 @@
 package fu.osms.inventory.controller;
 
 import fu.osms.common.dto.ApiResponse;
+import fu.osms.inventory.dto.request.WarehouseAddressSyncConfirmRequest;
 import fu.osms.inventory.dto.request.WarehouseMarketplaceSyncRequest;
 import fu.osms.inventory.dto.request.WarehouseRequest;
+import fu.osms.inventory.dto.response.WarehouseAddressComparisonResult;
 import fu.osms.inventory.dto.response.WarehouseMarketplaceSyncResult;
 import fu.osms.inventory.dto.response.WarehouseResponse;
 import fu.osms.inventory.service.WarehouseService;
@@ -95,5 +97,31 @@ public class WarehouseController {
                 ? "Đã cập nhật kho hàng lên tất cả các sàn thành công."
                 : "Cập nhật kho hàng hoàn tất — một số sàn gặp lỗi, vui lòng kiểm tra chi tiết.";
         return ResponseEntity.ok(ApiResponse.success(message, result));
+    }
+
+    /**
+     * Compare default warehouse addresses across all connected marketplace platforms
+     * with the current master warehouse address.
+     */
+    @GetMapping("/compare-addresses")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<WarehouseAddressComparisonResult>> compareAddresses() {
+        WarehouseAddressComparisonResult result = warehouseSyncService.comparePlatformAddresses();
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    /**
+     * Apply warehouse address sync: create a new warehouse with the synced address
+     * from platforms and deactivate the old one. Documents keep the old warehouse reference.
+     */
+    @PostMapping("/apply-address-sync")
+    @PreAuthorize("hasAnyRole('OWNER', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> applyAddressSync(
+            @RequestBody WarehouseAddressSyncConfirmRequest request) {
+        warehouseSyncService.applyAddressSync(request.isConfirm());
+        String message = request.isConfirm()
+                ? "Đã đồng bộ địa chỉ kho hàng thành công."
+                : "Bạn chưa xác nhận đồng bộ.";
+        return ResponseEntity.ok(ApiResponse.success(message, null));
     }
 }

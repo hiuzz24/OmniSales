@@ -50,7 +50,7 @@ class WarehouseRepositoryIT extends IntegrationTestBase {
     void findFirstByNameAndDeletedAtIsNull_returnsWarehouse() {
         Warehouse wh = warehouseRepo.save(factory.newWarehouse());
 
-        Optional<Warehouse> got = warehouseRepo.findFirstByNameAndDeletedAtIsNull(wh.getName());
+        Optional<Warehouse> got = warehouseRepo.findFirstByNameAndDeletedAtIsNullOrderByIdAsc(wh.getName());
         assertThat(got).isPresent();
     }
 }

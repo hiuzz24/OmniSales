@@ -1100,7 +1100,7 @@ public class InventoryServiceImpl implements InventoryService {
             return;
         }
 
-        Optional<Warehouse> sharedWarehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(SHARED_WAREHOUSE_NAME)
+        Optional<Warehouse> sharedWarehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNullOrderByIdAsc(SHARED_WAREHOUSE_NAME)
                 .filter(warehouse -> Boolean.TRUE.equals(warehouse.getIsActive()));
         Warehouse warehouse = sharedWarehouse
                 .or(() -> warehouseRepository.findFirstByDeletedAtIsNullAndIsActiveTrueOrderByCreatedAtAsc())

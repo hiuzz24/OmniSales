@@ -102,7 +102,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
 
         try {
             Map<String, Map<String, Object>> warehousesById = loadWarehousesById(channelId, shopCipher);
-            Map<String, Warehouse> localWarehousesByExternalId = syncTikTokWarehouses(warehousesById);
+            Map<String, Warehouse> localWarehousesByExternalId = syncTikTokWarehouses(warehousesById, masterWarehouse);
             Set<String> externalWarehouseIds = new LinkedHashSet<>(localWarehousesByExternalId.keySet());
 
             UUID defaultWarehouseId = resolveDefaultWarehouseId(channel);
@@ -255,11 +255,12 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         return result;
     }
 
-    private Map<String, Warehouse> syncTikTokWarehouses(Map<String, Map<String, Object>> warehousesById) {
+    private Map<String, Warehouse> syncTikTokWarehouses(Map<String, Map<String, Object>> warehousesById,
+                                                           Warehouse masterWarehouse) {
         Map<String, Warehouse> result = new LinkedHashMap<>();
         warehousesById.forEach((warehouseId, warehouseNode) -> {
-            if (isSalesWarehouse(warehouseNode)) {
-                result.put(warehouseId, resolveTikTokWarehouse(warehouseId, warehouseNode));
+            if (isDefaultWarehouse(warehouseNode)) {
+                result.put(warehouseId, masterWarehouse);
             } else {
                 deactivateTikTokWarehouse(warehouseId);
             }
@@ -521,7 +522,7 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         warehouseInventory.stream()
                 .map(node -> stringValue(node.get("warehouse_id")))
                 .filter(this::hasText)
-                .filter(warehouseId -> isSalesWarehouse(warehousesById.getOrDefault(warehouseId, Map.of())))
+                .filter(warehouseId -> isDefaultWarehouse(warehousesById.getOrDefault(warehouseId, Map.of())))
                 .forEach(externalWarehouseIds::add);
 
         if (defaultWarehouseId != null) {
@@ -558,13 +559,15 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 continue;
             }
             Map<String, Object> tikTokWarehouse = warehousesById.getOrDefault(externalWarehouseId, Map.of());
-            if (!isSalesWarehouse(tikTokWarehouse)) {
+            if (!isDefaultWarehouse(tikTokWarehouse)) {
                 continue;
             }
-            Warehouse warehouse = localWarehousesByExternalId.computeIfAbsent(
-                    externalWarehouseId,
-                    warehouseId -> resolveTikTokWarehouse(warehouseId, tikTokWarehouse)
-            );
+            Warehouse warehouse = localWarehousesByExternalId.containsKey(externalWarehouseId)
+                    ? localWarehousesByExternalId.get(externalWarehouseId)
+                    : masterWarehouse;
+            if (warehouse == null) {
+                continue;
+            }
             saveInventoryItem(
                     warehouse,
                     variant,
@@ -607,24 +610,6 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         inventoryItemRepository.save(item);
     }
 
-    private Warehouse resolveTikTokWarehouse(String externalWarehouseId, Map<String, Object> warehouseNode) {
-        String marker = "[" + WAREHOUSE_MARKER + externalWarehouseId + "]";
-        Warehouse warehouse = findTikTokWarehouse(externalWarehouseId).orElseGet(Warehouse::new);
-        warehouse.setName("TikTok Shop - "
-                + firstNonBlank(stringValue(warehouseNode.get("name")), "Warehouse")
-                + " " + marker);
-        String importedAddress = TikTokWarehouseAddressFormatter.format(
-                map(warehouseNode.get("address")),
-                externalWarehouseId
-        );
-        if (importedAddress != null && !importedAddress.isBlank()) {
-            warehouse.setAddress(importedAddress);
-        }
-        warehouse.setIsActive(!"DISABLED".equalsIgnoreCase(stringValue(warehouseNode.get("effect_status"))));
-        warehouse.setDeletedAt(null);
-        return warehouseRepository.save(warehouse);
-    }
-
     private void deactivateTikTokWarehouse(String externalWarehouseId) {
         findTikTokWarehouse(externalWarehouseId).ifPresent(warehouse -> {
             warehouse.setIsActive(false);
@@ -639,8 +624,8 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
                 .findFirst();
     }
 
-    private boolean isSalesWarehouse(Map<String, Object> warehouseNode) {
-        return "SALES_WAREHOUSE".equalsIgnoreCase(stringValue(warehouseNode.get("type")));
+    private boolean isDefaultWarehouse(Map<String, Object> warehouseNode) {
+        return booleanValue(warehouseNode.get("is_default"));
     }
 
     private boolean containsMarker(String value, String marker) {
@@ -884,6 +869,13 @@ public class TikTokImportSyncServiceImpl implements TikTokImportSyncService {
         } catch (NumberFormatException e) {
             return 0;
         }
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value != null && Boolean.parseBoolean(value.toString());
     }
 
     private String firstNonBlank(String... values) {

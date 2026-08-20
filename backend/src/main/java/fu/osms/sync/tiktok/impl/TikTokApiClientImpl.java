@@ -89,7 +89,7 @@ public class TikTokApiClientImpl implements TikTokApiClient {
             query.put("page_token", pageToken);
         }
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("status", "ALL");
+        body.put("status", "ACTIVATE");
         if (changedSince != null) {
             body.put("update_time_ge", changedSince.toEpochSecond());
         }

@@ -69,7 +69,7 @@ class MarketplaceWarehouseConsistencyServiceImplTest {
     @DisplayName("resolveAndValidatePrimaryWarehouse: returns shared warehouse for unsupported platform")
     void resolveAndValidate_unsupportedPlatform() {
         Warehouse shared = Warehouse.builder().id(UUID.randomUUID()).name("Kho mặc định đa sàn").build();
-        when(warehouseRepository.findFirstByNameAndDeletedAtIsNull("Kho mặc định đa sàn"))
+        when(warehouseRepository.findFirstByNameAndDeletedAtIsNullOrderByIdAsc("Kho mặc định đa sàn"))
                 .thenReturn(Optional.empty());
         when(warehouseRepository.save(any(Warehouse.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -81,7 +81,7 @@ class MarketplaceWarehouseConsistencyServiceImplTest {
     @Test
     @DisplayName("resolveAndValidatePrimaryWarehouse: returns shared warehouse when channel is null")
     void resolveAndValidate_nullChannel() {
-        when(warehouseRepository.findFirstByNameAndDeletedAtIsNull("Kho mặc định đa sàn"))
+        when(warehouseRepository.findFirstByNameAndDeletedAtIsNullOrderByIdAsc("Kho mặc định đa sàn"))
                 .thenReturn(Optional.empty());
         when(warehouseRepository.save(any(Warehouse.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -121,7 +121,7 @@ class MarketplaceWarehouseConsistencyServiceImplTest {
 
         assertThatThrownBy(() -> service.validateConnectedPrimaryWarehouses())
                 .isInstanceOf(AppException.class)
-                .hasMessageContaining("chưa cùng địa chỉ");
+                .hasMessageContaining("chưa đồng nhất");
     }
 
     @Test
@@ -174,6 +174,63 @@ class MarketplaceWarehouseConsistencyServiceImplTest {
 
         assertThat(result.getId()).isEqualTo(existing.getId());
         assertThat(result.getName()).isEqualTo("Kho mặc định đa sàn");
+    }
+
+    @Test
+    @DisplayName("resolveAndValidatePrimaryWarehouse: updates local warehouse address from platform when they differ")
+    void resolveAndValidate_updatesAddressFromPlatform() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        Warehouse localWarehouse = Warehouse.builder()
+                .id(warehouseId)
+                .name("Kho mac dinh da san")
+                .address("123 Cu Si, Quan 1, Ho Chi Minh")
+                .isActive(true)
+                .build();
+        Channel sh = channel(channelId, PlatformType.SHOPIFY,
+                Map.of("shopDomain", "shop.myshopify.com", "defaultWarehouseId", warehouseId.toString()));
+        when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(sh));
+        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
+                .thenReturn(Optional.of(credential("token")));
+        when(shopifyApiClient.executeGraphQl(eq("shop.myshopify.com"), eq("token"),
+                org.mockito.ArgumentMatchers.anyString(), any()))
+                .thenReturn(Map.of("data", Map.of("locations", Map.of("nodes", List.of(
+                        Map.of("isPrimary", true, "isActive", true,
+                                "address", Map.of("formatted", List.of("456 New Street, District 3, Ho Chi Minh City"))))))));
+        when(warehouseRepository.findByDeletedAtIsNull()).thenReturn(List.of(localWarehouse));
+        when(warehouseRepository.save(any(Warehouse.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Warehouse result = service.resolveAndValidatePrimaryWarehouse(sh);
+
+        assertThat(result.getAddress()).isNotEqualTo("123 Cu Si, Quan 1, Ho Chi Minh");
+    }
+
+    @Test
+    @DisplayName("resolveAndValidatePrimaryWarehouse: keeps local warehouse address when already similar to platform")
+    void resolveAndValidate_keepsAddressWhenSimilar() {
+        UUID warehouseId = UUID.randomUUID();
+        UUID channelId = UUID.randomUUID();
+        Warehouse localWarehouse = Warehouse.builder()
+                .id(warehouseId)
+                .name("Kho mac dinh da san")
+                .address("123 Khuat Duy Tien, Ha Noi")
+                .isActive(true)
+                .build();
+        Channel sh = channel(channelId, PlatformType.SHOPIFY,
+                Map.of("shopDomain", "shop.myshopify.com", "defaultWarehouseId", warehouseId.toString()));
+        when(channelRepository.findByDeletedAtIsNull()).thenReturn(List.of(sh));
+        when(credentialRepository.findByChannelIdAndConnectionState(channelId, "CONNECTED"))
+                .thenReturn(Optional.of(credential("token")));
+        when(shopifyApiClient.executeGraphQl(eq("shop.myshopify.com"), eq("token"),
+                org.mockito.ArgumentMatchers.anyString(), any()))
+                .thenReturn(Map.of("data", Map.of("locations", Map.of("nodes", List.of(
+                        Map.of("isPrimary", true, "isActive", true,
+                                "address", Map.of("address1", "123 Khuat Duy Tien, Cau Giay, Ha Noi")))))));
+        when(warehouseRepository.findByDeletedAtIsNull()).thenReturn(List.of(localWarehouse));
+
+        Warehouse result = service.resolveAndValidatePrimaryWarehouse(sh);
+
+        assertThat(result.getAddress()).isEqualTo("123 Khuat Duy Tien, Ha Noi");
     }
 
     private static <T> T eq(T value) {

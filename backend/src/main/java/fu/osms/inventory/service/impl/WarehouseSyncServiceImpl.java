@@ -1,6 +1,5 @@
 package fu.osms.inventory.service.impl;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fu.osms.channel.entity.Channel;
 import fu.osms.channel.entity.ChannelCredential;
@@ -11,20 +10,24 @@ import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.dto.request.WarehouseMarketplaceSyncRequest;
 import fu.osms.inventory.dto.request.WarehouseRequest;
+import fu.osms.inventory.dto.response.WarehouseAddressComparisonResult;
 import fu.osms.inventory.dto.response.WarehouseMarketplaceSyncResult;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.WarehouseService;
 import fu.osms.inventory.service.WarehouseSyncService;
 import fu.osms.sync.lazada.service.LazadaAuthorizedApiClient;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.shopify.ShopifyApiClient;
 import fu.osms.sync.tiktok.TikTokAuthorizedApiClient;
+import fu.osms.sync.util.WarehouseAddressUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +41,9 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
 
     private static final List<PlatformType> SUPPORTED = List.of(
             PlatformType.SHOPIFY, PlatformType.LAZADA, PlatformType.TIKTOK);
+    private static final String SHARED_WAREHOUSE_DISPLAY_NAME = "Kho mặc định đa sàn";
+    private static final List<PlatformType> ADDRESS_PRIORITY = List.of(
+            PlatformType.TIKTOK, PlatformType.LAZADA, PlatformType.SHOPIFY);
 
     private final WarehouseRepository warehouseRepository;
     private final WarehouseService warehouseService;
@@ -47,6 +53,7 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
     private final LazadaAuthorizedApiClient lazadaApiClient;
     private final TikTokAuthorizedApiClient tikTokApiClient;
     private final ObjectMapper objectMapper;
+    private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
     @Override
     @Transactional
@@ -55,7 +62,6 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
         Warehouse warehouse = warehouseRepository.findById(warehouseId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho hàng."));
 
-        // Update local warehouse first
         warehouseService.update(warehouseId, WarehouseRequest.builder()
                 .name(request.getName())
                 .address(request.getAddress())
@@ -67,20 +73,171 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
             results.add(syncChannel(channel, warehouse, request));
         }
 
-        boolean allOk = results.stream().allMatch(WarehouseMarketplaceSyncResult.ChannelSyncStatus::isSuccess);
+        boolean allOk = results.stream()
+                .filter(r -> !r.isSavedLocallyOnly())
+                .allMatch(WarehouseMarketplaceSyncResult.ChannelSyncStatus::isSuccess);
         return WarehouseMarketplaceSyncResult.builder()
                 .allSucceeded(allOk)
                 .channels(results)
                 .build();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public WarehouseAddressComparisonResult comparePlatformAddresses() {
+        Warehouse masterWarehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
+        String currentAddress = masterWarehouse.getAddress();
+
+        List<WarehouseAddressComparisonResult.PlatformAddress> platformAddresses =
+                marketplaceWarehouseConsistencyService.fetchConnectedPlatformAddresses();
+
+        if (platformAddresses.isEmpty()) {
+            return WarehouseAddressComparisonResult.builder()
+                    .status("NO_CHANNELS")
+                    .currentWarehouseId(masterWarehouse.getId().toString())
+                    .currentWarehouseAddress(currentAddress)
+                    .platformAddresses(platformAddresses)
+                    .build();
+        }
+
+        String firstPlatformAddress = platformAddresses.get(0).getAddress();
+        boolean allSame = platformAddresses.stream()
+                .allMatch(pa -> WarehouseAddressUtils.isAddressSimilar(pa.getAddress(), firstPlatformAddress));
+
+        if (!allSame) {
+            return WarehouseAddressComparisonResult.builder()
+                    .status("ALL_DIFFERENT")
+                    .currentWarehouseId(masterWarehouse.getId().toString())
+                    .currentWarehouseAddress(currentAddress)
+                    .platformAddresses(platformAddresses)
+                    .build();
+        }
+
+        boolean allMatchCurrent = platformAddresses.stream()
+                .allMatch(pa -> WarehouseAddressUtils.isAddressSimilar(pa.getAddress(), currentAddress));
+
+        if (allMatchCurrent) {
+            return WarehouseAddressComparisonResult.builder()
+                    .status("SAME_AS_CURRENT")
+                    .currentWarehouseId(masterWarehouse.getId().toString())
+                    .currentWarehouseAddress(currentAddress)
+                    .platformAddresses(platformAddresses)
+                    .build();
+        }
+
+        return WarehouseAddressComparisonResult.builder()
+                .status("ALL_SAME")
+                .currentWarehouseId(masterWarehouse.getId().toString())
+                .currentWarehouseAddress(currentAddress)
+                .platformAddresses(platformAddresses)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void applyAddressSync(boolean confirm) {
+        if (!confirm) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Bạn chưa xác nhận đồng bộ địa chỉ kho.");
+        }
+
+        WarehouseAddressComparisonResult comparison = comparePlatformAddresses();
+
+        if ("NO_CHANNELS".equals(comparison.getStatus())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Không có sàn nào đang kết nối.");
+        }
+        if ("ALL_DIFFERENT".equals(comparison.getStatus())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Các địa chỉ kho hàng trên các sàn không đồng nhất. Vui lòng cập nhật thủ công.");
+        }
+        if ("SAME_AS_CURRENT".equals(comparison.getStatus())) {
+            return;
+        }
+        if (!"ALL_SAME".equals(comparison.getStatus())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Trạng thái không hợp lệ để áp dụng.");
+        }
+
+        String syncedAddress = pickBestAddress(comparison.getPlatformAddresses());
+        String cleanedAddress = WarehouseAddressUtils.stripPostalCodes(syncedAddress);
+
+        Warehouse oldWarehouse = warehouseRepository
+                .findFirstByNameAndDeletedAtIsNullOrderByIdAsc(SHARED_WAREHOUSE_DISPLAY_NAME)
+                .filter(w -> Boolean.TRUE.equals(w.getIsActive()))
+                .orElse(null);
+        if (oldWarehouse == null) {
+            UUID oldWarehouseId = UUID.fromString(comparison.getCurrentWarehouseId());
+            oldWarehouse = warehouseRepository.findById(oldWarehouseId)
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                            "Không tìm thấy kho hàng."));
+        }
+
+        Warehouse newWarehouse = Warehouse.builder()
+                .name(SHARED_WAREHOUSE_DISPLAY_NAME)
+                .address(cleanedAddress)
+                .isActive(true)
+                .build();
+        Warehouse savedWarehouse = warehouseRepository.save(newWarehouse);
+
+        if (!oldWarehouse.getId().equals(savedWarehouse.getId())) {
+            oldWarehouse.setIsActive(false);
+            warehouseRepository.save(oldWarehouse);
+        }
+
+        List<Warehouse> duplicates = warehouseRepository
+                .findByNameAndDeletedAtIsNull(SHARED_WAREHOUSE_DISPLAY_NAME);
+        for (Warehouse w : duplicates) {
+            if (!w.getId().equals(savedWarehouse.getId()) && !w.getId().equals(oldWarehouse.getId())) {
+                w.setIsActive(false);
+                warehouseRepository.save(w);
+            }
+        }
+
+        String newWarehouseId = savedWarehouse.getId().toString();
+        for (Channel channel : channelRepository.findByDeletedAtIsNull()) {
+            if (!SUPPORTED.contains(channel.getPlatform())
+                    || !Boolean.TRUE.equals(channel.getSyncEnabled())) {
+                continue;
+            }
+            Map<String, Object> metadata = channel.getMetadata() == null
+                    ? new HashMap<>()
+                    : new HashMap<>(channel.getMetadata());
+            metadata.put("defaultWarehouseId", newWarehouseId);
+            channel.setMetadata(metadata);
+            channelRepository.save(channel);
+        }
+
+        log.info("[WarehouseSync] Address sync applied: oldWarehouse={}, newWarehouse={}, address='{}'",
+                oldWarehouse.getId(), savedWarehouse.getId(), cleanedAddress);
+    }
+
+    private String pickBestAddress(List<WarehouseAddressComparisonResult.PlatformAddress> platformAddresses) {
+        for (PlatformType platform : ADDRESS_PRIORITY) {
+            for (WarehouseAddressComparisonResult.PlatformAddress pa : platformAddresses) {
+                if (platform.name().equals(pa.getPlatform()) && pa.getAddress() != null
+                        && !pa.getAddress().isBlank()) {
+                    return pa.getAddress();
+                }
+            }
+        }
+        return platformAddresses.stream()
+                .map(WarehouseAddressComparisonResult.PlatformAddress::getAddress)
+                .filter(a -> a != null && !a.isBlank())
+                .findFirst().orElse("");
+    }
+
     private WarehouseMarketplaceSyncResult.ChannelSyncStatus syncChannel(
             Channel channel, Warehouse warehouse, WarehouseMarketplaceSyncRequest request) {
+        boolean savedLocallyOnly = false;
         try {
             String syncedAddress = switch (channel.getPlatform()) {
                 case SHOPIFY -> syncShopify(channel, request);
-                case LAZADA  -> syncLazada(channel, request);
-                case TIKTOK  -> syncTikTok(channel, request);
+                case LAZADA -> {
+                    savedLocallyOnly = true;
+                    yield syncUnsupportedPlatform(channel, request);
+                }
+                case TIKTOK -> {
+                    savedLocallyOnly = true;
+                    yield syncUnsupportedPlatform(channel, request);
+                }
                 default -> throw new UnsupportedOperationException("Sàn chưa hỗ trợ.");
             };
             return WarehouseMarketplaceSyncResult.ChannelSyncStatus.builder()
@@ -88,6 +245,7 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
                     .channelName(channel.getDisplayName())
                     .platform(channel.getPlatform().name())
                     .success(true)
+                    .savedLocallyOnly(savedLocallyOnly)
                     .syncedName(request.getName())
                     .syncedAddress(syncedAddress)
                     .syncedContactName(request.getContactName())
@@ -101,21 +259,12 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
                     .channelName(channel.getDisplayName())
                     .platform(channel.getPlatform().name())
                     .success(false)
+                    .savedLocallyOnly(savedLocallyOnly)
                     .error(rootMessage(e))
                     .build();
         }
     }
 
-    // ── Shopify: locationEdit ─────────────────────────────────────────────
-    //
-    // FIX: LocationEditInput does NOT have an "id" field.
-    // The location ID is passed as a separate top-level argument to the mutation,
-    // and the input object only contains name, address, fulfillsOnlineOrders.
-    //
-    // Correct signature:
-    //   locationEdit(id: ID!, input: LocationEditInput!) { ... }
-    //
-    // Ref: https://shopify.dev/docs/api/admin-graphql/latest/mutations/locationEdit
     private String syncShopify(Channel channel, WarehouseMarketplaceSyncRequest req) {
         String shopDomain = metaText(channel, "shopDomain", "shop");
         if (!hasText(shopDomain)) {
@@ -127,11 +276,9 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
             throw new IllegalStateException(
                     "Thiếu shopifyLocationId — vui lòng đồng bộ kho từ Shopify trước.");
         }
-        // GID format: gid://shopify/Location/{numericId}
         String gid = locationId.startsWith("gid://") ? locationId
                 : "gid://shopify/Location/" + locationId;
 
-        // Build LocationEditAddressInput — no "id" field here
         Map<String, Object> addressInput = new LinkedHashMap<>();
         addressInput.put("address1", req.getAddress());
         addressInput.put("phone", hasText(req.getPhone()) ? req.getPhone() : null);
@@ -140,12 +287,10 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
         addressInput.put("countryCode", hasText(req.getCountryCode()) ? req.getCountryCode() : "VN");
         if (hasText(req.getProvince())) addressInput.put("provinceCode", req.getProvince());
 
-        // LocationEditInput: name, address, fulfillsOnlineOrders — NO id field
         Map<String, Object> locationInput = new LinkedHashMap<>();
         locationInput.put("name", req.getName());
         locationInput.put("address", addressInput);
 
-        // id is a separate mutation argument, not inside input
         String mutation = """
                 mutation locationEdit($id: ID!, $input: LocationEditInput!) {
                   locationEdit(id: $id, input: $input) {
@@ -166,54 +311,24 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
         if (response.get("errors") != null) {
             throw new IllegalStateException("Shopify GraphQL errors: " + response.get("errors"));
         }
-        try {
-            if (response.get("data") instanceof Map<?, ?> dataMap
-                    && dataMap.get("locationEdit") instanceof Map<?, ?> editMap
-                    && editMap.get("userErrors") instanceof List<?> errorList
-                    && !errorList.isEmpty()) {
-                throw new IllegalStateException("Shopify userErrors: " + errorList.get(0));
-            }
-        } catch (IllegalStateException rethrow) {
-            throw rethrow;
-        } catch (Exception ignored) { /* non-critical */ }
+        if (response.get("data") instanceof Map<?, ?> dataMap
+                && dataMap.get("locationEdit") instanceof Map<?, ?> editMap
+                && editMap.get("userErrors") instanceof List<?> errorList
+                && !errorList.isEmpty()) {
+            throw new IllegalStateException("Shopify userErrors: " + errorList.get(0));
+        }
         return req.getAddress();
     }
 
-    // ── Lazada: warehouse info is read-only via Open API ──────────────────
-    //
-    // Lazada Open API does NOT expose a public endpoint to update warehouse
-    // name/address/contact for sellers. The /rc/warehouse/update path does not
-    // exist in the published API catalogue.
-    //
-    // We save the info locally and return a clear "not supported" message
-    // rather than failing silently or throwing a cryptic 404.
-    private String syncLazada(Channel channel, WarehouseMarketplaceSyncRequest req) {
-        log.info("[WarehouseSync] Lazada does not support warehouse update via Open API. " +
-                 "Saved locally only. channelId={}", channel.getId());
-        // Intentionally not calling any Lazada API.
-        // Return a special marker so the caller knows this was a no-op.
-        throw new IllegalStateException(
-                "Lazada Open API không hỗ trợ cập nhật thông tin kho qua API. " +
-                "Vui lòng cập nhật thủ công tại Lazada Seller Center.");
+    /**
+     * Lazada/TikTok Open API does not support warehouse update.
+     * Save locally only — do not throw.
+     */
+    private String syncUnsupportedPlatform(Channel channel, WarehouseMarketplaceSyncRequest req) {
+        log.info("[WarehouseSync] {} does not support warehouse update via Open API. Saved locally only. channelId={}",
+                channel.getPlatform(), channel.getId());
+        return req.getAddress();
     }
-
-    // ── TikTok: warehouse update is not available via Open API ───────────
-    //
-    // TikTok Shop Open API does not expose a public endpoint to update
-    // warehouse contact/address information for regular sellers.
-    // The /api/logistics/warehouses/{id} PUT path returned 404 with code 36009009
-    // "Invalid path. The specified path does not match any available endpoint."
-    //
-    // We report this limitation clearly rather than sending a broken request.
-    private String syncTikTok(Channel channel, WarehouseMarketplaceSyncRequest req) {
-        log.info("[WarehouseSync] TikTok does not support warehouse update via Open API. " +
-                 "Saved locally only. channelId={}", channel.getId());
-        throw new IllegalStateException(
-                "TikTok Shop Open API không hỗ trợ cập nhật thông tin kho qua API. " +
-                "Vui lòng cập nhật thủ công tại TikTok Seller Center.");
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
 
     private List<Channel> connectedChannels() {
         List<Channel> result = new ArrayList<>();

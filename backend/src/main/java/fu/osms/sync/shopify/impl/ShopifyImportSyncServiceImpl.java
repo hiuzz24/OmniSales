@@ -147,6 +147,13 @@ public class ShopifyImportSyncServiceImpl implements ShopifyImportSyncService {
                         continue;
                     }
 
+                    String productStatus = stringValue(productNode.get("status"));
+                    if (!"ACTIVE".equalsIgnoreCase(productStatus)) {
+                        log.info("[ShopifyImportSync] Skip non-active product channelId={}, externalProductId={}, status={}",
+                                channelId, externalProductId, productStatus);
+                        continue;
+                    }
+
                     ImportedCatalogProduct importedProduct = upsertProduct(channel, productNode, variantNode);
                     Product product = importedProduct.product();
                     ChannelProduct channelProduct = upsertChannelProduct(
@@ -628,7 +635,7 @@ private ImportedCatalogProduct upsertProduct(Channel channel,
             return warehouse;
         }
 
-        warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(DEFAULT_WAREHOUSE_NAME)
+        warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNullOrderByIdAsc(DEFAULT_WAREHOUSE_NAME)
                 .orElseGet(() -> Warehouse.builder()
                         .name(DEFAULT_WAREHOUSE_NAME)
                         .address("Kho đồng bộ từ Shopify")
@@ -653,9 +660,10 @@ private ImportedCatalogProduct upsertProduct(Channel channel,
 
         String locationName = firstNonBlank(stringValue(locationNode.get("name")), locationId);
         String warehouseName = truncate(DEFAULT_WAREHOUSE_NAME + " - " + locationName, 255);
-        warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(warehouseName)
+        warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNullOrderByIdAsc(warehouseName)
                 .orElseGet(() -> Warehouse.builder()
                         .name(warehouseName)
+                        .address("Kho đồng bộ từ Shopify")
                         .isActive(true)
                         .build());
         String importedAddress = withLocationIdMarker(formatLocationAddress(map(locationNode.get("address"))), locationId);
