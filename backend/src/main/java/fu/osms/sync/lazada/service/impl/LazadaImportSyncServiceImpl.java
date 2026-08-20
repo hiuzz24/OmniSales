@@ -235,7 +235,6 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
                                    OffsetDateTime changedSince,
                                    Consumer<List<JsonNode>> pageConsumer) {
         fetchProductPages(credential, changedSince, null, pageConsumer);
-        fetchProductPages(credential, changedSince, "inactive", pageConsumer);
     }
 
     private void fetchProductPages(ChannelCredential credential,
@@ -1030,7 +1029,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             name = externalWarehouseId == null ? "Lazada Warehouse" : "Lazada Warehouse " + externalWarehouseId;
         }
 
-        Warehouse warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(name)
+        Warehouse warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNullOrderByIdAsc(name)
                 .orElseGet(Warehouse::new);
         warehouse.setName(name);
         String importedAddress = withWarehouseCodeMarker(
@@ -1169,7 +1168,7 @@ public class LazadaImportSyncServiceImpl implements LazadaImportSyncService {
             return warehouse;
         }
 
-        warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNull(normalizedCode)
+        warehouse = warehouseRepository.findFirstByNameAndDeletedAtIsNullOrderByIdAsc(normalizedCode)
                 .orElseGet(() -> Warehouse.builder()
                         .name(normalizedCode)
                         .address("Lazada warehouse code: " + normalizedCode)

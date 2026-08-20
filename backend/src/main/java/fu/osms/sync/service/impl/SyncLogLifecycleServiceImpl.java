@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -28,6 +29,19 @@ public class SyncLogLifecycleServiceImpl implements SyncLogLifecycleService {
     public UUID start(UUID channelId, String jobType, int totalItems) {
         Channel channel = channelRepository.findById(channelId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHANNEL_NOT_FOUND));
+
+        // Close any stale PENDING logs that would violate uq_sync_logs_running
+        List<SyncLog> stale = syncLogRepository.findByJobTypeAndChannelIdAndStatus(
+                jobType, channelId, SyncStatus.PENDING);
+        for (SyncLog old : stale) {
+            old.setStatus(SyncStatus.FAILED);
+            old.setFailCount(0);
+            old.setErrorSummary("Superseded by new sync run");
+            old.setCompletedAt(OffsetDateTime.now());
+            syncLogRepository.save(old);
+        }
+        syncLogRepository.flush();
+
         return syncLogRepository.save(SyncLog.builder()
                 .channel(channel)
                 .jobType(jobType)

@@ -28,6 +28,7 @@ public interface StockReceiveMapper {
 
     @Mapping(target = "warehouseId", source = "warehouse.id")
     @Mapping(target = "warehouseName", source = "warehouse.name")
+    @Mapping(target = "warehouseAddress", source = "warehouse.address")
     @Mapping(target = "supplierId", source = "supplier.id")
     @Mapping(target = "supplierName", source = "supplier.name")
     @Mapping(target = "purchaseOrderId", source = "purchaseOrder.id")
