@@ -93,17 +93,19 @@ e2e:
     CI_DB_USERNAME: gitlab-ci
     CI_DB_PASSWORD: gitlab-ci
   rules:
-    # Chạy trên merge request (mọi MR)
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Chỉ chạy e2e khi MERGE từ nhánh khác vào main.
+    # Biến $CI_MERGE_REQUEST_TARGET_BRANCH_NAME có giá trị khi MR target = main,
+    # và $CI_PIPELINE_SOURCE là "merge_request_event" cho cả MR open + MR merge.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
     # Chạy khi pipeline được trigger bởi schedule (cron 7h sáng)
     - if: $CI_PIPELINE_SOURCE == "schedule"
     # Cho phép chạy thủ công từ UI (Run pipeline)
     - if: $CI_PIPELINE_SOURCE == "web"
-    # Tuyệt đối KHÔNG chạy khi push thẳng vào main → deploy chain only.
+    # Push thẳng vào main → KHÔNG chạy e2e (chỉ deploy chain)
     - if: $CI_COMMIT_BRANCH == "main"
       when: never
-    # Branch test_duy thì cũng không chạy tự động — chỉ chạy qua MR
-    - if: $CI_COMMIT_BRANCH == "test_duy"
+    # Push lên bất kỳ branch nào khác → KHÔNG chạy e2e
+    - if: $CI_COMMIT_BRANCH
       when: never
   before_script:
     - |
