@@ -1,12 +1,12 @@
 package fu.osms.sync.webhook.impl;
 
 import fu.osms.common.enums.PlatformType;
-import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderCreatedEvent;
 import fu.osms.order.event.OrderPaidEvent;
 import fu.osms.order.event.OrderStatusChangedEvent;
+import fu.osms.order.service.OrderStockAllocationService;
 import fu.osms.sync.entity.WebhookEvent;
 import fu.osms.sync.lazada.order.LazadaOrderApiService;
 import fu.osms.sync.lazada.order.LazadaOrderMapper;
@@ -29,7 +29,7 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
     private final LazadaOrderApiService apiService;
     private final LazadaOrderMapper mapper;
     private final LazadaOrderPersistenceService persistenceService;
-    private final PlatformOrderInventoryService inventoryService;
+    private final OrderStockAllocationService stockAllocationService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -49,9 +49,7 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         Map<String, Object> detail = apiService.getOrder(event.getChannel(), orderId);
         OrderImportOutcome outcome = persistenceService.write(event.getChannel(), mapper.map(
                 LazadaOrderStatusContext.webhook(payload), detail, apiService.getOrderItems(event.getChannel(), orderId)));
-        Order order = persistenceService.getOrder(outcome);
-
-        inventoryService.syncReservations(order);
+        Order order = stockAllocationService.classifyAfterImport(outcome.orderId());
         publishTransitions(outcome, order);
         return "PROCESSED";
     }
@@ -60,9 +58,9 @@ public class LazadaOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         if (outcome.created()) eventPublisher.publishEvent(new OrderCreatedEvent(order));
         if (outcome.becameCancelled()) eventPublisher.publishEvent(new OrderCancelledEvent(order));
         if (outcome.paymentBecamePaid()) eventPublisher.publishEvent(new OrderPaidEvent(order));
-        if (outcome.statusChanged()) {
+        if (outcome.previousStatus() != order.getStatus()) {
             eventPublisher.publishEvent(new OrderStatusChangedEvent(
-                    outcome.orderId(), outcome.previousStatus(), outcome.currentStatus()));
+                    outcome.orderId(), outcome.previousStatus(), order.getStatus()));
         }
     }
 }

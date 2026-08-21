@@ -98,13 +98,6 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success("Cập nhật sản phẩm thành công", response));
     }
 
-    @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
-    /** Thay đổi trạng thái cho phép bán và đồng bộ của sản phẩm. */
-    public ResponseEntity<ApiResponse<ProductResponse>> updateStatus(@PathVariable UUID id,
-                                                                     @RequestParam ProductStatus status) {
-        throw new UnsupportedOperationException("Chưa code");
-    }
 
     @DeleteMapping("/{id}/delete")
     @PreAuthorize("hasRole('OWNER')")

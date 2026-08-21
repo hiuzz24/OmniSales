@@ -11,6 +11,7 @@ import java.util.UUID;
 public record OrderStats(
     long totalOrders,
     long pendingCount,
+    long waitingStockCount,
     long confirmedCount,
     long processingCount,
     long shippedCount,

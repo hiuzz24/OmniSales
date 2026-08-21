@@ -134,6 +134,14 @@ app:
       secret: ${JWT_SECRET}
   frontend-url: ${FRONTEND_URL:http://localhost:5174}
 
+osms:
+  tiktok-sla:
+    buffer-hours: ${OSMS_TIKTOK_SLA_BUFFER_HOURS:2}
+    vietnam-holidays: ${OSMS_TIKTOK_VN_HOLIDAYS:}
+  order:
+    waiting-stock-timeout-hours: ${OSMS_ORDER_WAITING_STOCK_TIMEOUT_HOURS:48}
+    waiting-stock-sweeper-delay-ms: ${OSMS_ORDER_WAITING_STOCK_SWEEPER_DELAY_MS:60000}
+
 shopify:
   api-key: ${SHOPIFY_API_KEY:}
   api-secret: ${SHOPIFY_API_SECRET:}

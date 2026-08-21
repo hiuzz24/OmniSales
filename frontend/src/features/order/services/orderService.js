@@ -31,6 +31,20 @@ const orderService = {
     return await orderApi.createShippingLabel(id);
   },
 
+  /** Hủy hàng loạt các order chờ hàng, mỗi order có kết quả độc lập. */
+  cancelBatchWaitingStock: async (orderIds) => {
+    return await orderApi.cancelBatchWaitingStock(orderIds);
+  },
+
+  /** Đọc yêu cầu hủy do Buyer tạo và eligibility hiện tại trên TikTok. */
+  getBuyerCancellation: async (id) => orderApi.getBuyerCancellation(id),
+
+  /** Chấp thuận yêu cầu hủy Buyer; chờ webhook COMPLETE trước khi hủy local. */
+  approveBuyerCancellation: async (id) => orderApi.approveBuyerCancellation(id),
+
+  /** Từ chối yêu cầu hủy Buyer bằng reason TikTok đang cho phép. */
+  rejectBuyerCancellation: async (id, data) => orderApi.rejectBuyerCancellation(id, data),
+
   /** Lấy lịch sử thay đổi của order. */
   getHistory: async (id, page, size) => {
     return await orderApi.getHistory(id, page, size);

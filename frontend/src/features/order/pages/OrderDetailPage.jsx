@@ -15,6 +15,7 @@ import styles from './OrderDetailPage.module.css';
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',   icon: Clock,       color: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
+  WAITING_STOCK: { label: 'Chờ hàng', icon: Clock, color: '#9a6700', bg: '#fff8db', border: '#e9b949' },
   CONFIRMED:  { label: 'Đã xác nhận', icon: CheckCircle, color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
   PROCESSING: { label: 'Đang xử lý',  icon: Package,     color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
   SHIPPED:    { label: 'Sẵn sàng giao', icon: Truck,       color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4' },
@@ -78,6 +79,11 @@ const OrderDetailPage = () => {
   const [readiness, setReadiness] = useState(null);
   const [readinessLoading, setReadinessLoading] = useState(true);
   const [readinessError, setReadinessError] = useState(null);
+  const [buyerCancellation, setBuyerCancellation] = useState(null);
+  const [buyerCancellationLoading, setBuyerCancellationLoading] = useState(false);
+  const [rejectBuyerCancellationOpen, setRejectBuyerCancellationOpen] = useState(false);
+  const [buyerCancellationReason, setBuyerCancellationReason] = useState('');
+  const [buyerCancellationComment, setBuyerCancellationComment] = useState('');
 
   // Tải lại trạng thái đơn từ platform mà không làm giật màn chi tiết khi polling.
   const fetchOrder = async ({ silent = false } = {}) => {
@@ -88,6 +94,11 @@ const OrderDetailPage = () => {
     try {
       const data = await orderService.getById(id);
       setOrder(data);
+      if (data?.platformMetadata?.tiktok?.buyerCancellation?.cancelId) {
+        fetchBuyerCancellation({ silent: true });
+      } else {
+        setBuyerCancellation(null);
+      }
     } catch {
       if (!silent) {
         setError('Không thể tải thông tin đơn hàng');
@@ -96,6 +107,57 @@ const OrderDetailPage = () => {
       if (!silent) {
         setLoading(false);
       }
+    }
+  };
+
+  const fetchBuyerCancellation = async ({ silent = false } = {}) => {
+    if (!silent) setBuyerCancellationLoading(true);
+    try {
+      setBuyerCancellation(await orderService.getBuyerCancellation(id));
+    } catch (requestError) {
+      if (requestError?.response?.status !== 404) {
+        setBuyerCancellation((current) => current);
+      }
+    } finally {
+      if (!silent) setBuyerCancellationLoading(false);
+    }
+  };
+
+  const handleApproveBuyerCancellation = async () => {
+    setBuyerCancellationLoading(true);
+    try {
+      setBuyerCancellation(await orderService.approveBuyerCancellation(id));
+      toast.success('Đã chấp thuận yêu cầu hủy, đang chờ TikTok hoàn tất');
+      await fetchOrder({ silent: true });
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || 'Không thể duyệt yêu cầu hủy');
+      if (requestError?.response?.status === 409) await fetchBuyerCancellation({ silent: true });
+    } finally {
+      setBuyerCancellationLoading(false);
+    }
+  };
+
+  const handleRejectBuyerCancellation = async () => {
+    if (!buyerCancellationReason) {
+      toast.error('Vui lòng chọn lý do từ chối');
+      return;
+    }
+    setBuyerCancellationLoading(true);
+    try {
+      setBuyerCancellation(await orderService.rejectBuyerCancellation(id, {
+        reasonCode: buyerCancellationReason,
+        comment: buyerCancellationComment.trim() || undefined,
+      }));
+      setRejectBuyerCancellationOpen(false);
+      setBuyerCancellationReason('');
+      setBuyerCancellationComment('');
+      toast.success('Đã gửi quyết định từ chối lên TikTok');
+      await fetchOrder({ silent: true });
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message || 'Không thể từ chối yêu cầu hủy');
+      if (requestError?.response?.status === 409) await fetchBuyerCancellation({ silent: true });
+    } finally {
+      setBuyerCancellationLoading(false);
     }
   };
 
@@ -165,6 +227,10 @@ const OrderDetailPage = () => {
       fetchReadiness({ silent: true });
     } catch (requestError) {
       toast.error(requestError?.response?.data?.message || 'Cập nhật trạng thái thất bại');
+      if (requestError?.response?.status === 409) {
+        await fetchOrder({ silent: true });
+        fetchHistory();
+      }
     } finally {
       setUpdating(false);
       setConfirmStatus(null);
@@ -295,6 +361,18 @@ const OrderDetailPage = () => {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
+  };
+
+  // Hiển thị thời gian order đã chờ bổ sung tồn kho.
+  const formatWaitingDuration = (startedAt) => {
+    if (!startedAt) return '-';
+    const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000));
+    const days = Math.floor(elapsedMinutes / 1440);
+    const hours = Math.floor((elapsedMinutes % 1440) / 60);
+    const minutes = elapsedMinutes % 60;
+    if (days > 0) return `${days} ngày ${hours} giờ`;
+    if (hours > 0) return `${hours} giờ ${minutes} phút`;
+    return `${minutes} phút`;
   };
 
   // Nối các phần địa chỉ có giá trị và bỏ phần trống.
@@ -434,16 +512,36 @@ const OrderDetailPage = () => {
 
   const sc = STATUS_CONFIG[order.status] || { label: order.status, color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0' };
   const StatusIcon = sc.icon;
-  const canChangeStatus = role === ROLES.OWNER || role === ROLES.SALES;
+  const baseCanChangeStatus = (role === ROLES.OWNER || role === ROLES.SALES)
+    && order.status !== 'WAITING_STOCK';
   const canCreateOrderDelivery = role === ROLES.OWNER || role === ROLES.OPERATIONS;
   const canChangePaymentStatus = role === ROLES.OWNER || role === ROLES.OPERATIONS;
   const tikTokCancelPending = isTikTokOrder(order)
     && order.platformMetadata?.tiktok?.pendingConfirmation === true;
+  const cancellationMetadata = order.platformMetadata?.tiktok?.buyerCancellation;
+  const effectiveBuyerCancellation = cancellationMetadata
+    ? {
+        ...buyerCancellation,
+        ...cancellationMetadata,
+        sellerActionRequired: buyerCancellation?.sellerActionRequired
+          ?? cancellationMetadata.sellerActionRequired,
+        sellerNextAction: buyerCancellation?.sellerNextAction
+          ?? cancellationMetadata.sellerNextAction,
+        approve: buyerCancellation?.approve,
+        reject: buyerCancellation?.reject,
+      }
+    : buyerCancellation;
+  const buyerCancellationActive = effectiveBuyerCancellation?.active === true;
+  const canChangeStatus = baseCanChangeStatus && !buyerCancellationActive;
+  const canDecideBuyerCancellation = (role === ROLES.OWNER || role === ROLES.SALES)
+    && effectiveBuyerCancellation?.sellerActionRequired === true
+    && effectiveBuyerCancellation?.cancelStatus === 'CANCELLATION_REQUEST_PENDING'
+    && !['PROCESSING', 'SUBMITTED'].includes(effectiveBuyerCancellation?.actionState);
   const tikTokAwaitingShipment = order.platformMetadata?.tiktok?.rawOrderStatus === 'AWAITING_SHIPMENT';
   const tikTokProcessingBlocked = isTikTokOrder(order)
     && order.status === 'PENDING'
     && !tikTokAwaitingShipment;
-  const isCancellable = !tikTokCancelPending
+  const isCancellable = !tikTokCancelPending && !buyerCancellationActive
     && !['IN_TRANSIT', 'DELIVERED', 'CANCELLED'].includes(order.status);
   const currentStep = getCurrentStep();
   const chStyle = getChannelStyle(order.channelName);
@@ -551,7 +649,46 @@ const OrderDetailPage = () => {
         </div>
       </div>
 
-      {order.status === 'PROCESSING' && !shipmentReady && (
+      {effectiveBuyerCancellation?.cancelId && (
+        <section className={styles.buyerCancellationNotice}>
+          <div className={styles.buyerCancellationHeader}>
+            <AlertTriangle size={18} />
+            <div>
+              <strong>Yêu cầu hủy từ khách hàng TikTok</strong>
+              <p>
+                {effectiveBuyerCancellation.cancelStatus === 'CANCELLATION_REQUEST_PENDING'
+                  ? effectiveBuyerCancellation.sellerActionRequired
+                    ? 'Yêu cầu đang chờ Seller duyệt hoặc từ chối.'
+                    : effectiveBuyerCancellation.sellerNextAction
+                      ? 'TikTok đang tự động xử lý yêu cầu hủy.'
+                      : 'TikTok đang tiếp nhận yêu cầu hủy và chưa xác định bước xử lý tiếp theo.'
+                  : effectiveBuyerCancellation.cancelStatus === 'CANCELLATION_REQUEST_SUCCESS'
+                    ? 'Đã chấp thuận, đang chờ TikTok hoàn tất hủy và hoàn tiền.'
+                    : effectiveBuyerCancellation.cancelStatus === 'CANCELLATION_REQUEST_COMPLETE'
+                      ? 'TikTok đã hoàn tất yêu cầu hủy.'
+                      : 'Yêu cầu hủy đã được đóng, rút hoặc từ chối.'}
+              </p>
+            </div>
+          </div>
+          {canDecideBuyerCancellation && (
+            <div className={styles.buyerCancellationActions}>
+              <button type="button" className={styles.btnApproveCancellation}
+                onClick={handleApproveBuyerCancellation} disabled={buyerCancellationLoading}>
+                <CheckCircle size={14} /> Duyệt
+              </button>
+              <button type="button" className={styles.btnRejectCancellation}
+                onClick={() => setRejectBuyerCancellationOpen(true)} disabled={buyerCancellationLoading}>
+                <XCircle size={14} /> Từ chối
+              </button>
+            </div>
+          )}
+          {effectiveBuyerCancellation?.actionState === 'SUBMITTED' && (
+            <span className={styles.cancellationProgress}>Đã gửi quyết định, đang chờ TikTok cập nhật.</span>
+          )}
+        </section>
+      )}
+
+      {order.status === 'PROCESSING' && !shipmentReady && !buyerCancellationActive && (
         <div className={styles.readinessNotice}>
           <AlertTriangle size={16} />
           <span>
@@ -581,8 +718,40 @@ const OrderDetailPage = () => {
         </div>
       )}
 
+      {order.status === 'WAITING_STOCK' && (
+        <section className={styles.waitingStockNotice}>
+          <div className={styles.waitingStockHeader}>
+            <AlertTriangle size={18} />
+            <div>
+              <strong>Đơn đang chờ bổ sung tồn kho</strong>
+              <p>
+                Đã chờ: {formatWaitingDuration(order.waitingStockAt)}
+                {order.dispatchSlaAt ? ` · SLA TikTok: ${formatDate(order.dispatchSlaAt)}` : ''}
+              </p>
+            </div>
+          </div>
+          {order.platformMetadata?.platformProgressConflict?.active && (
+            <div className={styles.platformConflict}>
+              Sàn đã chuyển sang trạng thái {order.platformMetadata.platformProgressConflict.platformStatus}
+              {' '}ngoài OSMS. Đơn đã bị loại khỏi FIFO và cần đối soát tồn kho thủ công.
+            </div>
+          )}
+          {order.waitingStockItems?.length > 0 && (
+            <div className={styles.waitingStockItems}>
+              {order.waitingStockItems.map((item, index) => (
+                <div key={item.variantId || `${item.sku}-${index}`} className={styles.waitingStockItem}>
+                  <span>{item.name || item.sku || 'SKU chưa liên kết'}</span>
+                  <small>{item.sku || 'Chưa có SKU'}</small>
+                  <b>Cần {item.required} · Có {item.available} · Thiếu {item.missing}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Order Progress */}
-      {!['CANCELLED'].includes(order.status) && (
+      {!['CANCELLED', 'WAITING_STOCK'].includes(order.status) && (
         <div className={styles.progressBar}>
           {STATUS_FLOW.map((s, idx) => {
             const cfg = STATUS_CONFIG[s];
@@ -1046,6 +1215,41 @@ const OrderDetailPage = () => {
                         : !cancelReason.trim())}
               >
                 {updating ? 'Đang xử lý...' : 'Xác nhận hủy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectBuyerCancellationOpen && (
+        <div className={styles.modalOverlay} onClick={() => setRejectBuyerCancellationOpen(false)}>
+          <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div className={styles.modalIcon}><XCircle size={22} color="#b91c1c" /></div>
+              <div>
+                <h3 className={styles.modalTitle}>Từ chối yêu cầu hủy</h3>
+                <p className={styles.modalSubtitle}>{order.externalOrderId}</p>
+              </div>
+            </div>
+            <label className={styles.cancellationFieldLabel}>Lý do TikTok</label>
+            <select className={styles.cancelInput} value={buyerCancellationReason}
+              onChange={(event) => setBuyerCancellationReason(event.target.value)} disabled={buyerCancellationLoading}>
+              <option value="">Chọn lý do từ chối</option>
+              {(buyerCancellation?.reject?.reasons || []).map((reason) => (
+                <option key={reason.code} value={reason.code}>{reason.label || reason.code}</option>
+              ))}
+            </select>
+            <label className={styles.cancellationFieldLabel}>Ghi chú</label>
+            <textarea className={styles.cancelInput} rows={3} maxLength={500}
+              value={buyerCancellationComment}
+              onChange={(event) => setBuyerCancellationComment(event.target.value)}
+              placeholder="Ví dụ: Đơn đã được đóng gói" disabled={buyerCancellationLoading} />
+            <div className={styles.modalActions}>
+              <button className={styles.btnGhost} onClick={() => setRejectBuyerCancellationOpen(false)}
+                disabled={buyerCancellationLoading}>Đóng</button>
+              <button className={styles.btnDanger} onClick={handleRejectBuyerCancellation}
+                disabled={buyerCancellationLoading || !buyerCancellationReason}>
+                {buyerCancellationLoading ? 'Đang gửi...' : 'Xác nhận từ chối'}
               </button>
             </div>
           </div>

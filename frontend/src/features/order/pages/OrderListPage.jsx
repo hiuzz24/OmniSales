@@ -5,7 +5,7 @@ import { ROUTES } from '../../../app/router/routes';
 import {
   ShoppingCart, FileDown, Eye, Search,
   TrendingUp, Clock, CheckCircle, Package, Truck, XCircle,
-  Store, ShoppingBag, PenTool, History, CloudDownload, Printer, Loader2,
+  Store, ShoppingBag, PenTool, History, CloudDownload, Printer, Loader2, AlertTriangle,
 } from 'lucide-react';
 import PageHeader from '../../../shared/components/PageHeader';
 import Pagination from '../../../shared/components/Pagination';
@@ -23,6 +23,7 @@ const PULL_JOB_STORAGE_KEY = 'osms.orderPullJobIds';
 
 const STATUS_CONFIG = {
   PENDING:    { label: 'Chờ xử lý',  icon: Clock,       color: 'orange'    },
+  WAITING_STOCK: { label: 'Chờ hàng', icon: Clock, color: 'orange' },
   CONFIRMED:  { label: 'Đã xác nhận', icon: CheckCircle, color: 'blue'     },
   PROCESSING: { label: 'Đang xử lý',  icon: Package,     color: 'amber'    },
   SHIPPED:    { label: 'Sẵn sàng giao', icon: Truck,       color: 'teal'    },
@@ -74,6 +75,34 @@ const getShippingLabelAvailability = (order) => {
   return { enabled: false, title: 'V1 chưa hỗ trợ in phiếu cho kênh này' };
 };
 
+/** Trả về cảnh báo yêu cầu hủy TikTok đang hoạt động để hiển thị ngay trên danh sách. */
+const getBuyerCancellationBadge = (order) => {
+  const cancellation = order?.platformMetadata?.tiktok?.buyerCancellation;
+  if (!cancellation?.active) return null;
+
+  if (cancellation.cancelStatus === 'CANCELLATION_REQUEST_SUCCESS') {
+    return {
+      label: 'Đang hoàn tất hủy',
+      title: 'Seller đã chấp thuận; đang chờ TikTok hoàn tất yêu cầu hủy',
+      className: 'cancellationPendingCompletion',
+    };
+  }
+  if (cancellation.cancelStatus === 'CANCELLATION_REQUEST_PENDING') {
+    return cancellation.sellerActionRequired
+      ? {
+          label: 'Cần duyệt hủy',
+          title: 'Khách hàng yêu cầu hủy; Seller cần duyệt hoặc từ chối',
+          className: 'cancellationActionRequired',
+        }
+      : {
+          label: 'Yêu cầu hủy',
+          title: 'TikTok đang tiếp nhận yêu cầu hủy và chưa xác định bước xử lý tiếp theo',
+          className: 'cancellationPending',
+        };
+  }
+  return null;
+};
+
 /** Hiển thị danh sách đơn, polling trạng thái, kéo đơn và in phiếu vận chuyển. */
 const OrderListPage = () => {
   const { user } = useAuth();
@@ -82,6 +111,7 @@ const OrderListPage = () => {
 
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [waitingStockExpired, setWaitingStockExpired] = useState(false);
   const [channelFilter, setChannelFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -99,6 +129,8 @@ const OrderListPage = () => {
   const [isStartingPull, setIsStartingPull] = useState(false);
   const [pullJobs, setPullJobs] = useState([]);
   const [printingOrderIds, setPrintingOrderIds] = useState(() => new Set());
+  const [selectedOrderIds, setSelectedOrderIds] = useState(() => new Set());
+  const [batchCancelling, setBatchCancelling] = useState(false);
   const pullFailuresRef = useRef(0);
   const pullStartedAtRef = useRef(Date.now());
 
@@ -124,6 +156,7 @@ const OrderListPage = () => {
         channelId: channelFilter || undefined,
         from: fromDate || undefined,
         to: toDate || undefined,
+        waitingStockExpired: statusFilter === 'WAITING_STOCK' && waitingStockExpired,
       };
       const data = await orderService.getAll(params);
       setOrders(data.content || []);
@@ -135,7 +168,7 @@ const OrderListPage = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [page, keyword, statusFilter, channelFilter, fromDate, toDate]);
+  }, [page, keyword, statusFilter, channelFilter, fromDate, toDate, waitingStockExpired]);
 
   // Tải các chỉ số tổng hợp trên đầu màn danh sách.
   const fetchStats = useCallback(async () => {
@@ -162,7 +195,12 @@ const OrderListPage = () => {
     return () => window.clearInterval(refreshInterval);
   }, [fetchOrders, fetchStats]);
 
-  useEffect(() => { setPage(0); }, [keyword, statusFilter, channelFilter, fromDate, toDate]);
+  useEffect(() => { setPage(0); }, [keyword, statusFilter, channelFilter, fromDate, toDate, waitingStockExpired]);
+
+  useEffect(() => {
+    if (statusFilter !== 'WAITING_STOCK') setWaitingStockExpired(false);
+    setSelectedOrderIds(new Set());
+  }, [statusFilter, waitingStockExpired]);
 
   useEffect(() => {
     if (!canPullOrders) {
@@ -241,7 +279,29 @@ const OrderListPage = () => {
     setChannelFilter('');
     setFromDate('');
     setToDate('');
+    setWaitingStockExpired(false);
     setPage(0);
+  };
+
+  const handleBatchCancel = async () => {
+    const ids = [...selectedOrderIds];
+    if (ids.length === 0 || batchCancelling) return;
+    if (!window.confirm(`Hủy ${ids.length} đơn chờ hàng do hết tồn?`)) return;
+    setBatchCancelling(true);
+    try {
+      const results = await orderService.cancelBatchWaitingStock(ids);
+      const successCount = (results || []).filter((item) => item.success).length;
+      const failedCount = (results || []).length - successCount;
+      if (successCount > 0) toast.success(`Đã xử lý hủy ${successCount} đơn`);
+      if (failedCount > 0) toast.error(`${failedCount} đơn chưa thể hủy; hãy xem lại trạng thái sàn`);
+      setSelectedOrderIds(new Set());
+      await fetchOrders({ silent: true });
+      await fetchStats();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Không thể hủy các đơn đã chọn');
+    } finally {
+      setBatchCancelling(false);
+    }
   };
 
   // Mở tab chờ trước rồi chuyển tới URL phiếu vận chuyển có chữ ký của platform.
@@ -294,11 +354,24 @@ const OrderListPage = () => {
     });
   };
 
+  // Hiển thị thời gian order đã ở trạng thái chờ tồn kho.
+  const formatWaitingDuration = (startedAt) => {
+    if (!startedAt) return null;
+    const elapsedMinutes = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000));
+    const days = Math.floor(elapsedMinutes / 1440);
+    const hours = Math.floor((elapsedMinutes % 1440) / 60);
+    const minutes = elapsedMinutes % 60;
+    if (days > 0) return `${days} ngày ${hours} giờ`;
+    if (hours > 0) return `${hours} giờ ${minutes} phút`;
+    return `${minutes} phút`;
+  };
+
   // Lấy nhãn và màu hiển thị của trạng thái đơn.
   const getStatusConfig = (status) => STATUS_CONFIG[status] || { label: status, color: 'slate' };
   // Ghép class CSS tương ứng với trạng thái đơn.
   const getStatusClassName = (status) => {
     if (status === 'IN_TRANSIT') return 'statusInTransit';
+    if (status === 'WAITING_STOCK') return 'statusWaitingStock';
     return `status${status.charAt(0) + status.slice(1).toLowerCase()}`;
   };
   // Lấy nhãn và class của trạng thái thanh toán.
@@ -314,6 +387,7 @@ const OrderListPage = () => {
   const statsItems = stats ? [
     { label: 'Tổng đơn',        value: stats.totalOrders,    icon: ShoppingCart, color: 'slate'  },
     { label: 'Chờ xử lý',      value: stats.pendingCount,  icon: Clock,        color: 'orange'  },
+    { label: 'Chờ hàng', value: stats.waitingStockCount, icon: Clock, color: 'orange' },
     { label: 'Đã xác nhận',     value: stats.confirmedCount, icon: CheckCircle, color: 'blue'    },
     { label: 'Đang xử lý',      value: stats.processingCount,icon: Package,     color: 'amber'   },
     { label: 'Đã giao',         value: stats.deliveredCount,icon: Truck,       color: 'green'   },
@@ -393,6 +467,16 @@ const OrderListPage = () => {
               <option key={key} value={key}>{cfg.label}</option>
             ))}
           </select>
+          {statusFilter === 'WAITING_STOCK' && (
+            <label className={styles.expiredToggle}>
+              <input
+                type="checkbox"
+                checked={waitingStockExpired}
+                onChange={(event) => setWaitingStockExpired(event.target.checked)}
+              />
+              Chỉ đơn quá hạn
+            </label>
+          )}
           <select className={styles.select} value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
             <option value="">Tất cả kênh</option>
             {channels.map((ch) => (
@@ -435,11 +519,33 @@ const OrderListPage = () => {
             </div>
           </div>
           <span className={styles.tableCount}>{totalElements}</span>
+          {statusFilter === 'WAITING_STOCK' && waitingStockExpired && (
+            <button
+              type="button"
+              className={styles.batchCancelBtn}
+              disabled={selectedOrderIds.size === 0 || batchCancelling}
+              onClick={handleBatchCancel}
+            >
+              <XCircle size={14} />
+              {batchCancelling ? 'Đang hủy...' : `Hủy đơn đã chọn (${selectedOrderIds.size})`}
+            </button>
+          )}
         </div>
         <div className={styles.tableResponsive}>
           <table className={`${styles.table} ${orders.length === PAGE_SIZE ? styles.tableFilled : ''}`}>
           <thead>
             <tr>
+              {statusFilter === 'WAITING_STOCK' && waitingStockExpired && (
+                <th className={styles.selectColumn}>
+                  <input
+                    type="checkbox"
+                    aria-label="Chọn tất cả đơn trên trang"
+                    checked={orders.length > 0 && orders.every((order) => selectedOrderIds.has(order.id))}
+                    onChange={(event) => setSelectedOrderIds(event.target.checked
+                      ? new Set(orders.map((order) => order.id)) : new Set())}
+                  />
+                </th>
+              )}
               <th className={styles.thPl}>Mã đơn</th>
               <th>Ngày đặt</th>
               <th>Kênh</th>
@@ -454,11 +560,11 @@ const OrderListPage = () => {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={9} className={styles.emptyCell}>Đang tải...</td>
+                <td colSpan={statusFilter === 'WAITING_STOCK' && waitingStockExpired ? 10 : 9} className={styles.emptyCell}>Đang tải...</td>
               </tr>
             ) : orders.length === 0 ? (
               <tr>
-                <td colSpan={9} className={styles.emptyCell}>
+                <td colSpan={statusFilter === 'WAITING_STOCK' && waitingStockExpired ? 10 : 9} className={styles.emptyCell}>
                   {keyword || statusFilter || channelFilter || fromDate || toDate
                     ? 'Không tìm thấy đơn hàng nào'
                     : 'Chưa có đơn hàng nào'}
@@ -471,10 +577,39 @@ const OrderListPage = () => {
                 const StatusIcon = sc.icon;
                 const shippingLabel = getShippingLabelAvailability(order);
                 const isPrintingLabel = printingOrderIds.has(order.id);
+                const cancellationBadge = getBuyerCancellationBadge(order);
                 return (
-                  <tr key={order.id} className={styles.tableRow}>
+                  <tr
+                    key={order.id}
+                    className={`${styles.tableRow} ${cancellationBadge ? styles.cancellationRow : ''}`}
+                  >
+                    {statusFilter === 'WAITING_STOCK' && waitingStockExpired && (
+                      <td className={styles.selectColumn}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Chọn đơn ${order.externalOrderId}`}
+                          checked={selectedOrderIds.has(order.id)}
+                          onChange={(event) => setSelectedOrderIds((current) => {
+                            const next = new Set(current);
+                            if (event.target.checked) next.add(order.id); else next.delete(order.id);
+                            return next;
+                          })}
+                        />
+                      </td>
+                    )}
                     <td className={styles.thPl}>
-                      <span className={styles.orderCode}>{order.externalOrderId}</span>
+                      <div className={styles.orderCodeCell}>
+                        <span className={styles.orderCode}>{order.externalOrderId}</span>
+                        {cancellationBadge && (
+                          <span
+                            className={`${styles.cancellationBadge} ${styles[cancellationBadge.className]}`}
+                            title={cancellationBadge.title}
+                          >
+                            <AlertTriangle size={11} />
+                            {cancellationBadge.label}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className={styles.orderDate}>
                       {formatDate(order.createdAt)}
@@ -515,10 +650,17 @@ const OrderListPage = () => {
                       {formatCurrency(order.totalAmount)}
                     </td>
                     <td>
-                      <span className={`${styles.statusBadge} ${styles[getStatusClassName(order.status)]}`}>
-                        <StatusIcon size={11} />
-                        {sc.label}
-                      </span>
+                      <div className={styles.statusCell}>
+                        <span className={`${styles.statusBadge} ${styles[getStatusClassName(order.status)]}`}>
+                          <StatusIcon size={11} />
+                          {sc.label}
+                        </span>
+                        {order.status === 'WAITING_STOCK' && order.waitingStockAt && (
+                          <small className={styles.waitingDuration}>
+                            Đã chờ {formatWaitingDuration(order.waitingStockAt)}
+                          </small>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className={`${styles.payBadge} ${styles[pc.className]}`}>

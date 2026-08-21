@@ -20,7 +20,9 @@ public class OrderSpec {
             String keyword,
             OffsetDateTime from,
             OffsetDateTime to,
-            UUID customerId
+            UUID customerId,
+            Boolean waitingStockExpired,
+            OffsetDateTime requestNow
     ) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -52,6 +54,12 @@ public class OrderSpec {
 
             if (to != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), to));
+            }
+
+            if (Boolean.TRUE.equals(waitingStockExpired)) {
+                predicates.add(cb.equal(root.get("status"), OrderStatus.WAITING_STOCK));
+                predicates.add(cb.isNotNull(root.get("waitingStockExpiresAt")));
+                predicates.add(cb.lessThanOrEqualTo(root.get("waitingStockExpiresAt"), requestNow));
             }
 
             query.orderBy(cb.desc(root.get("createdAt")));

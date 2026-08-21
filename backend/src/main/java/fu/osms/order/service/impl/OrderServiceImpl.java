@@ -32,6 +32,8 @@ import fu.osms.order.mapper.OrderMapper;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
 import fu.osms.order.service.OrderService;
+import fu.osms.order.service.OrderStockAllocationService;
+import fu.osms.order.exception.OrderMovedToWaitingStockException;
 import fu.osms.order.spec.OrderSpec;
 import fu.osms.sync.order.OrderStatusPushContext;
 import fu.osms.sync.order.OrderStatusPushResult;
@@ -48,6 +50,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderPaidEvent;
 import fu.osms.order.event.OrderStatusChangedEvent;
+import fu.osms.order.support.OrderStockMetadata;
 
 import fu.osms.common.utils.SecurityUtils;
 import java.time.OffsetDateTime;
@@ -76,6 +79,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderStockDeliveryReadinessService orderStockDeliveryReadinessService;
     private final ApplicationEventPublisher eventPublisher;
     private final PlatformOrderInventoryService platformOrderInventoryService;
+    private final OrderStockAllocationService stockAllocationService;
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
     /** Tải đơn và gom các dòng sản phẩm vào response chi tiết. */
@@ -107,7 +111,7 @@ public class OrderServiceImpl implements OrderService {
 
     /** Kiểm tra, đẩy và lưu chuyển trạng thái đơn, sau đó phát domain event. */
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = OrderMovedToWaitingStockException.class)
     public OrderResponse updateStatus(UUID id, OrderStatus status) {
         Order order = orderRepository.findForUpdateById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
@@ -117,23 +121,28 @@ public class OrderServiceImpl implements OrderService {
 
         statusTransitionPolicy().validate(order, oldStatus, status, id);
 
-        OrderStatusPushResult pushResult = orderStatusPushService.push(order, status, OrderStatusPushContext.empty());
-        if (statusTransitionPolicy().shouldBlockLocalUpdate(order, status, pushResult)) {
-            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION, pushResult.getMessage());
-        }
+        boolean platformConfirm = status == OrderStatus.CONFIRMED
+                && statusTransitionPolicy().isPlatformOrder(order);
+        Order savedOrder = platformConfirm ? stockAllocationService.confirmOrder(order.getId()) : order;
+        boolean movedToWaitingStock = platformConfirm && savedOrder.getStatus() == OrderStatus.WAITING_STOCK;
 
-        order.setStatus(status);
+        OrderStatusPushResult pushResult;
+        boolean shouldAutoMarkPaid = false;
+        if (movedToWaitingStock) {
+            pushResult = OrderStatusPushResult.skipped("Không gửi trạng thái vì đơn chưa đủ tồn kho");
+        } else {
+            pushResult = orderStatusPushService.push(savedOrder, status, OrderStatusPushContext.empty());
+            if (statusTransitionPolicy().shouldBlockLocalUpdate(savedOrder, status, pushResult)) {
+                throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION, pushResult.getMessage());
+            }
 
-        boolean shouldAutoMarkPaid = statusTransitionPolicy().shouldAutoMarkPaid(order, status);
-        if (shouldAutoMarkPaid) {
-            order.setPaymentStatus("PAID");
-        }
-
-        order.setStatusChangedAt(OffsetDateTime.now());
-
-        Order savedOrder = orderRepository.save(order);
-        if (status == OrderStatus.CONFIRMED && statusTransitionPolicy().isPlatformOrder(savedOrder)) {
-            platformOrderInventoryService.syncReservations(savedOrder);
+            savedOrder.setStatus(status);
+            shouldAutoMarkPaid = statusTransitionPolicy().shouldAutoMarkPaid(savedOrder, status);
+            if (shouldAutoMarkPaid) {
+                savedOrder.setPaymentStatus("PAID");
+            }
+            savedOrder.setStatusChangedAt(OffsetDateTime.now());
+            savedOrder = orderRepository.save(savedOrder);
         }
 
         var userOpt = SecurityUtils.getCurrentUser();
@@ -143,7 +152,7 @@ public class OrderServiceImpl implements OrderService {
         boolean autoPaid = shouldAutoMarkPaid && "PAID".equals(savedOrder.getPaymentStatus()) && "UNPAID".equals(oldPaymentStatus);
         Map<String, Object> auditChanges = new java.util.HashMap<>();
         auditChanges.put("oldStatus", oldStatus.name());
-        auditChanges.put("newStatus", status.name());
+        auditChanges.put("newStatus", savedOrder.getStatus().name());
         auditChanges.put("platformPushStatus", pushResult.getStatus().name());
         auditChanges.put("platformPushMessage", pushResult.getMessage());
         if (autoPaid) {
@@ -157,6 +166,10 @@ public class OrderServiceImpl implements OrderService {
         if (oldStatus != savedOrder.getStatus()) {
             eventPublisher.publishEvent(new OrderStatusChangedEvent(
                     savedOrder.getId(), oldStatus, savedOrder.getStatus()));
+        }
+
+        if (movedToWaitingStock) {
+            throw new OrderMovedToWaitingStockException();
         }
 
         return responseAssembler().withItems(savedOrder);
@@ -193,7 +206,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public void cancel(UUID id, CancelOrderRequest request) {
-        Order order = orderRepository.findById(id)
+        Order order = orderRepository.findForUpdateById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
 
         CancelOrderRequest cancelRequest = request != null ? request : new CancelOrderRequest();
@@ -264,9 +277,10 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(OrderStatus.CANCELLED);
         order.setCancelReason(reason);
         order.setStatusChangedAt(OffsetDateTime.now());
+        OrderStockMetadata.clearLifecycle(order);
         Order savedOrder = orderRepository.save(order);
         if (statusTransitionPolicy().isPlatformOrder(savedOrder)) {
-            platformOrderInventoryService.syncReservations(savedOrder);
+            platformOrderInventoryService.releaseOrderReservations(savedOrder.getId());
         } else {
             manualInventoryService().propagate(manualInventoryService().release(savedOrder));
         }
@@ -322,9 +336,11 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getFiltered(OrderStatus status, UUID channelId, String keyword,
                                                     OffsetDateTime from, OffsetDateTime to,
-                                                    UUID customerId, int page, int size) {
+                                                    UUID customerId, Boolean waitingStockExpired, int page, int size) {
         PageRequest pageRequest = PageRequest.of(page, size);
-        Specification<Order> spec = OrderSpec.withFilters(status, channelId, keyword, from, to, customerId);
+        OffsetDateTime requestNow = OffsetDateTime.now();
+        Specification<Order> spec = OrderSpec.withFilters(
+                status, channelId, keyword, from, to, customerId, waitingStockExpired, requestNow);
         Page<Order> orderPage = orderRepository.findAll(spec, pageRequest);
         return responseAssembler().page(orderPage);
     }
@@ -336,6 +352,7 @@ public class OrderServiceImpl implements OrderService {
         return new OrderStats(
                 orderRepository.countAll(),
                 orderRepository.countByStatus(OrderStatus.PENDING),
+                orderRepository.countByStatus(OrderStatus.WAITING_STOCK),
                 orderRepository.countByStatus(OrderStatus.CONFIRMED),
                 orderRepository.countByStatus(OrderStatus.PROCESSING),
                 orderRepository.countByStatus(OrderStatus.SHIPPED),

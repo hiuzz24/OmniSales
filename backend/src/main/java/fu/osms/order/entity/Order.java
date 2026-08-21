@@ -61,6 +61,24 @@ public class Order {
     @Column(name = "status_changed_at")
     private OffsetDateTime statusChangedAt;
 
+    @Column(name = "waiting_stock_at")
+    private OffsetDateTime waitingStockAt;
+
+    @Column(name = "waiting_stock_expires_at")
+    private OffsetDateTime waitingStockExpiresAt;
+
+    @Column(name = "waiting_stock_expiry_notified_at")
+    private OffsetDateTime waitingStockExpiryNotifiedAt;
+
+    @Column(name = "dispatch_sla_at")
+    private OffsetDateTime dispatchSlaAt;
+
+    @Column(name = "shipping_due_time")
+    private OffsetDateTime shippingDueTime;
+
+    @Column(name = "collection_due_time")
+    private OffsetDateTime collectionDueTime;
+
     @Column(name = "buyer_name", length = 255)
     private String buyerName;
 

@@ -8,6 +8,7 @@ import fu.osms.sync.webhook.WebhookPayloadUtils;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,18 @@ public class TikTokOrderMapperImpl implements TikTokOrderMapper {
         metadata.put("recipientAddressStatus", hasAddress(address) ? "AVAILABLE" : "MASKED_OR_UNAVAILABLE");
         put(metadata, "buyerEmail", text(detail, "buyer_email"));
         put(metadata, "buyerUserId", text(detail, "user_id", "buyer_id"));
+        OffsetDateTime shippingDueTime = timestamp(detail, "shipping_due_time");
+        OffsetDateTime collectionDueTime = timestamp(detail, "collection_due_time");
+        OffsetDateTime rtsSlaTime = timestamp(detail, "rts_sla_time");
+        OffsetDateTime ttsSlaTime = timestamp(detail, "tts_sla_time");
+        Integer priority = integer(detail, "fulfillment_priority_level");
+        String shippingType = text(detail, "shipping_type", "delivery_type");
+        Boolean preOrder = preOrder(detail);
+        put(metadata, "shippingType", shippingType);
+        if (preOrder != null) metadata.put("preOrder", preOrder);
+        if (rtsSlaTime != null) metadata.put("rtsSlaTime", rtsSlaTime.toString());
+        if (ttsSlaTime != null) metadata.put("ttsSlaTime", ttsSlaTime.toString());
+        if (priority != null) metadata.put("fulfillmentPriorityLevel", priority);
         return new TikTokOrderWriteModel(id,
                 PlatformOrderTimestampParser.parse(WebhookPayloadUtils.firstPresent(
                         detail, "create_time", "created_at", "createdAt")),
@@ -38,7 +51,9 @@ public class TikTokOrderMapperImpl implements TikTokOrderMapper {
                 text(address, "name", "recipient_name"), text(address, "phone_number", "phone"), address,
                 subtotal(payment, rawItems), discount(payment), decimal(payment, "shipping_fee"),
                 fallback(text(payment, "currency"), "VND"), text(detail, "buyer_message", "buyer_note"),
-                text(detail, "cancel_reason"), tracking(packages, rawItems, detail), epoch(detail.get("update_time")), metadata, items);
+                text(detail, "cancel_reason"), tracking(packages, rawItems, detail), epoch(detail.get("update_time")),
+                shippingDueTime, collectionDueTime, rtsSlaTime, ttsSlaTime,
+                priority, shippingType, preOrder, metadata, items);
     }
 
     private TikTokOrderWriteModel.Item item(Map<String, Object> value) {
@@ -87,6 +102,20 @@ public class TikTokOrderMapperImpl implements TikTokOrderMapper {
     private String text(Map<String, Object> value, String... keys) { return WebhookPayloadUtils.text(WebhookPayloadUtils.firstPresent(value, keys)); }
     private BigDecimal decimal(Map<String, Object> value, String... keys) { return WebhookPayloadUtils.decimal(WebhookPayloadUtils.firstPresent(value, keys)); }
     private Long epoch(Object value) { try { return value == null ? null : Long.parseLong(String.valueOf(value)); } catch (NumberFormatException e) { return null; } }
+    private OffsetDateTime timestamp(Map<String, Object> value, String key) {
+        return PlatformOrderTimestampParser.parse(value.get(key));
+    }
+    private Integer integer(Map<String, Object> value, String key) {
+        Object raw = value.get(key);
+        try { return raw == null ? null : Integer.valueOf(String.valueOf(raw)); }
+        catch (NumberFormatException ignored) { return null; }
+    }
+    private Boolean preOrder(Map<String, Object> value) {
+        Object raw = WebhookPayloadUtils.firstPresent(value, "is_pre_order", "pre_order", "is_preorder");
+        if (raw != null) return raw instanceof Boolean bool ? bool : Boolean.parseBoolean(String.valueOf(raw));
+        String orderType = text(value, "order_type");
+        return orderType == null ? null : orderType.toUpperCase().contains("PRE");
+    }
     private String fallback(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
     private void put(Map<String, Object> map, String key, String value) { if (value != null && !value.isBlank()) map.put(key, value); }
 }
