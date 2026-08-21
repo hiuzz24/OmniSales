@@ -62,7 +62,16 @@ public class OrderSpec {
                 predicates.add(cb.lessThanOrEqualTo(root.get("waitingStockExpiresAt"), requestNow));
             }
 
-            query.orderBy(cb.desc(root.get("createdAt")));
+            if (status == OrderStatus.PENDING || status == OrderStatus.WAITING_STOCK) {
+                query.orderBy(
+                        cb.asc(cb.selectCase()
+                                .when(cb.isNotNull(root.get("waitingStockAt")), 0)
+                                .otherwise(1)),
+                        cb.asc(root.get("waitingStockAt")),
+                        cb.desc(root.get("createdAt")));
+            } else {
+                query.orderBy(cb.desc(root.get("createdAt")));
+            }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }

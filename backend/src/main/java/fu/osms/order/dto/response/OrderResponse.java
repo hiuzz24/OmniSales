@@ -29,6 +29,8 @@ public class OrderResponse {
     private OffsetDateTime statusChangedAt;
     private OffsetDateTime waitingStockAt;
     private OffsetDateTime waitingStockExpiresAt;
+    private boolean stockReadyForConfirmation;
+    private OffsetDateTime stockReadyAt;
     private OffsetDateTime dispatchSlaAt;
     private OffsetDateTime shippingDueTime;
     private OffsetDateTime collectionDueTime;

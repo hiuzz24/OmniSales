@@ -168,25 +168,11 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
                     WHERE oi.order_id = o.id AND oi.variant_id IN (:variantIds)
               )
             ORDER BY o.waiting_stock_at ASC NULLS LAST, o.created_at ASC, o.id ASC
-            LIMIT :limit
+            LIMIT :limit OFFSET :offset
             """, nativeQuery = true)
     List<UUID> findWaitingStockCandidateIds(@Param("variantIds") Collection<UUID> variantIds,
-                                            @Param("limit") int limit);
-
-    @Query(value = """
-            SELECT o.id
-            FROM orders o
-            WHERE o.status = 'PENDING'
-              AND o.platform IN ('SHOPIFY', 'LAZADA')
-              AND EXISTS (
-                    SELECT 1 FROM order_items oi
-                    WHERE oi.order_id = o.id AND oi.variant_id IN (:variantIds)
-              )
-            ORDER BY o.created_at ASC, o.id ASC
-            LIMIT :limit
-            """, nativeQuery = true)
-    List<UUID> findPendingStockCandidateIds(@Param("variantIds") Collection<UUID> variantIds,
-                                            @Param("limit") int limit);
+                                            @Param("limit") int limit,
+                                            @Param("offset") int offset);
 
     @Query(value = """
             SELECT id FROM orders

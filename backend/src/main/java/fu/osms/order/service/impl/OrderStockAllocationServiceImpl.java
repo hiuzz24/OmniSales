@@ -12,7 +12,6 @@ import fu.osms.order.dto.response.WaitingStockItemResponse;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
-import fu.osms.order.event.OrderStatusChangedEvent;
 import fu.osms.order.support.TikTokBuyerCancellationMetadata;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
@@ -22,16 +21,13 @@ import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -52,7 +48,6 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
     private final MarketplaceInventoryPropagationService inventoryPropagationService;
     private final PlatformOrderInventoryService inventoryService;
     private final OrderWorkflowNotificationService notificationService;
-    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${osms.order.waiting-stock-timeout-hours:48}")
     private long waitingTimeoutHours;
@@ -71,7 +66,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         if (order.getStatus() == OrderStatus.WAITING_STOCK) return order;
 
         if (order.getPlatform() == PlatformType.TIKTOK && order.getStatus() == OrderStatus.CONFIRMED) {
-            return applyHardReservation(order, false);
+            return applyHardReservation(order);
         }
         return order;
     }
@@ -80,85 +75,34 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
     @Transactional
     public Order confirmOrder(UUID orderId) {
         Order order = locked(orderId);
-        List<Requirement> requirements = requirements(order);
-        Set<UUID> variantIds = requirements.stream()
-                .map(Requirement::variant)
-                .filter(java.util.Objects::nonNull)
-                .map(ProductVariant::getId)
-                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
-        if ((order.getPlatform() == PlatformType.SHOPIFY || order.getPlatform() == PlatformType.LAZADA)
-                && requirements.stream().noneMatch(value -> value.variant() == null)) {
-            List<WaitingStockItemResponse> unavailable = unavailableForConfirm(requirements);
-            if (!unavailable.isEmpty()) {
-                Order result = moveToWaiting(order, unavailable, "INSUFFICIENT_STOCK", true);
-                inventoryPropagationService.scheduleWaitingStockReconcile(variantIds);
-                return result;
-            }
-        }
-        Order result = applyHardReservation(order, false);
-        if ((order.getPlatform() == PlatformType.SHOPIFY || order.getPlatform() == PlatformType.LAZADA)
-                && result.getStatus() == OrderStatus.WAITING_STOCK) {
-            inventoryPropagationService.scheduleWaitingStockReconcile(variantIds);
-        }
+        Order result = applyHardReservation(order);
+        inventoryPropagationService.scheduleWaitingStockReconcile(variantIds(order));
         return result;
     }
 
-    /** Đưa order Shopify/Lazada PENDING sang hàng chờ khi tồn thật không còn đủ sau một lần Confirm. */
+    /** Làm mới khả năng xác nhận của order mà không tự giữ tồn hoặc đổi trạng thái. */
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Order movePendingOrderToWaitingIfUnavailable(UUID orderId) {
-        Order order = locked(orderId);
-        if (order.getStatus() != OrderStatus.PENDING
-                || (order.getPlatform() != PlatformType.SHOPIFY && order.getPlatform() != PlatformType.LAZADA)) {
-            return order;
-        }
-
-        List<Requirement> requirements = requirements(order);
-        if (requirements.stream().anyMatch(value -> value.variant() == null)) {
-            OrderStatus before = order.getStatus();
-            Order saved = moveToWaiting(order, missingForInvalid(requirements), "VARIANT_MAPPING_MISSING", false);
-            eventPublisher.publishEvent(new OrderStatusChangedEvent(saved.getId(), before, saved.getStatus()));
-            return saved;
-        }
-
-        UUID warehouseId = warehouseConsistencyService.resolveMasterWarehouse().getId();
-        List<UUID> variantIds = requirements.stream().map(value -> value.variant().getId()).distinct()
-                .sorted(Comparator.comparing(UUID::toString)).toList();
-        Map<UUID, InventoryItem> byVariant = new HashMap<>();
-        inventoryItemRepository.findByWarehouseIdAndVariantIdInWithLock(warehouseId, variantIds)
-                .forEach(value -> byVariant.put(value.getVariant().getId(), value));
-
-        List<WaitingStockItemResponse> missing = unavailableItems(requirements, byVariant);
-        if (missing.isEmpty()) return order;
-
-        OrderStatus before = order.getStatus();
-        Order saved = moveToWaiting(order, missing, "INSUFFICIENT_STOCK", true);
-        eventPublisher.publishEvent(new OrderStatusChangedEvent(saved.getId(), before, saved.getStatus()));
-        return saved;
-    }
-
-    /** Thử cấp lại hàng cho đúng một order; mỗi lần gọi là transaction độc lập. */
-    @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Order reconcileWaitingOrder(UUID orderId) {
+    @Transactional
+    public Order refreshWaitingStockAvailability(UUID orderId) {
         Order order = locked(orderId);
         if (TikTokBuyerCancellationMetadata.isActive(order)
-                || order.getStatus() != OrderStatus.WAITING_STOCK || isExpired(order)
-                || hasPlatformConflict(order) || !isFifoEligible(order)) return order;
-        OrderStatus before = order.getStatus();
-        Order result = order.getPlatform() == PlatformType.TIKTOK
-                ? applyHardReservation(order, true)
-                : promoteWaitingOrder(order, true);
-        if (before != result.getStatus()) {
-            eventPublisher.publishEvent(new OrderStatusChangedEvent(result.getId(), before, result.getStatus()));
-        }
-        return result;
+                || order.getStatus() != OrderStatus.WAITING_STOCK
+                || hasPlatformConflict(order)) return order;
+
+        List<Requirement> requirements = requirements(order);
+        boolean resolvable = requirements.stream().noneMatch(value -> value.variant() == null);
+        List<WaitingStockItemResponse> items = resolvable
+                ? availabilityFor(requirements)
+                : waitingStockItems(order);
+        boolean ready = resolvable && !isExpired(order)
+                && items.stream().allMatch(item -> item.missing() <= 0);
+        return updateReadiness(order, ready, items);
     }
 
-    private Order applyHardReservation(Order order, boolean fromFifo) {
+    private Order applyHardReservation(Order order) {
         OffsetDateTime now = OffsetDateTime.now();
         if (order.getWaitingStockExpiresAt() != null && !order.getWaitingStockExpiresAt().isAfter(now)) {
-            return moveToWaiting(order, List.of(), "ALLOCATION_EXPIRED", false);
+            return moveToWaiting(order, List.of(), "ALLOCATION_EXPIRED");
         }
         ReservationOutcome outcome = inventoryService.tryReserve(order.getId());
         if (outcome.result() == ReservationResult.RESERVED
@@ -167,51 +111,12 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
             order.setStatusChangedAt(now);
             clearAllocation(order);
             Order saved = orderRepository.save(order);
-            if (fromFifo) notifyAfterCommit(saved, "ORDER_STOCK_OFFER", "Đã cấp tồn kho cho đơn TikTok",
-                    "Đơn đã được giữ đủ tồn kho và chuyển sang Đã xác nhận.", false);
             return saved;
         }
-        boolean fifoEligible = outcome.result() == ReservationResult.INSUFFICIENT_STOCK;
-        return moveToWaiting(order, outcome.missingItems(), outcome.result().name(), fifoEligible);
+        return moveToWaiting(order, outcome.missingItems(), outcome.result().name());
     }
 
-    /** Đưa order Shopify/Lazada đủ tồn từ WAITING_STOCK về PENDING để Sales xác nhận. */
-    private Order promoteWaitingOrder(Order order, boolean fromFifo) {
-        OffsetDateTime now = OffsetDateTime.now();
-        List<Requirement> requirements = requirements(order);
-        if (requirements.stream().anyMatch(value -> value.variant() == null)) {
-            return moveToWaiting(order, missingForInvalid(requirements), "VARIANT_MAPPING_MISSING", false);
-        }
-        UUID warehouseId = warehouseConsistencyService.resolveMasterWarehouse().getId();
-        List<UUID> variantIds = requirements.stream().map(value -> value.variant().getId()).distinct()
-                .sorted(Comparator.comparing(UUID::toString)).toList();
-        List<InventoryItem> inventories = inventoryItemRepository
-                .findByWarehouseIdAndVariantIdInWithLock(warehouseId, variantIds);
-        Map<UUID, InventoryItem> byVariant = new HashMap<>();
-        inventories.forEach(value -> byVariant.put(value.getVariant().getId(), value));
-        List<WaitingStockItemResponse> missing = new ArrayList<>();
-        for (Requirement requirement : requirements) {
-            InventoryItem inventory = byVariant.get(requirement.variant().getId());
-            int physicalAvailable = inventory == null ? 0
-                    : safe(inventory.getQuantityOnHand()) - safe(inventory.getReservedQuantity());
-            if (physicalAvailable < requirement.quantity()) {
-                missing.add(new WaitingStockItemResponse(requirement.variant().getId(), requirement.variant().getSku(),
-                        requirement.variant().getName(), requirement.quantity(), Math.max(0, physicalAvailable),
-                        requirement.quantity() - Math.max(0, physicalAvailable)));
-            }
-        }
-        if (!missing.isEmpty()) return moveToWaiting(order, missing, "INSUFFICIENT_STOCK", true);
-
-        order.setStatus(OrderStatus.PENDING);
-        order.setStatusChangedAt(now);
-        clearWaitingMetadata(order);
-        Order saved = orderRepository.save(order);
-        if (fromFifo) notifyAfterCommit(saved, "ORDER_WAITING_STOCK", "Đơn hàng đã có tồn kho",
-                "Đơn đã được đưa lại về Chờ xử lý. Sales có thể xác nhận để giữ tồn kho.", false);
-        return saved;
-    }
-
-    private Order moveToWaiting(Order order, List<WaitingStockItemResponse> items, String reason, boolean fifoEligible) {
+    private Order moveToWaiting(Order order, List<WaitingStockItemResponse> items, String reason) {
         OffsetDateTime now = OffsetDateTime.now();
         order.setStatus(OrderStatus.WAITING_STOCK);
         order.setStatusChangedAt(now);
@@ -223,7 +128,8 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
                 order.getPlatformMetadata() == null ? Map.of() : order.getPlatformMetadata());
         Map<String, Object> waiting = new LinkedHashMap<>();
         waiting.put("reason", reason);
-        waiting.put("fifoEligible", fifoEligible);
+        waiting.put("stockReadyForConfirmation", false);
+        waiting.put("stockReadyAt", null);
         waiting.put("items", items.stream().map(this::itemMap).toList());
         metadata.put("waitingStock", waiting);
         order.setPlatformMetadata(metadata);
@@ -248,47 +154,23 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return new ArrayList<>(result.values());
     }
 
-    private List<WaitingStockItemResponse> unavailableItems(
-            Collection<Requirement> requirements, Map<UUID, InventoryItem> inventories) {
-        List<WaitingStockItemResponse> missing = new ArrayList<>();
-        for (Requirement requirement : requirements) {
-            InventoryItem inventory = inventories.get(requirement.variant().getId());
-            int available = inventory == null ? 0
-                    : safe(inventory.getQuantityOnHand()) - safe(inventory.getReservedQuantity());
-            if (available < requirement.quantity()) {
-                missing.add(new WaitingStockItemResponse(
-                        requirement.variant().getId(), requirement.variant().getSku(), requirement.variant().getName(),
-                        requirement.quantity(), available, requirement.quantity() - available));
-            }
-        }
-        return missing;
-    }
-
-    private List<WaitingStockItemResponse> unavailableForConfirm(List<Requirement> requirements) {
+    private List<WaitingStockItemResponse> availabilityFor(List<Requirement> requirements) {
         UUID warehouseId = warehouseConsistencyService.resolveMasterWarehouse().getId();
         List<UUID> variantIds = requirements.stream().map(value -> value.variant().getId()).distinct()
                 .sorted(Comparator.comparing(UUID::toString)).toList();
         Map<UUID, InventoryItem> inventories = new HashMap<>();
         inventoryItemRepository.findByWarehouseIdAndVariantIdInWithLock(warehouseId, variantIds)
                 .forEach(value -> inventories.put(value.getVariant().getId(), value));
-        List<WaitingStockItemResponse> missing = new ArrayList<>();
+        List<WaitingStockItemResponse> result = new ArrayList<>();
         for (Requirement requirement : requirements) {
             InventoryItem inventory = inventories.get(requirement.variant().getId());
             int available = inventory == null ? 0
                     : safe(inventory.getQuantityOnHand()) - safe(inventory.getReservedQuantity());
-            if (available < requirement.quantity()) {
-                missing.add(new WaitingStockItemResponse(
-                        requirement.variant().getId(), requirement.variant().getSku(), requirement.variant().getName(),
-                        requirement.quantity(), available, requirement.quantity() - available));
-            }
+            result.add(new WaitingStockItemResponse(
+                    requirement.variant().getId(), requirement.variant().getSku(), requirement.variant().getName(),
+                    requirement.quantity(), available, Math.max(0, requirement.quantity() - available)));
         }
-        return missing;
-    }
-
-    private List<WaitingStockItemResponse> missingForInvalid(List<Requirement> requirements) {
-        return requirements.stream().filter(value -> value.variant() == null)
-                .map(value -> new WaitingStockItemResponse(null, value.item().getSku(), value.item().getName(),
-                        value.quantity(), 0, value.quantity())).toList();
+        return result;
     }
 
     private boolean isExpired(Order order) {
@@ -302,12 +184,49 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return raw instanceof Map<?, ?> conflict && Boolean.TRUE.equals(conflict.get("active"));
     }
 
-    private boolean isFifoEligible(Order order) {
-        if (order.getPlatformMetadata() == null) return true;
-        Object raw = order.getPlatformMetadata().get("waitingStock");
-        if (!(raw instanceof Map<?, ?> waiting)) return true;
-        Object eligible = waiting.get("fifoEligible");
-        return eligible == null || Boolean.parseBoolean(String.valueOf(eligible));
+    private Order updateReadiness(Order order, boolean ready, List<WaitingStockItemResponse> items) {
+        Map<String, Object> metadata = new LinkedHashMap<>(
+                order.getPlatformMetadata() == null ? Map.of() : order.getPlatformMetadata());
+        Object raw = metadata.get("waitingStock");
+        Map<String, Object> waiting = new LinkedHashMap<>();
+        if (raw instanceof Map<?, ?> existing) {
+            existing.forEach((key, value) -> waiting.put(String.valueOf(key), value));
+        }
+        boolean currentReady = Boolean.TRUE.equals(waiting.get("stockReadyForConfirmation"));
+        String currentReadyAt = waiting.get("stockReadyAt") == null ? null
+                : String.valueOf(waiting.get("stockReadyAt"));
+        String nextReadyAt = ready
+                ? (currentReadyAt == null ? OffsetDateTime.now().toString() : currentReadyAt)
+                : null;
+        List<Map<String, Object>> nextItems = items.stream().map(this::itemMap).toList();
+        if (currentReady == ready && java.util.Objects.equals(currentReadyAt, nextReadyAt)
+                && java.util.Objects.equals(waiting.get("items"), nextItems)) {
+            return order;
+        }
+        waiting.put("stockReadyForConfirmation", ready);
+        waiting.put("stockReadyAt", nextReadyAt);
+        waiting.put("items", nextItems);
+        metadata.put("waitingStock", waiting);
+        order.setPlatformMetadata(metadata);
+        return orderRepository.save(order);
+    }
+
+    private List<WaitingStockItemResponse> waitingStockItems(Order order) {
+        Object raw = order.getPlatformMetadata() == null ? null : order.getPlatformMetadata().get("waitingStock");
+        if (!(raw instanceof Map<?, ?> waiting) || !(waiting.get("items") instanceof List<?> values)) return List.of();
+        List<WaitingStockItemResponse> result = new ArrayList<>();
+        for (Object value : values) {
+            if (!(value instanceof Map<?, ?> item)) continue;
+            result.add(new WaitingStockItemResponse(
+                    uuid(item.get("variantId")), text(item.get("sku")), text(item.get("name")),
+                    number(item.get("required")), number(item.get("available")), number(item.get("missing"))));
+        }
+        return result;
+    }
+
+    private Set<UUID> variantIds(Order order) {
+        return requirements(order).stream().map(Requirement::variant).filter(java.util.Objects::nonNull)
+                .map(ProductVariant::getId).collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     private void clearAllocation(Order order) {
@@ -364,6 +283,19 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
     }
 
     private int safe(Integer value) { return value == null ? 0 : value; }
+
+    private int number(Object value) {
+        if (value instanceof Number number) return number.intValue();
+        try { return value == null ? 0 : Integer.parseInt(String.valueOf(value)); }
+        catch (NumberFormatException ignored) { return 0; }
+    }
+
+    private String text(Object value) { return value == null ? null : String.valueOf(value); }
+
+    private UUID uuid(Object value) {
+        try { return value == null ? null : UUID.fromString(String.valueOf(value)); }
+        catch (IllegalArgumentException ignored) { return null; }
+    }
 
     private record Requirement(ProductVariant variant, int quantity, OrderItem item) {}
 }

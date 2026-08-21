@@ -51,6 +51,7 @@ import fu.osms.order.event.OrderCancelledEvent;
 import fu.osms.order.event.OrderPaidEvent;
 import fu.osms.order.event.OrderStatusChangedEvent;
 import fu.osms.order.support.OrderStockMetadata;
+import fu.osms.order.support.TikTokBuyerCancellationMetadata;
 
 import fu.osms.common.utils.SecurityUtils;
 import java.time.OffsetDateTime;
@@ -175,6 +176,55 @@ public class OrderServiceImpl implements OrderService {
         return responseAssembler().withItems(savedOrder);
     }
 
+    /** Xác nhận thủ công order WAITING_STOCK sau khi kiểm tra và giữ đủ toàn bộ SKU. */
+    @Override
+    @Transactional(noRollbackFor = OrderMovedToWaitingStockException.class)
+    public OrderResponse confirmWaitingStock(UUID id) {
+        Order order = orderRepository.findForUpdateById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + id));
+        if (order.getStatus() != OrderStatus.WAITING_STOCK) {
+            throw new AppException(ErrorCode.CONFLICT, "Order không còn ở trạng thái Chờ hàng");
+        }
+        if (TikTokBuyerCancellationMetadata.isActive(order)) {
+            throw new AppException(ErrorCode.CONFLICT, "Đơn đang có yêu cầu hủy từ khách hàng TikTok");
+        }
+        if (hasPlatformProgressConflict(order)) {
+            throw new AppException(ErrorCode.CONFLICT, "Đơn có trạng thái trên sàn ngoài luồng OSMS, cần đối soát trước");
+        }
+        if (order.getPlatform() == PlatformType.TIKTOK
+                && !"AWAITING_SHIPMENT".equalsIgnoreCase(rawTikTokStatus(order))) {
+            throw new AppException(ErrorCode.CONFLICT,
+                    "TikTok chưa ở trạng thái AWAITING_SHIPMENT để xác nhận đơn");
+        }
+
+        OrderStatus oldStatus = order.getStatus();
+        Order saved = stockAllocationService.confirmOrder(id);
+        Map<String, Object> auditChanges = new java.util.LinkedHashMap<>();
+        auditChanges.put("oldStatus", oldStatus.name());
+        auditChanges.put("newStatus", saved.getStatus().name());
+        auditChanges.put("manualStockConfirmation", true);
+
+        var userOpt = SecurityUtils.getCurrentUser();
+        UUID actorId = userOpt.map(User::getId).orElse(null);
+        String actorEmail = userOpt.map(User::getEmail).orElse("system");
+        if (saved.getStatus() == OrderStatus.WAITING_STOCK) {
+            auditChanges.put("result", "INSUFFICIENT_STOCK");
+            auditService.record(actorId, actorEmail, "STOCK_CONFIRM_FAILED", "ORDER", id, id.toString(), auditChanges);
+            throw new OrderMovedToWaitingStockException();
+        }
+
+        auditChanges.put("result", "RESERVED");
+        auditChanges.put("items", orderItemRepository.findByOrderId(id).stream().map(item -> {
+            Map<String, Object> value = new java.util.LinkedHashMap<>();
+            value.put("sku", item.getSku());
+            value.put("quantity", item.getQuantity());
+            return value;
+        }).toList());
+        auditService.record(actorId, actorEmail, "STOCK_CONFIRMED_MANUALLY", "ORDER", id, id.toString(), auditChanges);
+        eventPublisher.publishEvent(new OrderStatusChangedEvent(id, oldStatus, saved.getStatus()));
+        return responseAssembler().withItems(saved);
+    }
+
     /** Cập nhật trạng thái thanh toán nội bộ và dành REFUNDED cho luồng trả hàng. */
     @Override
     @Transactional
@@ -233,7 +283,10 @@ public class OrderServiceImpl implements OrderService {
         if (oldStatus == OrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.ORDER_ALREADY_CANCELLED);
         }
-        if (oldStatus == OrderStatus.IN_TRANSIT || oldStatus == OrderStatus.DELIVERED) {
+        if (oldStatus != OrderStatus.PENDING
+                && oldStatus != OrderStatus.CONFIRMED
+                && oldStatus != OrderStatus.PROCESSING
+                && oldStatus != OrderStatus.WAITING_STOCK) {
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION);
         }
 
@@ -397,6 +450,20 @@ public class OrderServiceImpl implements OrderService {
                 orderItemRepository,
                 marketplaceInventoryPropagationService
         );
+    }
+
+    private boolean hasPlatformProgressConflict(Order order) {
+        if (order.getPlatformMetadata() == null) return false;
+        Object raw = order.getPlatformMetadata().get("platformProgressConflict");
+        return raw instanceof Map<?, ?> conflict && Boolean.TRUE.equals(conflict.get("active"));
+    }
+
+    private String rawTikTokStatus(Order order) {
+        if (order.getPlatformMetadata() == null) return null;
+        Object rawTikTok = order.getPlatformMetadata().get("tiktok");
+        if (!(rawTikTok instanceof Map<?, ?> tikTok)) return null;
+        Object rawStatus = tikTok.get("rawOrderStatus");
+        return rawStatus == null ? null : String.valueOf(rawStatus);
     }
 
     private OrderResponseAssembler responseAssembler() {

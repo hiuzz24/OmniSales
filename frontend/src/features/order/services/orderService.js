@@ -16,6 +16,9 @@ const orderService = {
     return await orderApi.updateStatus(id, status);
   },
 
+  /** Xác nhận order đã có tồn và chuyển thẳng sang CONFIRMED. */
+  confirmWaitingStock: async (id) => orderApi.confirmWaitingStock(id),
+
   /** Hủy order qua luồng hủy chuyên biệt. */
   cancel: async (id, data) => {
     return await orderApi.cancel(id, data);

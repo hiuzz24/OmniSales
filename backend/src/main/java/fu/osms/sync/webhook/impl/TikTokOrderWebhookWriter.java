@@ -111,8 +111,7 @@ public class TikTokOrderWebhookWriter {
         metadata.put("lastActorRole", cancellation.lastActorRole());
         metadata.put("cancelStatus", cancellation.cancelStatus());
         metadata.put("sellerNextAction", cancellation.sellerNextAction());
-        boolean active = TikTokBuyerCancellationMetadata.PENDING.equalsIgnoreCase(cancellation.cancelStatus())
-                || TikTokBuyerCancellationMetadata.SUCCESS.equalsIgnoreCase(cancellation.cancelStatus());
+        boolean active = TikTokBuyerCancellationMetadata.PENDING.equalsIgnoreCase(cancellation.cancelStatus());
         boolean sellerActionRequired = TikTokBuyerCancellationMetadata.PENDING.equalsIgnoreCase(cancellation.cancelStatus())
                 && "BUYER".equalsIgnoreCase(text(metadata.get("initiatorRole")))
                 && "SELLER_RESPOND_CANCEL".equalsIgnoreCase(cancellation.sellerNextAction());
@@ -126,7 +125,8 @@ public class TikTokOrderWebhookWriter {
         if (!active && "PROCESSING".equals(metadata.get("actionState"))) metadata.put("actionState", "RESOLVED");
         TikTokBuyerCancellationMetadata.replace(order, metadata);
 
-        if (TikTokBuyerCancellationMetadata.COMPLETE.equalsIgnoreCase(cancellation.cancelStatus())) {
+        if (TikTokBuyerCancellationMetadata.SUCCESS.equalsIgnoreCase(cancellation.cancelStatus())
+                || TikTokBuyerCancellationMetadata.COMPLETE.equalsIgnoreCase(cancellation.cancelStatus())) {
             order.setStatus(OrderStatus.CANCELLED);
             order.setStatusChangedAt(java.time.OffsetDateTime.now());
             OrderStockMetadata.clearLifecycle(order);

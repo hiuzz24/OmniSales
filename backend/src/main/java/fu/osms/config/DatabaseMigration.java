@@ -45,7 +45,7 @@ public class DatabaseMigration {
                                 DROP CONSTRAINT IF EXISTS chk_audit_action,
                                 DROP CONSTRAINT IF EXISTS audit_logs_action_check,
                                 ADD CONSTRAINT audit_logs_action_check
-                                CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'CONNECT', 'DISCONNECT', 'STATUS_CHANGE', 'ORDER_CANCEL', 'PAYMENT_STATUS_CHANGE'))
+                                CHECK (action IN ('CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'CONNECT', 'DISCONNECT', 'STATUS_CHANGE', 'ORDER_CANCEL', 'PAYMENT_STATUS_CHANGE', 'STOCK_CONFIRMED_MANUALLY'))
                             """);
             Boolean hasStatusChange = jdbcTemplate.queryForObject("""
                         SELECT EXISTS (
@@ -61,11 +61,20 @@ public class DatabaseMigration {
                               AND pg_get_constraintdef(oid) LIKE '%PAYMENT_STATUS_CHANGE%'
                         )
                     """, Boolean.class);
-            if (Boolean.TRUE.equals(hasStatusChange) && Boolean.TRUE.equals(hasPaymentStatusChange)) {
+            Boolean hasManualStockConfirmation = jdbcTemplate.queryForObject("""
+                        SELECT EXISTS (
+                            SELECT 1 FROM pg_constraint
+                            WHERE conname = 'audit_logs_action_check'
+                              AND pg_get_constraintdef(oid) LIKE '%STOCK_CONFIRMED_MANUALLY%'
+                        )
+                    """, Boolean.class);
+            if (Boolean.TRUE.equals(hasStatusChange)
+                    && Boolean.TRUE.equals(hasPaymentStatusChange)
+                    && Boolean.TRUE.equals(hasManualStockConfirmation)) {
                 log.info(
-                        "Migration: audit_logs_action_check constraint updated with STATUS_CHANGE and PAYMENT_STATUS_CHANGE");
+                        "Migration: audit_logs_action_check constraint updated with status and manual stock actions");
             } else {
-                log.error("Migration FAILED: audit_logs_action_check missing PAYMENT_STATUS_CHANGE!");
+                log.error("Migration FAILED: audit_logs_action_check is missing one or more required actions!");
             }
         } catch (Exception e) {
             log.error("Migration error updating audit_logs constraint: {}", e.getMessage());
@@ -178,7 +187,6 @@ public class DatabaseMigration {
                             'ORDER_RETURN_COMPLETED',
                             'ORDER_RETURN_ATTENTION',
                             'ORDER_WAITING_STOCK',
-                            'ORDER_STOCK_OFFER',
                             'ORDER_WAITING_STOCK_EXPIRED',
                             'ORDER_PLATFORM_STOCK_CONFLICT',
                             'ORDER_BUYER_CANCEL_REQUESTED',

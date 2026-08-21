@@ -34,7 +34,8 @@ public final class TikTokBuyerCancellationMetadata {
     }
 
     public static boolean isClosedStatus(String status) {
-        return COMPLETE.equalsIgnoreCase(status)
+        return SUCCESS.equalsIgnoreCase(status)
+                || COMPLETE.equalsIgnoreCase(status)
                 || "CANCELLATION_REQUEST_CANCEL".equalsIgnoreCase(status)
                 || "CANCELLATION_REQUEST_CANCELLED".equalsIgnoreCase(status);
     }

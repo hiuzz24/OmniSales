@@ -22,6 +22,8 @@ public interface OrderMapper {
     @Mapping(target = "items", ignore = true)
     @Mapping(target = "waitingStockExpired", ignore = true)
     @Mapping(target = "waitingStockItems", ignore = true)
+    @Mapping(target = "stockReadyForConfirmation", ignore = true)
+    @Mapping(target = "stockReadyAt", ignore = true)
     OrderResponse toResponse(Order order);
 
     @Mapping(target = "channelId", source = "order.channel.id")
@@ -32,13 +34,36 @@ public interface OrderMapper {
     @Mapping(target = "items", ignore = true)
     @Mapping(target = "waitingStockExpired", ignore = true)
     @Mapping(target = "waitingStockItems", ignore = true)
+    @Mapping(target = "stockReadyForConfirmation", ignore = true)
+    @Mapping(target = "stockReadyAt", ignore = true)
     OrderResponse toResponseWithItems(Order order);
 
     @AfterMapping
     default void mapWaitingStock(Order order, @MappingTarget OrderResponse response) {
         response.setWaitingStockExpired(order.getWaitingStockExpiresAt() != null
                 && !order.getWaitingStockExpiresAt().isAfter(OffsetDateTime.now()));
+        Map<String, Object> waitingStock = waitingStockMetadata(order.getPlatformMetadata());
+        response.setStockReadyForConfirmation(Boolean.TRUE.equals(waitingStock.get("stockReadyForConfirmation")));
+        response.setStockReadyAt(offsetDateTime(waitingStock.get("stockReadyAt")));
         response.setWaitingStockItems(waitingStockItems(order.getPlatformMetadata()));
+    }
+
+    private static Map<String, Object> waitingStockMetadata(Map<String, Object> metadata) {
+        if (metadata == null || !(metadata.get("waitingStock") instanceof Map<?, ?> waiting)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        waiting.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
+    }
+
+    private static OffsetDateTime offsetDateTime(Object value) {
+        if (value == null) return null;
+        try {
+            return OffsetDateTime.parse(String.valueOf(value));
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private static List<fu.osms.order.dto.response.WaitingStockItemResponse> waitingStockItems(

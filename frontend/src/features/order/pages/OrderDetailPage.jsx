@@ -363,6 +363,25 @@ const OrderDetailPage = () => {
     });
   };
 
+  // Xác nhận thủ công một order đã có lại tồn kho.
+  const handleConfirmWaitingStock = async () => {
+    setUpdating(true);
+    try {
+      const updated = await orderService.confirmWaitingStock(id);
+      setOrder(updated);
+      toast.success('Đã giữ tồn và xác nhận đơn hàng');
+      fetchHistory();
+      fetchReadiness({ silent: true });
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.message
+        || 'Tồn kho vừa không còn đủ, vui lòng kiểm tra lại');
+      await fetchOrder({ silent: true });
+      fetchHistory();
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   // Hiển thị thời gian order đã chờ bổ sung tồn kho.
   const formatWaitingDuration = (startedAt) => {
     if (!startedAt) return '-';
@@ -532,6 +551,10 @@ const OrderDetailPage = () => {
       }
     : buyerCancellation;
   const buyerCancellationActive = effectiveBuyerCancellation?.active === true;
+  const buyerCancellationVisible = Boolean(effectiveBuyerCancellation?.cancelId)
+    && buyerCancellationActive
+    && !['CANCELLATION_REQUEST_COMPLETE', 'CANCELLATION_REQUEST_CANCEL', 'CANCELLATION_REQUEST_CANCELLED']
+      .includes(effectiveBuyerCancellation?.cancelStatus);
   const canChangeStatus = baseCanChangeStatus && !buyerCancellationActive;
   const canDecideBuyerCancellation = (role === ROLES.OWNER || role === ROLES.SALES)
     && effectiveBuyerCancellation?.sellerActionRequired === true
@@ -542,7 +565,7 @@ const OrderDetailPage = () => {
     && order.status === 'PENDING'
     && !tikTokAwaitingShipment;
   const isCancellable = !tikTokCancelPending && !buyerCancellationActive
-    && !['IN_TRANSIT', 'DELIVERED', 'CANCELLED'].includes(order.status);
+    && ['PENDING', 'CONFIRMED', 'PROCESSING', 'WAITING_STOCK'].includes(order.status);
   const currentStep = getCurrentStep();
   const chStyle = getChannelStyle(order.channelName);
   const ChIcon = chStyle?.icon;
@@ -585,6 +608,31 @@ const OrderDetailPage = () => {
             <span className={styles.payPill} style={{ background: pc.bg, color: pc.color, borderColor: pc.border }}>
               {pc.label}
             </span>
+            {order.status === 'WAITING_STOCK' && (role === ROLES.OWNER || role === ROLES.SALES) && (
+              <div className={styles.waitingStockHeaderActions}>
+                {order.stockReadyForConfirmation && (
+                  <button
+                    type="button"
+                    className={styles.stockReadyButton}
+                    onClick={handleConfirmWaitingStock}
+                    disabled={updating}
+                    title="Xác nhận và giữ tồn cho order này"
+                  >
+                    {updating ? 'Đang xác nhận...' : 'Xác nhận đã có hàng'}
+                  </button>
+                )}
+                {isCancellable && (
+                  <button
+                    type="button"
+                    className={styles.waitingCancelButton}
+                    onClick={handleOpenCancelModal}
+                    disabled={updating}
+                  >
+                    Hủy đơn
+                  </button>
+                )}
+              </div>
+            )}
             {tikTokCancelPending && (
               <span className={styles.statusPill} style={{ background: '#fff7ed', color: '#c2410c', borderColor: '#fed7aa' }}>
                 <Clock size={12} />
@@ -637,7 +685,7 @@ const OrderDetailPage = () => {
               )}
             </div>
           )}
-          {canChangeStatus && isCancellable && (
+          {canChangeStatus && isCancellable && order.status !== 'WAITING_STOCK' && (
             <button
               className={styles.cancelBtn}
               onClick={handleOpenCancelModal}
@@ -649,7 +697,7 @@ const OrderDetailPage = () => {
         </div>
       </div>
 
-      {effectiveBuyerCancellation?.cancelId && (
+      {buyerCancellationVisible && (
         <section className={styles.buyerCancellationNotice}>
           <div className={styles.buyerCancellationHeader}>
             <AlertTriangle size={18} />
@@ -723,7 +771,9 @@ const OrderDetailPage = () => {
           <div className={styles.waitingStockHeader}>
             <AlertTriangle size={18} />
             <div>
-              <strong>Đơn đang chờ bổ sung tồn kho</strong>
+              <strong>{order.stockReadyForConfirmation
+                ? 'Đơn đã có hàng, chờ xác nhận'
+                : 'Đơn đang chờ bổ sung tồn kho'}</strong>
               <p>
                 Đã chờ: {formatWaitingDuration(order.waitingStockAt)}
                 {order.dispatchSlaAt ? ` · SLA TikTok: ${formatDate(order.dispatchSlaAt)}` : ''}

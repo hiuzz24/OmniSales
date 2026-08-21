@@ -105,6 +105,14 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái thành công", response));
     }
 
+    /** Xác nhận thủ công một order đã có lại tồn kho và chuyển thẳng sang CONFIRMED. */
+    @PostMapping("/{id}/waiting-stock/confirm")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<OrderResponse>> confirmWaitingStock(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã giữ tồn và xác nhận đơn hàng", orderService.confirmWaitingStock(id)));
+    }
+
     @PatchMapping("/{id}/payment-status")
     public ResponseEntity<ApiResponse<OrderResponse>> updatePaymentStatus(@PathVariable UUID id,
                                                                           @RequestParam String paymentStatus) {

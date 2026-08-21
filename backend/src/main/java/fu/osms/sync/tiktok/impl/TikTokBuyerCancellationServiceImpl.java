@@ -215,8 +215,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         metadata.put("lastActorRole", latest.lastActorRole());
         metadata.put("sellerNextAction", latest.sellerNextAction());
         metadata.put("lastUpdateTime", latest.updateTime());
-        boolean active = TikTokBuyerCancellationMetadata.PENDING.equalsIgnoreCase(latest.cancelStatus())
-                || TikTokBuyerCancellationMetadata.SUCCESS.equalsIgnoreCase(latest.cancelStatus());
+        boolean active = TikTokBuyerCancellationMetadata.PENDING.equalsIgnoreCase(latest.cancelStatus());
         metadata.put("active", active);
         metadata.put("sellerActionRequired", active
                 && TikTokBuyerCancellationMetadata.PENDING.equalsIgnoreCase(latest.cancelStatus())
@@ -226,7 +225,8 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         }
         TikTokBuyerCancellationMetadata.replace(order, metadata);
         OrderStatus previous = order.getStatus();
-        if (TikTokBuyerCancellationMetadata.COMPLETE.equalsIgnoreCase(latest.cancelStatus())) {
+        if (TikTokBuyerCancellationMetadata.SUCCESS.equalsIgnoreCase(latest.cancelStatus())
+                || TikTokBuyerCancellationMetadata.COMPLETE.equalsIgnoreCase(latest.cancelStatus())) {
             order.setStatus(OrderStatus.CANCELLED);
             order.setStatusChangedAt(java.time.OffsetDateTime.now());
             OrderStockMetadata.clearLifecycle(order);

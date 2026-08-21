@@ -39,6 +39,12 @@ const orderApi = {
     return response.data.data;
   },
 
+  // Xác nhận thủ công một order WAITING_STOCK và giữ tồn thật.
+  confirmWaitingStock: async (id) => {
+    const response = await axiosClient.post(`/orders/${id}/waiting-stock/confirm`);
+    return response.data.data;
+  },
+
   // Yêu cầu URL phiếu vận chuyển chính thức từ platform.
   createShippingLabel: async (id) => {
     const response = await axiosClient.post(`/orders/${id}/shipping-label`);

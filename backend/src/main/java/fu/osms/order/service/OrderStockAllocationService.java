@@ -7,6 +7,5 @@ import java.util.UUID;
 public interface OrderStockAllocationService {
     Order classifyAfterImport(UUID orderId);
     Order confirmOrder(UUID orderId);
-    Order movePendingOrderToWaitingIfUnavailable(UUID orderId);
-    Order reconcileWaitingOrder(UUID orderId);
+    Order refreshWaitingStockAvailability(UUID orderId);
 }

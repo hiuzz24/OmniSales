@@ -190,7 +190,7 @@ const OrderListPage = () => {
         fetchOrders({ silent: true });
         fetchStats();
       }
-    }, 15_000);
+    }, 5_000);
 
     return () => window.clearInterval(refreshInterval);
   }, [fetchOrders, fetchStats]);
@@ -581,7 +581,7 @@ const OrderListPage = () => {
                 return (
                   <tr
                     key={order.id}
-                    className={`${styles.tableRow} ${cancellationBadge ? styles.cancellationRow : ''}`}
+                    className={`${styles.tableRow} ${order.stockReadyForConfirmation ? styles.stockReadyRow : ''} ${cancellationBadge ? styles.cancellationRow : ''}`}
                   >
                     {statusFilter === 'WAITING_STOCK' && waitingStockExpired && (
                       <td className={styles.selectColumn}>
@@ -600,6 +600,12 @@ const OrderListPage = () => {
                     <td className={styles.thPl}>
                       <div className={styles.orderCodeCell}>
                         <span className={styles.orderCode}>{order.externalOrderId}</span>
+                        {order.status === 'WAITING_STOCK' && order.stockReadyForConfirmation && (
+                          <small className={styles.stockReadyBadge} title="Tồn đủ theo lần kiểm tra gần nhất; vẫn cần xác nhận lại để giữ tồn">
+                            <CheckCircle size={11} />
+                            Đã có hàng
+                          </small>
+                        )}
                         {cancellationBadge && (
                           <span
                             className={`${styles.cancellationBadge} ${styles[cancellationBadge.className]}`}
@@ -655,7 +661,7 @@ const OrderListPage = () => {
                           <StatusIcon size={11} />
                           {sc.label}
                         </span>
-                        {order.status === 'WAITING_STOCK' && order.waitingStockAt && (
+                        {order.waitingStockAt && order.status === 'WAITING_STOCK' && (
                           <small className={styles.waitingDuration}>
                             Đã chờ {formatWaitingDuration(order.waitingStockAt)}
                           </small>

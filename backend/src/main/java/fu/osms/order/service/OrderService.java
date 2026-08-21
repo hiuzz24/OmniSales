@@ -27,6 +27,8 @@ public interface OrderService {
 
     OrderResponse updateStatus(UUID id, OrderStatus status);
 
+    OrderResponse confirmWaitingStock(UUID id);
+
     OrderResponse updatePaymentStatus(UUID id, PaymentStatus paymentStatus);
 
     void cancel(UUID id, CancelOrderRequest request);
