@@ -26,7 +26,9 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID> {
            "ORDER BY w.name ASC")
     List<Warehouse> searchWarehouses(@Param("keyword") String keyword, @Param("isActive") Boolean isActive);
 
-    Optional<Warehouse> findFirstByNameAndDeletedAtIsNull(String name);
+    Optional<Warehouse> findFirstByNameAndDeletedAtIsNullOrderByIdAsc(String name);
+
+    List<Warehouse> findByNameAndDeletedAtIsNull(String name);
 
     Optional<Warehouse> findFirstByDeletedAtIsNullAndIsActiveTrueOrderByCreatedAtAsc();
 

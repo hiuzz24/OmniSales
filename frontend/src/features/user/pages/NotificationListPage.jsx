@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import useAuth from '../../auth/hooks/useAuth';
 import notificationApi from '../../../api/notificationApi';
+import { getDefaultPageSize } from '../../../shared/utils/systemPreferences';
 import { ROUTES } from '../../../app/router/routes';
 import Pagination from '../../../shared/components/Pagination';
 import styles from './NotificationListPage.module.css';
@@ -70,8 +71,14 @@ const NotificationListPage = () => {
   
   // Pagination state
   const [page, setPage] = useState(0);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(getDefaultPageSize);
   const [totalPages, setTotalPages] = useState(0);
+
+  useEffect(() => {
+    const applyPageSize = () => setPageSize(getDefaultPageSize());
+    window.addEventListener('system-preferences:loaded', applyPageSize);
+    return () => window.removeEventListener('system-preferences:loaded', applyPageSize);
+  }, []);
   const [totalElements, setTotalElements] = useState(0);
 
   const fetchUnreadCount = useCallback(async () => {

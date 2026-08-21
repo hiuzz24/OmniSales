@@ -2,6 +2,7 @@ package fu.osms.it;
 
 import fu.osms.address.entity.Country;
 import fu.osms.address.service.RestCountriesService;
+import fu.osms.auth.service.EmailSender;
 import org.mockito.Mockito;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +27,13 @@ public class TestExternalServicesConfig {
     @Primary
     public JavaMailSender javaMailSender() {
         return Mockito.mock(JavaMailSender.class, Mockito.RETURNS_DEEP_STUBS);
+    }
+
+    /** Mocks the email sender — the "it" profile has no active EmailSender impl. */
+    @Bean
+    @Primary
+    public EmailSender emailSender() {
+        return Mockito.mock(EmailSender.class);
     }
 
     /** Prevents RestCountries API calls from failing. */

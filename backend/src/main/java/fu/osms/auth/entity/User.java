@@ -75,7 +75,20 @@ public class User {
     @Column(name = "password_expired")
     private Boolean passwordExpired;
 
+    @Column(name = "password_changed_at")
+    private OffsetDateTime passwordChangedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "warehouse_id")
     private Warehouse warehouse;
+
+    @PrePersist
+    protected void initializePasswordChangedAt() {
+        if (passwordChangedAt == null) {
+            passwordChangedAt = OffsetDateTime.now();
+        }
+        if (passwordExpired == null) {
+            passwordExpired = false;
+        }
+    }
 }

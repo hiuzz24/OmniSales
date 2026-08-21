@@ -690,6 +690,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return PurchaseOrderResponse.builder()
                 .id(order.getId()).orderCode(order.getOrderCode())
                 .supplierId(order.getSupplier().getId()).supplierName(order.getSupplier().getName())
+                .supplierTaxCode(order.getSupplier().getTaxCode())
                 .warehouseId(order.getWarehouse().getId()).warehouseName(order.getWarehouse().getName())
                 .warehouseAddress(order.getWarehouse().getAddress())
                 .status(order.getStatus()).orderDate(order.getOrderDate())

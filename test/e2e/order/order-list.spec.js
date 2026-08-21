@@ -161,23 +161,23 @@ test.describe('Order Detail E2E Tests', () => {
 
   test.describe('Order Detail View', () => {
 
-    test('OD-1 - Clicking on order opens detail view', async ({ managerPage }) => {
+    test('OD-1 - Clicking on order opens detail view', async ({ managerPage, request }) => {
+      // Seed at least one order so the list isn't empty
+      const token = await getAuthTokenCached(request);
+      await createTestOrder(request, token);
+
       await managerPage.goto(`${BASE_URL}/orders`);
       await managerPage.waitForLoadState('networkidle');
       await managerPage.waitForTimeout(1500);
-      
-      // Try to find and click on first order row
-      const orderRow = managerPage.locator('tbody tr, [class*="order-row"], [class*="item"]').first();
-      if (await orderRow.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await orderRow.click();
-        await managerPage.waitForTimeout(1000);
-        
-        // Should see detail panel or modal
-        const detail = managerPage.locator('[class*="detail"], [class*="modal"], [class*="drawer"]').first();
-        if (await detail.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await expect(detail).toBeVisible();
-        }
-      }
+
+      // The table row itself is not clickable; only the "Xem chi tiết" eye button navigates.
+      const detailBtn = managerPage.locator('button[title="Xem chi tiết"]').first();
+      await expect(detailBtn).toBeVisible({ timeout: 10000 });
+      await detailBtn.click();
+
+      // Should navigate to the order detail page (id may be UUID or numeric)
+      await managerPage.waitForURL(/\/orders\/[^/]+$/, { timeout: 10000 });
+      await expect(managerPage).toHaveURL(/\/orders\/[^/]+$/);
     });
 
     test('OD-2 - Order detail shows customer information', async ({ managerPage }) => {
@@ -376,11 +376,21 @@ test.describe('Order Pagination E2E Tests', () => {
     await managerPage.goto(`${BASE_URL}/orders`);
     await managerPage.waitForLoadState('networkidle');
     await managerPage.waitForTimeout(1500);
-    
-    const pagination = managerPage.locator('[class*="pagination"], nav, [role="navigation"]').first();
+
+    // The shared <Pagination> component renders
+    // <nav class="pagination" aria-label="Phân trang">. The sidebar uses a
+    // generic <nav> without aria-label, so prefer the labelled one. Fall back
+    // to a generic <nav> + the page-info line if the labelled one is absent.
+    const labelledPagination = managerPage.locator('nav[aria-label*="Phân trang" i], nav[aria-label*="pagination" i]').first();
+    const anyPagination = managerPage.locator('nav').first();
+    const pagination = (await labelledPagination.count()) > 0 ? labelledPagination : anyPagination;
     if (await pagination.isVisible({ timeout: 3000 }).catch(() => false)) {
       const content = await pagination.textContent();
-      expect(content).toMatch(/\d+|page|trang/i);
+      expect(content).toMatch(/\d+|page|trang|Trang|Page/i);
+    } else {
+      // Page info may also live in a footer span like "Trang 1 / 5".
+      const pageInfo = managerPage.locator('text=/Trang\\s*\\d+|Page\\s*\\d+|\\/\\s*\\d+\\s*$/i').first();
+      await expect(pageInfo).toBeVisible({ timeout: 3000 });
     }
   });
 

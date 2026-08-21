@@ -12,15 +12,23 @@ const API_BASE = process.env.API_BASE || ENV_API_BASE;
 
 /**
  * Login as manager via UI (for E2E tests)
- * Navigates to /login, fills credentials, waits for redirect to dashboard
+ * Navigates to /login, fills credentials, waits for redirect to dashboard.
+ *
+ * The 30s managerPage fixture timeout is the historical flake mode: Vite
+ * occasionally re-optimizes dependencies on first request, so the email
+ * input is not in the DOM until the bundle downloads. We pre-wait for the
+ * input to be visible (60s) before doing any action.
  */
 async function loginAsManager(page) {
   await page.goto('/login');
+  // Vite first-load re-optimization can take 30s+; wait up to 60s for the form.
+  await page.locator('#login-email').waitFor({ state: 'visible', timeout: 60000 });
   await page.locator('#login-email').fill(TEST_EMAIL);
+  await page.locator('#login-password').waitFor({ state: 'visible', timeout: 5000 });
   await page.locator('#login-password').fill(TEST_PASSWORD);
 
   await Promise.all([
-    page.waitForURL('**/dashboard', { timeout: 8000 }),
+    page.waitForURL('**/dashboard', { timeout: 30000 }),
     page.locator('#login-submit-btn').click(),
   ]);
 

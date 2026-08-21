@@ -266,13 +266,16 @@ test.describe('Warehouse E2E Tests', () => {
 
     test('CK4 - Create transfer shows source and destination warehouse', async ({ managerPage }) => {
       await managerPage.goto(`${BASE_URL}/warehouse/transfers/create`);
-      await managerPage.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null);
+      // Vite re-optimization can take a while; wait for the form to be in the DOM.
+      await managerPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => null);
 
-      const sourceField = managerPage.locator('#from-warehouse').first();
-      const destField = managerPage.locator('#to-warehouse').first();
+      // Frontend renders a <select id="from-warehouse"> for OWNER/SALES role
+      // and a read-only <input> for OPERATIONS. Either path covers the case.
+      const sourceField = managerPage.locator('#from-warehouse, select[name*="from"], input[readonly][value*="kho" i]').first();
+      const destField = managerPage.locator('#to-warehouse, select[name*="to"]').first();
 
-      const hasSource = await sourceField.isVisible({ timeout: 3000 });
-      const hasDest = await destField.isVisible({ timeout: 3000 });
+      const hasSource = await sourceField.isVisible({ timeout: 15000 }).catch(() => false);
+      const hasDest = await destField.isVisible({ timeout: 15000 }).catch(() => false);
 
       expect(hasSource || hasDest).toBeTruthy();
     });

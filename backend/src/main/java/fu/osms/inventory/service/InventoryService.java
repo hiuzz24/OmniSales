@@ -18,6 +18,8 @@ public interface InventoryService {
 
     PageResponse<InventoryItemResponse> getAllInventoryItems(PageRequest pageRequest, int page, int size, UUID channelId, boolean localOnly, String keyword, String status, UUID warehouseId, Collection<PlatformType> platforms);
 
+    PageResponse<InventoryGroupResponse> getInventoryGroupsPage(int page, int size, String sortBy, String sortDir, UUID channelId, boolean localOnly, String keyword, String status, UUID warehouseId, Collection<PlatformType> platforms, UUID categoryId);
+
     InventoryItemResponse createItem(InventoryItemRequest request);
 
     InventoryItemResponse getItemById(UUID id);
@@ -27,6 +29,8 @@ public interface InventoryService {
     InventoryItemResponse getItemByWarehouseAndVariant(UUID warehouseId, UUID variantId);
 
     List<InventoryItemResponse> getLowStockItems();
+
+    InventorySummaryResponse getInventorySummary();
 
     InventoryTransactionResponse recordTransaction(InventoryTransactionRequest request);
 

@@ -28,6 +28,7 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -223,16 +224,39 @@ public class BackupServiceImpl implements BackupService {
             pb.environment().put("PGPASSWORD", dbPassword);
             Process process = pb.start();
 
+            // Capture toàn bộ stderr để vừa log chi tiết vừa đính kèm vào thông báo lỗi
+            // nếu restore thực sự thất bại. pg_restore có thể ghi cảnh báo (warning) ra
+            // stderr trong khi restore vẫn thành công — đây là hành vi bình thường.
+            List<String> stderrLines = new ArrayList<>();
             try (BufferedReader r = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
                 String line;
                 while ((line = r.readLine()) != null) {
+                    stderrLines.add(line);
                     log.debug("[pg_restore] {}", line);
                 }
             }
 
             int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                throw new RuntimeException("Tiến trình pg_restore kết thúc với mã lỗi: " + exitCode);
+            // Theo tài liệu pg_restore:
+            //   0 = thành công hoàn toàn
+            //   1 = thành công nhưng có cảnh báo (ví dụ: DROP IF EXISTS không tìm thấy object)
+            //   2 = lỗi kết nối tới máy chủ
+            //   3 = lỗi nghiêm trọng (fatal error)
+            // Do đó chỉ coi exit code >= 2 là lỗi thực sự. Với exit code = 1, dữ liệu
+            // vẫn được khôi phục, chỉ ghi log cảnh báo để admin theo dõi.
+            if (exitCode == 1) {
+                String warnings = stderrLines.stream()
+                        .filter(line -> line != null && !line.isBlank())
+                        .collect(Collectors.joining(" | "));
+                log.warn("pg_restore hoàn tất với exit code 1 (cảnh báo, dữ liệu vẫn được khôi phục) khi restore file {}: {}",
+                        file.getName(), warnings);
+            } else if (exitCode != 0) {
+                String detail = stderrLines.stream()
+                        .filter(line -> line != null && !line.isBlank())
+                        .limit(20)
+                        .collect(Collectors.joining(" | "));
+                throw new RuntimeException("Tiến trình pg_restore kết thúc với mã lỗi: " + exitCode
+                        + (detail.isEmpty() ? "" : ". Chi tiết: " + detail));
             }
             log.info("Khôi phục cơ sở dữ liệu thành công từ file: {}", file.getName());
 
