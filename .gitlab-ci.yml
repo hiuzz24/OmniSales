@@ -35,14 +35,14 @@ workflow:
   rules:
     # 1. Merge request → keep default (run all jobs that opt in)
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    # 2. Push to main → deploy chain only, e2e will be skipped via job rules
+    # 2. Push to main → chạy tất cả jobs (build → e2e → package → deploy)
     - if: $CI_COMMIT_BRANCH == "main"
     # 3. Scheduled / trigger / API / web → keep default
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "trigger"
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "api"
-    # 4. Any other branch push → keep default (jobs opt out individually)
+    # 4. Any other branch push → chỉ build, không deploy
     - if: $CI_COMMIT_BRANCH
 
 variables:
@@ -102,18 +102,14 @@ e2e:
     CI_DB_USERNAME: gitlab-ci
     CI_DB_PASSWORD: gitlab-ci
   rules:
+    # Chạy khi push lên main (build → e2e → package → deploy)
+    - if: $CI_COMMIT_BRANCH == "main"
     # Chỉ chạy e2e khi MERGE từ nhánh khác vào main.
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
     # Chạy khi pipeline được trigger bởi schedule (cron 7h sáng)
     - if: $CI_PIPELINE_SOURCE == "schedule"
     # Cho phép chạy thủ công từ UI (Run pipeline)
     - if: $CI_PIPELINE_SOURCE == "web"
-    # Push thẳng vào main → KHÔNG chạy e2e (chỉ deploy chain)
-    - if: $CI_COMMIT_BRANCH == "main"
-      when: never
-    # Push lên bất kỳ branch nào khác → KHÔNG chạy e2e
-    - if: $CI_COMMIT_BRANCH
-      when: never
   before_script:
     - |
       # Install Maven, Java, and PostgreSQL client

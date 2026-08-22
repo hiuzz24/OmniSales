@@ -1,18 +1,18 @@
 /**
- * Central configuration loader for Playwright tests.
+ * Trình quản lý cấu hình trung tâm cho Playwright tests.
  *
- * Reads credentials and base URLs from `.env` (or process.env which
- * takes precedence so CI / pipelines can inject values without
- * shipping the `.env` file).
+ * Đọc credentials và base URLs từ `.env` (hoặc process.env có
+ * mức ưu tiên cao hơn để CI / pipelines có thể inject values
+ * mà không cần gửi file `.env`).
  *
- * Usage:
+ * Cách sử dụng:
  *   const { TEST_EMAIL, TEST_PASSWORD, API_BASE } = require('./env-config');
  */
 
 const path = require('path');
 
-// Load .env from the `test/` folder regardless of where Playwright
-// is invoked from.
+// Load .env từ thư mục `test/` bất kể Playwright
+// được gọi từ đâu.
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 function readEnv(key, fallback) {
@@ -21,10 +21,10 @@ function readEnv(key, fallback) {
   return value;
 }
 
-// Passwords are seeded by backend/src/main/resources/schema.sql with
-// crypt('11111111', gen_salt('bf', 10)) for every demo account. Keep
-// these aligned with the DB seed so the warmup + fixtures can actually
-// log in. Override via env vars when running against a different DB.
+// Passwords được seed bởi backend/src/main/resources/schema.sql với
+// crypt('11111111', gen_salt('bf', 10)) cho mỗi demo account. Giữ
+// các giá trị này đồng bộ với DB seed để warmup + fixtures có thể
+// đăng nhập thành công. Override qua env vars khi chạy với DB khác.
 const TEST_EMAIL = readEnv('TEST_EMAIL', 'manager@osms.vn');
 const TEST_PASSWORD = readEnv('TEST_PASSWORD', '11111111');
 const API_BASE = readEnv('API_BASE', 'http://localhost:8080/api');
