@@ -25,6 +25,7 @@ import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.order.support.TikTokBuyerCancellationMetadata;
 import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import lombok.RequiredArgsConstructor;
@@ -94,6 +95,9 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
             throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
                     "Chỉ đơn hàng đang xử lý mới được tạo phiếu xuất kho");
         }
+        if (TikTokBuyerCancellationMetadata.isActive(order)) {
+            throw new AppException(ErrorCode.CONFLICT, "Đơn đang có yêu cầu hủy từ khách hàng");
+        }
         if (!issueRepository.findByReferenceIdAndIssueTypeAndStatusIn(
                 orderId, ORDER_ISSUE, List.of("DRAFT", "CONFIRMED")).isEmpty()) {
             throw new AppException(ErrorCode.VALIDATION_FAILED,
@@ -154,6 +158,7 @@ public class OrderStockDeliveryServiceImpl implements OrderStockDeliveryService 
         if (order == null || order.getStatus() != OrderStatus.DELIVERED) {
             return;
         }
+        if (TikTokBuyerCancellationMetadata.isActive(order)) return;
         InventoryIssue issue = issueRepository
                 .findFirstByReferenceIdAndIssueTypeAndStatus(orderId, ORDER_ISSUE, "DRAFT")
                 .flatMap(candidate -> issueRepository.findByIdForUpdate(candidate.getId()))

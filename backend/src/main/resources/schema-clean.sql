@@ -805,7 +805,7 @@ CREATE TABLE audit_logs (
                             actor_id     UUID        REFERENCES users(id) ON DELETE SET NULL,
                             actor_email  VARCHAR(255) NOT NULL,
                             action       VARCHAR(30) NOT NULL
-                                CHECK (action IN ('CREATE','UPDATE','DELETE','LOGIN','LOGOUT','EXPORT','CONNECT','DISCONNECT','STATUS_CHANGE','ORDER_CANCEL','PAYMENT_STATUS_CHANGE')),
+                                CHECK (action IN ('CREATE','UPDATE','DELETE','LOGIN','LOGOUT','EXPORT','CONNECT','DISCONNECT','STATUS_CHANGE','ORDER_CANCEL','PAYMENT_STATUS_CHANGE','STOCK_CONFIRMED_MANUALLY')),
                             entity_type  VARCHAR(10) NOT NULL
                                 CHECK (entity_type IN ('PRODUCT','VARIANT','ORDER','INVENTORY','CHANNEL','WAREHOUSE','USER')),
                             entity_id    UUID,

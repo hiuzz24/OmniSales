@@ -2,30 +2,36 @@ package fu.osms.inventory.service.impl;
 
 import fu.osms.catalog.entity.ProductVariant;
 import fu.osms.catalog.repository.ProductVariantRepository;
-import fu.osms.common.exception.AppException;
-import fu.osms.common.exception.ErrorCode;
+import fu.osms.inventory.dto.response.ReservationOutcome;
 import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.InventoryTransaction;
 import fu.osms.inventory.entity.Warehouse;
 import fu.osms.inventory.enums.InvTxnType;
+import fu.osms.inventory.enums.ReservationResult;
 import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.InventoryTransactionRepository;
 import fu.osms.inventory.service.InventoryAlertService;
-import fu.osms.sync.service.MarketplaceInventoryPropagationService;
-import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
 import fu.osms.inventory.service.PlatformOrderInventoryService;
+import fu.osms.order.dto.response.WaitingStockItemResponse;
 import fu.osms.order.entity.Order;
 import fu.osms.order.entity.OrderItem;
-import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
+import fu.osms.order.repository.OrderRepository;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
+import fu.osms.sync.service.MarketplaceWarehouseConsistencyService;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -36,6 +42,7 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
 
     private static final String ORDER_REFERENCE_TYPE = "ORDER";
 
+    private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductVariantRepository productVariantRepository;
     private final InventoryItemRepository inventoryItemRepository;
@@ -44,165 +51,178 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
     private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
 
+    /** Giữ toàn bộ SKU của đơn trong một transaction; không giữ dở một phần. */
     @Override
     @Transactional
-    public void syncReservations(Order order) {
-        if (order == null || order.getId() == null) {
-            return;
+    public ReservationOutcome tryReserve(UUID orderId) {
+        Order order = orderRepository.findForUpdateById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
+        if (hasOrderDeductTransactions(orderId)) {
+            return ReservationOutcome.of(ReservationResult.ALREADY_RESERVED);
         }
 
-        if (order.getStatus() == OrderStatus.CANCELLED) {
-            releaseOrderReservations(order);
-            return;
-        }
-
-        if (order.getStatus() != OrderStatus.CONFIRMED) {
-            log.debug("Skipping inventory reservation for order {} because its status is {} instead of CONFIRMED",
-                    order.getId(), order.getStatus());
-            return;
-        }
-
-        if (hasOrderDeductTransactions(order.getId())) {
-            log.debug("Skipping inventory reservation for order {} because it was already reserved", order.getId());
-            return;
-        }
-
-        List<OrderItem> orderItems = orderItemRepository.findByOrderId(order.getId());
-        Set<UUID> changedVariantIds = new HashSet<>();
-        for (OrderItem orderItem : orderItems) {
-            ProductVariant variant = resolveVariant(orderItem);
+        List<OrderItem> orderItems = orderItemRepository.findByOrderId(orderId);
+        Map<UUID, Requirement> requirements = new LinkedHashMap<>();
+        List<WaitingStockItemResponse> unmapped = new ArrayList<>();
+        for (OrderItem item : orderItems) {
+            int quantity = safeInt(item.getQuantity());
+            if (quantity <= 0) continue;
+            ProductVariant variant = resolveVariant(item);
             if (variant == null) {
-                log.warn("Skipping inventory reservation for order {} item {} because no local variant mapping was found",
-                        order.getId(), orderItem.getId());
+                unmapped.add(new WaitingStockItemResponse(
+                        null, item.getSku(), item.getName(), quantity, 0, quantity));
                 continue;
             }
-            reserveVariant(order, orderItem, variant);
-            changedVariantIds.add(variant.getId());
+            requirements.merge(variant.getId(), new Requirement(variant, quantity, item),
+                    (left, right) -> left.add(right.quantity(), right.sourceItem()));
         }
-        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
-    }
-
-    private void reserveVariant(Order order, OrderItem orderItem, ProductVariant variant) {
-        int quantity = safeInt(orderItem.getQuantity());
-        if (quantity <= 0) {
-            return;
+        if (!unmapped.isEmpty()) {
+            return new ReservationOutcome(ReservationResult.VARIANT_MAPPING_MISSING, Set.of(), unmapped);
+        }
+        if (requirements.isEmpty()) {
+            return ReservationOutcome.of(ReservationResult.ALREADY_RESERVED);
         }
 
         Warehouse warehouse = marketplaceWarehouseConsistencyService.resolveMasterWarehouse();
-        InventoryItem inventoryItem = inventoryItemRepository
-                .findByWarehouseIdAndVariantIdWithLock(warehouse.getId(), variant.getId())
-                .orElseThrow(() -> new AppException(
-                        ErrorCode.INVENTORY_ITEM_NOT_FOUND,
-                        "SKU " + variant.getSku() + " không tồn tại trong Kho mặc định đa sàn."));
+        List<UUID> variantIds = requirements.keySet().stream()
+                .sorted(Comparator.comparing(UUID::toString)).toList();
+        List<InventoryItem> lockedItems = inventoryItemRepository
+                .findByWarehouseIdAndVariantIdInWithLock(warehouse.getId(), variantIds);
+        Map<UUID, InventoryItem> inventoryByVariant = new LinkedHashMap<>();
+        lockedItems.forEach(item -> inventoryByVariant.put(item.getVariant().getId(), item));
 
-        int available = availableQuantity(inventoryItem);
-        if (available < quantity) {
-            throw new AppException(ErrorCode.INSUFFICIENT_STOCK,
-                    "SKU " + variant.getSku() + " chỉ còn " + available
-                            + " sản phẩm có thể bán trong Kho mặc định đa sàn.");
+        List<WaitingStockItemResponse> unavailable = new ArrayList<>();
+        for (UUID variantId : variantIds) {
+            Requirement requirement = requirements.get(variantId);
+            InventoryItem inventory = inventoryByVariant.get(variantId);
+            if (inventory == null) unavailable.add(missing(requirement, 0));
+        }
+        if (!unavailable.isEmpty()) {
+            return new ReservationOutcome(ReservationResult.INVENTORY_ITEM_MISSING, Set.of(), unavailable);
         }
 
-        int quantityOnHand = safeInt(inventoryItem.getQuantityOnHand());
-        int reservedBefore = safeInt(inventoryItem.getReservedQuantity());
-        int reservedAfter = reservedBefore + quantity;
-        inventoryItem.setReservedQuantity(reservedAfter);
-        inventoryItemRepository.save(inventoryItem);
+        List<WaitingStockItemResponse> insufficient = new ArrayList<>();
+        for (UUID variantId : variantIds) {
+            Requirement requirement = requirements.get(variantId);
+            int available = availableQuantity(inventoryByVariant.get(variantId));
+            if (available < requirement.quantity()) insufficient.add(missing(requirement, available));
+        }
+        if (!insufficient.isEmpty()) {
+            return new ReservationOutcome(ReservationResult.INSUFFICIENT_STOCK, Set.of(), insufficient);
+        }
 
-        inventoryTransactionRepository.save(InventoryTransaction.builder()
-                .warehouse(warehouse)
-                .variant(variant)
-                .type(InvTxnType.ORDER_DEDUCT)
-                .referenceType(ORDER_REFERENCE_TYPE)
-                .referenceId(order.getId())
-                .quantityChange(-quantity)
-                .quantityBefore(quantityOnHand - reservedBefore)
-                .quantityAfter(quantityOnHand - reservedAfter)
-                .unitCost(resolveUnitCost(inventoryItem, orderItem))
-                .note("Platform order reserved: " + order.getExternalOrderId())
-                .build());
-
-        inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
+        Set<UUID> changedVariantIds = new LinkedHashSet<>();
+        for (UUID variantId : variantIds) {
+            Requirement requirement = requirements.get(variantId);
+            InventoryItem inventory = inventoryByVariant.get(variantId);
+            int quantityOnHand = safeInt(inventory.getQuantityOnHand());
+            int reservedBefore = safeInt(inventory.getReservedQuantity());
+            int reservedAfter = reservedBefore + requirement.quantity();
+            inventory.setReservedQuantity(reservedAfter);
+            inventoryItemRepository.save(inventory);
+            inventoryTransactionRepository.save(InventoryTransaction.builder()
+                    .warehouse(warehouse)
+                    .variant(requirement.variant())
+                    .type(InvTxnType.ORDER_DEDUCT)
+                    .referenceType(ORDER_REFERENCE_TYPE)
+                    .referenceId(orderId)
+                    .quantityChange(-requirement.quantity())
+                    .quantityBefore(quantityOnHand - reservedBefore)
+                    .quantityAfter(quantityOnHand - reservedAfter)
+                    .unitCost(resolveUnitCost(inventory, requirement.sourceItem()))
+                    .note("Platform order reserved: " + order.getExternalOrderId())
+                    .build());
+            inventoryAlertService.notifyLowStockAfterStockChange(inventory);
+            changedVariantIds.add(variantId);
+        }
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        return new ReservationOutcome(ReservationResult.RESERVED, changedVariantIds, List.of());
     }
 
-    private void releaseOrderReservations(Order order) {
+    /** Nhả reservation idempotent khi platform xác nhận đơn đã hủy. */
+    @Override
+    @Transactional
+    public Set<UUID> releaseOrderReservations(UUID orderId) {
+        Order order = orderRepository.findForUpdateById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException("Order not found: " + orderId));
         List<InventoryTransaction> transactions = inventoryTransactionRepository
-                .findByReferenceTypeAndReferenceId(ORDER_REFERENCE_TYPE, order.getId());
-        boolean alreadyCancelled = transactions.stream()
-                .anyMatch(transaction -> transaction.getType() == InvTxnType.ORDER_CANCEL);
-        if (alreadyCancelled) {
-            return;
+                .findByReferenceTypeAndReferenceId(ORDER_REFERENCE_TYPE, orderId);
+        if (transactions.stream().anyMatch(value -> value.getType() == InvTxnType.ORDER_CANCEL)) {
+            return Set.of();
+        }
+        List<InventoryTransaction> deductions = transactions.stream()
+                .filter(value -> value.getType() == InvTxnType.ORDER_DEDUCT)
+                .sorted(Comparator.comparing((InventoryTransaction value) -> value.getWarehouse().getId().toString())
+                        .thenComparing(value -> value.getVariant().getId().toString()))
+                .toList();
+        if (deductions.isEmpty()) return Set.of();
+
+        Map<UUID, InventoryItem> locked = new LinkedHashMap<>();
+        Map<UUID, List<InventoryTransaction>> byWarehouse = new LinkedHashMap<>();
+        deductions.forEach(value -> byWarehouse
+                .computeIfAbsent(value.getWarehouse().getId(), ignored -> new ArrayList<>()).add(value));
+        for (Map.Entry<UUID, List<InventoryTransaction>> entry : byWarehouse.entrySet()) {
+            List<UUID> variantIds = entry.getValue().stream().map(value -> value.getVariant().getId())
+                    .distinct().sorted(Comparator.comparing(UUID::toString)).toList();
+            inventoryItemRepository.findByWarehouseIdAndVariantIdInWithLock(entry.getKey(), variantIds)
+                    .forEach(item -> locked.put(item.getVariant().getId(), item));
         }
 
-        transactions.stream()
-                .filter(transaction -> transaction.getType() == InvTxnType.ORDER_DEDUCT)
-                .forEach(transaction -> {
-                    InventoryItem inventoryItem = inventoryItemRepository
-                            .findByWarehouseIdAndVariantIdWithLock(
-                                    transaction.getWarehouse().getId(),
-                                    transaction.getVariant().getId())
-                            .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND));
-
-                    int releaseQuantity = Math.abs(safeInt(transaction.getQuantityChange()));
-                    int quantityOnHand = safeInt(inventoryItem.getQuantityOnHand());
-                    int reservedBefore = safeInt(inventoryItem.getReservedQuantity());
-                    int actualReleaseQuantity = Math.min(releaseQuantity, reservedBefore);
-                    if (actualReleaseQuantity <= 0) {
-                        return;
-                    }
-
-                    int availableBefore = quantityOnHand - reservedBefore;
-                    int reservedAfter = reservedBefore - actualReleaseQuantity;
-                    int availableAfter = quantityOnHand - reservedAfter;
-
-                    inventoryItem.setReservedQuantity(reservedAfter);
-                    inventoryItemRepository.save(inventoryItem);
-                    inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
-
-                    inventoryTransactionRepository.save(InventoryTransaction.builder()
-                            .warehouse(inventoryItem.getWarehouse())
-                            .variant(inventoryItem.getVariant())
-                            .type(InvTxnType.ORDER_CANCEL)
-                            .referenceType(ORDER_REFERENCE_TYPE)
-                            .referenceId(order.getId())
-                            .quantityChange(actualReleaseQuantity)
-                            .quantityBefore(availableBefore)
-                            .quantityAfter(availableAfter)
-                            .unitCost(transaction.getUnitCost())
-                            .note("Platform order cancelled: " + order.getExternalOrderId())
-                            .build());
-                });
-        Set<UUID> changedVariantIds = transactions.stream()
-                .filter(transaction -> transaction.getType() == InvTxnType.ORDER_DEDUCT)
-                .map(transaction -> transaction.getVariant() == null ? null : transaction.getVariant().getId())
-                .filter(id -> id != null)
-                .collect(java.util.stream.Collectors.toSet());
+        Set<UUID> changedVariantIds = new LinkedHashSet<>();
+        for (InventoryTransaction transaction : deductions) {
+            InventoryItem inventory = locked.get(transaction.getVariant().getId());
+            if (inventory == null) {
+                log.warn("Cannot release reservation orderId={} variantId={}: inventory item missing",
+                        orderId, transaction.getVariant().getId());
+                continue;
+            }
+            int releaseQuantity = Math.abs(safeInt(transaction.getQuantityChange()));
+            int quantityOnHand = safeInt(inventory.getQuantityOnHand());
+            int reservedBefore = safeInt(inventory.getReservedQuantity());
+            int actualRelease = Math.min(releaseQuantity, reservedBefore);
+            if (actualRelease <= 0) continue;
+            int availableBefore = quantityOnHand - reservedBefore;
+            inventory.setReservedQuantity(reservedBefore - actualRelease);
+            inventoryItemRepository.save(inventory);
+            inventoryAlertService.notifyLowStockAfterStockChange(inventory);
+            inventoryTransactionRepository.save(InventoryTransaction.builder()
+                    .warehouse(inventory.getWarehouse())
+                    .variant(inventory.getVariant())
+                    .type(InvTxnType.ORDER_CANCEL)
+                    .referenceType(ORDER_REFERENCE_TYPE)
+                    .referenceId(orderId)
+                    .quantityChange(actualRelease)
+                    .quantityBefore(availableBefore)
+                    .quantityAfter(availableBefore + actualRelease)
+                    .unitCost(transaction.getUnitCost())
+                    .note("Platform order cancelled: " + order.getExternalOrderId())
+                    .build());
+            changedVariantIds.add(inventory.getVariant().getId());
+        }
         marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        return changedVariantIds;
     }
 
     private boolean hasOrderDeductTransactions(UUID orderId) {
         return inventoryTransactionRepository.findByReferenceTypeAndReferenceId(ORDER_REFERENCE_TYPE, orderId).stream()
-                .anyMatch(transaction -> transaction.getType() == InvTxnType.ORDER_DEDUCT);
+                .anyMatch(value -> value.getType() == InvTxnType.ORDER_DEDUCT);
     }
 
-    private ProductVariant resolveVariant(OrderItem orderItem) {
-        if (orderItem.getVariant() != null) {
-            return orderItem.getVariant();
-        }
-        String sku = orderItem.getSku();
-        if (sku == null || sku.isBlank()) {
-            return null;
-        }
-        return productVariantRepository.findBySkuAndDeletedAtIsNull(sku).orElse(null);
+    private ProductVariant resolveVariant(OrderItem item) {
+        if (item.getVariant() != null) return item.getVariant();
+        if (item.getSku() == null || item.getSku().isBlank()) return null;
+        return productVariantRepository.findBySkuAndDeletedAtIsNull(item.getSku()).orElse(null);
     }
 
-    private BigDecimal resolveUnitCost(InventoryItem inventoryItem, OrderItem orderItem) {
-        if (inventoryItem.getAverageCost() != null) {
-            return inventoryItem.getAverageCost();
-        }
-        if (orderItem.getCostPrice() != null) {
-            return orderItem.getCostPrice();
-        }
-        return BigDecimal.ZERO;
+    private WaitingStockItemResponse missing(Requirement requirement, int available) {
+        return new WaitingStockItemResponse(requirement.variant().getId(), requirement.variant().getSku(),
+                requirement.variant().getName(), requirement.quantity(), available,
+                Math.max(0, requirement.quantity() - available));
+    }
+
+    private BigDecimal resolveUnitCost(InventoryItem inventory, OrderItem item) {
+        if (inventory.getAverageCost() != null) return inventory.getAverageCost();
+        return item != null && item.getCostPrice() != null ? item.getCostPrice() : BigDecimal.ZERO;
     }
 
     private int availableQuantity(InventoryItem item) {
@@ -211,5 +231,11 @@ public class PlatformOrderInventoryServiceImpl implements PlatformOrderInventory
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private record Requirement(ProductVariant variant, int quantity, OrderItem sourceItem) {
+        private Requirement add(int extra, OrderItem latestSource) {
+            return new Requirement(variant, quantity + extra, sourceItem != null ? sourceItem : latestSource);
+        }
     }
 }

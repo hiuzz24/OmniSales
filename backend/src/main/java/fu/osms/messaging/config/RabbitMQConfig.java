@@ -9,10 +9,13 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.annotation.EnableRabbit;
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +45,18 @@ public class RabbitMQConfig {
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
+    }
+
+    @Bean
+    public SimpleRabbitListenerContainerFactory orderStockWaitingContainerFactory(
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            ConnectionFactory connectionFactory) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(factory, connectionFactory);
+        factory.setConcurrentConsumers(1);
+        factory.setMaxConcurrentConsumers(1);
+        factory.setPrefetchCount(1);
+        return factory;
     }
 
     @Bean
@@ -81,7 +96,9 @@ public class RabbitMQConfig {
                 new QueueSpec(RabbitMQConstants.QUEUE_ORDER_STOCK_DELIVERY_LIFECYCLE,
                         RabbitMQConstants.ORDER_STOCK_DELIVERY_LIFECYCLE),
                 new QueueSpec(RabbitMQConstants.QUEUE_ORDER_RETURN_WORKFLOW,
-                        RabbitMQConstants.ORDER_RETURN_WORKFLOW)
+                        RabbitMQConstants.ORDER_RETURN_WORKFLOW),
+                new QueueSpec(RabbitMQConstants.QUEUE_ORDER_STOCK_WAITING_RECONCILE,
+                        RabbitMQConstants.ORDER_STOCK_WAITING_RECONCILE)
         };
     }
 

@@ -38,6 +38,7 @@ import fu.osms.inventory.service.InventoryService;
 import fu.osms.inventory.service.InventoryAlertService;
 import fu.osms.purchase.repository.PurchaseOrderItemRepository;
 import fu.osms.inventory.dto.response.AvailableVariantDTO;
+import fu.osms.sync.service.MarketplaceInventoryPropagationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -79,6 +80,7 @@ public class InventoryServiceImpl implements InventoryService {
     private final ChannelProductVariantRepository channelProductVariantRepository;
     private final PurchaseOrderItemRepository purchaseOrderItemRepository;
     private final InventoryIssueItemRepository inventoryIssueItemRepository;
+    private final MarketplaceInventoryPropagationService marketplaceInventoryPropagationService;
 
     @Override
     @Transactional
@@ -1328,6 +1330,7 @@ public class InventoryServiceImpl implements InventoryService {
         InventoryItem inventoryItem = inventoryItemRepository.findById(inventoryItemId)
                 .orElseThrow(() -> new AppException(ErrorCode.INVENTORY_ITEM_NOT_FOUND,
                         "Không tìm thấy thông tin tồn kho yêu cầu"));
+        Integer quantityOnHandBefore = inventoryItem.getQuantityOnHand();
 
         // If warehouse is changed, check constraint
         if (request.getWarehouseId() != null && !request.getWarehouseId().equals(inventoryItem.getWarehouse().getId())) {
@@ -1364,6 +1367,11 @@ public class InventoryServiceImpl implements InventoryService {
         inventoryItem.setUpdatedBy(currentUser);
         inventoryItem = inventoryItemRepository.save(inventoryItem);
         inventoryAlertService.notifyLowStockAfterStockChange(inventoryItem);
+        if (!Objects.equals(quantityOnHandBefore, inventoryItem.getQuantityOnHand())
+                && inventoryItem.getVariant() != null) {
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(
+                    Set.of(inventoryItem.getVariant().getId()));
+        }
 
         // Fetch refreshed details to return
         return getInventoryItemDetail(inventoryItemId);

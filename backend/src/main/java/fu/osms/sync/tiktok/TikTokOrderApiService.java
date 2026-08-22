@@ -23,6 +23,15 @@ public interface TikTokOrderApiService {
 
     Map<String, Object> cancelOrder(Channel channel, String orderId, String cancelReason);
 
+    Cancellation searchCancellation(Channel channel, String cancelId);
+
+    CancellationDecisionEligibility getCancellationDecisionEligibility(Channel channel, String cancelId);
+
+    Map<String, Object> approveCancellation(Channel channel, String cancelId, String idempotencyKey);
+
+    Map<String, Object> rejectCancellation(Channel channel, String cancelId, String reasonCode,
+                                           String comment, String idempotencyKey);
+
     record Eligibility(boolean eligible, Set<String> reasonNames, String warningMessage) {
     }
 
@@ -30,5 +39,19 @@ public interface TikTokOrderApiService {
     }
 
     record ShippingDocumentResult(String code, String message, String documentUrl) {
+    }
+
+    record Cancellation(String cancelId, String orderId, String cancelStatus,
+                        String initiatorRole, String lastActorRole, String sellerNextAction,
+                        Long updateTime) {
+    }
+
+    record CancellationDecisionEligibility(ActionDecision approve, ActionDecision reject) {
+    }
+
+    record ActionDecision(boolean eligible, String warningMessage, List<DecisionReason> reasons) {
+    }
+
+    record DecisionReason(String code, String label) {
     }
 }

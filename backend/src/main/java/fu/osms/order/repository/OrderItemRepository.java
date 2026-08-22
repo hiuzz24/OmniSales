@@ -36,6 +36,21 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
 
     List<OrderItem> findByOrderIdIn(List<UUID> orderIds);
 
+    @Query("SELECT DISTINCT oi.variant.id FROM OrderItem oi WHERE oi.order.id = :orderId AND oi.variant IS NOT NULL")
+    List<UUID> findVariantIdsByOrderId(@Param("orderId") UUID orderId);
+
+    @Query(value = """
+            SELECT DISTINCT oi.variant_id
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE o.status = 'WAITING_STOCK'
+              AND oi.variant_id IS NOT NULL
+              AND (o.waiting_stock_expires_at IS NULL OR o.waiting_stock_expires_at > :now)
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<UUID> findActiveWaitingStockVariantIds(@Param("now") OffsetDateTime now,
+                                                @Param("limit") int limit);
+
     Optional<OrderItem> findByOrderIdAndExternalItemId(UUID orderId, String externalItemId);
 
     @Modifying

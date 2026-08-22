@@ -16,6 +16,9 @@ const orderService = {
     return await orderApi.updateStatus(id, status);
   },
 
+  /** Xác nhận order đã có tồn và chuyển thẳng sang CONFIRMED. */
+  confirmWaitingStock: async (id) => orderApi.confirmWaitingStock(id),
+
   /** Hủy order qua luồng hủy chuyên biệt. */
   cancel: async (id, data) => {
     return await orderApi.cancel(id, data);
@@ -30,6 +33,20 @@ const orderService = {
   createShippingLabel: async (id) => {
     return await orderApi.createShippingLabel(id);
   },
+
+  /** Hủy hàng loạt các order chờ hàng, mỗi order có kết quả độc lập. */
+  cancelBatchWaitingStock: async (orderIds) => {
+    return await orderApi.cancelBatchWaitingStock(orderIds);
+  },
+
+  /** Đọc yêu cầu hủy do Buyer tạo và eligibility hiện tại trên TikTok. */
+  getBuyerCancellation: async (id) => orderApi.getBuyerCancellation(id),
+
+  /** Chấp thuận yêu cầu hủy Buyer; chờ webhook COMPLETE trước khi hủy local. */
+  approveBuyerCancellation: async (id) => orderApi.approveBuyerCancellation(id),
+
+  /** Từ chối yêu cầu hủy Buyer bằng reason TikTok đang cho phép. */
+  rejectBuyerCancellation: async (id, data) => orderApi.rejectBuyerCancellation(id, data),
 
   /** Lấy lịch sử thay đổi của order. */
   getHistory: async (id, page, size) => {

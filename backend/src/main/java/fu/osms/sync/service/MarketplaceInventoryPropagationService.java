@@ -9,6 +9,8 @@ public interface MarketplaceInventoryPropagationService {
 
     void schedulePushAvailableStock(Collection<UUID> variantIds, UUID excludedChannelId);
 
+    void scheduleWaitingStockReconcile(Collection<UUID> variantIds);
+
     void pushAvailableStock(Collection<UUID> variantIds);
 
     void pushAvailableStock(Collection<UUID> variantIds, UUID excludedChannelId);

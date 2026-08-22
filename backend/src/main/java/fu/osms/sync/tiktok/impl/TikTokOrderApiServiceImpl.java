@@ -67,13 +67,15 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
         Map<String, String> query = new LinkedHashMap<>();
         query.put("shop_cipher", shopCipher(channel));
         query.put("page_size", "100");
+        query.put("sort_field", "update_time");
+        query.put("sort_order", "ASC");
         if (pageToken != null && !pageToken.isBlank()) query.put("page_token", pageToken);
         OffsetDateTime exclusiveTo = exclusiveUpperBound(to);
         String body;
         try {
             body = objectMapper.writeValueAsString(Map.of(
-                    "create_time_ge", from.toEpochSecond(),
-                    "create_time_lt", exclusiveTo.toEpochSecond()));
+                    "update_time_ge", from.toEpochSecond(),
+                    "update_time_lt", exclusiveTo.toEpochSecond()));
         } catch (Exception e) {
             throw new IllegalStateException("Cannot serialize TikTok order search request", e);
         }
@@ -160,6 +162,70 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
         return parseSuccess(response, "TikTok cancel order");
     }
 
+    @Override
+    public Cancellation searchCancellation(Channel channel, String cancelId) {
+        String rawBody = json(Map.of("cancel_ids", List.of(cancelId)), "TikTok cancellation search request");
+        String response = tikTokApiClient.executePost(channel.getId(),
+                "/return_refund/202602/cancellations/search",
+                Map.of("shop_cipher", shopCipher(channel), "page_size", "10"), rawBody);
+        Map<String, Object> data = WebhookPayloadUtils.copyMap(
+                parseSuccess(response, "TikTok search cancellations").get("data"));
+        List<Map<String, Object>> cancellations = maps(
+                WebhookPayloadUtils.firstPresent(data, "cancellations", "cancel_requests"));
+        Map<String, Object> cancellation = cancellations.stream()
+                .filter(value -> cancelId.equals(text(WebhookPayloadUtils.firstPresent(value, "cancel_id", "id"))))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("TikTok cancellation was not found: " + cancelId));
+        return new Cancellation(
+                text(WebhookPayloadUtils.firstPresent(cancellation, "cancel_id", "id")),
+                text(cancellation.get("order_id")),
+                text(WebhookPayloadUtils.firstPresent(cancellation, "cancel_status", "status")),
+                text(WebhookPayloadUtils.firstPresent(cancellation, "initiator_role", "cancellations_role", "role")),
+                text(WebhookPayloadUtils.firstPresent(cancellation, "cancellations_role", "last_actor_role", "role")),
+                sellerNextAction(WebhookPayloadUtils.firstPresent(cancellation,
+                        "seller_next_action_response", "seller_next_action", "next_action")),
+                epoch(WebhookPayloadUtils.firstPresent(cancellation, "update_time", "updated_at"))
+        );
+    }
+
+    @Override
+    public CancellationDecisionEligibility getCancellationDecisionEligibility(Channel channel, String cancelId) {
+        String response = tikTokApiClient.executeGet(channel.getId(),
+                "/return_refund/202601/decision_eligibility",
+                Map.of(
+                        "shop_cipher", shopCipher(channel),
+                        "return_or_cancel_id", cancelId,
+                        "check_decisions", "APPROVE_REQUEST_CANCEL,REJECT_REQUEST_CANCEL"
+                ));
+        Map<String, Object> data = WebhookPayloadUtils.copyMap(
+                parseSuccess(response, "TikTok cancellation decision eligibility").get("data"));
+        return new CancellationDecisionEligibility(
+                decision(data, "APPROVE_REQUEST_CANCEL"),
+                decision(data, "REJECT_REQUEST_CANCEL")
+        );
+    }
+
+    @Override
+    public Map<String, Object> approveCancellation(Channel channel, String cancelId, String idempotencyKey) {
+        return parseSuccess(tikTokApiClient.executePost(channel.getId(),
+                        "/return_refund/202309/cancellations/" + cancelId + "/approve",
+                        Map.of("shop_cipher", shopCipher(channel), "idempotency_key", idempotencyKey), "{}"),
+                "TikTok approve cancellation");
+    }
+
+    @Override
+    public Map<String, Object> rejectCancellation(Channel channel, String cancelId, String reasonCode,
+                                                  String comment, String idempotencyKey) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("reject_reason", reasonCode);
+        if (comment != null && !comment.isBlank()) body.put("comment", comment.trim());
+        return parseSuccess(tikTokApiClient.executePost(channel.getId(),
+                        "/return_refund/202309/cancellations/" + cancelId + "/reject",
+                        Map.of("shop_cipher", shopCipher(channel), "idempotency_key", idempotencyKey),
+                        json(body, "TikTok reject cancellation request")),
+                "TikTok reject cancellation");
+    }
+
     private String shopCipher(Channel channel) {
         if (channel == null) {
             throw new IllegalStateException("TikTok order is missing channel");
@@ -238,6 +304,95 @@ public class TikTokOrderApiServiceImpl implements TikTokOrderApiService {
             }
         }
         return result;
+    }
+
+    private ActionDecision decision(Map<String, Object> data, String decisionName) {
+        Map<String, Object> value = WebhookPayloadUtils.copyMap(data.get(decisionName));
+        if (value.isEmpty()) {
+            for (Map<String, Object> candidate : maps(WebhookPayloadUtils.firstPresent(
+                    data, "decisions", "decision_eligibility", "check_decisions"))) {
+                String name = text(WebhookPayloadUtils.firstPresent(
+                        candidate, "decision", "decision_type", "check_decision", "action"));
+                if (decisionName.equalsIgnoreCase(name)) {
+                    value = candidate;
+                    break;
+                }
+            }
+        }
+        if (value.isEmpty()) {
+            return new ActionDecision(false, "TikTok did not return " + decisionName + " eligibility", List.of());
+        }
+        boolean eligible = booleanValue(value.get("eligible"));
+        String warning = text(WebhookPayloadUtils.firstPresent(
+                value, "warning_message", "ineligible_reason", "ineligible_reason_text"));
+        List<DecisionReason> reasons = new ArrayList<>();
+        Object rawReasons = WebhookPayloadUtils.firstPresent(
+                value, "available_reject_reasons", "available_reason_names", "reasons");
+        if (rawReasons instanceof Collection<?> collection) {
+            for (Object rawReason : collection) {
+                if (rawReason instanceof Map<?, ?>) {
+                    Map<String, Object> reason = WebhookPayloadUtils.copyMap(rawReason);
+                    String code = text(WebhookPayloadUtils.firstPresent(
+                            reason, "code", "reason", "reason_name", "name"));
+                    String label = text(WebhookPayloadUtils.firstPresent(
+                            reason, "label", "display_name", "reason_text", "name"));
+                    if (code != null && !code.isBlank()) {
+                        reasons.add(new DecisionReason(code, label == null || label.isBlank() ? code : label));
+                    }
+                } else {
+                    String code = text(rawReason);
+                    if (code != null && !code.isBlank()) reasons.add(new DecisionReason(code, code));
+                }
+            }
+        }
+        return new ActionDecision(eligible, warning, List.copyOf(reasons));
+    }
+
+    private List<Map<String, Object>> maps(Object value) {
+        if (!(value instanceof Collection<?> collection)) return List.of();
+        return collection.stream().filter(Map.class::isInstance).map(WebhookPayloadUtils::copyMap).toList();
+    }
+
+    private String sellerNextAction(Object value) {
+        if (value instanceof Map<?, ?>) {
+            Map<String, Object> action = WebhookPayloadUtils.copyMap(value);
+            for (String key : List.of("action", "next_action", "seller_next_action", "name")) {
+                String candidate = sellerNextAction(action.get(key));
+                if (candidate != null) return candidate;
+            }
+            for (String key : List.of("actions", "next_actions", "seller_actions")) {
+                String candidate = sellerNextAction(action.get(key));
+                if (candidate != null) return candidate;
+            }
+            return null;
+        }
+        if (value instanceof Collection<?> values) {
+            String fallback = null;
+            for (Object item : values) {
+                String candidate = sellerNextAction(item);
+                if ("SELLER_RESPOND_CANCEL".equalsIgnoreCase(candidate)) return candidate;
+                if (fallback == null) fallback = candidate;
+            }
+            return fallback;
+        }
+        String candidate = text(value);
+        return candidate == null || candidate.isBlank() ? null : candidate;
+    }
+
+    private Long epoch(Object value) {
+        try {
+            return value == null ? null : Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private String json(Object value, String operation) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot serialize " + operation, exception);
+        }
     }
 
     private boolean booleanValue(Object value) {

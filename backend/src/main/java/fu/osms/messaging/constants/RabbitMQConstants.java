@@ -25,6 +25,7 @@ public final class RabbitMQConstants {
     public static final String ORDER_PULL_REQUESTED = "sync.order.pull";
     public static final String ORDER_STOCK_DELIVERY_LIFECYCLE = "order.stock-delivery.lifecycle";
     public static final String ORDER_RETURN_WORKFLOW = "order-return.workflow";
+    public static final String ORDER_STOCK_WAITING_RECONCILE = "order.stock-waiting.reconcile";
 
     public static final String NOTIFICATION_SEND    = "notification.send";
 
@@ -46,4 +47,6 @@ public final class RabbitMQConstants {
     public static final String QUEUE_ORDER_STOCK_DELIVERY_LIFECYCLE =
             "queue.order.stock-delivery-lifecycle";
     public static final String QUEUE_ORDER_RETURN_WORKFLOW = "queue.order-return.workflow";
+    public static final String QUEUE_ORDER_STOCK_WAITING_RECONCILE =
+            "queue.order.stock-waiting-reconcile";
 }

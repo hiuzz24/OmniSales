@@ -25,6 +25,7 @@ import java.util.Optional;
 public class TikTokWebhookHandler implements PlatformWebhookHandler {
 
     private static final String ORDER_STATUS_EVENT = "TIKTOK_ORDER_STATUS_UPDATE";
+    private static final String ORDER_CANCELLATION_STATUS_EVENT = "TIKTOK_ORDER_CANCELLATION_STATUS_UPDATE";
     private static final String REVERSE_STATUS_EVENT = "TIKTOK_REVERSE_STATUS_UPDATE";
     private static final String INVENTORY_CHANGED_EVENT = "TIKTOK_INVENTORY_CHANGED";
 
@@ -77,6 +78,9 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
         if ("2".equals(type)) {
             return REVERSE_STATUS_EVENT;
         }
+        if ("11".equals(type)) {
+            return ORDER_CANCELLATION_STATUS_EVENT;
+        }
         if ("68".equals(type)) {
             return INVENTORY_CHANGED_EVENT;
         }
@@ -101,6 +105,7 @@ public class TikTokWebhookHandler implements PlatformWebhookHandler {
         String type = WebhookPayloadUtils.text(payload.get("type"));
         return !"1".equals(type)
                 && !"2".equals(type)
+                && !"11".equals(type)
                 && !"68".equals(type)
                 && !"RETURN_STATUS_CHANGE".equalsIgnoreCase(type)
                 && !"RETURN_STATUS_CHANGED".equalsIgnoreCase(type);

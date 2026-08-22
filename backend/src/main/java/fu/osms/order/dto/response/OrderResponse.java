@@ -27,6 +27,15 @@ public class OrderResponse {
     private OrderStatus status;
     private String paymentStatus;
     private OffsetDateTime statusChangedAt;
+    private OffsetDateTime waitingStockAt;
+    private OffsetDateTime waitingStockExpiresAt;
+    private boolean stockReadyForConfirmation;
+    private OffsetDateTime stockReadyAt;
+    private OffsetDateTime dispatchSlaAt;
+    private OffsetDateTime shippingDueTime;
+    private OffsetDateTime collectionDueTime;
+    private boolean waitingStockExpired;
+    private List<WaitingStockItemResponse> waitingStockItems;
     private String buyerName;
     private String buyerPhone;
     private Map<String, Object> shippingAddress;

@@ -8,6 +8,8 @@ import fu.osms.common.enums.PlatformType;
 import fu.osms.common.enums.SyncStatus;
 import fu.osms.messaging.constants.RabbitMQConstants;
 import fu.osms.messaging.dto.InventoryPushMessage;
+import fu.osms.messaging.dto.OrderStockWaitingMessage;
+import fu.osms.messaging.handler.OrderStockWaitingHandler;
 import fu.osms.messaging.publisher.EventPublisher;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
@@ -21,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskRejectedException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -49,6 +52,7 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
     private final MarketplaceStockQuantityResolver marketplaceStockQuantityResolver;
     private final InventoryAutoPushSyncLogService inventoryAutoPushSyncLogService;
     private final EventPublisher eventPublisher;
+    private final ObjectProvider<OrderStockWaitingHandler> stockWaitingHandlerProvider;
     @Qualifier("syncJobExecutor")
     private final Executor syncJobExecutor;
 
@@ -69,6 +73,7 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
         }
 
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            publishWaitingStockReconcile(scopedVariantIds);
             pushAvailableStock(scopedVariantIds, excludedChannelId);
             return;
         }
@@ -80,7 +85,30 @@ public class MarketplaceInventoryPropagationServiceImpl implements MarketplaceIn
                         RabbitMQConstants.INVENTORY_UPDATED,
                         new InventoryPushMessage(scopedVariantIds, excludedChannelId),
                         () -> scheduleAsyncPush(scopedVariantIds, excludedChannelId));
+                publishWaitingStockReconcile(scopedVariantIds);
             }
+        });
+    }
+
+    private void publishWaitingStockReconcile(Set<UUID> variantIds) {
+        OrderStockWaitingMessage message = new OrderStockWaitingMessage(UUID.randomUUID(), Set.copyOf(variantIds));
+        eventPublisher.publish(
+                RabbitMQConstants.ORDER_STOCK_WAITING_RECONCILE,
+                message,
+                () -> stockWaitingHandlerProvider.getObject().handle(message));
+    }
+
+    @Override
+    public void scheduleWaitingStockReconcile(Collection<UUID> variantIds) {
+        Set<UUID> scopedVariantIds = marketplaceStockQuantityResolver.expandVariantIdsBySkuGroup(
+                sanitizeVariantIds(variantIds));
+        if (scopedVariantIds.isEmpty()) return;
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            publishWaitingStockReconcile(scopedVariantIds);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() { publishWaitingStockReconcile(scopedVariantIds); }
         });
     }
 

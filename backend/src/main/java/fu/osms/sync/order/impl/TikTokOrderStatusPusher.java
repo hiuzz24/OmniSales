@@ -9,6 +9,7 @@ import fu.osms.sync.order.OrderStatusPushResult;
 import fu.osms.sync.order.PlatformOrderStatusPusher;
 import fu.osms.sync.tiktok.TikTokOrderApiService;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
+import fu.osms.order.support.TikTokBuyerCancellationMetadata;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -78,6 +79,9 @@ public class TikTokOrderStatusPusher implements PlatformOrderStatusPusher {
     }
 
     private OrderStatusPushResult ship(Order order) {
+        if (TikTokBuyerCancellationMetadata.isActive(order)) {
+            return OrderStatusPushResult.failed("Đơn đang có yêu cầu hủy từ khách hàng TikTok");
+        }
         requireScope(order, "seller.fulfillment.basic");
         Map<String, Object> detail = tikTokOrderApiService.getOrderDetail(order.getChannel(), order.getExternalOrderId());
         String rawStatus = rawStatus(detail);

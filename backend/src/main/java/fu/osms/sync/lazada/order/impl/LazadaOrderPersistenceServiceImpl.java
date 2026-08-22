@@ -9,6 +9,8 @@ import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.order.event.OrderPlatformStockConflictEvent;
+import fu.osms.order.support.OrderStockMetadata;
 import fu.osms.sync.lazada.order.LazadaOrderPersistenceService;
 import fu.osms.sync.lazada.order.LazadaOrderWriteModel;
 import fu.osms.sync.order.importing.OrderImportOutcome;
@@ -16,6 +18,7 @@ import fu.osms.sync.order.importing.OrderImportResult;
 import fu.osms.sync.order.importing.OrderUpsertResult;
 import fu.osms.sync.order.importing.OrderUpsertSupport;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +34,7 @@ public class LazadaOrderPersistenceServiceImpl implements LazadaOrderPersistence
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ChannelProductVariantRepository channelVariantRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(propagation = Propagation.REQUIRED)
@@ -45,8 +49,10 @@ public class LazadaOrderPersistenceServiceImpl implements LazadaOrderPersistence
         order.setChannelName(channel.getDisplayName());
         order.setPlatform(PlatformType.LAZADA);
         if (upsert.created() && model.createdAt() != null) order.setCreatedAt(model.createdAt());
-        if (upsert.created() || oldStatus != model.status()) order.setStatusChangedAt(OffsetDateTime.now());
-        order.setStatus(model.status());
+        boolean conflict = oldStatus == OrderStatus.WAITING_STOCK && isProgressStatus(model.status());
+        OrderStatus guardedStatus = guardedStatus(oldStatus, model.status());
+        if (upsert.created() || oldStatus != guardedStatus) order.setStatusChangedAt(OffsetDateTime.now());
+        order.setStatus(guardedStatus);
         order.setPaymentStatus(model.paymentStatus());
         setTextIfPresent(model.buyerName(), order::setBuyerName);
         setTextIfPresent(model.buyerPhone(), order::setBuyerPhone);
@@ -57,6 +63,11 @@ public class LazadaOrderPersistenceServiceImpl implements LazadaOrderPersistence
         order.setCurrency(model.currency());
         setTextIfPresent(model.note(), order::setNote);
         setTextIfPresent(model.trackingNumber(), order::setTrackingNumber);
+        if (conflict) {
+            OrderStockMetadata.markPlatformConflict(order, String.valueOf(model.status()));
+            eventPublisher.publishEvent(new OrderPlatformStockConflictEvent(order.getId(), String.valueOf(model.status())));
+        }
+        if (guardedStatus == OrderStatus.CANCELLED) OrderStockMetadata.clearLifecycle(order);
         Order saved = orderRepository.save(order);
 
         orderItemRepository.deleteByOrderId(saved.getId());
@@ -89,6 +100,16 @@ public class LazadaOrderPersistenceServiceImpl implements LazadaOrderPersistence
         boolean masked = incoming.values().stream().filter(java.util.Objects::nonNull)
                 .map(String::valueOf).anyMatch(value -> value.contains("***"));
         return currentEmpty || !masked;
+    }
+
+    private OrderStatus guardedStatus(OrderStatus current, OrderStatus incoming) {
+        if (current != OrderStatus.WAITING_STOCK || incoming == null) return incoming;
+        return incoming == OrderStatus.CANCELLED ? OrderStatus.CANCELLED : OrderStatus.WAITING_STOCK;
+    }
+
+    private boolean isProgressStatus(OrderStatus incoming) {
+        return incoming != null && incoming != OrderStatus.PENDING && incoming != OrderStatus.CONFIRMED
+                && incoming != OrderStatus.CANCELLED && incoming != OrderStatus.WAITING_STOCK;
     }
 
     private record ResolvedItem(LazadaOrderWriteModel.Item item, ChannelProductVariant mapping) {

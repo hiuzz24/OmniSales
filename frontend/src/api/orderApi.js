@@ -2,7 +2,7 @@ import axiosClient from './axiosClient';
 
 const orderApi = {
   // Lấy danh sách đơn hàng theo bộ lọc và phân trang.
-  getAll: async ({ status, channelId, customerId, keyword, from, to, page = 0, size = 20 } = {}) => {
+  getAll: async ({ status, channelId, customerId, keyword, from, to, waitingStockExpired, page = 0, size = 20 } = {}) => {
     const params = { page, size };
     if (status) params.status = status;
     if (channelId) params.channelId = channelId;
@@ -10,6 +10,7 @@ const orderApi = {
     if (keyword) params.keyword = keyword;
     if (from) params.from = from;
     if (to) params.to = to;
+    if (waitingStockExpired) params.waitingStockExpired = true;
     const response = await axiosClient.get('/orders', { params });
     return response.data.data;
   },
@@ -38,9 +39,36 @@ const orderApi = {
     return response.data.data;
   },
 
+  // Xác nhận thủ công một order WAITING_STOCK và giữ tồn thật.
+  confirmWaitingStock: async (id) => {
+    const response = await axiosClient.post(`/orders/${id}/waiting-stock/confirm`);
+    return response.data.data;
+  },
+
   // Yêu cầu URL phiếu vận chuyển chính thức từ platform.
   createShippingLabel: async (id) => {
     const response = await axiosClient.post(`/orders/${id}/shipping-label`);
+    return response.data.data;
+  },
+
+  // Hủy độc lập các đơn chờ hàng đã chọn bằng lý do hết hàng của từng sàn.
+  cancelBatchWaitingStock: async (orderIds) => {
+    const response = await axiosClient.post('/orders/waiting-stock/cancel-batch', { orderIds });
+    return response.data.data;
+  },
+
+  getBuyerCancellation: async (id) => {
+    const response = await axiosClient.get(`/orders/${id}/buyer-cancellation`);
+    return response.data.data;
+  },
+
+  approveBuyerCancellation: async (id) => {
+    const response = await axiosClient.post(`/orders/${id}/buyer-cancellation/approve`);
+    return response.data.data;
+  },
+
+  rejectBuyerCancellation: async (id, data) => {
+    const response = await axiosClient.post(`/orders/${id}/buyer-cancellation/reject`, data);
     return response.data.data;
   },
 

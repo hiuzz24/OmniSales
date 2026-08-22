@@ -99,11 +99,7 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
 
     @Override
     public boolean shouldIgnore(Map<String, Object> payload) {
-        Object sellerId = firstPresent(payload, "seller_id", "sellerId");
-        if (sellerId == null) {
-            sellerId = firstPresent(dataPayload(payload), "seller_id", "sellerId");
-        }
-        return "200185074242".equals(String.valueOf(sellerId));
+        return false;
     }
 
     @Override
@@ -113,9 +109,6 @@ public class LazadaWebhookHandler implements PlatformWebhookHandler {
             accountId = firstPresent(dataPayload(payload), "seller_id", "sellerId", "account_id", "accountId");
         }
         if (accountId == null) {
-            return Optional.empty();
-        }
-        if(accountId.equals("200185074242")){
             return Optional.empty();
         }
         String resolvedAccountId = accountId.toString().trim();
