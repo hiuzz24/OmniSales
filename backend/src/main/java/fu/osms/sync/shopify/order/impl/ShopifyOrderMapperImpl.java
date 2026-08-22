@@ -57,7 +57,24 @@ public class ShopifyOrderMapperImpl implements ShopifyOrderMapper {
         if (contains(fulfillment, "DELIVER")) return OrderStatus.DELIVERED;
         if (contains(fulfillment, "FULFILLED") || contains(fulfillment, "SHIP") || contains(fulfillment, "PARTIAL"))
             return OrderStatus.SHIPPED;
+        if (isClosedFullRefundWithoutFulfillableItems(payload)) return OrderStatus.CANCELLED;
         return OrderStatus.PENDING;
+    }
+
+    /** Shopify Remove items có thể đóng và hoàn toàn bộ order nhưng không điền cancelled_at. */
+    private boolean isClosedFullRefundWithoutFulfillableItems(Map<String, Object> payload) {
+        String financialStatus = text(payload, "financial_status", "payment_status");
+        if (!contains(financialStatus, "REFUNDED")
+                || WebhookPayloadUtils.firstPresent(payload, "closed_at", "closedAt") == null) {
+            return false;
+        }
+        List<Map<String, Object>> items = maps(payload.get("line_items"));
+        return !items.isEmpty() && items.stream().allMatch(item -> {
+            Object fulfillable = WebhookPayloadUtils.firstPresent(item, "fulfillable_quantity");
+            if (fulfillable != null) return WebhookPayloadUtils.integer(fulfillable, 1) <= 0;
+            Object current = WebhookPayloadUtils.firstPresent(item, "current_quantity");
+            return current != null && WebhookPayloadUtils.integer(current, 1) <= 0;
+        });
     }
 
     private boolean hasDeliveredFulfillment(Map<String, Object> payload) {

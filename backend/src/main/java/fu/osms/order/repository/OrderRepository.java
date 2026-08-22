@@ -159,6 +159,31 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
 
     long countByStatus(OrderStatus status);
 
+    @Query(value = """
+            SELECT o.id
+            FROM orders o
+            WHERE o.status = 'WAITING_STOCK'
+              AND EXISTS (
+                    SELECT 1 FROM order_items oi
+                    WHERE oi.order_id = o.id AND oi.variant_id IN (:variantIds)
+              )
+            ORDER BY o.waiting_stock_at ASC NULLS LAST, o.created_at ASC, o.id ASC
+            LIMIT :limit OFFSET :offset
+            """, nativeQuery = true)
+    List<UUID> findWaitingStockCandidateIds(@Param("variantIds") Collection<UUID> variantIds,
+                                            @Param("limit") int limit,
+                                            @Param("offset") int offset);
+
+    @Query(value = """
+            SELECT id FROM orders
+            WHERE status = 'WAITING_STOCK'
+              AND waiting_stock_expires_at <= :now
+              AND waiting_stock_expiry_notified_at IS NULL
+            ORDER BY waiting_stock_expires_at ASC, id ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<UUID> findExpiredWaitingStockIds(@Param("now") OffsetDateTime now, @Param("limit") int limit);
+
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.status = 'DELIVERED'")
     BigDecimal sumRevenueDelivered();
 
@@ -185,6 +210,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
                       AND issue.issueType = 'ORDER'
                       AND issue.status IN ('DRAFT', 'CONFIRMED')
               )
+              AND COALESCE(function('jsonb_extract_path_text', o.platformMetadata,
+                    'tiktok', 'buyerCancellation', 'active'), 'false') <> 'true'
             ORDER BY
               CASE WHEN :orderId IS NOT NULL AND o.id = :orderId THEN 0 ELSE 1 END,
               o.createdAt DESC
@@ -212,6 +239,8 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
                       AND issue.issueType = 'ORDER'
                       AND issue.status IN ('DRAFT', 'CONFIRMED')
               )
+              AND COALESCE(function('jsonb_extract_path_text', o.platformMetadata,
+                    'tiktok', 'buyerCancellation', 'active'), 'false') <> 'true'
             """)
     Page<Order> findStockDeliveryCandidates(@Param("status") OrderStatus status,
                                             @Param("orderId") UUID orderId,

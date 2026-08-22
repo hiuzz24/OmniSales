@@ -12,6 +12,9 @@ public record TikTokOrderWriteModel(
         String buyerName, String buyerPhone, Map<String, Object> shippingAddress,
         BigDecimal subtotal, BigDecimal discountAmount, BigDecimal shippingFee, String currency,
         String note, String cancelReason, String trackingNumber, Long updateTime,
+        OffsetDateTime shippingDueTime, OffsetDateTime collectionDueTime,
+        OffsetDateTime rtsSlaTime, OffsetDateTime ttsSlaTime,
+        Integer fulfillmentPriorityLevel, String shippingType, Boolean preOrder,
         Map<String, Object> detailMetadata, List<Item> items
 ) {
     public record Item(String externalItemId, String externalVariantId, String sku, String name, int quantity,

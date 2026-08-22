@@ -18,6 +18,7 @@ public class StockReceiveResponse {
 
     private UUID warehouseId;
     private String warehouseName;
+    private String warehouseAddress;
     private UUID supplierId;
     private String supplierName;
     private UUID purchaseOrderId;

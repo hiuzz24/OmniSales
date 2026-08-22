@@ -42,6 +42,18 @@ const warehouseApi = {
         const response = await axiosClient.post(`/warehouses/${id}/sync-to-marketplaces`, payload);
         return response;
     },
+
+    // Compare default warehouse addresses across connected platforms
+    compareAddresses: async () => {
+        const response = await axiosClient.get('/warehouses/compare-addresses');
+        return response;
+    },
+
+    // Apply warehouse address sync (create new warehouse, deactivate old one)
+    applyAddressSync: async (confirm = true) => {
+        const response = await axiosClient.post('/warehouses/apply-address-sync', { confirm });
+        return response;
+    },
 };
 
 export default warehouseApi;

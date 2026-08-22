@@ -5,14 +5,21 @@ import fu.osms.channel.service.ChannelService;
 import fu.osms.common.dto.ApiResponse;
 import fu.osms.common.dto.PageResponse;
 import fu.osms.order.dto.request.CancelOrderRequest;
+import fu.osms.order.dto.request.OrderBatchCancelRequest;
+import fu.osms.order.dto.request.RejectBuyerCancellationRequest;
+import fu.osms.order.dto.response.OrderBatchCancelItemResponse;
 import fu.osms.order.dto.response.CancelReasonResponse;
 import fu.osms.order.dto.response.OrderResponse;
 import fu.osms.order.dto.response.OrderShippingLabelResponse;
 import fu.osms.order.dto.response.OrderStats;
 import fu.osms.order.dto.response.UncustomerdCountResponse;
+import fu.osms.order.dto.response.BuyerCancellationResponse;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.service.OrderService;
 import fu.osms.order.service.OrderShippingLabelService;
+import fu.osms.order.service.OrderBatchCancelService;
+import fu.osms.sync.tiktok.TikTokBuyerCancellationService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +40,8 @@ public class OrderController {
     private final OrderService orderService;
     private final OrderShippingLabelService orderShippingLabelService;
     private final ChannelService channelService;
+    private final OrderBatchCancelService orderBatchCancelService;
+    private final TikTokBuyerCancellationService buyerCancellationService;
 
     /** Trả về một đơn đã import cùng các dòng sản phẩm cho màn chi tiết. */
     @GetMapping("/{id}")
@@ -52,6 +61,7 @@ public class OrderController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Boolean waitingStockExpired,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
@@ -59,7 +69,7 @@ public class OrderController {
         OffsetDateTime toDt = to != null ? to.atTime(LocalTime.MAX).atOffset(OffsetDateTime.now().getOffset()) : null;
 
         PageResponse<OrderResponse> result = orderService.getFiltered(
-                status, channelId, keyword, fromDt, toDt, customerId, page, size);
+                status, channelId, keyword, fromDt, toDt, customerId, waitingStockExpired, page, size);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
@@ -95,6 +105,14 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái thành công", response));
     }
 
+    /** Xác nhận thủ công một order đã có lại tồn kho và chuyển thẳng sang CONFIRMED. */
+    @PostMapping("/{id}/waiting-stock/confirm")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<OrderResponse>> confirmWaitingStock(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã giữ tồn và xác nhận đơn hàng", orderService.confirmWaitingStock(id)));
+    }
+
     @PatchMapping("/{id}/payment-status")
     public ResponseEntity<ApiResponse<OrderResponse>> updatePaymentStatus(@PathVariable UUID id,
                                                                           @RequestParam String paymentStatus) {
@@ -128,5 +146,38 @@ public class OrderController {
     @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
     public ResponseEntity<ApiResponse<OrderShippingLabelResponse>> createShippingLabel(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(orderShippingLabelService.createLabel(id)));
+    }
+
+    /** Hủy độc lập từng đơn chờ hàng bằng lý do hết hàng hợp lệ của platform. */
+    @PostMapping("/waiting-stock/cancel-batch")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<List<OrderBatchCancelItemResponse>>> cancelWaitingStockBatch(
+            @Valid @RequestBody OrderBatchCancelRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                orderBatchCancelService.cancelWaitingStock(request.orderIds())));
+    }
+
+    /** Đọc yêu cầu hủy do Buyer tạo và quyền quyết định hiện tại từ TikTok. */
+    @GetMapping("/{id}/buyer-cancellation")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES', 'OPERATIONS')")
+    public ResponseEntity<ApiResponse<BuyerCancellationResponse>> getBuyerCancellation(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(buyerCancellationService.get(id)));
+    }
+
+    /** Chấp thuận yêu cầu hủy của Buyer; trạng thái local chỉ hủy khi TikTok báo COMPLETE. */
+    @PostMapping("/{id}/buyer-cancellation/approve")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<BuyerCancellationResponse>> approveBuyerCancellation(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(buyerCancellationService.approve(id)));
+    }
+
+    /** Từ chối yêu cầu hủy của Buyer bằng reason TikTok đang cho phép. */
+    @PostMapping("/{id}/buyer-cancellation/reject")
+    @PreAuthorize("hasAnyRole('OWNER', 'SALES')")
+    public ResponseEntity<ApiResponse<BuyerCancellationResponse>> rejectBuyerCancellation(
+            @PathVariable UUID id,
+            @Valid @RequestBody RejectBuyerCancellationRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                buyerCancellationService.reject(id, request.reasonCode(), request.comment())));
     }
 }

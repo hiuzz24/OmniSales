@@ -1,8 +1,11 @@
 package fu.osms.sync.tiktok.util;
 
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 public final class TikTokWarehouseAddressFormatter {
 
@@ -20,31 +23,32 @@ public final class TikTokWarehouseAddressFormatter {
             "city",
             "state",
             "province",
-            "region",
-            "postal_code"
+            "region"
     };
 
     private TikTokWarehouseAddressFormatter() {
     }
 
     public static String format(Map<String, Object> address, String warehouseId) {
-        Map<String, String> parts = new LinkedHashMap<>();
+        if (address == null || address.isEmpty()) {
+            return "TikTok warehouse " + warehouseId;
+        }
+        List<String> parts = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
         for (String field : ADDRESS_FIELDS) {
             String value = text(address.get(field));
             if (value != null) {
-                String normalizedValue = normalize(value);
-                boolean alreadyIncluded = parts.keySet().stream()
-                        .anyMatch(existing -> existing.equals(normalizedValue) || existing.contains(normalizedValue));
-                if (!alreadyIncluded) {
-                    parts.put(normalizedValue, value);
+                String normalized = normalize(value);
+                if (seen.add(normalized)) {
+                    parts.add(value);
                 }
             }
         }
-        return parts.isEmpty() ? "TikTok warehouse " + warehouseId : String.join(", ", parts.values());
+        return parts.isEmpty() ? "TikTok warehouse " + warehouseId : String.join(", ", parts);
     }
 
     private static String normalize(String value) {
-        return value.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        return value.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
     private static String text(Object value) {

@@ -2,6 +2,7 @@ package fu.osms.order.enums;
 
 public enum OrderStatus {
     PENDING,
+    WAITING_STOCK,
     CONFIRMED,
     PROCESSING,
     SHIPPED,

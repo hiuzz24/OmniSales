@@ -24,7 +24,7 @@ public class Warehouse {
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String address;
 
     @Column(name = "is_active", nullable = false)

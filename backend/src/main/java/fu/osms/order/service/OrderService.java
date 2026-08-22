@@ -23,9 +23,11 @@ public interface OrderService {
 
     PageResponse<OrderResponse> getFiltered(OrderStatus status, UUID channelId, String keyword,
                                             OffsetDateTime from, OffsetDateTime to,
-                                            UUID customerId, int page, int size);
+                                            UUID customerId, Boolean waitingStockExpired, int page, int size);
 
     OrderResponse updateStatus(UUID id, OrderStatus status);
+
+    OrderResponse confirmWaitingStock(UUID id);
 
     OrderResponse updatePaymentStatus(UUID id, PaymentStatus paymentStatus);
 

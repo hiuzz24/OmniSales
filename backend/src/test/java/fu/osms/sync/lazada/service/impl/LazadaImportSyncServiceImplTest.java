@@ -193,13 +193,6 @@ class LazadaImportSyncServiceImplTest {
                 .thenReturn("{\"code\":\"0\",\"data\":[]}");
         lenient().when(lazadaApiClient.executeGet(eq(channelId), eq("/products/get"), anyMap()))
                 .thenReturn("{\"code\":\"0\",\"data\":{\"products\":[]}}");
-        lenient().when(warehouseRepository.findFirstByNameAndDeletedAtIsNull("Main WH"))
-                .thenReturn(Optional.of(Warehouse.builder()
-                        .id(UUID.randomUUID())
-                        .name("Main WH")
-                        .address("[LAZADA_WAREHOUSE_CODE=WH-1]")
-                        .isActive(true)
-                        .build()));
         lenient().when(warehouseRepository.save(any(Warehouse.class)))
                 .thenAnswer(i -> i.getArgument(0));
         lenient().when(channelProductRepository.countByChannelIdAndMappingState(channelId, "ACTIVE"))

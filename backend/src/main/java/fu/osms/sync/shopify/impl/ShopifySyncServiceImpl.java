@@ -69,8 +69,6 @@ public class ShopifySyncServiceImpl implements PlatformSyncService {
 
             ShopifyProductPayload payload = shopifyPayloadBuilder.buildPayload(product, variants, images);
             if (!isNew) {
-                // Shopify REST product update rejects option changes without matching variant payloads.
-                // Existing variants are synced separately through productVariantsBulkUpdate below.
                 payload.setVariants(null);
                 payload.setOptions(null);
             }

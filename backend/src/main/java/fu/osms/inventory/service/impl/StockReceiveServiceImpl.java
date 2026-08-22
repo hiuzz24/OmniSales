@@ -307,6 +307,9 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             recordActualReceivedBatch(purchaseOrder, savedItems);
             purchaseOrderService.completeFromReceiptWithResult(purchaseOrder.getId());
             response.setPoCompleted(isPurchaseOrderCompleted(purchaseOrder.getId()));
+        }
+        if ("CONFIRMED".equals(status)) {
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
             notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
         }
 
@@ -472,6 +475,7 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         response.setTotalQuantity(summary.totalQuantity());
 
         if ("CONFIRMED".equals(status)) {
+            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
             notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
         }
         return enrichMarketplaceInfo(response);
@@ -800,8 +804,10 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             recordActualReceivedBatch(receipt.getPurchaseOrder(), receiptItems);
             purchaseOrderService.completeFromReceipt(receipt.getPurchaseOrder().getId());
             response.setPoCompleted(isPurchaseOrderCompleted(receipt.getPurchaseOrder().getId()));
-            notifyMarketplaceSyncChoice(receipt, approvedByUser, changedVariantIds);
         }
+
+        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
+        notifyMarketplaceSyncChoice(receipt, approvedByUser, changedVariantIds);
 
         return enrichMarketplaceInfo(response);
     }

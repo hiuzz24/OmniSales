@@ -466,6 +466,26 @@
   box-shadow: inset 4px 0 0 #5f9fd0;
 }
 
+.stockReadyRow {
+  background: #f0fdf4;
+  box-shadow: inset 4px 0 0 #34a853;
+}
+
+.stockReadyRow:hover {
+  background: #e4f8eb;
+  box-shadow: inset 4px 0 0 #218c43;
+}
+
+.cancellationRow {
+  background: #fff8d8;
+  box-shadow: inset 4px 0 0 #e4ad24;
+}
+
+.cancellationRow:hover {
+  background: #fff2bd;
+  box-shadow: inset 4px 0 0 #cf8d0e;
+}
+
 .tableRow:last-child td {
   border-bottom: 0;
 }
@@ -495,6 +515,30 @@
 
 .tableRow:hover .tdAction {
   background: #f4f9fb;
+}
+
+.cancellationRow .tdAction {
+  background: #fff8d8;
+}
+
+.cancellationRow:hover .tdAction {
+  background: #fff2bd;
+}
+
+.stockReadyRow .tdAction {
+  background: #f0fdf4;
+}
+
+.stockReadyRow:hover .tdAction {
+  background: #e4f8eb;
+}
+
+.cancellationRow.stockReadyRow .tdAction {
+  background: #fff8d8;
+}
+
+.cancellationRow.stockReadyRow:hover .tdAction {
+  background: #fff2bd;
 }
 
 .orderCode {
@@ -568,6 +612,45 @@
   white-space: nowrap;
 }
 
+.orderCodeCell {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cancellationBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 148px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.cancellationActionRequired {
+  border-color: #f3b5ac;
+  color: #a93428;
+  background: #fff0ed;
+}
+
+.cancellationPending {
+  border-color: #ebce8f;
+  color: #8a6314;
+  background: #fff8df;
+}
+
+.cancellationPendingCompletion {
+  border-color: #c9c1e7;
+  color: #66509a;
+  background: #f3f0fb;
+}
+
 .totalCell {
   color: #23816a !important;
   font-weight: 750;
@@ -591,13 +674,23 @@
 .statusBadge { padding: 4px 8px; }
 .payBadge { padding: 4px 7px; }
 
+.statusCell { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 128px; }
+.waitingDuration { color: #8a5a00; font-size: 10.5px; white-space: nowrap; }
+.stockReadyBadge { display: inline-flex; align-items: center; gap: 4px; color: #166534; background: #ecfdf3; border: 1px solid #86efac; border-radius: 6px; padding: 4px 8px; font-size: 10.5px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+
 .statusPending { border-color: #efc89f; color: #a85b1f; background: #fff0df; }
+.statusWaitingStock { border-color: #e9b949; color: #8a5a00; background: #fff8db; }
 .statusConfirmed { border-color: #b9d8ef; color: #3076ad; background: #e7f4fd; }
 .statusProcessing { border-color: #d0c3e7; color: #6e55a0; background: #f1ebfa; }
 .statusShipped { border-color: #afd9ce; color: #287969; background: #e4f6f1; }
 .statusInTransit { border-color: #b3d9e9; color: #287a9f; background: #e6f6fc; }
 .statusDelivered { border-color: #b4ddca; color: #27785b; background: #e5f7ee; }
 .statusCancelled { border-color: #ecc2c2; color: #a54848; background: #fdeaea; }
+
+.expiredToggle { display: inline-flex; align-items: center; gap: 7px; color: #7c5a12; font-size: 12px; white-space: nowrap; }
+.selectColumn { width: 38px; text-align: center; }
+.batchCancelBtn { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 7px 10px; border: 1px solid #efb4b4; border-radius: 7px; background: #fff4f4; color: #a33b3b; font-weight: 650; cursor: pointer; }
+.batchCancelBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .payUnpaid { border-color: #ead49e; color: #8d6814; background: #fff6d8; }
 .payPaid { border-color: #b4ddca; color: #27785b; background: #e5f7ee; }

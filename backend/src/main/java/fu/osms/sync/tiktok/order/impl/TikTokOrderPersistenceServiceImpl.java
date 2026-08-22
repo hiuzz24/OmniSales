@@ -9,6 +9,8 @@ import fu.osms.order.entity.OrderItem;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.order.event.OrderPlatformStockConflictEvent;
+import fu.osms.order.support.OrderStockMetadata;
 import fu.osms.sync.order.importing.OrderImportOutcome;
 import fu.osms.sync.order.importing.OrderImportResult;
 import fu.osms.sync.order.importing.OrderUpsertResult;
@@ -16,6 +18,7 @@ import fu.osms.sync.order.importing.OrderUpsertSupport;
 import fu.osms.sync.tiktok.order.*;
 import fu.osms.sync.webhook.WebhookPayloadUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +35,8 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
     private final OrderItemRepository itemRepository;
     private final ChannelProductVariantRepository channelVariantRepository;
     private final TikTokOrderMetadataMapper metadataMapper;
+    private final TikTokDispatchSlaCalculator slaCalculator;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(propagation = Propagation.REQUIRED)
@@ -60,8 +65,11 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
         order.setChannelName(channel.getDisplayName());
         order.setPlatform(PlatformType.TIKTOK);
         if (upsert.created() && model.createdAt() != null) order.setCreatedAt(model.createdAt());
-        if (model.status() != null && (upsert.created() || oldStatus != model.status())) order.setStatusChangedAt(OffsetDateTime.now());
-        if (model.status() != null) order.setStatus(model.status());
+        OrderStatus incomingStatus = model.status();
+        boolean conflict = oldStatus == OrderStatus.WAITING_STOCK && isProgressStatus(incomingStatus);
+        OrderStatus guardedStatus = guardedStatus(oldStatus, incomingStatus);
+        if (guardedStatus != null && (upsert.created() || oldStatus != guardedStatus)) order.setStatusChangedAt(OffsetDateTime.now());
+        if (guardedStatus != null) order.setStatus(guardedStatus);
         order.setPaymentStatus(model.paymentStatus());
         setText(model.buyerName(), order::setBuyerName);
         setText(model.buyerPhone(), order::setBuyerPhone);
@@ -73,7 +81,19 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
         setText(model.note(), order::setNote);
         setText(model.cancelReason(), order::setCancelReason);
         setText(model.trackingNumber(), order::setTrackingNumber);
+        order.setShippingDueTime(model.shippingDueTime());
+        order.setCollectionDueTime(model.collectionDueTime());
         order.setPlatformMetadata(metadataMapper.merge(order.getPlatformMetadata(), context, model, true));
+        if ("AWAITING_SHIPMENT".equalsIgnoreCase(model.rawStatus())) {
+            TikTokDispatchSlaCalculator.SlaWindow window = slaCalculator.calculate(model, OffsetDateTime.now());
+            order.setDispatchSlaAt(window.dispatchSlaAt());
+            order.setWaitingStockExpiresAt(window.allocationCutoffAt());
+        }
+        if (conflict) {
+            OrderStockMetadata.markPlatformConflict(order, model.rawStatus());
+            eventPublisher.publishEvent(new OrderPlatformStockConflictEvent(order.getId(), model.rawStatus()));
+        }
+        if (guardedStatus == OrderStatus.CANCELLED) OrderStockMetadata.clearLifecycle(order);
         Order saved = orderRepository.save(order);
         itemRepository.deleteByOrderId(saved.getId());
         itemRepository.saveAll(items.stream().map(item -> item.entity(saved)).toList());
@@ -108,6 +128,14 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
         return currentEmpty || !masked;
     }
     private Long epoch(Object value) { try { return value == null ? null : Long.parseLong(String.valueOf(value)); } catch (NumberFormatException e) { return null; } }
+    private OrderStatus guardedStatus(OrderStatus current, OrderStatus incoming) {
+        if (current != OrderStatus.WAITING_STOCK || incoming == null) return incoming;
+        return incoming == OrderStatus.CANCELLED ? OrderStatus.CANCELLED : OrderStatus.WAITING_STOCK;
+    }
+    private boolean isProgressStatus(OrderStatus incoming) {
+        return incoming != null && incoming != OrderStatus.PENDING && incoming != OrderStatus.CONFIRMED
+                && incoming != OrderStatus.CANCELLED && incoming != OrderStatus.WAITING_STOCK;
+    }
     private record ResolvedItem(TikTokOrderWriteModel.Item item, ChannelProductVariant mapping) {
         private OrderItem entity(Order order) {
             return OrderItem.builder().order(order).externalItemId(item.externalItemId())

@@ -46,6 +46,15 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
     Optional<InventoryItem> findByWarehouseIdAndVariantIdWithLock(@Param("warehouseId") UUID warehouseId,
                                                                    @Param("variantId") UUID variantId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM InventoryItem i " +
+            "JOIN FETCH i.warehouse w JOIN FETCH i.variant v " +
+            "WHERE w.id = :warehouseId AND v.id IN :variantIds " +
+            "ORDER BY w.id ASC, v.id ASC")
+    List<InventoryItem> findByWarehouseIdAndVariantIdInWithLock(
+            @Param("warehouseId") UUID warehouseId,
+            @Param("variantIds") Collection<UUID> variantIds);
+
     @Query("SELECT DISTINCT i FROM InventoryItem i " +
             "JOIN FETCH i.warehouse " +
             "JOIN FETCH i.variant v " +

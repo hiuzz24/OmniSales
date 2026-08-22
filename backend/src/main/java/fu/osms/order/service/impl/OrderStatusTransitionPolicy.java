@@ -7,6 +7,7 @@ import fu.osms.inventory.service.OrderStockDeliveryReadinessService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.sync.order.OrderStatusPushResult;
+import fu.osms.order.support.TikTokBuyerCancellationMetadata;
 
 import java.util.Map;
 import java.util.UUID;
@@ -20,6 +21,14 @@ final class OrderStatusTransitionPolicy {
     }
 
     void validate(Order order, OrderStatus oldStatus, OrderStatus targetStatus, UUID orderId) {
+        if (TikTokBuyerCancellationMetadata.isActive(order)
+                && (targetStatus == OrderStatus.PROCESSING || targetStatus == OrderStatus.SHIPPED)) {
+            throw new AppException(ErrorCode.CONFLICT, "Đơn đang có yêu cầu hủy từ khách hàng TikTok");
+        }
+        if (targetStatus == OrderStatus.WAITING_STOCK || oldStatus == OrderStatus.WAITING_STOCK) {
+            throw new AppException(ErrorCode.ORDER_STATUS_INVALID_TRANSITION,
+                    "Trạng thái Chờ hàng chỉ được thay đổi bởi luồng phân bổ tồn kho hoặc hủy đơn");
+        }
         if (targetStatus == OrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.ORDER_CANCEL_ENDPOINT_REQUIRED);
         }
@@ -59,7 +68,9 @@ final class OrderStatusTransitionPolicy {
         Object rawTikTok = order.getPlatformMetadata().get("tiktok");
         if (!(rawTikTok instanceof Map<?, ?> tikTok)) return false;
         Object pending = tikTok.get("pendingConfirmation");
-        return pending instanceof Boolean value ? value : Boolean.parseBoolean(String.valueOf(pending));
+        boolean sellerCancellationPending = pending instanceof Boolean value
+                ? value : Boolean.parseBoolean(String.valueOf(pending));
+        return sellerCancellationPending || TikTokBuyerCancellationMetadata.isActive(order);
     }
 
     private boolean isStrictPlatformOrder(Order order) {

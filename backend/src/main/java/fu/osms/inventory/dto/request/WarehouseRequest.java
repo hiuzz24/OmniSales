@@ -18,6 +18,8 @@ public class WarehouseRequest {
     @Size(max = 255)
     private String name;
 
+    @NotBlank(message = "Warehouse address must not be blank")
+    @Size(max = 500)
     private String address;
 
     @Builder.Default

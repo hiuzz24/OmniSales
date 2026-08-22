@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, DownloadCloud, Link2, Loader2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronDown, DownloadCloud, Link2, Loader2, MapPin, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { ROUTES } from '../../../../app/router/routes';
 import channelSyncService from '../../services/channelSyncService';
+import WarehouseAddressSyncDialog from './WarehouseAddressSyncDialog';
 
 const PLATFORM_LABELS = {
   LAZADA: 'Lazada',
@@ -25,6 +26,14 @@ const DIRECTION_OPTIONS = {
     color: '#1d4ed8',
     background: '#eff6ff',
     channelTitle: 'Chọn sàn để kéo dữ liệu về',
+  },
+  'warehouse-address-sync': {
+    title: 'Đồng bộ địa chỉ kho',
+    description: 'So sánh và đồng bộ địa chỉ kho mặc định từ tất cả sàn',
+    icon: MapPin,
+    color: '#b45309',
+    background: '#fffbeb',
+    channelTitle: null,
   },
 };
 
@@ -225,7 +234,7 @@ export default function MarketplaceSyncButton({
   buttonClassName,
   buttonStyle,
   iconClassName,
-  allowedDirections = ['from-marketplace'],
+  allowedDirections = ['from-marketplace', 'warehouse-address-sync'],
   getSuccessMessage,
 }) {
   const navigate = useNavigate();
@@ -236,6 +245,7 @@ export default function MarketplaceSyncButton({
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [activeJobs, setActiveJobs] = useState([]);
   const [buttonHovered, setButtonHovered] = useState(false);
+  const [showAddressSyncDialog, setShowAddressSyncDialog] = useState(false);
 
   useEffect(() => subscribeRemoteSyncJobs(setActiveJobs), []);
 
@@ -311,6 +321,12 @@ export default function MarketplaceSyncButton({
   };
 
   const selectDirection = async (nextDirection) => {
+    if (nextDirection === 'warehouse-address-sync') {
+      setOpen(false);
+      setDirection(null);
+      setShowAddressSyncDialog(true);
+      return;
+    }
     setDirection(nextDirection);
     if (channels.length === 0) await loadChannels();
   };
@@ -427,6 +443,13 @@ export default function MarketplaceSyncButton({
     );
   };
 
+  const handleAddressSyncClose = async (applied) => {
+    setShowAddressSyncDialog(false);
+    if (applied) {
+      await onSynced?.({ channel: null, direction: 'warehouse-address-sync', result: null });
+    }
+  };
+
   return (
     <div ref={menuRef} className={className} style={{ ...shellStyle, ...style }}>
       <style>{`
@@ -505,6 +528,10 @@ export default function MarketplaceSyncButton({
           {direction ? renderChannelList() : renderDirectionOptions()}
         </div>
       )}
+      <WarehouseAddressSyncDialog
+        open={showAddressSyncDialog}
+        onClose={handleAddressSyncClose}
+      />
     </div>
   );
 }
