@@ -9,6 +9,7 @@ import fu.osms.channel.repository.ChannelProductVariantRepository;
 import fu.osms.channel.repository.ChannelRepository;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.messaging.publisher.EventPublisher;
+import fu.osms.messaging.handler.OrderStockWaitingHandler;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.service.InventoryAutoPushSyncLogService;
 import fu.osms.sync.service.MarketplaceStockQuantityResolver;
@@ -22,11 +23,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -60,7 +63,11 @@ class MarketplaceInventoryPropagationServiceImplTest {
         @Mock
         private EventPublisher eventPublisher;
         @Mock
-        private java.util.concurrent.Executor syncJobExecutor;
+        private ObjectProvider<OrderStockWaitingHandler> stockWaitingHandlerProvider;
+        @Mock
+        private OrderStockWaitingHandler stockWaitingHandler;
+        @Mock
+        private Executor syncJobExecutor;
 
         private MarketplaceInventoryPropagationServiceImpl service;
 
@@ -77,6 +84,7 @@ class MarketplaceInventoryPropagationServiceImplTest {
                                 marketplaceStockQuantityResolver,
                                 inventoryAutoPushSyncLogService,
                                 eventPublisher,
+                                stockWaitingHandlerProvider,
                                 syncJobExecutor);
         }
 

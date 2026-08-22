@@ -14,10 +14,11 @@ const API_BASE = process.env.API_BASE || ENV_API_BASE;
  * Login as manager via UI (for E2E tests)
  * Navigates to /login, fills credentials, waits for redirect to dashboard.
  *
+ * Handles rate-limit (429) errors by waiting and retrying.
  * The 30s managerPage fixture timeout is the historical flake mode: Vite
  * occasionally re-optimizes dependencies on first request, so the email
  * input is not in the DOM until the bundle downloads. We pre-wait for the
- * input to be visible (60s) before doing any action.
+ * input to be visible (90s) before doing any action.
  */
 async function loginAsManager(page) {
   await page.goto('/login');
@@ -26,6 +27,23 @@ async function loginAsManager(page) {
   await page.locator('#login-email').fill(TEST_EMAIL);
   await page.locator('#login-password').waitFor({ state: 'visible', timeout: 5000 });
   await page.locator('#login-password').fill(TEST_PASSWORD);
+
+  // Check if already rate-limited (happens after many test runs)
+  const errorBanner = page.locator('[role="alert"]');
+  if (await errorBanner.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const errorText = await errorBanner.textContent();
+    if (errorText.includes('Quá nhiều lần thử')) {
+      // Wait 2 minutes for rate-limit to reset
+      console.log('[login] Rate-limited, waiting 120s for reset...');
+      await page.waitForTimeout(120000);
+      // Reload page and try again
+      await page.goto('/login');
+      await page.locator('#login-email').waitFor({ state: 'visible', timeout: 90000 });
+      await page.locator('#login-email').fill(TEST_EMAIL);
+      await page.locator('#login-password').waitFor({ state: 'visible', timeout: 5000 });
+      await page.locator('#login-password').fill(TEST_PASSWORD);
+    }
+  }
 
   await Promise.all([
     page.waitForURL('**/dashboard', { timeout: 60000 }),

@@ -8,11 +8,13 @@ test.describe('Auth E2E Tests', () => {
   });
 
   test('Login successfully and redirects to dashboard', async ({ page }) => {
+    // Wait for form to be ready (Vite may be slow on first load)
+    await page.locator('#login-email').waitFor({ state: 'visible', timeout: 30000 });
     await page.locator('#login-email').fill(TEST_EMAIL);
     await page.locator('#login-password').fill(TEST_PASSWORD);
 
     await Promise.all([
-      page.waitForURL('**/dashboard', { timeout: 8000 }),
+      page.waitForURL('**/dashboard', { timeout: 60000 }),
       page.locator('#login-submit-btn').click(),
     ]);
 

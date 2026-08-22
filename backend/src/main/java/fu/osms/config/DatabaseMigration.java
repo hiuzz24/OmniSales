@@ -248,5 +248,199 @@ public class DatabaseMigration {
             log.warn("Migration skipped or already applied for system_settings seeding: {}", e.getMessage());
         }
 
+        // =====================================================
+        // Migration: WAITING_STOCK order status
+        // =====================================================
+        try {
+            jdbcTemplate.execute("""
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM pg_type t
+                                JOIN pg_enum e ON t.oid = e.enumtypid
+                                WHERE t.typname = 'order_status'
+                                AND e.enumlabel = 'WAITING_STOCK'
+                            ) THEN
+                                ALTER TYPE order_status ADD VALUE 'WAITING_STOCK';
+                            END IF;
+                        END $$;
+                    """);
+            log.info("Migration: added WAITING_STOCK value to order_status enum");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for WAITING_STOCK enum value: {}", e.getMessage());
+        }
+
+        // =====================================================
+        // Migration: Add WAITING_STOCK columns to orders table
+        // =====================================================
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS waiting_stock_at TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added waiting_stock_at column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.waiting_stock_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS waiting_stock_expires_at TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added waiting_stock_expires_at column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.waiting_stock_expires_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS stock_offer_at TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added stock_offer_at column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.stock_offer_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS stock_offer_expires_at TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added stock_offer_expires_at column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.stock_offer_expires_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS stock_offer_notified_at TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added stock_offer_notified_at column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.stock_offer_notified_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS waiting_stock_expiry_notified_at TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added waiting_stock_expiry_notified_at column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.waiting_stock_expiry_notified_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS dispatch_sla_at TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added dispatch_sla_at column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.dispatch_sla_at: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipping_due_time TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added shipping_due_time column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.shipping_due_time: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        ALTER TABLE orders ADD COLUMN IF NOT EXISTS collection_due_time TIMESTAMPTZ;
+                    """);
+            log.info("Migration: added collection_due_time column to orders");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for orders.collection_due_time: {}", e.getMessage());
+        }
+
+        // =====================================================
+        // Migration: Add indexes for WAITING_STOCK orders
+        // =====================================================
+        try {
+            jdbcTemplate.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_orders_waiting_stock_fifo
+                        ON orders (waiting_stock_at, created_at, id)
+                        WHERE status = 'WAITING_STOCK';
+                    """);
+            log.info("Migration: created idx_orders_waiting_stock_fifo index");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for idx_orders_waiting_stock_fifo: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_orders_waiting_stock_expired
+                        ON orders (waiting_stock_expires_at, id)
+                        WHERE status = 'WAITING_STOCK' AND waiting_stock_expiry_notified_at IS NULL;
+                    """);
+            log.info("Migration: created idx_orders_waiting_stock_expired index");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for idx_orders_waiting_stock_expired: {}", e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_orders_stock_offer_expired
+                        ON orders (stock_offer_expires_at, id)
+                        WHERE status = 'PENDING' AND stock_offer_at IS NOT NULL;
+                    """);
+            log.info("Migration: created idx_orders_stock_offer_expired index");
+        } catch (Exception e) {
+            log.warn("Migration skipped or already applied for idx_orders_stock_offer_expired: {}", e.getMessage());
+        }
+
+        // =====================================================
+        // Migration: Update notifications_type_check with STOCK_OFFER
+        // =====================================================
+        try {
+            Boolean hasStockOffer = jdbcTemplate.queryForObject("""
+                        SELECT EXISTS (
+                            SELECT 1 FROM pg_constraint
+                            WHERE conname = 'notifications_type_check'
+                              AND pg_get_constraintdef(oid) LIKE '%ORDER_STOCK_OFFER%'
+                        )
+                    """, Boolean.class);
+            if (!Boolean.TRUE.equals(hasStockOffer)) {
+                jdbcTemplate.execute("""
+                            ALTER TABLE notifications
+                            DROP CONSTRAINT IF EXISTS notifications_type_check;
+                            ALTER TABLE notifications ALTER COLUMN type TYPE VARCHAR(40);
+                            ALTER TABLE notifications
+                            ADD CONSTRAINT notifications_type_check
+                            CHECK (type IN (
+                                'LOW_STOCK',
+                                'SYNC_FAILED',
+                                'ORDER_NEW',
+                                'ORDER_CANCELLED',
+                                'ORDER_PAID',
+                                'ORDER_PICK_REQUIRED',
+                                'ORDER_READY_SHIP',
+                                'ORDER_SHIPPED',
+                                'ORDER_DELIVERED',
+                                'ORDER_RETURN_REQUESTED',
+                                'ORDER_RETURN_REJECTED',
+                                'ORDER_RETURN_COMPLETED',
+                                'ORDER_RETURN_ATTENTION',
+                                'ORDER_WAITING_STOCK',
+                                'ORDER_STOCK_OFFER',
+                                'ORDER_WAITING_STOCK_EXPIRED',
+                                'ORDER_PLATFORM_STOCK_CONFLICT',
+                                'ORDER_BUYER_CANCEL_REQUESTED',
+                                'CHANNEL_DISCONNECTED',
+                                'STOCK_TRANSFER',
+                                'STOCKTAKE',
+                                'SYNC',
+                                'INVENTORY'
+                            ))
+                        """);
+                log.info("Migration: notifications_type_check updated with ORDER_STOCK_OFFER");
+            } else {
+                log.info("Migration: notifications_type_check already has ORDER_STOCK_OFFER");
+            }
+        } catch (Exception e) {
+            log.error("Migration error updating notifications_type_check with STOCK_OFFER: {}", e.getMessage());
+        }
+
     }
 }
