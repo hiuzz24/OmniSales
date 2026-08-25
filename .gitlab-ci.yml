@@ -15,8 +15,35 @@
 
 stages:
   - build
+  - test
   - package
   - deploy
+
+# =============================================================================
+# Stage order: build → e2e → package → deploy
+# - build: build-backend (tạo JAR artifact)
+# - test: e2e (chạy against JAR từ build-backend)
+# - package: package-backend (đóng Docker image từ JAR đã build)
+# - deploy: deploy-render (deploy lên Render)
+# =============================================================================
+
+# =============================================================================
+# Default: skip EVERYTHING on push-to-main except the deploy chain.
+# Individual jobs opt back in via their own `rules:`.
+# =============================================================================
+workflow:
+  rules:
+    # 1. Merge request → keep default (run all jobs that opt in)
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # 2. Push to main → chạy tất cả jobs (build → e2e → package → deploy)
+    - if: $CI_COMMIT_BRANCH == "main"
+    # 3. Scheduled / trigger / API / web → keep default
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "trigger"
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "api"
+    # 4. Any other branch push → chỉ build, không deploy
+    - if: $CI_COMMIT_BRANCH
 
 variables:
   MAVEN_OPTS: "-Xmx2g -Xms512m -XX:+UseG1GC"
@@ -24,6 +51,146 @@ variables:
   # Image name dùng GitLab Container Registry (sẵn với mọi repo gitlab.com)
   BACKEND_IMAGE: "$CI_REGISTRY_IMAGE/backend"
   BACKEND_IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+
+# =============================================================================
+# Stage test: Playwright E2E
+#
+# - Sử dụng JAR artifact từ build-backend (không build lại)
+# - Backend + frontend khởi động inline trong job
+# - PostgreSQL service ephemeral (alias: postgres) — mỗi pipeline có DB riêng
+# =============================================================================
+e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.61.1-jammy
+  services:
+    - name: postgres:15-alpine
+      variables:
+        POSTGRES_PASSWORD: $CI_DB_PASSWORD
+        POSTGRES_USER: $CI_DB_USERNAME
+  needs:
+    - job: build-backend
+      artifacts: true
+  variables:
+    # GitLab service alias — Postgres chạy ở host `postgres`, port 5432.
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_NAME: $CI_DB_NAME
+    DB_USERNAME: $CI_DB_USERNAME
+    DB_PASSWORD: $CI_DB_PASSWORD
+    # Backend
+    API_BASE: http://localhost:8080/api
+    SPRING_PROFILES_ACTIVE: ci
+    # JWT secret cho CI — giá trị随便, chỉ cần đủ 32 ký tự
+    JWT_SECRET: ci_dummy_jwt_secret_key_minimum_32_chars_long_for_testing_only
+    # Frontend
+    FRONTEND_URL: http://localhost:5174
+    # Tắt RabbitMQ trong CI
+    APP_MESSAGING_MODE: disabled
+    RABBITMQ_LISTENER_AUTOSTART: "false"
+    # Tắt notification email
+    NOTIFICATION_EMAIL_ENABLED: "false"
+    # Tắt webhook retry (không cần trong E2E test)
+    WEBHOOK_RETRY_ENABLED: "false"
+    # Tắt channel token refresh
+    CHANNEL_TOKEN_REFRESH_ENABLED: "false"
+    # Tắt inventory reconciliation
+    INVENTORY_RECONCILIATION_ENABLED: "false"
+    # Tắt order pull recovery
+    ORDER_PULL_RECOVERY_ENABLED: "false"
+    # Database init script credentials
+    CI_DB_NAME: omnisales_e2e
+    CI_DB_USERNAME: gitlab-ci
+    CI_DB_PASSWORD: gitlab-ci
+  rules:
+    # Chạy khi push lên main (build → e2e → package → deploy)
+    - if: $CI_COMMIT_BRANCH == "main"
+    # Chỉ chạy e2e khi MERGE từ nhánh khác vào main.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
+    # Chạy khi pipeline được trigger bởi schedule (cron 7h sáng)
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    # Cho phép chạy thủ công từ UI (Run pipeline)
+    - if: $CI_PIPELINE_SOURCE == "web"
+  before_script:
+    - |
+      # Install Maven, Java, and PostgreSQL client
+      apt-get update && apt-get install -y maven openjdk-17-jdk-headless postgresql-client
+      # Verify installation
+      java -version
+      mvn -version
+      # Verify backend JAR from artifact
+      echo "=== Backend JAR from artifact ==="
+      ls -lh backend/target/*.jar
+      # Install test dependencies
+      cd test && npm ci && cd ..
+      # Install frontend dependencies (needed for npm run dev)
+      cd frontend && npm ci && cd ..
+      # Install wait-on globally
+      npm install -g wait-on
+      # Create test database
+      PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '$CI_DB_NAME' AND pid <> pg_backend_pid();" || true
+      PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "DROP DATABASE IF EXISTS $CI_DB_NAME;"
+      PGPASSWORD=$CI_DB_PASSWORD psql -h postgres -U $CI_DB_USERNAME -d postgres -c "CREATE DATABASE $CI_DB_NAME;"
+  script:
+    - |
+      set -x  # Debug mode
+      echo "=== Working directory ==="
+      pwd
+      echo "=== Java version ==="
+      java -version 2>&1
+      echo "=== Backend JAR ==="
+      ls -lh backend/target/*.jar
+      echo "=== Starting backend ==="
+      nohup java -Dserver.port=8080 -jar backend/target/backend-0.0.1-SNAPSHOT.jar > backend.log 2>&1 &
+      BACKEND_PID=$!
+      echo "Backend PID: $BACKEND_PID"
+      echo "=== Waiting 15 seconds for backend to initialize ==="
+      sleep 15
+      echo "=== Backend log ==="
+      cat backend.log
+      echo "=== Checking port 8080 ==="
+      curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/address/countries 2>/dev/null || echo "Backend not responding"
+      echo "=== Building frontend (pre-bundle all deps via Vite build) ==="
+      # Build once up-front so Rolldown pre-bundles EVERY dependency, not on-demand.
+      cd frontend
+      npm run build
+      echo "=== Starting frontend (vite preview = serve pre-built files) ==="
+      nohup npm run preview -- --host 127.0.0.1 --strictPort > ../frontend.log 2>&1 &
+      FRONTEND_PID=$!
+      echo "Frontend PID: $FRONTEND_PID"
+      cd ..
+      echo "=== Waiting for backend ==="
+      wait-on http://localhost:8080/api/address/countries --timeout 180000 || {
+        echo "Backend FAILED"
+        cat backend.log
+        exit 1
+      }
+      echo "Backend ready!"
+      echo "=== Waiting for frontend ==="
+      wait-on http://localhost:5174 --timeout 60000 || {
+        echo "Frontend FAILED"
+        cat frontend.log
+        exit 1
+      }
+      echo "Frontend ready!"
+      echo "=== Cold-warming React SPA with REAL chromium ==="
+      # Even with vite preview, the React Router SPA still needs the JS bundle
+      # evaluated once in a real browser so the dev-login form is rendered.
+      # We do this in a try-block so a warmup failure does NOT block tests.
+      cd test && node warmup-browser.js || echo "[warmup] non-fatal: warmup script failed, continuing"
+      cd ..
+      echo "=== Warmup complete (or skipped) ==="
+      echo "=== Running E2E tests ==="
+      cd test && npx playwright test --project=chromium --reporter=list,junit,html
+  artifacts:
+    when: always
+    reports:
+      junit: test/test-results/junit.xml
+    paths:
+      - test/test-results/
+      - test/playwright-report/
+      - backend.log
+      - frontend.log
+    expire_in: 7 days
 
 # -----------------------------------------------------------------------------
 # Cache Maven dependencies giữa các pipeline để build nhanh hơn.
@@ -61,6 +228,7 @@ build-backend:
 # Stage 2: Build Docker image (chỉ chứa JRE + JAR — KHÔNG có Maven)
 # Size: ~250MB thay vì ~500MB như cũ.
 # Chỉ chạy trên branch main.
+# Phụ thuộc vào e2e để đảm bảo build stable trước khi đóng Docker image.
 # -----------------------------------------------------------------------------
 package-backend:
   stage: package
@@ -77,6 +245,7 @@ package-backend:
     # artifacts: true → download JAR từ build-backend vào workspace
     - job: build-backend
       artifacts: true
+    # Không cần chờ e2e pass nữa
   before_script:
     # Verify artifact có thật trước khi build
     - ls -lh backend/target/*.jar
@@ -94,6 +263,7 @@ package-backend:
 # -----------------------------------------------------------------------------
 # Stage 3: Trigger Render redeploy bằng Deploy Hook.
 # Image đã được push ở stage trên, Render sẽ pull image mới từ registry.
+# Phụ thuộc vào package-backend.
 # -----------------------------------------------------------------------------
 deploy-render:
   stage: deploy

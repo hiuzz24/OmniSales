@@ -97,6 +97,8 @@ public class RabbitMQConfig {
                         RabbitMQConstants.ORDER_STOCK_DELIVERY_LIFECYCLE),
                 new QueueSpec(RabbitMQConstants.QUEUE_ORDER_RETURN_WORKFLOW,
                         RabbitMQConstants.ORDER_RETURN_WORKFLOW),
+                new QueueSpec(RabbitMQConstants.QUEUE_CHANNEL_PUSH_RETRY,
+                        RabbitMQConstants.CHANNEL_PUSH_RETRY),
                 new QueueSpec(RabbitMQConstants.QUEUE_ORDER_STOCK_WAITING_RECONCILE,
                         RabbitMQConstants.ORDER_STOCK_WAITING_RECONCILE)
         };

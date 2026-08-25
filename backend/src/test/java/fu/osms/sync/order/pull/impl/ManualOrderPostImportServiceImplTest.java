@@ -1,6 +1,5 @@
 package fu.osms.sync.order.pull.impl;
 
-import fu.osms.inventory.service.PlatformOrderInventoryService;
 import fu.osms.order.entity.Order;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.event.OrderCancelledEvent;
@@ -8,23 +7,22 @@ import fu.osms.order.event.OrderCreatedEvent;
 import fu.osms.order.event.OrderPaidEvent;
 import fu.osms.order.event.OrderStatusChangedEvent;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.order.service.OrderStockAllocationService;
 import fu.osms.sync.order.importing.OrderImportOutcome;
 import fu.osms.sync.order.importing.OrderImportResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
-import java.util.Optional;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,138 +31,116 @@ import static org.mockito.Mockito.when;
 class ManualOrderPostImportServiceImplTest {
 
     @Mock private OrderRepository orderRepository;
-    @Mock private PlatformOrderInventoryService inventoryService;
+    @Mock private OrderStockAllocationService stockAllocationService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private ManualOrderPostImportServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new ManualOrderPostImportServiceImpl(orderRepository, inventoryService, eventPublisher);
+        service = new ManualOrderPostImportServiceImpl(stockAllocationService, eventPublisher);
     }
 
-    private Order order(UUID id) {
-        return Order.builder().id(id).build();
-    }
-
-    private OrderImportOutcome outcome(UUID orderId,
-                                       OrderImportResult result,
-                                       boolean created,
-                                       boolean paid,
-                                       boolean cancelled,
-                                       boolean statusChanged) {
-        return new OrderImportOutcome(
-                orderId,
-                result,
-                created,
-                paid,
-                cancelled,
-                false,
-                statusChanged ? OrderStatus.PENDING : null,
-                statusChanged ? OrderStatus.CONFIRMED : null
-        );
+    private Order order(UUID id, OrderStatus status) {
+        return Order.builder().id(id).status(status).build();
     }
 
     @Test
-    @DisplayName("publish: throws when order is not found")
-    void publish_orderNotFound() {
-        UUID orderId = UUID.randomUUID();
-        when(orderRepository.findById(orderId)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> service.publish(outcome(orderId, OrderImportResult.CREATED, true, false, false, false)))
-                .isInstanceOf(java.util.NoSuchElementException.class);
-    }
-
-    @Test
-    @DisplayName("publish: reserves inventory and publishes OrderCreatedEvent when outcome.created = true")
+    @DisplayName("publish: publishes OrderCreatedEvent when outcome.created = true")
     void publish_created() {
         UUID orderId = UUID.randomUUID();
-        Order order = order(orderId);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        Order order = order(orderId, OrderStatus.CONFIRMED);
+        OrderImportOutcome outcome = new OrderImportOutcome(
+                orderId,
+                OrderImportResult.CREATED,
+                true, false, false, false,
+                null, OrderStatus.CONFIRMED);
 
-        service.publish(outcome(orderId, OrderImportResult.CREATED, true, false, false, false));
+        when(stockAllocationService.classifyAfterImport(orderId)).thenReturn(order);
 
-        verify(inventoryService).syncReservations(order);
-        verify(eventPublisher).publishEvent(any(OrderCreatedEvent.class));
-        verify(eventPublisher, never()).publishEvent(any(OrderPaidEvent.class));
-        verify(eventPublisher, never()).publishEvent(any(OrderCancelledEvent.class));
-        verify(eventPublisher, never()).publishEvent(any(OrderStatusChangedEvent.class));
+        service.publish(outcome);
+
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isInstanceOf(OrderCreatedEvent.class);
     }
 
     @Test
     @DisplayName("publish: publishes OrderPaidEvent when paymentBecamePaid = true")
     void publish_paid() {
         UUID orderId = UUID.randomUUID();
-        Order order = order(orderId);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        Order order = order(orderId, OrderStatus.CONFIRMED);
+        OrderImportOutcome outcome = new OrderImportOutcome(
+                orderId,
+                OrderImportResult.UPDATED,
+                false, true, false, false,
+                OrderStatus.PENDING, OrderStatus.CONFIRMED);
 
-        service.publish(outcome(orderId, OrderImportResult.UPDATED, false, true, false, false));
+        when(stockAllocationService.classifyAfterImport(orderId)).thenReturn(order);
 
-        verify(eventPublisher).publishEvent(any(OrderPaidEvent.class));
-        verify(eventPublisher, never()).publishEvent(any(OrderCreatedEvent.class));
+        service.publish(outcome);
+
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isInstanceOf(OrderPaidEvent.class);
     }
 
     @Test
     @DisplayName("publish: publishes OrderCancelledEvent when becameCancelled = true")
     void publish_cancelled() {
         UUID orderId = UUID.randomUUID();
-        Order order = order(orderId);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        Order order = order(orderId, OrderStatus.CANCELLED);
+        OrderImportOutcome outcome = new OrderImportOutcome(
+                orderId,
+                OrderImportResult.UPDATED,
+                false, false, true, false,
+                OrderStatus.CONFIRMED, OrderStatus.CANCELLED);
 
-        service.publish(outcome(orderId, OrderImportResult.UPDATED, false, false, true, false));
+        when(stockAllocationService.classifyAfterImport(orderId)).thenReturn(order);
 
-        verify(eventPublisher).publishEvent(any(OrderCancelledEvent.class));
+        service.publish(outcome);
+
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).isInstanceOf(OrderCancelledEvent.class);
     }
 
     @Test
-    @DisplayName("publish: publishes OrderStatusChangedEvent when statusChanged() returns true")
+    @DisplayName("publish: publishes OrderStatusChangedEvent when status changed")
     void publish_statusChanged() {
         UUID orderId = UUID.randomUUID();
-        Order order = order(orderId);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        Order order = order(orderId, OrderStatus.PROCESSING);
+        OrderImportOutcome outcome = new OrderImportOutcome(
+                orderId,
+                OrderImportResult.UPDATED,
+                false, false, false, false,
+                OrderStatus.CONFIRMED, OrderStatus.PROCESSING);
 
-        service.publish(outcome(orderId, OrderImportResult.UPDATED, false, false, false, true));
+        when(stockAllocationService.classifyAfterImport(orderId)).thenReturn(order);
 
-        verify(eventPublisher).publishEvent(any(OrderStatusChangedEvent.class));
+        service.publish(outcome);
+
+        ArgumentCaptor<OrderStatusChangedEvent> eventCaptor = ArgumentCaptor.forClass(OrderStatusChangedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().orderId()).isEqualTo(orderId);
     }
 
     @Test
-    @DisplayName("publish: wraps inventory exceptions in IllegalStateException with [INV] prefix")
-    void publish_inventoryError() {
+    @DisplayName("publish: publishes only OrderCreatedEvent when created and paid are both true")
+    void publish_createdAndPaid() {
         UUID orderId = UUID.randomUUID();
-        Order order = order(orderId);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        doThrow(new RuntimeException("stock blew up")).when(inventoryService).syncReservations(order);
+        Order order = order(orderId, OrderStatus.CONFIRMED);
+        OrderImportOutcome outcome = new OrderImportOutcome(
+                orderId,
+                OrderImportResult.CREATED,
+                true, true, false, false,
+                null, OrderStatus.CONFIRMED);
 
-        assertThatThrownBy(() -> service.publish(outcome(orderId, OrderImportResult.CREATED, true, false, false, false)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageStartingWith("[INV]")
-                .hasMessageContaining("stock blew up");
-    }
+        when(stockAllocationService.classifyAfterImport(orderId)).thenReturn(order);
 
-    @Test
-    @DisplayName("publish: no events published for UNCHANGED outcome with no flags set")
-    void publish_unchanged() {
-        UUID orderId = UUID.randomUUID();
-        Order order = order(orderId);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        service.publish(outcome);
 
-        service.publish(outcome(orderId, OrderImportResult.UNCHANGED, false, false, false, false));
-
-        verify(eventPublisher, never()).publishEvent(any());
-    }
-
-    @Test
-    @DisplayName("publish: wraps null inventory exception message with the exception class name")
-    void publish_inventoryErrorNullMessage() {
-        UUID orderId = UUID.randomUUID();
-        Order order = order(orderId);
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        doThrow(new IllegalArgumentException()).when(inventoryService).syncReservations(order);
-
-        assertThatThrownBy(() -> service.publish(outcome(orderId, OrderImportResult.CREATED, true, false, false, false)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageStartingWith("[INV]")
-                .hasMessageContaining("IllegalArgumentException");
+        verify(eventPublisher).publishEvent(any(OrderCreatedEvent.class));
+        verify(eventPublisher).publishEvent(any(OrderPaidEvent.class));
     }
 }

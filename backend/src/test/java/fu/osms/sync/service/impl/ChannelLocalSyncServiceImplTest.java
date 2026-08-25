@@ -7,6 +7,8 @@ import fu.osms.channel.service.ChannelConnectionValidator;
 import fu.osms.common.enums.PlatformType;
 import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
+import fu.osms.messaging.constants.RabbitMQConstants;
+import fu.osms.messaging.publisher.EventPublisher;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
 import fu.osms.sync.repository.SyncLogRepository;
@@ -25,6 +27,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -44,6 +47,7 @@ class ChannelLocalSyncServiceImplTest {
     @Mock private InventoryIssueRepository inventoryIssueRepository;
     @Mock private MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
     @Mock private TransactionTemplate transactionTemplate;
+    @Mock private EventPublisher eventPublisher;
 
     private ChannelLocalSyncServiceImpl service;
     private Channel channel;
@@ -60,7 +64,8 @@ class ChannelLocalSyncServiceImplTest {
                 stockReceiveRepository,
                 inventoryIssueRepository,
                 marketplaceWarehouseConsistencyService,
-                transactionTemplate
+                transactionTemplate,
+                eventPublisher
         );
         channel = Channel.builder()
                 .id(UUID.randomUUID())
@@ -76,11 +81,11 @@ class ChannelLocalSyncServiceImplTest {
             }
             return log;
         });
-        when(channelRepository.save(any(Channel.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
     void reportsNoChangesAndAdvancesApplicationCursorWithoutCallingMarketplace() {
+        when(channelRepository.save(any(Channel.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(stockReceiveRepository.findConfirmedVariantIdsUpTo(any(OffsetDateTime.class))).thenReturn(List.of());
         when(inventoryIssueRepository.findConfirmedVariantIdsUpTo(any(OffsetDateTime.class))).thenReturn(List.of());
 
@@ -95,6 +100,7 @@ class ChannelLocalSyncServiceImplTest {
 
     @Test
     void pushesOnlyVariantsFromConfirmedDocumentsAfterApplicationCursor() {
+        when(channelRepository.save(any(Channel.class))).thenAnswer(invocation -> invocation.getArgument(0));
         OffsetDateTime cursor = OffsetDateTime.now().minusHours(1);
         UUID receiptVariantId = UUID.randomUUID();
         UUID issueVariantId = UUID.randomUUID();
@@ -117,5 +123,46 @@ class ChannelLocalSyncServiceImplTest {
                 any(OffsetDateTime.class),
                 eq(java.util.Set.of(receiptVariantId, issueVariantId))
         );
+    }
+
+    @Test
+    void enqueuesBrokerRetryAndKeepsCursorWhenManualPushFails() {
+        OffsetDateTime cursor = OffsetDateTime.now().minusHours(1);
+        UUID variantId = UUID.randomUUID();
+        channel.setLastSyncedApplicationAt(cursor);
+        when(stockReceiveRepository.findChangedConfirmedVariantIdsBetween(
+                eq(cursor), any(OffsetDateTime.class))).thenReturn(List.of(variantId));
+        when(inventoryIssueRepository.findChangedAppliedVariantIdsBetween(
+                eq(cursor), any(OffsetDateTime.class))).thenReturn(List.of());
+        when(shopifyInventoryUpdateService.syncChangedAvailableStock(
+                eq(channel.getId()), eq(cursor), any(OffsetDateTime.class), any()))
+                .thenThrow(new IllegalStateException("Marketplace API down"));
+
+        Throwable thrown = catchThrowable(() -> service.syncLocalChanges(channel.getId()));
+
+        assertThat(thrown).isInstanceOf(IllegalStateException.class);
+        assertThat(channel.getLastSyncedApplicationAt()).isEqualTo(cursor);
+        verify(eventPublisher).publish(
+                eq(RabbitMQConstants.CHANNEL_PUSH_RETRY), any());
+    }
+
+    @Test
+    void doesNotEnqueueAnotherRetryWhenBrokerRetryFails() {
+        OffsetDateTime cursor = OffsetDateTime.now().minusHours(1);
+        UUID variantId = UUID.randomUUID();
+        channel.setLastSyncedApplicationAt(cursor);
+        when(stockReceiveRepository.findChangedConfirmedVariantIdsBetween(
+                eq(cursor), any(OffsetDateTime.class))).thenReturn(List.of(variantId));
+        when(inventoryIssueRepository.findChangedAppliedVariantIdsBetween(
+                eq(cursor), any(OffsetDateTime.class))).thenReturn(List.of());
+        when(shopifyInventoryUpdateService.syncChangedAvailableStock(
+                eq(channel.getId()), eq(cursor), any(OffsetDateTime.class), any()))
+                .thenThrow(new IllegalStateException("Marketplace API down"));
+
+        Throwable thrown = catchThrowable(() -> service.retryLocalSync(channel.getId()));
+
+        assertThat(thrown).isInstanceOf(IllegalStateException.class);
+        assertThat(channel.getLastSyncedApplicationAt()).isEqualTo(cursor);
+        verify(eventPublisher, never()).publish(any(), any());
     }
 }

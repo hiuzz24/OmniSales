@@ -101,7 +101,7 @@ test.describe('Profile E2E Tests', () => {
     const confirmPwd = managerPage.locator('input[name*="confirm"], input[placeholder*="xác nhận"]').first();
 
     if (await oldPwd.count() > 0 && await newPwd.count() > 0) {
-      await oldPwd.fill('Duy16042004%');
+      await oldPwd.fill('11111111');
       await newPwd.fill('NewPass123@');
       if (await confirmPwd.count() > 0) await confirmPwd.fill('NewPass123@');
 
@@ -157,7 +157,7 @@ test.describe('Profile E2E Tests', () => {
     const confirmPwd = managerPage.locator('input[name*="confirm"], input[placeholder*="xác nhận"]').first();
 
     if (await oldPwd.count() > 0 && await newPwd.count() > 0 && await confirmPwd.count() > 0) {
-      await oldPwd.fill('Duy16042004%');
+      await oldPwd.fill('11111111');
       await newPwd.fill('ValidPass123@');
       await confirmPwd.fill('DifferentPass123@');
       await confirmPwd.blur();
@@ -181,7 +181,7 @@ test.describe('Profile E2E Tests', () => {
     const confirmPwd = managerPage.locator('input[name*="confirm"], input[placeholder*="xác nhận"]').first();
 
     if (await oldPwd.count() > 0 && await newPwd.count() > 0 && await confirmPwd.count() > 0) {
-      await oldPwd.fill('Duy16042004%');
+      await oldPwd.fill('11111111');
       await newPwd.fill('weak');
       await confirmPwd.fill('weak');
       await newPwd.blur();

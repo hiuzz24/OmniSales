@@ -70,13 +70,19 @@ test.describe('Inventory Log E2E Tests', () => {
 
     const nextBtn = managerPage.locator('button:has-text("Sau"), button:has-text("Next"), button:has-text(">")').first();
     if ((await nextBtn.count()) > 0) {
-      await nextBtn.click();
-      await managerPage.waitForTimeout(500);
+      const isDisabled = await nextBtn.isDisabled().catch(() => true);
+      if (!isDisabled) {
+        await nextBtn.click();
+        await managerPage.waitForTimeout(500);
+      }
     }
     const prevBtn = managerPage.locator('button:has-text("Trước"), button:has-text("Prev"), button:has-text("<")').first();
     if ((await prevBtn.count()) > 0) {
-      await prevBtn.click();
-      await managerPage.waitForTimeout(500);
+      const isDisabled = await prevBtn.isDisabled().catch(() => true);
+      if (!isDisabled) {
+        await prevBtn.click();
+        await managerPage.waitForTimeout(500);
+      }
     }
     const body = await managerPage.content();
     expect(body.length).toBeGreaterThan(50);

@@ -375,7 +375,7 @@ export default function StockReceivePage() {
             }}
           >
             <RefreshCw size={15} style={{ animation: syncingMarketplace ? 'spin 1s linear infinite' : undefined }} />
-            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn và giá'}
+            {syncingMarketplace ? 'Đang đồng bộ...' : 'Đồng bộ tồn kho'}
           </button>
         )}
         stats={stats}

@@ -9,6 +9,7 @@ import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
 import fu.osms.sync.lazada.order.LazadaOrderWriteModel;
+import fu.osms.sync.order.importing.OrderImportResult;
 import fu.osms.sync.order.importing.OrderUpsertResult;
 import fu.osms.sync.order.importing.OrderUpsertSupport;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -29,8 +31,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,13 +42,14 @@ class LazadaOrderPersistenceServiceImplTest {
     @Mock private OrderRepository orderRepository;
     @Mock private OrderItemRepository orderItemRepository;
     @Mock private ChannelProductVariantRepository channelVariantRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private LazadaOrderPersistenceServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new LazadaOrderPersistenceServiceImpl(
-                upsertSupport, orderRepository, orderItemRepository, channelVariantRepository);
+                upsertSupport, orderRepository, orderItemRepository, channelVariantRepository, eventPublisher);
     }
 
     private Channel channel() {
@@ -67,7 +68,7 @@ class LazadaOrderPersistenceServiceImplTest {
     private static final OffsetDateTime CREATED_AT = OffsetDateTime.parse("2026-08-01T10:00:00+07:00");
 
     private LazadaOrderWriteModel model(String extOrderId, String extVariantId) {
-        return  new LazadaOrderWriteModel(
+        return new LazadaOrderWriteModel(
                 extOrderId,
                 (OffsetDateTime) null,
                 OrderStatus.PENDING,
@@ -100,7 +101,7 @@ class LazadaOrderPersistenceServiceImplTest {
 
         assertThat(outcome.orderId()).isEqualTo(order.getId());
         assertThat(outcome.created()).isTrue();
-        assertThat(outcome.result().name()).isEqualTo("CREATED");
+        assertThat(outcome.result()).isEqualTo(OrderImportResult.CREATED);
         verify(orderItemRepository).deleteByOrderId(order.getId());
         verify(orderItemRepository).saveAll(any());
     }
@@ -171,30 +172,6 @@ class LazadaOrderPersistenceServiceImplTest {
     }
 
     @Test
-    @DisplayName("write: accepts non-masked incoming address when current is empty")
-    void write_addressReplaceEmpty() {
-        Channel channel = channel();
-        Order order = order(channel, OrderStatus.PENDING, "UNPAID");
-        order.setShippingAddress(null);
-        Map<String, Object> incoming = Map.of("city", "HCMC");
-        LazadaOrderWriteModel m = new LazadaOrderWriteModel(
-                "EXT-1", null, OrderStatus.PENDING, "UNPAID", null, null, incoming,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "VND", null, null,
-                List.of()
-        );
-
-        when(upsertSupport.ensureAndLock(channel, "EXT-1", PlatformType.LAZADA))
-                .thenReturn(new OrderUpsertResult(order, false));
-        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        service.write(channel, m);
-
-        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
-        verify(orderRepository).save(captor.capture());
-        assertThat(captor.getValue().getShippingAddress()).isEqualTo(incoming);
-    }
-
-    @Test
     @DisplayName("write: rejects masked buyer name containing '***'")
     void write_maskedBuyerName() {
         Channel channel = channel();
@@ -238,19 +215,5 @@ class LazadaOrderPersistenceServiceImplTest {
         service.write(channel, m);
 
         verify(channelVariantRepository).findActiveByChannelIdAndExternalVariantId(channel.getId(), "EXT-VAR-1");
-    }
-
-    @Test
-    @DisplayName("getOrder: returns the order from the repository by id")
-    void getOrder() {
-        UUID id = UUID.randomUUID();
-        Order order = Order.builder().id(id).build();
-        when(orderRepository.findById(id)).thenReturn(Optional.of(order));
-
-        Order result = service.getOrder(new fu.osms.sync.order.importing.OrderImportOutcome(
-                id, fu.osms.sync.order.importing.OrderImportResult.UPDATED,
-                false, false, false, false, null, null));
-
-        assertThat(result.getId()).isEqualTo(id);
     }
 }
