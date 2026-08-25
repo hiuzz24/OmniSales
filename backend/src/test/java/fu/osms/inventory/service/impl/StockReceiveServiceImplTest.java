@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -44,6 +45,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -676,15 +678,51 @@ class StockReceiveServiceImplTest {
         }
 
         @Test
-        @DisplayName("syncPendingMarketplaceInventory returns 0 when no pending variants")
+        @DisplayName("syncPendingMarketplaceInventory returns 0 when no pending receipts")
         void syncPendingMarketplaceInventory_empty() {
-            when(stockReceiveRepository.findConfirmedVariantIdsPendingMarketplaceSync())
+            when(stockReceiveRepository.findConfirmedReceiptsPendingMarketplaceSync())
                     .thenReturn(Collections.emptyList());
 
             int pushed = stockReceiveService.syncPendingMarketplaceInventory();
 
             assertThat(pushed).isZero();
             verify(marketplaceInventoryPropagationService, never()).pushAvailableStock(any());
+        }
+
+        @Test
+        @DisplayName("syncPendingMarketplaceInventory pushes receipts oldest-confirmed-first")
+        void syncPendingMarketplaceInventory_pushesReceiptsInChronologicalOrder() {
+            ProductVariant oldVariant = ProductVariant.builder().id(UUID.randomUUID()).build();
+            ProductVariant newVariant = ProductVariant.builder().id(UUID.randomUUID()).build();
+            InventoryReceipt older = InventoryReceipt.builder()
+                    .id(UUID.randomUUID()).status("CONFIRMED")
+                    .confirmedAt(OffsetDateTime.now().minusHours(2))
+                    .build();
+            InventoryReceipt newer = InventoryReceipt.builder()
+                    .id(UUID.randomUUID()).status("CONFIRMED")
+                    .confirmedAt(OffsetDateTime.now().minusHours(1))
+                    .build();
+            when(stockReceiveRepository.findConfirmedReceiptsPendingMarketplaceSync())
+                    .thenReturn(List.of(older, newer));
+            when(stockReceiveRepository.findConfirmedVariantIdsByReceiptId(older.getId()))
+                    .thenReturn(List.of(oldVariant.getId()));
+            when(stockReceiveRepository.findConfirmedVariantIdsByReceiptId(newer.getId()))
+                    .thenReturn(List.of(newVariant.getId()));
+            when(variantRepository.findAllById(any())).thenAnswer(invocation -> {
+                Collection<UUID> ids = invocation.getArgument(0);
+                return ids.stream()
+                        .map(id -> id.equals(oldVariant.getId()) ? oldVariant : newVariant)
+                        .collect(Collectors.toList());
+            });
+
+            int pushed = stockReceiveService.syncPendingMarketplaceInventory();
+
+            assertThat(pushed).isEqualTo(2);
+            InOrder inOrder = inOrder(marketplaceInventoryPropagationService);
+            inOrder.verify(marketplaceInventoryPropagationService)
+                    .pushAvailableStock(Set.of(oldVariant.getId()));
+            inOrder.verify(marketplaceInventoryPropagationService)
+                    .pushAvailableStock(Set.of(newVariant.getId()));
         }
     }
 }

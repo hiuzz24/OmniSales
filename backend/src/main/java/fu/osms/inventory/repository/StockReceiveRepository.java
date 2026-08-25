@@ -50,15 +50,18 @@ public interface StockReceiveRepository extends JpaRepository<InventoryReceipt, 
     List<UUID> findChangedConfirmedWarehouseIdsBetween(@Param("changedSince") OffsetDateTime changedSince,
                                                        @Param("changedUntil") OffsetDateTime changedUntil);
 
-    @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
-            "JOIN ChannelProductVariant cpv ON cpv.variant.id = item.variant.id " +
-            "JOIN cpv.channelProduct cp " +
-            "JOIN cp.channel ch " +
-            "WHERE item.receipt.status = 'CONFIRMED' " +
-            "AND ch.deletedAt IS NULL " +
-            "AND cp.mappingState = 'ACTIVE' " +
-            "AND (cpv.lastSyncedAt IS NULL OR cpv.lastSyncedAt < COALESCE(item.receipt.confirmedAt, item.receipt.updatedAt))")
-    List<UUID> findConfirmedVariantIdsPendingMarketplaceSync();
+    @Query(value = "SELECT DISTINCT r.*, COALESCE(r.confirmed_at, r.updated_at) AS sort_time FROM inventory_receipts r " +
+            "JOIN inventory_receipt_items iri ON iri.receipt_id = r.id " +
+            "JOIN channel_product_variants cpv ON cpv.variant_id = iri.variant_id " +
+            "JOIN channel_products cp ON cp.id = cpv.channel_product_id " +
+            "JOIN channels ch ON ch.id = cp.channel_id " +
+            "WHERE r.status = 'CONFIRMED' " +
+            "AND ch.deleted_at IS NULL " +
+            "AND cp.mapping_state = 'ACTIVE' " +
+            "AND (cpv.last_synced_at IS NULL OR cpv.last_synced_at < COALESCE(r.confirmed_at, r.updated_at)) " +
+            "ORDER BY sort_time ASC",
+            nativeQuery = true)
+    List<InventoryReceipt> findConfirmedReceiptsPendingMarketplaceSync();
 
     @Query("SELECT DISTINCT item.variant.id FROM InventoryReceiptItem item " +
             "WHERE item.receipt.id = :receiptId AND item.receipt.status = 'CONFIRMED'")

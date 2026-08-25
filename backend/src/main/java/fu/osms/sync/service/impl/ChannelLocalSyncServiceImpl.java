@@ -11,6 +11,9 @@ import fu.osms.common.exception.AppException;
 import fu.osms.common.exception.ErrorCode;
 import fu.osms.inventory.repository.InventoryIssueRepository;
 import fu.osms.inventory.repository.StockReceiveRepository;
+import fu.osms.messaging.constants.RabbitMQConstants;
+import fu.osms.messaging.dto.ChannelPushRetryMessage;
+import fu.osms.messaging.publisher.EventPublisher;
 import fu.osms.sync.entity.SyncLog;
 import fu.osms.sync.lazada.dto.LazadaInventorySyncResult;
 import fu.osms.sync.lazada.service.LazadaInventoryUpdateService;
@@ -49,6 +52,7 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
     private final InventoryIssueRepository inventoryIssueRepository;
     private final MarketplaceWarehouseConsistencyService marketplaceWarehouseConsistencyService;
     private final TransactionTemplate transactionTemplate;
+    private final EventPublisher eventPublisher;
 
     @Override
     public ChannelImportSyncResponse syncAllLocalChanges(UUID requestedChannelId) {
@@ -117,6 +121,23 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
     @Override
     @Transactional
     public ChannelImportSyncResponse syncLocalChanges(UUID channelId) {
+        return doSyncLocalChanges(channelId, true);
+    }
+
+    @Override
+    @Transactional
+    public ChannelImportSyncResponse retryLocalSync(UUID channelId) {
+        return doSyncLocalChanges(channelId, false);
+    }
+
+    /**
+     * Khi đẩy thất bại, transaction hiện tại rollback nên mốc
+     * {@code lastSyncedApplicationAt} quay về giá trị cũ — mọi SKU chưa đẩy được
+     * vẫn ở trạng thái chưa đồng bộ và có thể đẩy lại bằng cách bấm đồng bộ lần nữa.
+     * Với luồng do người dùng kích hoạt ({@code enqueueRetryOnFailure=true}), một
+     * message retry cũng được đưa vào RabbitMQ để nền tự thử lại.
+     */
+    private ChannelImportSyncResponse doSyncLocalChanges(UUID channelId, boolean enqueueRetryOnFailure) {
         Channel channel = channelConnectionValidator.requireConnected(channelId);
 
         if (!Boolean.TRUE.equals(channel.getSyncEnabled())) {
@@ -132,10 +153,10 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
             throw new IllegalArgumentException("Chỉ hỗ trợ đồng bộ tồn kho cho Lazada, Shopify và TikTok Shop.");
         }
 
-        return syncInventoryDocuments(channel);
+        return syncInventoryDocuments(channel, enqueueRetryOnFailure);
     }
 
-    private ChannelImportSyncResponse syncInventoryDocuments(Channel channel) {
+    private ChannelImportSyncResponse syncInventoryDocuments(Channel channel, boolean enqueueRetryOnFailure) {
         SyncLog syncLog = syncLogRepository.save(SyncLog.builder()
                 .channel(channel)
                 .jobType(channel.getPlatform().name() + "_APPLICATION_INVENTORY_SYNC")
@@ -200,6 +221,14 @@ public class ChannelLocalSyncServiceImpl implements ChannelLocalSyncService {
             syncLog.setErrorSummary(e.getMessage());
             syncLog.setCompletedAt(OffsetDateTime.now());
             syncLogRepository.save(syncLog);
+            if (enqueueRetryOnFailure) {
+                eventPublisher.publish(
+                        RabbitMQConstants.CHANNEL_PUSH_RETRY,
+                        new ChannelPushRetryMessage(
+                                channel.getId(),
+                                e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(),
+                                OffsetDateTime.now()));
+            }
             throw e;
         }
     }

@@ -12,7 +12,9 @@ import fu.osms.inventory.dto.request.WarehouseMarketplaceSyncRequest;
 import fu.osms.inventory.dto.request.WarehouseRequest;
 import fu.osms.inventory.dto.response.WarehouseAddressComparisonResult;
 import fu.osms.inventory.dto.response.WarehouseMarketplaceSyncResult;
+import fu.osms.inventory.entity.InventoryItem;
 import fu.osms.inventory.entity.Warehouse;
+import fu.osms.inventory.repository.InventoryItemRepository;
 import fu.osms.inventory.repository.WarehouseRepository;
 import fu.osms.inventory.service.WarehouseService;
 import fu.osms.inventory.service.WarehouseSyncService;
@@ -26,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -47,6 +50,7 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
 
     private final WarehouseRepository warehouseRepository;
     private final WarehouseService warehouseService;
+    private final InventoryItemRepository inventoryItemRepository;
     private final ChannelRepository channelRepository;
     private final ChannelCredentialRepository credentialRepository;
     private final ShopifyApiClient shopifyApiClient;
@@ -191,6 +195,8 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
             }
         }
 
+        migrateInventoryItems(oldWarehouse, savedWarehouse);
+
         String newWarehouseId = savedWarehouse.getId().toString();
         for (Channel channel : channelRepository.findByDeletedAtIsNull()) {
             if (!SUPPORTED.contains(channel.getPlatform())
@@ -207,6 +213,50 @@ public class WarehouseSyncServiceImpl implements WarehouseSyncService {
 
         log.info("[WarehouseSync] Address sync applied: oldWarehouse={}, newWarehouse={}, address='{}'",
                 oldWarehouse.getId(), savedWarehouse.getId(), cleanedAddress);
+    }
+
+    private void migrateInventoryItems(Warehouse oldWarehouse, Warehouse newWarehouse) {
+        List<InventoryItem> oldItems = inventoryItemRepository.findByWarehouseId(oldWarehouse.getId());
+        if (oldItems.isEmpty()) return;
+
+        int moved = 0;
+        int merged = 0;
+        List<InventoryItem> toDelete = new ArrayList<>();
+
+        for (InventoryItem oldItem : oldItems) {
+            Optional<InventoryItem> existingOpt = inventoryItemRepository
+                    .findByWarehouseIdAndVariantId(newWarehouse.getId(), oldItem.getVariant().getId());
+
+            if (existingOpt.isPresent()) {
+                InventoryItem existing = existingOpt.get();
+                int totalQty = existing.getQuantityOnHand() + oldItem.getQuantityOnHand();
+                int totalReserved = existing.getReservedQuantity() + oldItem.getReservedQuantity();
+                existing.setQuantityOnHand(totalQty);
+                existing.setReservedQuantity(Math.min(totalReserved, totalQty));
+                if (totalQty > 0) {
+                    BigDecimal existingCost = existing.getAverageCost() != null
+                            ? existing.getAverageCost() : BigDecimal.ZERO;
+                    BigDecimal oldCost = oldItem.getAverageCost() != null
+                            ? oldItem.getAverageCost() : BigDecimal.ZERO;
+                    existing.setAverageCost(existingCost
+                            .multiply(BigDecimal.valueOf(existing.getQuantityOnHand()))
+                            .add(oldCost.multiply(BigDecimal.valueOf(oldItem.getQuantityOnHand())))
+                            .divide(BigDecimal.valueOf(totalQty), 2, java.math.RoundingMode.HALF_UP));
+                }
+                inventoryItemRepository.save(existing);
+                toDelete.add(oldItem);
+                merged++;
+            } else {
+                oldItem.setWarehouse(newWarehouse);
+                inventoryItemRepository.save(oldItem);
+                moved++;
+            }
+        }
+
+        inventoryItemRepository.deleteAll(toDelete);
+
+        log.info("[WarehouseSync] Inventory migration: {} moved, {} merged from warehouse {} to {}",
+                moved, merged, oldWarehouse.getId(), newWarehouse.getId());
     }
 
     private String pickBestAddress(List<WarehouseAddressComparisonResult.PlatformAddress> platformAddresses) {
