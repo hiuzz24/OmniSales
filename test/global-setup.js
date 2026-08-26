@@ -1,11 +1,11 @@
 /**
- * Global setup - runs once before all tests in a Playwright run.
+ * Thiết lập toàn cục - chạy một lần trước tất cả tests trong một lần chạy Playwright.
  *
- * Verifies that backend and frontend are reachable. Fails fast with
- * a clear message when the user forgot to start the dev servers.
+ * Kiểm tra backend và frontend có thể truy cập được. Dừng ngay với
+ * thông báo rõ ràng khi người dùng quên khởi động dev servers.
  *
- * Uses Node's built-in `http` module so we do not depend on
- * Playwright APIs (globalSetup runs outside the test context).
+ * Sử dụng module `http` có sẵn của Node để không phụ thuộc
+ * vào Playwright APIs (globalSetup chạy bên ngoài test context).
  */
 
 const http = require('node:http');
@@ -26,8 +26,8 @@ function checkUrl(url, timeoutMs = 5000) {
 module.exports = async () => {
   const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5174';
   const API_BASE = process.env.API_BASE || 'http://localhost:8080/api';
-  // Backend has no dedicated /health endpoint; use the public
-  // /address/countries endpoint as a liveness proxy.
+  // Backend không có endpoint /health riêng; sử dụng
+  // endpoint công khai /address/countries như proxy kiểm tra sức khỏe.
   const BACKEND_HEALTH = `${API_BASE}/address/countries`;
 
   console.log('[setup] verifying frontend:', FRONTEND_URL);
@@ -39,9 +39,9 @@ module.exports = async () => {
     console.log(`[setup] frontend OK (status ${fe.status})`);
   } catch (err) {
     throw new Error(
-      `Cannot reach frontend at ${FRONTEND_URL}. ` +
-      `Start the Vite dev server (npm run dev) before running tests. ` +
-      `Original error: ${err.message}`,
+      `Không thể kết nối frontend tại ${FRONTEND_URL}. ` +
+      `Khởi động Vite dev server (npm run dev) trước khi chạy tests. ` +
+      `Lỗi gốc: ${err.message}`,
     );
   }
 
@@ -54,9 +54,9 @@ module.exports = async () => {
     console.log(`[setup] backend OK (status ${be.status})`);
   } catch (err) {
     throw new Error(
-      `Cannot reach backend at ${BACKEND_HEALTH}. ` +
-      `Start the Spring Boot app before running tests. ` +
-      `Original error: ${err.message}`,
+      `Không thể kết nối backend tại ${BACKEND_HEALTH}. ` +
+      `Khởi động Spring Boot app trước khi chạy tests. ` +
+      `Lỗi gốc: ${err.message}`,
     );
   }
 

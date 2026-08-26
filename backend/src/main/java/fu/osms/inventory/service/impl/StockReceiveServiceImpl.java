@@ -309,7 +309,6 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             response.setPoCompleted(isPurchaseOrderCompleted(purchaseOrder.getId()));
         }
         if ("CONFIRMED".equals(status)) {
-            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
             notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
         }
 
@@ -475,7 +474,6 @@ public class StockReceiveServiceImpl implements StockReceiveService {
         response.setTotalQuantity(summary.totalQuantity());
 
         if ("CONFIRMED".equals(status)) {
-            marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
             notifyMarketplaceSyncChoice(receipt, createdByUser, changedVariantIds);
         }
         return enrichMarketplaceInfo(response);
@@ -806,7 +804,6 @@ public class StockReceiveServiceImpl implements StockReceiveService {
             response.setPoCompleted(isPurchaseOrderCompleted(receipt.getPurchaseOrder().getId()));
         }
 
-        marketplaceInventoryPropagationService.schedulePushAvailableStock(changedVariantIds);
         notifyMarketplaceSyncChoice(receipt, approvedByUser, changedVariantIds);
 
         return enrichMarketplaceInfo(response);
@@ -849,13 +846,23 @@ public class StockReceiveServiceImpl implements StockReceiveService {
     @Override
     @Transactional
     public int syncPendingMarketplaceInventory() {
-        List<UUID> variantIds = stockReceiveRepository.findConfirmedVariantIdsPendingMarketplaceSync();
-        if (variantIds.isEmpty()) {
-            return 0;
+        List<InventoryReceipt> pendingReceipts =
+                stockReceiveRepository.findConfirmedReceiptsPendingMarketplaceSync();
+        int totalVariantCount = 0;
+        for (InventoryReceipt receipt : pendingReceipts) {
+            List<UUID> variantIds =
+                    stockReceiveRepository.findConfirmedVariantIdsByReceiptId(receipt.getId());
+            if (variantIds.isEmpty()) {
+                continue;
+            }
+            Set<UUID> expandedVariantIds = expandSharedVariantIds(variantIds);
+            if (expandedVariantIds.isEmpty()) {
+                continue;
+            }
+            marketplaceInventoryPropagationService.pushAvailableStock(expandedVariantIds);
+            totalVariantCount += expandedVariantIds.size();
         }
-        Set<UUID> expandedVariantIds = expandSharedVariantIds(variantIds);
-        marketplaceInventoryPropagationService.pushAvailableStock(expandedVariantIds);
-        return expandedVariantIds.size();
+        return totalVariantCount;
     }
 
     @Override

@@ -1,17 +1,17 @@
 /**
  * test/utils/cleanup-helpers.js
  *
- * Provides helpers for cleaning up test data after each spec and for the
- * global teardown.  Two modes of operation:
+ * Cung cấp các hàm helper để dọn dẹp test data sau mỗi spec và cho
+ * global teardown. Hai chế độ hoạt động:
  *
- *   1. API mode  (default) — calls backend DELETE/PATCH endpoints.
- *      Used inside individual spec afterEach hooks and the globalTeardown.
+ *   1. Chế độ API (mặc định) — gọi backend DELETE/PATCH endpoints.
+ *      Sử dụng trong afterEach hooks của spec và globalTeardown.
  *
- *   2. SQL mode  — raw SQL via pg client (runs by default; opt-out via
- *      TEST_DB_SQL_CLEANUP=false).  Used as a fallback for entities without
- *      a DELETE API, and to catch anything API mode missed.
+ *   2. Chế độ SQL — raw SQL qua pg client (chạy mặc định; tắt qua
+ *      TEST_DB_SQL_CLEANUP=false). Dùng như fallback cho entities không có
+ *      DELETE API, và để bắt những gì API mode bỏ sót.
  *
- * Usage in a spec:
+ * Cách sử dụng trong spec:
  *   const { cleanupAllTestData, getAuthToken } = require('../../utils/cleanup-helpers');
  *
  *   test.afterEach(async ({ request }) => {
@@ -19,18 +19,18 @@
  *     await cleanupAllTestData(request, token);
  *   });
  *
- * Usage in globalTeardown:
+ * Cách sử dụng trong globalTeardown:
  *   const { cleanupAllTestData } = require('./utils/cleanup-helpers');
- *   // token from a fresh request context...
+ *   // token từ fresh request context...
  */
 
 const { TEST_EMAIL, TEST_PASSWORD, API_BASE } = require('./env-config');
 
-// ─── Auth ─────────────────────────────────────────────────────────────────
+// ─── Xác thực ─────────────────────────────────────────────────────────────────
 
 /**
- * Get a manager auth token using a Playwright request context.
- * Retries on rate-limit / auth errors.
+ * Lấy manager auth token sử dụng Playwright request context.
+ * Thử lại khi gặp rate-limit / auth errors.
  */
 async function getAuthToken(request) {
   for (let i = 0; i < 5; i++) {
@@ -50,15 +50,15 @@ async function getAuthToken(request) {
   throw new Error('Login failed after retries');
 }
 
-// Cache tokens per worker process so cleanupAllTestData doesn't hammer
-// the login endpoint and trip the API rate limiter (100 req/min).
+// Cache tokens per worker process để cleanupAllTestData không
+// gọi login endpoint liên tục và trigger API rate limiter (100 req/min).
 let _cleanupTokenCache = null;
 let _cleanupTokenCacheAt = 0;
 const CLEANUP_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
- * Cached version of getAuthToken. Use this in afterEach hooks so we
- * don't re-login on every test.
+ * Phiên bản cached của getAuthToken. Sử dụng trong afterEach hooks
+ * để không phải đăng nhập lại mỗi test.
  */
 async function getAuthTokenCached(request) {
   const now = Date.now();
@@ -69,34 +69,34 @@ async function getAuthTokenCached(request) {
   return _cleanupTokenCache;
 }
 
-// ─── Generic delete helpers ─────────────────────────────────────────────────
+// ─── Các hàm xóa generic ─────────────────────────────────────────────────
 
 /**
- * Fetch all pages of a list endpoint, returning all items whose field
- * matches the keyword (case-insensitive).
+ * Lấy tất cả pages của list endpoint, trả về các items có field
+ * khớp với keyword (không phân biệt hoa thường).
  *
- * Retries with exponential backoff on HTTP 429 (rate-limit) because the
- * backend's ApiUsageFilter caps per-user requests at 100/minute per
- * endpoint and our cleanup runs 12 keyword searches after each test.
+ * Thử lại với exponential backoff khi gặp HTTP 429 (rate-limit) vì
+ * backend's ApiUsageFilter giới hạn 100 req/min mỗi endpoint
+ * và cleanup chạy 12 keyword searches sau mỗi test.
  *
  * @param {object} request  Playwright request context
  * @param {string} token
  * @param {object} opts
- * @param {string} opts.listPath   e.g. '/products?page=0&size=100'
- * @param {string} opts.queryName  Parameter name for keyword search (optional)
- * @param {string} opts.keyword    Match this string in item[opts.matchField]
- * @param {string} opts.matchField Field to match against (default: 'name')
- * @returns {Promise<Array>}  Array of matching items with `id` field
+ * @param {string} opts.listPath   ví dụ: '/products?page=0&size=100'
+ * @param {string} opts.queryName  Tên parameter cho keyword search (tùy chọn)
+ * @param {string} opts.keyword    Khớp với string này trong item[opts.matchField]
+ * @param {string} opts.matchField Field để khớp (mặc định: 'name')
+ * @returns {Promise<Array>}  Array các items khớp với field `id`
  */
 async function fetchAllPages(request, token, { listPath, queryName, keyword, matchField = 'name' }) {
   const results = [];
   let page = 0;
   const PAGE_SIZE = 100;
 
-  // Normalize listPath: append '?' if there is no query string yet so we
-  // can safely add '&foo=...' parameters afterwards. Without this, the
-  // cleanup produced URLs like `/api/products&search=TEST-` which Spring
-  // treated as an unknown static resource and surfaced as HTTP 500.
+  // Normalize listPath: thêm '?' nếu không có query string để
+  // có thể thêm '&foo=...' parameters. Không có điều này, cleanup
+  // tạo URLs như `/api/products&search=TEST-` khiến Spring
+  // trả HTTP 500 vì coi là static resource không xác định.
   const separator = listPath.includes('?') ? '&' : '?';
 
   while (true) {
@@ -145,8 +145,8 @@ async function fetchAllPages(request, token, { listPath, queryName, keyword, mat
 }
 
 /**
- * Delete (or PATCH) every item returned by fetchAllPages.
- * Best-effort — does not throw on failure.
+ * Xóa (hoặc PATCH) mọi item trả về bởi fetchAllPages.
+ * Best-effort — không throw khi thất bại.
  */
 async function deleteByKeyword(request, token, opts) {
   const {
@@ -192,8 +192,8 @@ async function deleteByKeyword(request, token, opts) {
 }
 
 /**
- * Cancel an order via POST /api/orders/{id}/cancel.
- * Used because the backend has no DELETE endpoint for orders.
+ * Hủy đơn hàng qua POST /api/orders/{id}/cancel.
+ * Dùng vì backend không có DELETE endpoint cho orders.
  */
 async function cancelOrder(request, token, orderId) {
   if (!orderId) return;
@@ -202,14 +202,14 @@ async function cancelOrder(request, token, orderId) {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     });
     if (resp.status() === 404 || resp.status() === 405) {
-      // Fallback to DELETE if backend implements it
+      // Fallback sang DELETE nếu backend implement
       await request.delete(`${API_BASE}/orders/${orderId}`, {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});
     }
-  } catch (e) {
-    // best-effort
-  }
+      } catch (e) {
+        // best-effort - không throw
+      }
 }
 
 async function cancelEntity(request, token, listPath, id, cancelPathFn) {
@@ -219,18 +219,18 @@ async function cancelEntity(request, token, listPath, id, cancelPathFn) {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       data: listPath.body,
     }).catch(() => {});
-  } catch (e) {
-    // best-effort
-  }
+      } catch (e) {
+        // best-effort - không throw
+      }
 }
 
-// ─── High-level cleanup ─────────────────────────────────────────────────────
+// ─── Dọn dẹp cấp cao ─────────────────────────────────────────────────────
 
 /**
- * Delete every test product in the catalog using the API. Used by the
- * product spec afterEach hook (where calling the full
- * `cleanupAllTestData()` would otherwise time out) and by the global
- * teardown. Returns the number of products successfully deleted.
+ * Xóa mọi test product trong catalog sử dụng API. Dùng bởi
+ * product spec afterEach hook (nơi gọi full
+ * `cleanupAllTestData()` sẽ timeout) và bởi global
+ * teardown. Trả về số products đã xóa thành công.
  */
 async function cleanupTestProducts(request, token) {
   const productSkuPrefixes = [
@@ -274,17 +274,17 @@ async function cleanupTestProducts(request, token) {
 }
 
 /**
- * Delete all test data by keyword using the API.
- * Called at end of each test suite (afterEach) or in globalTeardown.
+ * Xóa tất cả test data theo keyword sử dụng API.
+ * Gọi ở cuối mỗi test suite (afterEach) hoặc trong globalTeardown.
  *
- * For entities without DELETE API the SQL fallback below is also used.
+ * Với entities không có DELETE API, SQL fallback bên dưới cũng được sử dụng.
  */
 async function cleanupAllTestData(request, token) {
   const counts = {};
 
-  // Products — DELETE /api/products/{id}/delete (soft delete).
+  // Products — DELETE /api/products/{id}/delete (xóa mềm).
   //
-  // Tests create products with many different name/SKU prefixes:
+  // Tests tạo products với nhiều prefix khác nhau:
   //   * helper default  : "Test Product …" + sku "TEST-…"
   //   * API spec        : "API Test Product …", "API Variant Product …"
   //   * duplicate spec  : sku "DUP-…"
@@ -293,12 +293,10 @@ async function cleanupAllTestData(request, token) {
   //   * validation spec : "NONAME…", "NOVAR…", "UNAUTH…", "NOPRICE-…"
   //   * product-variant : sku "SEARCH-…"
   //
-  // Strategy: a SINGLE GET to /api/products (no keyword) returns every
-  // non-deleted product. We then keep only products whose SKU starts with
-  // any known test marker, and DELETE them. This used to be 12 keyword
-  // searches (one per prefix), which together tripped the backend's
-  // 100-req/minute ApiUsageFilter on /api/products and produced 429
-  // failures during cleanup itself.
+  // Chiến lược: một GET đơn đến /api/products (không keyword) trả về mọi
+  // product chưa bị xóa. Giữ lại products có SKU bắt đầu với
+  // marker test, và DELETE chúng. Trước đây dùng 12 keyword searches,
+  // gây 429 failures trong cleanup.
   counts.products = await cleanupTestProducts(request, token);
 
   // Customers — DELETE /api/customers/{id}
@@ -424,17 +422,17 @@ async function cleanupAllTestData(request, token) {
 }
 
 /**
- * SQL-based cleanup. Runs by default; opt-out via TEST_DB_SQL_CLEANUP=false.
+ * Dọn dẹp dựa trên SQL. Chạy mặc định; tắt qua TEST_DB_SQL_CLEANUP=false.
  *
- * Only deletes rows with clear test markers — same patterns as the
- * scripts/_delete-statements.js used in Phase 1. Safe for shared DB because
- * every WHERE clause filters by a recognizable test marker prefix.
+ * Chỉ xóa rows có test markers rõ ràng — cùng patterns với
+ * scripts/_delete-statements.js. An toàn cho shared DB vì
+ * mỗi WHERE clause filter bằng test marker prefix.
  */
 async function cleanupAllTestDataSQL(pg) {
-  // Order matters: respect FK constraints (children before parents).
-  // Triggers on immutable tables must be disabled before DELETE then re-enabled.
+  // Thứ tự quan trọng: respect FK constraints (children trước parents).
+  // Triggers trên immutable tables phải disable trước DELETE rồi enable lại.
   const SQL_MARKERS = [
-    // ── Inventory transactions (immutable trigger) ─────────────────────
+    // ── Giao dịch inventory (immutable trigger) ─────────────────────
     `ALTER TABLE inventory_transactions DISABLE TRIGGER trg_inventory_transactions_immutable`,
     `DELETE FROM inventory_transactions WHERE note LIKE 'Test transaction %'
        OR variant_id IN (SELECT id FROM product_variants
@@ -445,33 +443,32 @@ async function cleanupAllTestDataSQL(pg) {
                              OR sku LIKE 'TEST-ORD-%')`,
     `ALTER TABLE inventory_transactions ENABLE TRIGGER trg_inventory_transactions_immutable`,
 
-    // ── Stocktakes ──────────────────────────────────────────────────────
+    // ── Stocktakes ──────────────────────────────────────────────────
     `DELETE FROM stocktake_items WHERE session_id IN (SELECT id FROM stocktake_sessions WHERE session_code LIKE 'KK-%')`,
     `DELETE FROM stocktake_sessions WHERE session_code LIKE 'KK-%'`,
 
-    // ── Stock transfers ─────────────────────────────────────────────────
+    // ── Stock transfers ─────────────────────────────────────────────
     `DELETE FROM stock_transfer_items WHERE transfer_id IN (SELECT id FROM stock_transfers WHERE transfer_code LIKE 'CK-%')`,
     `DELETE FROM stock_transfers WHERE transfer_code LIKE 'CK-%'`,
 
-    // ── Channels (deep clean — has multiple child tables) ──────────────
+    // ── Channels (dọn sâu — có nhiều child tables) ──────────────
     `DELETE FROM channel_product_variants WHERE channel_product_id IN (SELECT id FROM channel_products WHERE channel_id IN (SELECT id FROM channels WHERE display_name LIKE 'TestMC_%' OR display_name LIKE 'BadCommission %' OR display_name LIKE 'Updated Manual Channel %' OR display_name LIKE 'ToDelete_%' OR display_name LIKE 'DupCh_%'))`,
     `DELETE FROM channel_products WHERE channel_id IN (SELECT id FROM channels WHERE display_name LIKE 'TestMC_%' OR display_name LIKE 'BadCommission %' OR display_name LIKE 'Updated Manual Channel %' OR display_name LIKE 'ToDelete_%' OR display_name LIKE 'DupCh_%')`,
     `DELETE FROM channel_credentials WHERE channel_id IN (SELECT id FROM channels WHERE display_name LIKE 'TestMC_%' OR display_name LIKE 'BadCommission %' OR display_name LIKE 'Updated Manual Channel %' OR display_name LIKE 'ToDelete_%' OR display_name LIKE 'DupCh_%')`,
     `DELETE FROM channel_connection_logs WHERE channel_id IN (SELECT id FROM channels WHERE display_name LIKE 'TestMC_%' OR display_name LIKE 'BadCommission %' OR display_name LIKE 'Updated Manual Channel %' OR display_name LIKE 'ToDelete_%' OR display_name LIKE 'DupCh_%')`,
     `DELETE FROM channels WHERE display_name LIKE 'TestMC_%' OR display_name LIKE 'BadCommission %' OR display_name LIKE 'Updated Manual Channel %' OR display_name LIKE 'ToDelete_%' OR display_name LIKE 'DupCh_%'`,
 
-    // ── Suppliers (no DELETE API — mark inactive via is_active column) ─
+    // ── Suppliers (không DELETE API — đánh dấu inactive) ─
     `UPDATE suppliers SET is_active=false WHERE name LIKE 'TestSup%' OR name LIKE 'ToUpdate%' OR name LIKE 'StatusTest%' OR name LIKE 'DuplicateTest%' OR name LIKE 'Some Supplier %' OR email LIKE 'supplier%@example.com'`,
 
-    // ── Categories (clear FK then delete) ──────────────────────────────
+    // ── Categories (xóa FK trước rồi delete) ──────────────────────
     `UPDATE categories SET parent_id=NULL WHERE parent_id IN (SELECT id FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR name = 'API Sub Category Attempt' OR slug LIKE 'test-category-%' OR name = 'X' OR slug LIKE 'unauth--%' OR slug LIKE 'uniqueSlug%')`,
     `DELETE FROM categories WHERE name LIKE 'Test Category %' OR name LIKE 'API Test %' OR name = 'API Sub Category Attempt' OR slug LIKE 'test-category-%' OR name = 'X' OR slug LIKE 'unauth--%' OR slug LIKE 'uniqueSlug%'`,
 
-    // ── Products (deep clean) ───────────────────────────────────────────
-    // SKU prefixes used across catalog specs — see comment in
-    // cleanupAllTestData() above. Be aggressive here because the BE API
-    // soft-deletes rows, and tests depend on /api/products returning only
-    // fresh data after cleanup.
+    // ── Products (dọn sâu) ───────────────────────────────────────────
+    // SKU prefixes sử dụng trong catalog specs — xem comment ở trên.
+    // Xóa mạnh ở đây vì BE API xóa mềm rows, và tests phụ thuộc
+    // /api/products trả về chỉ fresh data sau cleanup.
     `DELETE FROM product_images WHERE product_id IN (SELECT id FROM products
        WHERE sku LIKE 'TEST-%' OR sku LIKE 'SKU-TEST-%' OR sku LIKE 'API-%'
           OR sku LIKE 'VAR-%' OR sku LIKE 'V1-%' OR sku LIKE 'V2-%'
@@ -557,7 +554,7 @@ async function cleanupAllTestDataSQL(pg) {
        OR email LIKE 'noname%'
        OR email LIKE 'noauth%'`,
 
-    // ── Users (excluding the manager/admin test accounts) ───────────────
+    // ── Users (trừ manager/admin test accounts) ───────────────
     `DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'testuser_%'
        OR email LIKE 'newuser_%'
        OR email LIKE 'dup_%'
@@ -577,7 +574,7 @@ async function cleanupAllTestDataSQL(pg) {
        OR email LIKE 'e2e_%'
        OR email LIKE 'invitee+%@osms-test.vn'`,
 
-    // ── Orders (cancel via API is preferred; SQL fallback for orphans) ─
+    // ── Orders (ưu tiên cancel qua API; SQL fallback cho orphans) ─
     `DELETE FROM order_items WHERE sku LIKE 'TEST-ORD-%' OR order_id IN (SELECT id FROM orders WHERE note LIKE 'Test order note %')`,
     `DELETE FROM orders WHERE note LIKE 'Test order note %' OR id IN (SELECT order_id FROM order_items WHERE sku LIKE 'TEST-ORD-%')`,
 
@@ -594,7 +591,7 @@ async function cleanupAllTestDataSQL(pg) {
       const r = await pg.query(sql);
       total += r.rowCount || 0;
     } catch (e) {
-      // table or trigger may not exist on a fresh DB — ignore
+      // table hoặc trigger có thể không tồn tại trên fresh DB — bỏ qua
       console.warn('[sql-cleanup] warning:', e.message.slice(0, 150));
     }
   }

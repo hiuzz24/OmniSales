@@ -1,6 +1,6 @@
 /**
- * Helper utilities for product E2E and API tests
- * Uses the same credentials as auth.spec.js
+ * Các hàm helper cho product E2E và API tests
+ * Sử dụng cùng credentials như auth.spec.js
  */
 
 const {
@@ -11,24 +11,42 @@ const {
 const API_BASE = process.env.API_BASE || ENV_API_BASE;
 
 /**
- * Login as manager via UI (for E2E tests)
- * Navigates to /login, fills credentials, waits for redirect to dashboard.
+ * Đăng nhập như manager qua UI (cho E2E tests)
+ * Điều hướng đến /login, điền credentials, đợi redirect đến dashboard.
  *
- * The 30s managerPage fixture timeout is the historical flake mode: Vite
- * occasionally re-optimizes dependencies on first request, so the email
- * input is not in the DOM until the bundle downloads. We pre-wait for the
- * input to be visible (60s) before doing any action.
+ * Xử lý rate-limit (429) errors bằng cách đợi và thử lại.
+ * 30s managerPage fixture timeout là historical flake mode: Vite
+ * đôi khi re-optimizes dependencies trên request đầu tiên, nên email
+ * input không có trong DOM cho đến khi bundle download xong. Chúng tôi
+ * pre-wait cho input visible (90s) trước khi thực hiện bất kỳ action nào.
  */
 async function loginAsManager(page) {
   await page.goto('/login');
-  // Vite first-load re-optimization can take 30s+; wait up to 60s for the form.
-  await page.locator('#login-email').waitFor({ state: 'visible', timeout: 60000 });
+  // Vite re-optimization có thể mất 30s+; đợi đến 90s cho form.
+  await page.locator('#login-email').waitFor({ state: 'visible', timeout: 90000 });
   await page.locator('#login-email').fill(TEST_EMAIL);
   await page.locator('#login-password').waitFor({ state: 'visible', timeout: 5000 });
   await page.locator('#login-password').fill(TEST_PASSWORD);
 
+  // Kiểm tra nếu đã bị rate-limited (xảy ra sau nhiều lần test)
+  const errorBanner = page.locator('[role="alert"]');
+  if (await errorBanner.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const errorText = await errorBanner.textContent();
+    if (errorText.includes('Quá nhiều lần thử')) {
+      // Đợi 2 phút cho rate-limit reset
+      console.log('[login] Rate-limited, đợi 120s để reset...');
+      await page.waitForTimeout(120000);
+      // Reload page and try again
+      await page.goto('/login');
+      await page.locator('#login-email').waitFor({ state: 'visible', timeout: 90000 });
+      await page.locator('#login-email').fill(TEST_EMAIL);
+      await page.locator('#login-password').waitFor({ state: 'visible', timeout: 5000 });
+      await page.locator('#login-password').fill(TEST_PASSWORD);
+    }
+  }
+
   await Promise.all([
-    page.waitForURL('**/dashboard', { timeout: 30000 }),
+    page.waitForURL('**/dashboard', { timeout: 60000 }),
     page.locator('#login-submit-btn').click(),
   ]);
 
@@ -36,8 +54,8 @@ async function loginAsManager(page) {
 }
 
 /**
- * Login via API and return access token
- * For API tests that need authentication
+ * Đăng nhập qua API và trả về access token
+ * Cho API tests cần authentication
  */
 async function getAuthToken(request) {
   const response = await request.post(`${API_BASE}/auth/login`, {

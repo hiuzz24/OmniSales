@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 --  OSMS â€” Full Schema Reset (DROP â†’ CREATE â†’ SEED)
 --  Generated: 2026-06-21
 --  Order: DROP children first, then parents
@@ -454,7 +454,7 @@ CREATE TABLE warehouses (
                             deleted_at TIMESTAMPTZ
 );
 
--- Purchase orders: Sales creates and sends; Operations receives through one inventory receipt.
+-- Purchase orders: Sales creates and sends then Operations receives through one inventory receipt.
 CREATE TABLE purchase_orders (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_code            VARCHAR(100) NOT NULL UNIQUE,
@@ -1204,11 +1204,11 @@ INSERT INTO system_settings (key, value, description, category) VALUES
     ('maintenance_mode', 'false', 'Bật chế độ bảo trì hệ thống', 'SYSTEM'),
     ('maintenance_message', 'Hệ thống đang bảo trì. Vui lòng thử lại sau.', 'Thông báo hiển thị khi bảo trì', 'SYSTEM'),
     ('backup_schedule_enabled', 'true', 'Bật sao lưu dữ liệu tự động hằng ngày', 'SYSTEM'),
-    ('default_reorder_level', '10', 'Má»©c cáº£nh bÃ¡o tá»“n kho tá»‘i thiá»ƒu máº·c Ä‘á»‹nh cho sáº£n pháº©m', 'INVENTORY'),
-    ('reserved_timeout_minutes', '30', 'Thá»i gian giá»¯ chá»— hÃ ng (phÃºt) trÆ°á»›c khi tá»± Ä‘á»™ng hoÃ n tráº£', 'INVENTORY'),
-    ('low_stock_repeat_hours', '12', 'Khoáº£ng thá»i gian nháº¯c nhá»Ÿ (giá») giá»¯a cÃ¡c láº§n gá»­i cáº£nh bÃ¡o tá»“n kho', 'NOTIFICATION'),
-    ('timezone', 'Asia/Ho_Chi_Minh', 'Timezone hoáº¡t Ä‘á»™ng chÃ­nh thá»©c cá»§a há»‡ thá»‘ng', 'SYSTEM'),
-    ('max_failed_login_attempts', '5', 'Sá»‘ láº§n Ä‘Äƒng nháº­p sai tá»‘i Ä‘a trÆ°á»›c khi khÃ³a tÃ i khoáº£n', 'SECURITY')
+    ('default_reorder_level', '10', 'Mức cảnh báo tồn kho tối thiểu mặc định cho sản phẩm', 'INVENTORY'),
+    ('reserved_timeout_minutes', '30', 'Thời gian giữ chỗ hàng (phút) trước khi tự động hoàn trả', 'INVENTORY'),
+    ('low_stock_repeat_hours', '12', 'Khoảng thời gian nhắc nhở (giờ) giữa các lần gửi cảnh báo tồn kho', 'NOTIFICATION'),
+    ('timezone', 'Asia/Ho_Chi_Minh', 'Timezone hoạt động chính thức của hệ thống', 'SYSTEM'),
+    ('max_failed_login_attempts', '5', 'Số lần đăng nhập sai tối đa trước khi khóa tài khoản', 'SECURITY')
 ON CONFLICT (key) DO NOTHING;
 
 

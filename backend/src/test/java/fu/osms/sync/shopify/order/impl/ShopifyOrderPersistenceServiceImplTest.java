@@ -8,6 +8,7 @@ import fu.osms.order.entity.Order;
 import fu.osms.order.enums.OrderStatus;
 import fu.osms.order.repository.OrderItemRepository;
 import fu.osms.order.repository.OrderRepository;
+import fu.osms.sync.order.importing.OrderImportResult;
 import fu.osms.sync.order.importing.OrderUpsertResult;
 import fu.osms.sync.order.importing.OrderUpsertSupport;
 import fu.osms.sync.shopify.order.ShopifyOrderWriteModel;
@@ -15,11 +16,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,7 +30,6 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,13 +41,14 @@ class ShopifyOrderPersistenceServiceImplTest {
     @Mock private OrderRepository orderRepository;
     @Mock private OrderItemRepository itemRepository;
     @Mock private ChannelProductVariantRepository channelVariantRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private ShopifyOrderPersistenceServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new ShopifyOrderPersistenceServiceImpl(
-                upsertSupport, orderRepository, itemRepository, channelVariantRepository);
+                upsertSupport, orderRepository, itemRepository, channelVariantRepository, eventPublisher);
     }
 
     private Channel channel() {
@@ -56,8 +58,6 @@ class ShopifyOrderPersistenceServiceImplTest {
                 .platform(PlatformType.SHOPIFY)
                 .build();
     }
-
-    private static final OffsetDateTime CREATED_AT = OffsetDateTime.parse("2026-08-01T10:00:00+07:00");
 
     private ShopifyOrderWriteModel model(String externalOrderId, OrderStatus status, String paymentStatus) {
         return new ShopifyOrderWriteModel(
@@ -92,6 +92,7 @@ class ShopifyOrderPersistenceServiceImplTest {
         var outcome = service.write(channel, m);
 
         assertThat(outcome.created()).isTrue();
+        assertThat(outcome.result()).isEqualTo(OrderImportResult.CREATED);
         verify(itemRepository).deleteByOrderId(order.getId());
         verify(itemRepository).saveAll(any());
     }
@@ -100,7 +101,7 @@ class ShopifyOrderPersistenceServiceImplTest {
     @DisplayName("write: resolves externalVariantId through channelVariantRepository")
     void write_resolvesVariant() {
         Channel channel = channel();
-        Order order = order(channel, OrderStatus.PENDING, "UNPAID");
+        Order order = order(channel, OrderStatus.PENDING, "PAID");
         ShopifyOrderWriteModel m = model("EXT-1", OrderStatus.PENDING, "PAID");
         ChannelProductVariant mapping = ChannelProductVariant.builder()
                 .id(UUID.randomUUID())
@@ -138,8 +139,9 @@ class ShopifyOrderPersistenceServiceImplTest {
 
         service.write(channel, m);
 
-        verify(orderRepository).save(any(Order.class));
-        assertThat(order.getBuyerName()).isEqualTo("Real Name");
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(captor.capture());
+        assertThat(captor.getValue().getBuyerName()).isEqualTo("Real Name");
     }
 
     @Test
@@ -195,19 +197,5 @@ class ShopifyOrderPersistenceServiceImplTest {
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(outcome.becameCancelled()).isTrue();
-    }
-
-    @Test
-    @DisplayName("getOrder: returns the order from the repository by id")
-    void getOrder() {
-        UUID id = UUID.randomUUID();
-        Order order = Order.builder().id(id).build();
-        when(orderRepository.findById(id)).thenReturn(Optional.of(order));
-
-        Order result = service.getOrder(new fu.osms.sync.order.importing.OrderImportOutcome(
-                id, fu.osms.sync.order.importing.OrderImportResult.UPDATED,
-                false, false, false, false, null, null));
-
-        assertThat(result.getId()).isEqualTo(id);
     }
 }
