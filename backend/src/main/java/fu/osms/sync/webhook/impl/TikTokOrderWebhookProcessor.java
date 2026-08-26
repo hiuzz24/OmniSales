@@ -43,10 +43,6 @@ public class TikTokOrderWebhookProcessor implements PlatformOrderWebhookProcesso
         return "PROCESSED";
     }
 
-    /**
-     * Webhook status is newer than an eventually-consistent Order Detail response.
-     * Overlay it so a cancellation cannot be reverted to AWAITING_SHIPMENT.
-     */
     private void applyAuthoritativeWebhookState(Map<String, Object> detail, Map<String, Object> payload) {
         Map<String, Object> data = WebhookPayloadUtils.copyMap(payload == null ? null : payload.get("data"));
         String webhookOrderStatus = WebhookPayloadUtils.text(data.get("order_status"));

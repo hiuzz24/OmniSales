@@ -38,6 +38,10 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
     private final TikTokDispatchSlaCalculator slaCalculator;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * Lưu hoặc cập nhật order TikTok sau khi webhook hoặc manual pull đã lấy đủ dữ liệu.
+     * Hàm cũng bảo vệ trạng thái WAITING_STOCK và cập nhật các OrderItem tương ứng.
+     */
     @Override
     @Transactional(propagation = Propagation.REQUIRED)
     public OrderImportOutcome write(TikTokOrderWriteContext context, TikTokOrderWriteModel model) {
@@ -103,10 +107,15 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
                 oldStatus, saved.getStatus());
     }
 
+    /** Lấy lại order vừa import để các bước xử lý sau tiếp tục dùng entity mới nhất. */
     @Override
     @Transactional(readOnly = true)
     public Order getOrder(OrderImportOutcome outcome) { return orderRepository.findById(outcome.orderId()).orElseThrow(); }
 
+    /**
+     * Liên kết item TikTok với variant nội bộ.
+     * Ưu tiên external variant ID, sau đó fallback sang SKU của TikTok.
+     */
     private ResolvedItem resolve(Channel channel, TikTokOrderWriteModel.Item item) {
         ChannelProductVariant mapping = null;
         if (item.externalVariantId() != null && !item.externalVariantId().isBlank()) {
@@ -117,9 +126,13 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
         }
         return new ResolvedItem(item, mapping);
     }
+
+    /** Chỉ ghi đè thông tin text hợp lệ, không ghi dữ liệu rỗng hoặc đã bị che. */
     private void setText(String value, java.util.function.Consumer<String> setter) {
         if (value != null && !value.isBlank() && !value.contains("***")) setter.accept(value);
     }
+
+    /** Quyết định có nên thay địa chỉ hiện tại bằng địa chỉ mới từ TikTok hay không. */
     private boolean shouldReplaceAddress(Order order, Map<String, Object> incoming) {
         if (incoming == null || incoming.isEmpty()) return false;
         boolean currentEmpty = order.getShippingAddress() == null || order.getShippingAddress().isEmpty();
@@ -127,16 +140,25 @@ public class TikTokOrderPersistenceServiceImpl implements TikTokOrderPersistence
                 .map(String::valueOf).anyMatch(value -> value.contains("***"));
         return currentEmpty || !masked;
     }
+
+    /** Chuyển giá trị thời gian từ payload TikTok sang epoch an toàn. */
     private Long epoch(Object value) { try { return value == null ? null : Long.parseLong(String.valueOf(value)); } catch (NumberFormatException e) { return null; } }
+
+    /** Giữ WAITING_STOCK cho đến khi OSMS xử lý tồn; chỉ cho CANCELLED ghi đè. */
     private OrderStatus guardedStatus(OrderStatus current, OrderStatus incoming) {
         if (current != OrderStatus.WAITING_STOCK || incoming == null) return incoming;
         return incoming == OrderStatus.CANCELLED ? OrderStatus.CANCELLED : OrderStatus.WAITING_STOCK;
     }
+
+    /** Xác định incoming status có phải là trạng thái platform đã tiến lên hay không. */
     private boolean isProgressStatus(OrderStatus incoming) {
         return incoming != null && incoming != OrderStatus.PENDING && incoming != OrderStatus.CONFIRMED
                 && incoming != OrderStatus.CANCELLED && incoming != OrderStatus.WAITING_STOCK;
     }
+
+    /** Dữ liệu item TikTok sau khi đã tìm thấy mapping variant nội bộ nếu có. */
     private record ResolvedItem(TikTokOrderWriteModel.Item item, ChannelProductVariant mapping) {
+        /** Chuyển item đã resolve thành entity OrderItem để lưu vào database. */
         private OrderItem entity(Order order) {
             return OrderItem.builder().order(order).externalItemId(item.externalItemId())
                     .channelVariant(mapping).variant(mapping == null ? null : mapping.getVariant())

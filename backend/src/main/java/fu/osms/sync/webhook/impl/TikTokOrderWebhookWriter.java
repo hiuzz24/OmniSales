@@ -71,7 +71,6 @@ public class TikTokOrderWebhookWriter {
         }
     }
 
-    /** Gắn cancellation trước khi phân bổ tồn để webhook type 11 đến sớm không reserve nhầm. */
     @Transactional
     public void writeCancellation(UUID eventId, String externalOrderId, Map<String, Object> bootstrapDetail,
                                   TikTokOrderApiService.Cancellation cancellation) {

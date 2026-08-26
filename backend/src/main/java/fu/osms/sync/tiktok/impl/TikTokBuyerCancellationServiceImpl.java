@@ -48,6 +48,11 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
     private final MarketplaceInventoryPropagationService inventoryPropagationService;
 
     @Override
+    /**
+     * Xử lý webhook type 11 về yêu cầu hủy do khách hàng tạo trên TikTok.
+     * Hàm này chỉ cập nhật thông tin yêu cầu hủy; việc chuyển Order thành
+     * CANCELLED và nhả tồn được thực hiện ở writer khi TikTok xác nhận trạng thái phù hợp.
+     */
     public void handleWebhook(WebhookEvent event) {
         Map<String, Object> data = WebhookPayloadUtils.copyMap(event.getRawPayload().get("data"));
         String orderId = required(data, "order_id");
@@ -87,6 +92,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
     }
 
     @Override
+    /** Lấy trạng thái yêu cầu hủy và quyền Approve/Reject hiện tại từ TikTok. */
     public BuyerCancellationResponse get(UUID orderId) {
         ActionContext context = loadContext(orderId);
         TikTokOrderApiService.CancellationDecisionEligibility eligibility = shouldLoadEligibility(context.metadata())
@@ -96,11 +102,13 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
     }
 
     @Override
+    /** Seller chấp thuận yêu cầu hủy; Order chỉ bị hủy sau webhook xác nhận của TikTok. */
     public BuyerCancellationResponse approve(UUID orderId) {
         return execute(orderId, "APPROVE", null, null);
     }
 
     @Override
+    /** Seller từ chối yêu cầu hủy với lý do hợp lệ do TikTok cung cấp. */
     public BuyerCancellationResponse reject(UUID orderId, String reasonCode, String comment) {
         if (reasonCode == null || reasonCode.isBlank()) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Vui lòng chọn lý do từ chối");
@@ -108,6 +116,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         return execute(orderId, "REJECT", reasonCode, comment);
     }
 
+    /** Luồng dùng chung cho cả thao tác Approve và Reject. */
     private BuyerCancellationResponse execute(UUID orderId, String action, String reasonCode, String comment) {
         ActionContext loaded = loadContext(orderId);
         TikTokOrderApiService.CancellationDecisionEligibility eligibility =
@@ -150,6 +159,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         }
     }
 
+    /** Kiểm tra Order, channel, scope và lấy cancelId để thực hiện thao tác. */
     private ActionContext loadContext(UUID orderId) {
         Order order = orderRepository.findByIdWithChannel(orderId)
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
@@ -165,6 +175,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         return new ActionContext(order.getId(), order.getChannel(), cancelId, metadata);
     }
 
+    /** Khóa Order và đánh dấu đang xử lý để chặn hai thao tác Approve/Reject đồng thời. */
     private ActionContext prepare(UUID orderId, String expectedCancelId, String action, UUID requestId,
                                   String reasonCode) {
         Order order = locked(orderId);
@@ -187,6 +198,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         return new ActionContext(order.getId(), order.getChannel(), expectedCancelId, metadata);
     }
 
+    /** Lưu rằng TikTok đã nhận yêu cầu Approve/Reject thành công. */
     private void markSubmitted(UUID orderId, UUID requestId, String action) {
         Order order = locked(orderId);
         Map<String, Object> metadata = new LinkedHashMap<>(TikTokBuyerCancellationMetadata.value(order));
@@ -198,6 +210,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         orderRepository.save(order);
     }
 
+    /** Lưu lỗi khi không thể gửi hoặc xác nhận thao tác với TikTok. */
     private void markFailed(UUID orderId, UUID requestId, Exception error) {
         Order order = locked(orderId);
         Map<String, Object> metadata = new LinkedHashMap<>(TikTokBuyerCancellationMetadata.value(order));
@@ -208,6 +221,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         orderRepository.save(order);
     }
 
+    /** Đồng bộ trạng thái mới nhất từ TikTok sau khi xảy ra race condition. */
     private void applyLatest(UUID orderId, UUID requestId, TikTokOrderApiService.Cancellation latest) {
         Order order = locked(orderId);
         Map<String, Object> metadata = new LinkedHashMap<>(TikTokBuyerCancellationMetadata.value(order));
@@ -245,6 +259,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         }
     }
 
+    /** Chuyển metadata TikTok thành response dễ dùng cho frontend. */
     private BuyerCancellationResponse response(Map<String, Object> metadata,
                                                TikTokOrderApiService.CancellationDecisionEligibility eligibility) {
         boolean sellerActionRequired = booleanValue(metadata.get("sellerActionRequired"))
@@ -262,6 +277,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
                         localizedRejectReasons(eligibility.reject().reasons())));
     }
 
+    /** Việt hóa và loại bỏ các lý do từ chối bị trùng tên hiển thị. */
     private List<BuyerCancellationResponse.Reason> localizedRejectReasons(
             List<TikTokOrderApiService.DecisionReason> reasons) {
         Map<String, BuyerCancellationResponse.Reason> uniqueByLabel = new LinkedHashMap<>();
@@ -272,6 +288,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         return List.copyOf(uniqueByLabel.values());
     }
 
+    /** Ánh xạ mã lý do của TikTok sang nội dung tiếng Việt. */
     private String vietnameseRejectReason(String code, String platformLabel) {
         if (code == null) return platformLabel;
         return switch (code) {
@@ -294,11 +311,13 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         return new TikTokOrderApiService.CancellationDecisionEligibility(decision, decision);
     }
 
+    /** Chỉ gọi Decision Eligibility khi yêu cầu còn đang chờ Seller xử lý. */
     private boolean shouldLoadEligibility(Map<String, Object> metadata) {
         return booleanValue(metadata.get("active"))
                 && TikTokBuyerCancellationMetadata.PENDING.equalsIgnoreCase(text(metadata.get("cancelStatus")));
     }
 
+    /** Kiểm tra channel đã được cấp scope xử lý hủy/hoàn tiền của TikTok chưa. */
     private void requireScope(Channel channel, String requiredScope) {
         Object configured = channel.getMetadata() == null ? null : channel.getMetadata().get("grantedScopes");
         if (!(configured instanceof Collection<?> scopes) || scopes.isEmpty()) return;
@@ -308,6 +327,7 @@ public class TikTokBuyerCancellationServiceImpl implements TikTokBuyerCancellati
         }
     }
 
+    /** Tạo transaction độc lập cho các bước trước/sau lời gọi API TikTok. */
     private TransactionTemplate requiredNew() {
         TransactionTemplate template = new TransactionTemplate(transactionManager);
         template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);

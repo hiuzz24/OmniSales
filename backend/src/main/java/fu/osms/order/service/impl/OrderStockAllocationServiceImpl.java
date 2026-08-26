@@ -71,6 +71,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return order;
     }
 
+    /** Sales xác nhận thủ công order đang chờ hàng và thử giữ tồn kho thật. */
     @Override
     @Transactional
     public Order confirmOrder(UUID orderId) {
@@ -80,7 +81,10 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return result;
     }
 
-    /** Làm mới khả năng xác nhận của order mà không tự giữ tồn hoặc đổi trạng thái. */
+    /**
+     * Kiểm tra lại tồn kho cho order đang WAITING_STOCK.
+     * Hàm chỉ cập nhật cờ "đã có hàng" và số lượng thiếu, không tự giữ tồn.
+     */
     @Override
     @Transactional
     public Order refreshWaitingStockAvailability(UUID orderId) {
@@ -99,6 +103,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return updateReadiness(order, ready, items);
     }
 
+    /** Thử giữ tồn thật cho toàn bộ SKU; đủ thì xác nhận, thiếu thì chuyển sang chờ hàng. */
     private Order applyHardReservation(Order order) {
         OffsetDateTime now = OffsetDateTime.now();
         if (order.getWaitingStockExpiresAt() != null && !order.getWaitingStockExpiresAt().isAfter(now)) {
@@ -116,6 +121,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return moveToWaiting(order, outcome.missingItems(), outcome.result().name());
     }
 
+    /** Chuyển order sang WAITING_STOCK và lưu lý do cùng các SKU đang thiếu. */
     private Order moveToWaiting(Order order, List<WaitingStockItemResponse> items, String reason) {
         OffsetDateTime now = OffsetDateTime.now();
         order.setStatus(OrderStatus.WAITING_STOCK);
@@ -139,6 +145,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return saved;
     }
 
+    /** Gom các order item theo variant và cộng tổng số lượng cần giữ. */
     private List<Requirement> requirements(Order order) {
         Map<String, Requirement> result = new LinkedHashMap<>();
         for (OrderItem item : orderItemRepository.findByOrderId(order.getId())) {
@@ -154,6 +161,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return new ArrayList<>(result.values());
     }
 
+    /** Đọc tồn khả dụng tại kho chính và khóa các dòng inventory liên quan. */
     private List<WaitingStockItemResponse> availabilityFor(List<Requirement> requirements) {
         UUID warehouseId = warehouseConsistencyService.resolveMasterWarehouse().getId();
         List<UUID> variantIds = requirements.stream().map(value -> value.variant().getId()).distinct()
@@ -173,17 +181,20 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return result;
     }
 
+    /** Kiểm tra order đã quá thời hạn chờ được cấp tồn hay chưa. */
     private boolean isExpired(Order order) {
         return order.getWaitingStockExpiresAt() != null
                 && !order.getWaitingStockExpiresAt().isAfter(OffsetDateTime.now());
     }
 
+    /** Kiểm tra platform đã tiến trạng thái ngoài OSMS và cần đối soát hay chưa. */
     private boolean hasPlatformConflict(Order order) {
         if (order.getPlatformMetadata() == null) return false;
         Object raw = order.getPlatformMetadata().get("platformProgressConflict");
         return raw instanceof Map<?, ?> conflict && Boolean.TRUE.equals(conflict.get("active"));
     }
 
+    /** Cập nhật cờ "Đã có hàng" và snapshot tồn; không tự giữ tồn cho order. */
     private Order updateReadiness(Order order, boolean ready, List<WaitingStockItemResponse> items) {
         Map<String, Object> metadata = new LinkedHashMap<>(
                 order.getPlatformMetadata() == null ? Map.of() : order.getPlatformMetadata());
@@ -211,6 +222,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return orderRepository.save(order);
     }
 
+    /** Đọc lại danh sách SKU thiếu đã lưu trong metadata của order. */
     private List<WaitingStockItemResponse> waitingStockItems(Order order) {
         Object raw = order.getPlatformMetadata() == null ? null : order.getPlatformMetadata().get("waitingStock");
         if (!(raw instanceof Map<?, ?> waiting) || !(waiting.get("items") instanceof List<?> values)) return List.of();
@@ -224,11 +236,13 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return result;
     }
 
+    /** Lấy các variant của order để phát event kiểm tra lại những order liên quan. */
     private Set<UUID> variantIds(Order order) {
         return requirements(order).stream().map(Requirement::variant).filter(java.util.Objects::nonNull)
                 .map(ProductVariant::getId).collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
+    /** Xóa thời gian chờ và metadata phân bổ sau khi order đã giữ hàng thành công. */
     private void clearAllocation(Order order) {
         order.setWaitingStockAt(null);
         order.setWaitingStockExpiresAt(null);
@@ -236,6 +250,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         clearWaitingMetadata(order);
     }
 
+    /** Xóa nhánh waitingStock và cảnh báo xung đột platform khỏi metadata. */
     private void clearWaitingMetadata(Order order) {
         if (order.getPlatformMetadata() == null) return;
         Map<String, Object> metadata = new LinkedHashMap<>(order.getPlatformMetadata());
@@ -244,6 +259,7 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         order.setPlatformMetadata(metadata);
     }
 
+    /** Chuyển thông tin SKU thiếu thành Map để lưu trong JSON metadata. */
     private Map<String, Object> itemMap(WaitingStockItemResponse item) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("variantId", item.variantId() == null ? null : item.variantId().toString());
@@ -255,10 +271,12 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         return value;
     }
 
+    /** Gửi notification sau khi transaction commit và mặc định chống gửi trùng. */
     private void notifyAfterCommit(Order order, String type, String title, String body) {
         notifyAfterCommit(order, type, title, body, true);
     }
 
+    /** Đăng ký gửi notification sau commit, có thể chọn gửi một lần hoặc mỗi lần. */
     private void notifyAfterCommit(Order order, String type, String title, String body, boolean once) {
         Runnable action = () -> {
             if (once) {
@@ -278,24 +296,30 @@ public class OrderStockAllocationServiceImpl implements OrderStockAllocationServ
         });
     }
 
+    /** Lấy và khóa order bằng pessimistic lock để tránh hai transaction xử lý đồng thời. */
     private Order locked(UUID id) {
         return orderRepository.findForUpdateById(id).orElseThrow();
     }
 
+    /** Chuyển giá trị Integer null thành 0 khi tính tồn hoặc số lượng. */
     private int safe(Integer value) { return value == null ? 0 : value; }
 
+    /** Đọc số nguyên an toàn từ dữ liệu metadata. */
     private int number(Object value) {
         if (value instanceof Number number) return number.intValue();
         try { return value == null ? 0 : Integer.parseInt(String.valueOf(value)); }
         catch (NumberFormatException ignored) { return 0; }
     }
 
+    /** Đọc chuỗi an toàn từ dữ liệu metadata. */
     private String text(Object value) { return value == null ? null : String.valueOf(value); }
 
+    /** Đọc UUID an toàn từ dữ liệu metadata. */
     private UUID uuid(Object value) {
         try { return value == null ? null : UUID.fromString(String.valueOf(value)); }
         catch (IllegalArgumentException ignored) { return null; }
     }
 
+    /** Nhu cầu tồn đã được gom theo một variant trong order. */
     private record Requirement(ProductVariant variant, int quantity, OrderItem item) {}
 }

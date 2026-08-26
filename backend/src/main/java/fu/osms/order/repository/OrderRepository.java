@@ -123,8 +123,6 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
                                     @Param("channelName") String channelName,
                                     @Param("externalOrderId") String externalOrderId);
 
-    Page<Order> findByCustomerId(UUID customerId, Pageable pageable);
-
     @Query("SELECT COUNT(o) FROM Order o WHERE o.customer.id = :customerId AND o.status <> 'CANCELLED'")
     Long countByCustomerId(@Param("customerId") UUID customerId);
 

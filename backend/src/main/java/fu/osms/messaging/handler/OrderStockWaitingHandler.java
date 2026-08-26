@@ -19,7 +19,7 @@ public class OrderStockWaitingHandler {
     private final OrderRepository orderRepository;
     private final OrderStockAllocationService allocationService;
 
-    /** Cập nhật khả năng xác nhận, không tự động phân bổ tồn theo FIFO. */
+    /** Cập nhật khả năng xác nhận*/
     public void handle(OrderStockWaitingMessage message) {
         if (message == null || message.variantIds() == null || message.variantIds().isEmpty()) return;
 
